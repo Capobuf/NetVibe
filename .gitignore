@@ -1,0 +1,41 @@
+/vendor/
+/node_modules/
+/public/hot
+/public/storage
+/storage/*.key
+/.idea
+/.vscode
+/.vagrant
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/.fleet
+/.idea
+/.vscode
+.env
+.env.backup
+.env.production
+.phpactor.json
+.php-cs-fixer.php
+
+# Docker volumes
+/docker/mysql-data/
+/docker/redis-data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+storage/logs/*.log
+
+# IDE
+*.swp
+*.swo
+*~
+.project
+.settings
+.buildpath

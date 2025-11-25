@@ -11,7 +11,9 @@
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "mlocati/ip-lib": "^1.22",
-        "spatie/laravel-data": "^4.18"
+        "spatie/laravel-activitylog": "^4.10",
+        "spatie/laravel-data": "^4.18",
+        "spatie/laravel-settings": "^3.5"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

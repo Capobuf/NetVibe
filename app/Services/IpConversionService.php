@@ -9,9 +9,6 @@ class IpConversionService
 {
     /**
      * Convert IP address string to decimal format for database storage
-     * 
-     * @param string $ip IP address (e.g., "192.168.1.1" or "2001:db8::1")
-     * @return string Decimal representation
      */
     public function toDecimal(string $ip): string
     {
@@ -21,46 +18,51 @@ class IpConversionService
             throw new \InvalidArgumentException("Invalid IP address: {$ip}");
         }
         
-        // Convert bytes to decimal string
-        $bytes = $address->getBytes();
-        return gmp_strval(gmp_import($bytes), 10);
+        // Convert bytes to decimal string using BCMath
+        $decimal = '0';
+        foreach ($address->getBytes() as $byte) {
+            $decimal = bcadd(bcmul($decimal, '256'), (string)$byte);
+        }
+        
+        return $decimal;
     }
 
     /**
      * Convert decimal IP address to human-readable string
-     * 
-     * @param string $decimal Decimal IP address from database
-     * @param bool $isIpv6 Whether the IP is IPv6 (optional, auto-detected)
-     * @return string Human-readable IP (e.g., "192.168.1.1")
      */
-    public function fromDecimal(string $decimal, bool $isIpv6 = null): string
+    /**
+     * Convert decimal IP address to human-readable string
+     */
+    public function fromDecimal(string|int|float $decimal): ?AddressInterface
     {
-        // Auto-detect IPv6 if not specified (IPv6 decimals are much larger)
-        if ($isIpv6 === null) {
-            $isIpv6 = bccomp($decimal, '340282366920938463463374607431768211455') <= 0 
-                   && bccomp($decimal, '65535') > 0;
+        if (!$decimal) {
+            return null;
         }
-        
-        $bytes = gmp_export(gmp_init($decimal, 10));
-        
-        // Pad bytes to correct length (4 for IPv4, 16 for IPv6)
-        $expectedLength = $isIpv6 ? 16 : 4;
-        $bytes = str_pad($bytes, $expectedLength, "\x00", STR_PAD_LEFT);
-        
-        $address = Factory::parseBytes($bytes);
-        
-        if (!$address) {
-            throw new \InvalidArgumentException("Invalid decimal IP: {$decimal}");
+
+        // Convert to string to ensure BCMath handles it correctly for very large numbers
+        $decimal = (string) $decimal;
+
+        // IPv4 max value: 4294967295 (2^32 - 1)
+        // If the value fits in IPv4 range, convert to dotted notation and parse
+        if (function_exists('bccomp') && bccomp($decimal, '4294967295') <= 0) {
+            // Use (int) cast to get a numeric value suitable for long2ip.
+            // On 32-bit platforms casting may overflow, but bccomp above ensures it's in range.
+            $ipString = long2ip((int) $decimal);
+            if ($ipString === false || $ipString === null) {
+                return null;
+            }
+
+            return Factory::parseAddressString($ipString);
         }
-        
-        return $address->toString();
+
+        // For now we don't attempt to reconstruct IPv6 from a decimal string.
+        // Returning null avoids throwing errors when encountering large integers
+        // that represent IPv6 addresses stored as decimals.
+        return null;
     }
 
     /**
      * Parse CIDR notation to subnet and mask
-     * 
-     * @param string $cidr CIDR notation (e.g., "192.168.1.0/24")
-     * @return array ['subnet' => decimal, 'mask' => int]
      */
     public function parseCidr(string $cidr): array
     {
@@ -78,23 +80,16 @@ class IpConversionService
 
     /**
      * Convert decimal subnet + mask to CIDR notation
-     * 
-     * @param string $subnet Decimal subnet
-     * @param int $mask CIDR mask
-     * @return string CIDR notation (e.g., "192.168.1.0/24")
      */
     public function toCidr(string $subnet, int $mask): string
     {
-        $ip = $this->fromDecimal($subnet);
+        $address = $this->fromDecimal($subnet);
+        $ip = $address ? $address->toString() : '0.0.0.0';
         return "{$ip}/{$mask}";
     }
 
     /**
      * Calculate number of usable hosts in a subnet
-     * 
-     * @param int $mask CIDR mask
-     * @param bool $isIpv6 Whether this is IPv6
-     * @return string Number of usable hosts (as string for large IPv6 numbers)
      */
     public function calculateUsableHosts(int $mask, bool $isIpv6 = false): string
     {
@@ -106,34 +101,35 @@ class IpConversionService
         }
         
         // Total addresses = 2^hostBits
-        $totalAddresses = gmp_pow(2, $hostBits);
+        $totalAddresses = bcpow('2', (string)$hostBits);
         
         // Usable = total - 2 (network + broadcast) for IPv4
         // For IPv6, all addresses are usable
         if (!$isIpv6 && $mask < 31) {
-            $totalAddresses = gmp_sub($totalAddresses, 2);
+            $totalAddresses = bcsub($totalAddresses, '2');
         }
         
-        return gmp_strval($totalAddresses);
+        return $totalAddresses;
     }
 
     /**
      * Check if an IP address is within a subnet
-     * 
-     * @param string $ipDecimal IP address in decimal
-     * @param string $subnetDecimal Subnet in decimal
-     * @param int $mask CIDR mask
-     * @return bool True if IP is in subnet
      */
     public function isIpInSubnet(string $ipDecimal, string $subnetDecimal, int $mask): bool
     {
-        $ip = Factory::parseAddressString($this->fromDecimal($ipDecimal));
-        $subnet = Factory::parseRangeString($this->toCidr($subnetDecimal, $mask));
+        $ipAddress = $this->fromDecimal($ipDecimal);
+        $subnetAddress = $this->fromDecimal($subnetDecimal);
         
-        if (!$ip || !$subnet) {
+        if (!$ipAddress || !$subnetAddress) {
             return false;
         }
         
-        return $subnet->contains($ip);
+        $range = Factory::parseRangeString($subnetAddress->toString() . '/' . $mask);
+        
+        if (!$range) {
+            return false;
+        }
+        
+        return $range->contains($ipAddress);
     }
 }

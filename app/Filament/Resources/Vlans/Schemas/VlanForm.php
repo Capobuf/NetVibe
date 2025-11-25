@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Vlans\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
@@ -12,9 +13,11 @@ class VlanForm
     {
         return $schema
             ->components([
-                TextInput::make('domain_id')
+                Select::make('domain_id')
+                    ->relationship('l2Domain', 'name')
+                    ->searchable()
+                    ->preload()
                     ->required()
-                    ->numeric()
                     ->default(1),
                 TextInput::make('name')
                     ->required(),
@@ -24,8 +27,10 @@ class VlanForm
                 Textarea::make('description')
                     ->default(null)
                     ->columnSpanFull(),
-                TextInput::make('customer_id')
-                    ->numeric()
+                Select::make('customer_id')
+                    ->relationship('customer', 'title')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
             ]);
     }

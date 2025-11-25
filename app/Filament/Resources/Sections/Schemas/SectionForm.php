@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Sections\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
@@ -18,8 +19,11 @@ class SectionForm
                 Textarea::make('description')
                     ->default(null)
                     ->columnSpanFull(),
-                TextInput::make('master_section_id')
-                    ->numeric()
+                Select::make('master_section_id')
+                    ->label('Parent section')
+                    ->relationship('parentSection', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(0),
                 Textarea::make('permissions')
                     ->default(null)

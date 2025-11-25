@@ -8,17 +8,20 @@ use App\Filament\Resources\Subnets\Pages\ListSubnets;
 use App\Filament\Resources\Subnets\Schemas\SubnetForm;
 use App\Filament\Resources\Subnets\Tables\SubnetsTable;
 use App\Models\Subnet;
-use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
+use BackedEnum;
 
 class SubnetResource extends Resource
 {
     protected static ?string $model = Subnet::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static UnitEnum|string|null $navigationGroup = 'IP Management';
+    protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
     {

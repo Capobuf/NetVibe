@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Subnets\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
@@ -18,8 +19,10 @@ class SubnetForm
                     ->default(null),
                 TextInput::make('mask')
                     ->default(null),
-                TextInput::make('section_id')
-                    ->numeric()
+                Select::make('section_id')
+                    ->relationship('section', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 Textarea::make('description')
                     ->default(null)
@@ -29,22 +32,37 @@ class SubnetForm
                     ->default(null),
                 TextInput::make('firewall_address_object')
                     ->default(null),
-                TextInput::make('vrf_id')
-                    ->numeric()
+                Select::make('vrf_id')
+                    ->relationship('vrf', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
-                TextInput::make('master_subnet_id')
-                    ->required()
-                    ->numeric()
-                    ->default(0),
+                Select::make('master_subnet_id')
+                    ->label('Parent subnet')
+                    ->relationship('parentSubnet', 'subnet')
+                    ->searchable()
+                    ->preload()
+                    ->default(0)
+                    ->required(),
                 Toggle::make('allow_requests')
                     ->required(),
-                TextInput::make('vlan_id')
-                    ->numeric()
+                Select::make('vlan_id')
+                    ->options(function () {
+                        return \App\Models\Vlan::query()
+                            ->orderBy('number')
+                            ->get()
+                            ->mapWithKeys(fn($v) => [$v->id => ($v->number ? ($v->number . ' - ') : '') . $v->name])
+                            ->toArray();
+                    })
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 Toggle::make('show_name')
                     ->required(),
-                TextInput::make('device_id')
-                    ->numeric()
+                Select::make('device_id')
+                    ->relationship('device', 'hostname')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 Textarea::make('permissions')
                     ->default(null)
@@ -62,14 +80,20 @@ class SubnetForm
                 TextInput::make('nameserver_id')
                     ->numeric()
                     ->default(0),
-                TextInput::make('scan_agent_id')
-                    ->numeric()
+                Select::make('scan_agent_id')
+                    ->relationship('scanAgent', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
-                TextInput::make('customer_id')
-                    ->numeric()
+                Select::make('customer_id')
+                    ->relationship('customer', 'title')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
-                TextInput::make('location_id')
-                    ->numeric()
+                Select::make('location_id')
+                    ->relationship('location', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 Toggle::make('is_folder')
                     ->required(),

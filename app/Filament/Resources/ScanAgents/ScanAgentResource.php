@@ -8,17 +8,19 @@ use App\Filament\Resources\ScanAgents\Pages\ListScanAgents;
 use App\Filament\Resources\ScanAgents\Schemas\ScanAgentForm;
 use App\Filament\Resources\ScanAgents\Tables\ScanAgentsTable;
 use App\Models\ScanAgent;
-use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
+use BackedEnum;
 
 class ScanAgentResource extends Resource
 {
     protected static ?string $model = ScanAgent::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static UnitEnum|string|null $navigationGroup = 'Administration';
 
     public static function form(Schema $schema): Schema
     {

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\IpAddresses\Schemas;
 
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
@@ -14,8 +15,10 @@ class IpAddressForm
     {
         return $schema
             ->components([
-                TextInput::make('subnet_id')
-                    ->numeric()
+                Select::make('subnet_id')
+                    ->relationship('subnet', 'subnet')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 TextInput::make('ip_addr')
                     ->required(),
@@ -32,11 +35,16 @@ class IpAddressForm
                 TextInput::make('state')
                     ->numeric()
                     ->default(2),
-                TextInput::make('switch_id')
-                    ->numeric()
+                Select::make('switch_id')
+                    ->relationship('switchDevice', 'hostname')
+                    ->label('Switch')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
-                TextInput::make('location_id')
-                    ->numeric()
+                Select::make('location_id')
+                    ->relationship('location', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
                 TextInput::make('port')
                     ->default(null),
@@ -53,8 +61,10 @@ class IpAddressForm
                     ->default(0),
                 TextInput::make('firewall_address_object')
                     ->default(null),
-                TextInput::make('customer_id')
-                    ->numeric()
+                Select::make('customer_id')
+                    ->relationship('customer', 'title')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
             ]);
     }

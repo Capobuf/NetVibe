@@ -8,17 +8,24 @@ use App\Filament\Resources\IpAddresses\Pages\ListIpAddresses;
 use App\Filament\Resources\IpAddresses\Schemas\IpAddressForm;
 use App\Filament\Resources\IpAddresses\Tables\IpAddressesTable;
 use App\Models\IpAddress;
-use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
+use BackedEnum;
 
 class IpAddressResource extends Resource
 {
     protected static ?string $model = IpAddress::class;
 
+    protected static ?string $modelLabel = 'IP Address';
+    protected static ?string $pluralModelLabel = 'IP Addresses';
+    protected static ?string $navigationLabel = 'IP Addresses';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static UnitEnum|string|null $navigationGroup = 'IP Management';
+    protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema
     {

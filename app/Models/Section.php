@@ -11,4 +11,6 @@ class Section extends Model
     protected $casts = ['strict_mode' => 'boolean', 'show_subnet' => 'boolean', 'show_vlan' => 'boolean', 'show_vrf' => 'boolean', 'show_supernet_only' => 'boolean'];
     
     public function subnets() { return $this->hasMany(Subnet::class); }
+    public function parentSection() { return $this->belongsTo(Section::class, 'master_section_id'); }
+    public function childSections() { return $this->hasMany(Section::class, 'master_section_id'); }
 }

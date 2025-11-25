@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Devices\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Schema;
 
@@ -66,8 +67,10 @@ class DeviceForm
                 TextInput::make('rack_size')
                     ->numeric()
                     ->default(null),
-                TextInput::make('location_id')
-                    ->numeric()
+                Select::make('location_id')
+                    ->relationship('location', 'name')
+                    ->searchable()
+                    ->preload()
                     ->default(null),
             ]);
     }

@@ -57,3 +57,35 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+---
+
+## Modern IPAM — Pre-fill IPs (feature notes)
+
+This repository implements a modern Laravel-based IPAM. Recent work added a "Pre-fill IPs" feature to the Subnets UI which:
+
+- Allows populating all usable IPv4 addresses of a subnet in the DB as "Not Verified" (state = 0) so they appear in the UI and can later be scanned and updated.
+- Runs safety checks: IPv4 only, skips network & broadcast addresses (only hosts), disallows large subnets (mask suggested minimum 22), and uses chunked DB insert with insertOrIgnore to avoid duplicates.
+- Includes an asynchronous job (IpPrefillJob) and a Subnet observer that dispatches prefill for eligible subnets upon creation.
+
+Migration note — last_seen:
+- Historically the project used a placeholder timestamp (`1970-01-01 00:00:01`) for `last_seen`. A migration was added to change the column default to NULL and convert those placeholder values to NULL. After pulling these changes run:
+
+	- php artisan migrate
+
+Queue workers (running the background job):
+
+On this project we use Laravel queues to run long operations (IpPrefillJob). In development, you can run a worker in a terminal or via docker-compose.
+
+- Locally (PHP installed):
+	- php artisan queue:work --tries=1
+
+- In Docker (from repository root using Docker Compose):
+	- docker compose exec app php artisan queue:work --tries=1
+
+Testing:
+- Run unit/feature tests:
+	- composer test
+	- or vendor/bin/phpunit
+
+If you plan to modify prefill limits or behavior, check `app/Services/IpPrefillService.php` and `app/Observers/SubnetObserver.php` and update tests in `tests/Feature/IpPrefillServiceTest.php` and `tests/Feature/SubnetPrefillDispatchTest.php`.

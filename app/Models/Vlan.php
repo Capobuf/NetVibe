@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Vlan extends Model
 {
+    protected $table = 'vlans';
+
     protected $fillable = ['domain_id', 'name', 'number', 'description', 'customer_id'];
     
     public function customer() { return $this->belongsTo(Customer::class); }

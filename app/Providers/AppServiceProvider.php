@@ -19,6 +19,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Register model observers
+        if (class_exists(\App\Models\Subnet::class) && class_exists(\App\Observers\SubnetObserver::class)) {
+            \App\Models\Subnet::observe(\App\Observers\SubnetObserver::class);
+        }
     }
 }

@@ -76,4 +76,9 @@ class Subnet extends Model
     {
         return $this->belongsTo(Subnet::class, 'master_subnet_id');
     }
+
+    public function device()
+    {
+        return $this->belongsTo(Device::class);
+    }
 }

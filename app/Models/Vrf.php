@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Vrf extends Model
 {
+    protected $table = 'vrfs';
+
     protected $fillable = ['name', 'rd', 'description', 'sections', 'customer_id'];
     
     public function customer() { return $this->belongsTo(Customer::class); }

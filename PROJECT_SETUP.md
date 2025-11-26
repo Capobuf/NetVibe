@@ -112,7 +112,11 @@ app/
 
 ### 🔄 PHASE 5: SCAN ACTIONS & UI (In Progress)
 **Completed:**
-- [x] `FpingWrapper` service (scan CIDR + range)
+- [x] `FpingWrapper` service refactored with `Illuminate\Support\Facades\Process`
+  - CIDR validation (`isValidCidr()`)
+  - Exit code handling (0-2 = success, >2 = critical error)
+  - IP validation with `FILTER_VALIDATE_IP`
+  - Command: `fping -a -g -r 1 -t 500 {cidr}`
 - [x] IP Address display transformation (decimal → readable)
 - [x] State badges con colori:
   - 🔴 Offline (1) - danger
@@ -224,5 +228,54 @@ Password: password
 
 ---
 
-**Last Updated:** 2025-11-25  
+**Last Updated:** 2025-11-26  
 **Project Status:** ✅ Functional MVP | 🔄 UI Refinement In Progress
+
+---
+
+## 9. CURRENT PROBLEMS / TECHNICAL DEBT (found during prefill feature)
+
+I ran a targeted repo review while implementing the Subnet "Pre-fill IPs" feature. Below are reproducible issues and recommended fixes (ordered by priority):
+
+- ⚠️ last_seen default placeholder (DB)
+  - Where: database/migrations/2025_11_25_203417_create_ip_addresses_table.php (and legacy phpIPAM schema)
+  - Symptom: `last_seen` uses a legacy default timestamp '1970-01-01 00:00:01' instead of NULL. This forces application code to treat the placeholder as special-case and is error prone.
+  - Risk: confusing UI, difficult semantics, and extra special-case checks across the codebase (many occurrences in phpipam-master). Prefill code writes NULL for prefilled addresses which is inconsistent with the migration default.
+  - Recommendation: add a migration to change default to NULL and migrate existing placeholder values to NULL. Update tests & docs.
+
+- ⚠️ Allowed magic numbers / safety thresholds
+  - Where: app/Services/IpPrefillService.php and SubnetObserver.php
+  - Symptom: mask threshold (22) is hard-coded in service/observer code. Currently prefill only supports masks >= 22.
+  - Risk: magic numbers scattered through code make behavior non-transparent for maintainers and tests. If this value needs to change, it must be updated in multiple places.
+  - Recommendation: centralize threshold into a config entry (config/ipam.php) and reference config('ipam.prefill_mask_limit', 22) instead of hard-coded constants. Add tests and a small docs entry.
+
+- ⚠️ Filament import / namespace discrepancies
+  - Where: multiple Filament resources and relation managers (examples fixed in recent changes)
+  - Symptom: incorrect imports (e.g., Filament\Tables\Actions vs Filament\Actions) and wrong component namespaces (Forms vs Schemas). These triggered runtime errors during development and required fixes.
+  - Risk: Breaks during Filament upgrades and reduces maintainability.
+  - Recommendation: Normalize all Filament imports to the patterns used by Filament v4; add a small static check or phpstan rule to find deprecated namespaces.
+
+- ⚠️ Invalid heroicon usage / missing unit coverage
+  - Where: app/Filament/Resources/* (heroicon-s-circle used but doesn't exist)
+  - Symptom: Blade/UI runtime errors (SvgNotFound) when rendering resources. One-off fixes were applied but there's risk of regression if icons are renamed incorrectly.
+  - Recommendation: Add unit test coverage for the helper used to render icons (already added in tests/Unit/IconRenderingTest.php). Expand tests to cover other resources and add CI gating.
+
+- ⚠️ Prefill safety & performance
+  - Where: IpPrefillService.php
+  - Symptom: Potentially heavy write operations for wide subnets. Implementation includes safeguards: IPv4-only, skip network/broadcast, chunked insert (500), insertOrIgnore to avoid duplicates — but operations may still be long-running.
+  - Recommendation: Keep asynchronous job path (IpPrefillJob) and add documentation for running queue workers in Docker/Windows environments. Consider rate-limit/backoff or split job by sub-ranges for large subnets.
+
+- ⚠️ Tests & CI coverage gaps
+  - Where: tests/ and CI (no GitHub Actions present yet)
+  - Symptom: New features have tests, but project lacks a full CI pipeline that runs phpunit and static analysis.
+  - Recommendation: Add GitHub Actions workflow to run tests (phpunit), composer, static analysis (phpstan/pint), and optionally run code-style checks to prevent regressions.
+
+---
+
+### Next actions recommended (short-term)
+1. Add a migration to set ip_addresses.last_seen default to NULL and migrate old placeholder values to NULL. Add tests. (High)
+2. Centralize prefill mask limit into a config file (config/ipam.php). Update service/observer to use config values. (Medium)
+3. Add CI / GitHub Actions to run phpunit and static analysis on PRs. (Medium)
+4. Document the prefill feature in README and add a short guide to set up queue workers locally (Windows + Docker). (Low)
+
+---

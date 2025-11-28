@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Customer;
+use App\Models\Device;
 use App\Models\IpAddress;
 use App\Models\Subnet;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
@@ -27,6 +28,11 @@ class StatsOverview extends BaseWidget
                 ->description('Total Assigned IPs')
                 ->descriptionIcon('heroicon-m-globe-alt')
                 ->color('info'),
+
+            Stat::make('Devices', Device::count())
+                ->description(sprintf('Active %d / Total %d', Device::whereNotNull('ip_addr')->count(), Device::count()))
+                ->descriptionIcon('heroicon-s-device-phone-mobile')
+                ->color('secondary'),
         ];
     }
 }

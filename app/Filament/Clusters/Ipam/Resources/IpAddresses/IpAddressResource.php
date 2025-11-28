@@ -9,7 +9,18 @@ use App\Models\IpAddress;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Select;
+use Filament\Schemas\Components\TextInput;
+use Filament\Schemas\Components\Textarea;
+use Filament\Schemas\Components\Toggle;
+use Filament\Schemas\Components\DateTimePicker;
+use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Actions\DeleteAction;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\BulkActionGroup;
+use Filament\Tables\Actions\DeleteBulkAction;
 
 class IpAddressResource extends Resource
 {
@@ -22,12 +33,135 @@ class IpAddressResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return \App\Filament\Resources\IpAddresses\Schemas\IpAddressForm::configure($schema);
+        return $schema
+            ->components([
+                Select::make('subnet_id')
+                    ->relationship('subnet', 'subnet')
+                    ->searchable()
+                    ->preload()
+                    ->default(null),
+                TextInput::make('ip_addr')
+                    ->required(),
+                Toggle::make('is_gateway')
+                    ->required(),
+                TextInput::make('description')
+                    ->default(null),
+                TextInput::make('hostname')
+                    ->default(null),
+                TextInput::make('mac')
+                    ->default(null),
+                TextInput::make('owner')
+                    ->default(null),
+                TextInput::make('state')
+                    ->numeric()
+                    ->default(2),
+                Select::make('switch_id')
+                    ->relationship('switchDevice', 'hostname')
+                    ->label('Switch')
+                    ->searchable()
+                    ->preload()
+                    ->default(null),
+                Select::make('location_id')
+                    ->relationship('location', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->default(null),
+                TextInput::make('port')
+                    ->default(null),
+                Textarea::make('note')
+                    ->default(null)
+                    ->columnSpanFull(),
+                DateTimePicker::make('last_seen'),
+                Toggle::make('exclude_ping')
+                    ->required(),
+                Toggle::make('ptr_ignore')
+                    ->required(),
+                TextInput::make('ptr')
+                    ->numeric()
+                    ->default(0),
+                TextInput::make('firewall_address_object')
+                    ->default(null),
+                Select::make('customer_id')
+                    ->relationship('customer', 'title')
+                    ->searchable()
+                    ->preload()
+                    ->default(null),
+            ]);
     }
 
     public static function table(Table $table): Table
     {
-        return \App\Filament\Resources\IpAddresses\Tables\IpAddressesTable::configure($table);
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('ip_addr')
+                    ->label('IP Address')
+                    ->formatStateUsing(fn ($state) => app(\App\Services\IpConversionService::class)->fromDecimal($state))
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('hostname')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('description')
+                    ->searchable()
+                    ->limit(30)
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('mac')
+                    ->label('MAC Address')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('owner')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('state')
+                    ->badge()
+                    ->color(fn ($state) => match($state) {
+                        1 => 'danger',   // Offline
+                        2 => 'success',  // Used
+                        3 => 'primary',  // Reserved
+                        4 => 'gray',     // DHCP
+                        default => 'secondary',
+                    })
+                    ->formatStateUsing(fn ($state) => match($state) {
+                        1 => 'Offline',
+                        2 => 'Used',
+                        3 => 'Reserved',
+                        4 => 'DHCP',
+                        default => 'Unknown',
+                    })
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('subnet.description')
+                    ->label('Subnet')
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('location.name')
+                    ->label('Location')
+                    ->toggleable(),
+                Tables\Columns\IconColumn::make('is_gateway')
+                    ->label('Gateway')
+                    ->boolean()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('port')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('last_seen')
+                    ->label('Last Seen')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                //
+            ])
+            ->recordActions([
+                EditAction::make(),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
+            ]);
     }
 
     public static function getRelations(): array
@@ -46,9 +180,9 @@ class IpAddressResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => \App\Filament\Resources\IpAddresses\Pages\ListIpAddresses::route('/'),
-            'create' => \App\Filament\Resources\IpAddresses\Pages\CreateIpAddress::route('/create'),
-            'edit' => \App\Filament\Resources\IpAddresses\Pages\EditIpAddress::route('/{record}/edit'),
+            'index' => Pages\ListIpAddresses::route('/'),
+            'create' => Pages\CreateIpAddress::route('/create'),
+            'edit' => Pages\EditIpAddress::route('/{record}/edit'),
         ];
     }
 }

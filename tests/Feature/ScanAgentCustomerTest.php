@@ -13,7 +13,7 @@ class ScanAgentCustomerTest extends TestCase
 
     public function test_scan_agent_can_belong_to_customer()
     {
-        $customer = Customer::create(['title' => 'Acme Corp']);
+        $customer = Customer::create(['name' => 'Acme Corp']);
 
         $agent = ScanAgent::create([
             'name' => 'Agent A',

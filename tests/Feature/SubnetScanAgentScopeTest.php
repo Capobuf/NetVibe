@@ -17,12 +17,15 @@ class SubnetScanAgentScopeTest extends TestCase
     {
         $ipService = new IpConversionService();
 
-        $customer = Customer::create(['title' => 'Client']);
+        $customer = Customer::create(['name' => 'Client']);
 
         // Global agent (customer_id null)
         $globalAgent = ScanAgent::create(['name' => 'Global', 'type' => 'direct']);
 
+        $vrf = \App\Models\Vrf::factory()->create(['customer_id' => $customer->id]);
+
         $subnet = Subnet::create([
+            'vrf_id' => $vrf->id,
             'subnet' => $ipService->toDecimal('192.168.10.0'),
             'mask' => 24,
             'customer_id' => $customer->id,
@@ -37,11 +40,14 @@ class SubnetScanAgentScopeTest extends TestCase
     {
         $ipService = new IpConversionService();
 
-        $customer = Customer::create(['title' => 'ClientB']);
+        $customer = Customer::create(['name' => 'ClientB']);
 
         $agent = ScanAgent::create(['name' => 'AgentB', 'type' => 'direct', 'customer_id' => $customer->id]);
 
+        $vrf2 = \App\Models\Vrf::factory()->create(['customer_id' => $customer->id]);
+
         $subnet = Subnet::create([
+            'vrf_id' => $vrf2->id,
             'subnet' => $ipService->toDecimal('10.2.0.0'),
             'mask' => 24,
             'customer_id' => $customer->id,

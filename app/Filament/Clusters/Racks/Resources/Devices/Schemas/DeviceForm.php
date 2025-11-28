@@ -53,6 +53,7 @@ class DeviceForm
                     ->searchable()
                     ->preload()
                     ->label('Rack')
+                    ->default(request()->query('rack_id'))
                     ->options(function (Get $get) {
                         $query = \App\Models\Rack::query();
                         if ($locationId = $get('location_id')) {
@@ -62,6 +63,7 @@ class DeviceForm
                     }),
 
                 TextInput::make('rack_position')
+                    ->default(request()->query('rack_position'))
                     ->numeric()
                     ->label('Position (U)')
                     ->minValue(1)

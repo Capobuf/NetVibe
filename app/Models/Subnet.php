@@ -6,10 +6,12 @@ namespace App\Models;
 
 use App\Services\IpConversionService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Subnet extends Model
 {
+    use HasFactory;
     use SoftDeletes;
     protected $fillable = [
         'subnet', 'mask', 'cidr', 'name', 'vrf_id', 'section_id', 'description', 'linked_subnet_id',

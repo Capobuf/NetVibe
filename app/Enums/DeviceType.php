@@ -26,4 +26,19 @@ enum DeviceType: string implements HasLabel
             self::Other => 'Other',
         };
     }
+
+    /**
+     * Return a semantic color key used for UI purposes.
+     * Values: danger, warning, info, success, gray
+     */
+    public function getColor(): string
+    {
+        return match ($this) {
+            self::Firewall => 'danger',
+            self::Router => 'warning',
+            self::Switch => 'info',
+            self::Server => 'success',
+            default => 'gray',
+        };
+    }
 }

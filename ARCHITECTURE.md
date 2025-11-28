@@ -6,7 +6,7 @@
 
 ## 🏗️ High-Level Overview
 
-Modern IPAM is built on **Laravel 12** and **FilamentPHP 4**, utilizing a **Dockerized** environment. It follows a strict **Domain-Driven Design** approach where possible, leveraging **Actions** for business logic and **Resources** for UI.
+Modern IPAM is built on **Laravel 12** and **FilamentPHP 4**, and runs in a Dockerized environment. The project favors a clean resource-driven admin UI using Filament Clusters, and uses an Action/Service pattern for business logic.
 
 ---
 
@@ -56,12 +56,12 @@ We use **Filament Clusters** to group related resources and keep the sidebar cle
 
 ### 3. Services & Actions
 
-- **IP Conversion:** `IpConversionService` handles IPv4/IPv6 <-> Decimal conversion.
-- **Scanning:** `FpingWrapper` encapsulates the `fping` CLI tool interaction.
+- **IP Conversion:** `IpConversionService` handles IPv4 and IPv6 conversions to and from decimal for efficient storage and range queries.
+- **Scanning/Discovery:** The discovery pipeline is implemented using a `FpingWrapper` (calls the `fping` binary) executed via Laravel's Process APIs, with results dispatched and persisted using the application's queue workers. The discovery architecture expects queue workers to be running to process scan jobs and persist results.
 
 ---
 
-## 💾 Database Schema
+## 💾 Database Schema & Persistence
 
 ### Key Relationships
 - `Customer` (1) -> (N) `Location`
@@ -70,22 +70,22 @@ We use **Filament Clusters** to group related resources and keep the sidebar cle
 - `DeviceModel` (1) -> (N) `Device`
 
 ### Design Decisions
-- **Nullable Foreign Keys:** Used for flexible relationships (e.g., Device can exist without Rack).
-- **Decimal IP Storage:** Chosen over string for >100x faster range queries.
-- **Strict Types:** PHP 8.4 features used extensively.
+- **Strict Schema:** Migrations enforce types and relationships. Soft deletes are used extensively on primary entities for safer data retention and audit.
+- **Decimal IP storage:** IPv4 and IPv6 values are stored in integer/decimal-friendly formats for efficient indexing and range queries.
+- **Queue-driven processes:** Discovery and long-running tasks are delegated to the queue system to keep the web process responsive.
 
 ---
 
 ## 🐳 Infrastructure (Docker)
 
-- **App:** PHP 8.4 FPM + Nginx
-- **DB:** MariaDB 11.8
-- **Cache:** Redis 8.4
-- **Network:** Internal bridge network
+- **App:** PHP 8.4 FPM + Nginx (plus required tooling like `fping` for discovery)
+- **DB:** MariaDB (or SQLite for local testing)
+- **Cache & Queue:** Redis — used by queues and caching services
+- **Queues/Workers:** The discovery pipeline and background jobs require the queue worker to be running (`php artisan queue:work` in container)
 
 ---
 
 ## 🔒 Security
 
-- **SNMP:** Credentials removed from DB (security risk). Future implementation via secure vault.
-- **Auth:** Standard Laravel Authentication.
+- **Secrets:** Sensitive credentials removed from DB and planned to be stored with secure vault integration for remote agents in the future.
+- **Auth:** Standard Laravel authentication and role controls are present in the Filament admin UI.

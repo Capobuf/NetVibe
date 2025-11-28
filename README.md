@@ -71,13 +71,27 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-### 3. Initialize Database
+### 3. Initialize Database (first-run)
+
+Run migrations and seed the database. For a clean start (development) we recommend a fresh migrate and seeds:
 
 ```bash
-docker-compose exec app php artisan migrate --seed
+docker-compose exec app php artisan migrate:fresh --seed
 ```
 
-### 4. Access Admin Panel
+Notes:
+- The seeder inserts a default admin user; check the seed output or your database for the created admin credentials.
+- If you're running against an existing DB (production or persisted data), use `php artisan migrate --seed` instead of `migrate:fresh`.
+
+### 4. Run background workers (required for scanning)
+
+Some discovery and scan jobs run asynchronously and require the queue worker to be running. Start a queue worker inside the app container:
+
+```bash
+docker-compose exec app php artisan queue:work
+```
+
+### 5. Access Admin Panel
 
 ```
 URL: http://localhost:8080/admin
@@ -136,7 +150,7 @@ Password: password
 
 ## 📊 Project Status
 
-**Current Version:** 0.5.0 (Phase 5 - Scan Actions & UI)
+**Current Version:** 1.0.0 (Phase 6 - Visual Racks & Dashboard)
 
 **Stability:** ✅ **Production-Ready** for small-medium deployments
 

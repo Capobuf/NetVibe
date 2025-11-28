@@ -6,9 +6,12 @@ use App\Filament\Clusters\Racks\RacksCluster;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\CreateRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\EditRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\ListRacks;
+use App\Filament\Clusters\Racks\Resources\Racks\Pages\ViewRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Schemas\RackForm;
 use App\Filament\Clusters\Racks\Resources\Racks\Tables\RacksTable;
+use App\Filament\Infolists\Components\RackVisual;
 use App\Models\Rack;
+use Filament\Infolists;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -35,6 +38,14 @@ class RackResource extends Resource
         return RacksTable::configure($table);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                RackVisual::make('structure'),
+            ]);
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -47,6 +58,7 @@ class RackResource extends Resource
         return [
             'index' => ListRacks::route('/'),
             'create' => CreateRack::route('/create'),
+            'view' => ViewRack::route('/{record}'),
             'edit' => EditRack::route('/{record}/edit'),
         ];
     }

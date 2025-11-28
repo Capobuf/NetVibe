@@ -1,17 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ScanAgent extends Model
 {
+
+    use HasFactory;
+    use SoftDeletes;
+
     protected $fillable = [
-        'name', 'description', 'type', 'code', 'last_access', 'customer_id',
+        'name', 'description', 'ip_address', 'active', 'last_seen', 'customer_id',
     ];
 
     protected $casts = [
-        'last_access' => 'datetime',
+        'active' => 'boolean',
+        'last_seen' => 'datetime',
     ];
 
     // Relationships

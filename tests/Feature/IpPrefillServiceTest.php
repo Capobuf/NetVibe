@@ -24,8 +24,12 @@ class IpPrefillServiceTest extends TestCase
         $mask = 29; // 8 addresses
 
         // create subnet record (store subnet as decimal string)
+        $customer = \App\Models\Customer::factory()->create();
+        $vrf = \App\Models\Vrf::factory()->create(['customer_id' => $customer->id]);
+
         $subnetDecimal = $ipService->toDecimal($cidrBase);
         $subnet = Subnet::create([
+            'vrf_id' => $vrf->id,
             'subnet' => $subnetDecimal,
             'mask' => $mask,
             'description' => 'test',
@@ -58,7 +62,11 @@ class IpPrefillServiceTest extends TestCase
         $mask = 29; // 8 addresses
 
         $subnetDecimal = $ipService->toDecimal($cidrBase);
+        $customer2 = \App\Models\Customer::factory()->create();
+        $vrf2 = \App\Models\Vrf::factory()->create(['customer_id' => $customer2->id]);
+
         $subnet = Subnet::create([
+            'vrf_id' => $vrf2->id,
             'subnet' => $subnetDecimal,
             'mask' => $mask,
             'description' => 'test',
@@ -87,7 +95,10 @@ class IpPrefillServiceTest extends TestCase
         $this->assertEquals(6, $nullLastSeenCount);
 
         // Test mask too small (too big subnet) is rejected
-        $subnet2 = Subnet::create(['subnet' => $ipService->toDecimal('10.0.0.0'), 'mask' => 21]);
+        $customer3 = \App\Models\Customer::factory()->create();
+        $vrf3 = \App\Models\Vrf::factory()->create(['customer_id' => $customer3->id]);
+
+        $subnet2 = Subnet::create(['vrf_id' => $vrf3->id, 'subnet' => $ipService->toDecimal('10.0.0.0'), 'mask' => 21]);
 
         $this->expectException(\InvalidArgumentException::class);
         $service->prefill($subnet2);

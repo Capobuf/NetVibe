@@ -23,6 +23,9 @@ class IpAddressResource extends Resource
     protected static ?string $pluralModelLabel = 'IP Addresses';
     protected static ?string $navigationLabel = 'IP Addresses';
 
+    // Hide the top-level navigation for IP Addresses — they live inside the IPAM Cluster
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
     protected static UnitEnum|string|null $navigationGroup = 'IP Management';
     protected static ?int $navigationSort = 3;

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class ScanAgent extends Model
 {
     protected $fillable = [
-        'name', 'description', 'type', 'code', 'last_access',
+        'name', 'description', 'type', 'code', 'last_access', 'customer_id',
     ];
 
     protected $casts = [
@@ -18,5 +18,10 @@ class ScanAgent extends Model
     public function subnets()
     {
         return $this->hasMany(Subnet::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
     }
 }

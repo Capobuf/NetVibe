@@ -1,15 +1,42 @@
 <?php
 
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Customer extends Model
 {
-    protected $fillable = ['title', 'address', 'postcode', 'city', 'state', 'lat', 'long', 'contact_person', 'contact_phone', 'contact_mail', 'note', 'status'];
-    
-    public function subnets() { return $this->hasMany(Subnet::class); }
-    public function ipAddresses() { return $this->hasMany(IpAddress::class); }
-    public function vlans() { return $this->hasMany(Vlan::class); }
-    public function vrfs() { return $this->hasMany(Vrf::class); }
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'name',
+        'contact_email',
+        'notes',
+    ];
+
+    public function locations()
+    {
+        return $this->hasMany(Location::class);
+    }
+
+    public function vrfs()
+    {
+        return $this->hasMany(Vrf::class);
+    }
+
+    protected static function booted()
+    {
+        static::deleting(function ($customer) {
+            if ($customer->isForceDeleting()) {
+                $customer->locations()->withTrashed()->forceDelete();
+                $customer->vrfs()->withTrashed()->forceDelete();
+            } else {
+                $customer->locations()->delete();
+                $customer->vrfs()->delete();
+            }
+        });
+    }
 }

@@ -2,8 +2,8 @@
 
 namespace Tests\Unit;
 
-use Filament\Support\generate_icon_html;
-use Illuminate\Support\HtmlString;
+use function Filament\Support\generate_icon_html;
+use Illuminate\Contracts\Support\Htmlable;
 use Tests\TestCase;
 
 class IconRenderingTest extends TestCase
@@ -13,7 +13,8 @@ class IconRenderingTest extends TestCase
         // This should not throw SvgNotFound for a valid icon name
         $html = generate_icon_html('heroicon-s-question-mark-circle');
 
-        $this->assertInstanceOf(HtmlString::class, $html);
-        $this->assertNotEmpty((string) $html);
+        $this->assertInstanceOf(Htmlable::class, $html);
+        // BladeUI Svg objects implement toHtml(); HtmlString also supports toHtml(). Use toHtml() to get string output.
+        $this->assertNotEmpty($html->toHtml());
     }
 }

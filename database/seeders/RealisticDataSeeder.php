@@ -16,8 +16,8 @@ class RealisticDataSeeder extends Seeder
         $ipService = app(IpConversionService::class);
 
         // 1. Customers
-        $acme = Customer::create(['title' => 'Acme Corp', 'address' => '123 Main St', 'contact_mail' => 'admin@acme.com']);
-        $contoso = Customer::create(['title' => 'Contoso', 'address' => '456 Tech Blvd', 'contact_mail' => 'it@contoso.com']);
+        $acme = Customer::create(['title' => 'Acme Corp', 'address' => '123 Main St']);
+        $contoso = Customer::create(['title' => 'Contoso', 'address' => '456 Tech Blvd']);
 
         // 2. Sections
         $dcSection = Section::create(['name' => 'Datacenter', 'description' => 'Server Farm', 'master_section_id' => 0, 'permissions' => '{"3":"1","2":"2"}', 'strict_mode' => 1]);

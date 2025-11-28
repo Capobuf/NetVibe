@@ -16,6 +16,10 @@ class ScanAgentsTable
             ->columns([
                 TextColumn::make('name')
                     ->searchable(),
+                TextColumn::make('customer.title')
+                    ->label('Customer')
+                    ->toggleable()
+                    ->searchable(),
                 TextColumn::make('type')
                     ->badge(),
                 TextColumn::make('code')

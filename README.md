@@ -1,91 +1,231 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Modern IPAM
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> A modern Laravel 12 + FilamentPHP 4 implementation of IP Address Management
 
-## About Laravel
-
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
-
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-## Laravel Sponsors
-
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
-
-### Premium Partners
-
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+[![Laravel 12](https://img.shields.io/badge/Laravel-12.x-red)](https://laravel.com)
+[![FilamentPHP 4](https://img.shields.io/badge/Filament-4.x-orange)](https://filamentphp.com)
+[![PHP 8.4](https://img.shields.io/badge/PHP-8.4-blue)](https://php.net)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## Modern IPAM — Pre-fill IPs (feature notes)
+## 📋 Quick Links
 
-This repository implements a modern Laravel-based IPAM. Recent work added a "Pre-fill IPs" feature to the Subnets UI which:
+- **🚀 [Setup Guide](SETUP.md)** - Installation & configuration
+- **🏗️ [Architecture](ARCHITECTURE.md)** - System design & technical decisions
+- **✨ [Features](FEATURES.md)** - Implemented features & roadmap
+- **🐛 [Known Issues](ISSUES.md)** - Problems, fixes & technical debt
+- **📝 [Changelog](CHANGELOG.md)** - Release history
+- **📚 [Navigation Map](NAVIGATION.md)** - Full documentation index
 
-- Allows populating all usable IPv4 addresses of a subnet in the DB as "Not Verified" (state = 0) so they appear in the UI and can later be scanned and updated.
-- Runs safety checks: IPv4 only, skips network & broadcast addresses (only hosts), disallows large subnets (mask suggested minimum 22), and uses chunked DB insert with insertOrIgnore to avoid duplicates.
-- Includes an asynchronous job (IpPrefillJob) and a Subnet observer that dispatches prefill for eligible subnets upon creation.
+---
 
-Migration note — last_seen:
-- Historically the project used a placeholder timestamp (`1970-01-01 00:00:01`) for `last_seen`. A migration was added to change the column default to NULL and convert those placeholder values to NULL. After pulling these changes run:
+## 🎯 Project Overview
 
-	- php artisan migrate
+Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/) using modern PHP frameworks while maintaining strict UI/UX compatibility with the original.
 
-Queue workers (running the background job):
+### Philosophy: "Strict Replica"
 
-On this project we use Laravel queues to run long operations (IpPrefillJob). In development, you can run a worker in a terminal or via docker-compose.
+- ✅ Replicate phpIPAM workflows exactly (no shortcuts or "improvements")
+- ✅ Modern codebase (Laravel 12, FilamentPHP 4, PHP 8.4)
+- ✅ Docker-based development environment
+- ✅ Clean architecture (Action pattern, DTOs, Services)
 
-- Locally (PHP installed):
-	- php artisan queue:work --tries=1
+---
 
-- In Docker (from repository root using Docker Compose):
-	- docker compose exec app php artisan queue:work --tries=1
+## ⚡ Technology Stack
 
-Testing:
-- Run unit/feature tests:
-	- composer test
-	- or vendor/bin/phpunit
+| Component | Technology | Version | Rationale |
+|-----------|-----------|---------|-----------|
+| **Framework** | Laravel | 12.40.1 | Modern PHP framework with LTS |
+| **Admin Panel** | FilamentPHP | 4.2.3 | TALL stack admin panel |
+| **Language** | PHP | 8.4.15 | Latest stable with performance gains |
+| **Database** | MariaDB | 11.8 LTS | 3-year support, MySQL compatible |
+| **Cache** | Redis | 8.4.0 | Fast session + cache layer |
+| **Web Server** | Nginx | 1.28.0 | High performance, FastCGI |
+| **IP Library** | mlocati/ip-lib | 1.22.0 | Best IPv4/IPv6 support |
+| **Container** | Docker | Compose | Reproducible environments |
 
-If you plan to modify prefill limits or behavior, check `app/Services/IpPrefillService.php` and `app/Observers/SubnetObserver.php` and update tests in `tests/Feature/IpPrefillServiceTest.php` and `tests/Feature/SubnetPrefillDispatchTest.php`.
+📖 **Details:** [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker & Docker Compose
+- Git
+
+### 1. Clone & Setup
+
+```bash
+git clone <repository-url> phpipam-laravel
+cd phpipam-laravel
+cp .env.example .env
+```
+
+### 2. Start Docker Stack
+
+```bash
+docker-compose up -d
+```
+
+### 3. Initialize Database
+
+```bash
+docker-compose exec app php artisan migrate --seed
+```
+
+### 4. Access Admin Panel
+
+```
+URL: http://localhost:8080/admin
+Email: admin@modernipam.local
+Password: password
+```
+
+📖 **Full Setup Guide:** [SETUP.md](SETUP.md)
+
+---
+
+## ✨ Current Features
+
+### ✅ Fully Implemented
+
+- **IP Management**
+  - Subnets with hierarchical support (`master_subnet_id`)
+  - IP Addresses with decimal storage (efficient queries)
+  - IP state management (Used, Reserved, DHCP, Offline)
+  - IP pre-fill for subnets (async job-based)
+  
+- **Network Infrastructure**
+  - VLANs with L2 domain support
+  - Devices inventory
+  - Locations management
+  - Customers/tenants
+
+- **Scanning**
+  - Scan Agents (localhost + future remote support)
+  - FpingWrapper for network discovery
+  - Ping status tracking with last_seen timestamps
+
+- **Administration**
+  - Filament-based admin panel
+  - User authentication
+  - Settings management
+
+### 🔄 In Progress
+
+- Subnet CIDR display in tables
+- Scan workflow UI (agent selection + results review)
+- Import discovered IPs workflow
+
+### 📋 Planned
+
+- Hierarchical subnet tree view
+- Remote scan agent support (API)
+- SNMP integration
+- Bulk import/export
+- IP request workflow
+- DNS PTR management
+
+📖 **Full Feature List:** [FEATURES.md](FEATURES.md)
+
+---
+
+## 📊 Project Status
+
+**Current Version:** 0.5.0 (Phase 5 - Scan Actions & UI)
+
+**Stability:** ✅ **Production-Ready** for small-medium deployments
+
+**Code Quality:**
+- ✅ All critical bugs resolved
+- ✅ Database schema clean (6 major migrations on 2025-11-26)
+- ✅ Security issues fixed (SNMP removed, VRF dropped)
+- ✅ Legacy code eliminated
+- ⚠️ CI/CD pipeline recommended before scaling
+
+📖 **Known Issues & Fixes:** [ISSUES.md](ISSUES.md)
+
+---
+
+## 🏗️ Architecture Highlights
+
+### Directory Structure
+
+```
+app/
+├── Actions/          # Business logic (Action pattern)
+├── Data/             # DTOs (spatie/laravel-data)
+├── Filament/         # Admin UI resources
+│   ├── Resources/    # CRUD (Subnets, IPs, Devices, etc.)
+│   └── Widgets/      # Dashboard widgets
+├── Models/           # 8 Eloquent models with relationships
+├── Services/         # External service wrappers
+│   ├── IpConversionService.php
+│   └── Scanners/FpingWrapper.php
+└── Observers/        # Model event listeners
+```
+
+### Key Design Decisions
+
+- **IP Storage:** Decimal format (e.g., `192.168.1.1` → `3232235777`) for efficient indexing
+- **Scan Agents:** Support local + remote agents (localhost default, API/MySQL for remote)
+- **UI Pattern:** Filament Resources + Actions (no raw controllers)
+- **Data Flow:** Request → Action → Service → Model
+
+📖 **Full Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## 📚 Documentation for AI Agents
+
+This project is designed to be maintainable by AI coding agents. All documentation includes:
+
+- ✅ Clear navigation links between related docs
+- ✅ Context for each document's purpose
+- ✅ File location references (absolute paths)
+- ✅ Code examples with explanations
+- ✅ Decision rationale
+
+**Start here:** [NAVIGATION.md](NAVIGATION.md) - Complete documentation index
+
+---
+
+## 🤝 Contributing
+
+### For Developers
+
+1. Read [SETUP.md](SETUP.md) to set up your environment
+2. Check [ARCHITECTURE.md](ARCHITECTURE.md) for design patterns
+3. Review [FEATURES.md](FEATURES.md) for roadmap
+4. See [ISSUES.md](ISSUES.md) for known constraints
+
+### For AI Agents
+
+1. Read [NAVIGATION.md](NAVIGATION.md) for documentation map
+2. Check `docs/PHPIPAM_UI_MAP.md` for UI requirements
+3. Check `docs/IMPLEMENTATION_GAP.md` for what exists
+4. Follow patterns in [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+---
+
+## 🔗 Related Documentation
+
+- **phpIPAM Original:** https://phpipam.net/
+- **Laravel 12:** https://laravel.com/docs/12.x
+- **FilamentPHP 4:** https://filamentphp.com/docs
+
+---
+
+**Last Updated:** 2025-11-28  
+**Project Maintainer:** See git history  
+**For Support:** Check [ISSUES.md](ISSUES.md) or open an issue

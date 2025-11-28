@@ -8,6 +8,7 @@ use App\Services\IpConversionService;
 use App\Services\IpPrefillService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use Illuminate\Support\Facades\Bus;
 
 class IpPrefillServiceTest extends TestCase
 {
@@ -15,6 +16,8 @@ class IpPrefillServiceTest extends TestCase
 
     public function test_prefill_creates_expected_number_of_ips()
     {
+        Bus::fake();
+
         $ipService = new IpConversionService();
 
         $cidrBase = '192.168.200.0';
@@ -47,6 +50,8 @@ class IpPrefillServiceTest extends TestCase
 
     public function test_prefill_skips_existing_entries_and_respects_mask_limit()
     {
+        Bus::fake();
+
         $ipService = new IpConversionService();
 
         $cidrBase = '192.168.201.0';
@@ -77,7 +82,9 @@ class IpPrefillServiceTest extends TestCase
 
         // Newly inserted records should have last_seen = null; the pre-existing item may have default
         $nullLastSeenCount = IpAddress::where('subnet_id', $subnet->id)->whereNull('last_seen')->count();
-        $this->assertEquals(5, $nullLastSeenCount);
+        // Since the table default for last_seen is NULL, the pre-existing record will also
+        // have NULL unless explicitly set — so we should expect 6 NULLs (1 pre-existing + 5 new).
+        $this->assertEquals(6, $nullLastSeenCount);
 
         // Test mask too small (too big subnet) is rejected
         $subnet2 = Subnet::create(['subnet' => $ipService->toDecimal('10.0.0.0'), 'mask' => 21]);

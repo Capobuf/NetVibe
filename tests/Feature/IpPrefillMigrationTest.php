@@ -8,6 +8,7 @@ use App\Services\IpConversionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
+use Illuminate\Support\Facades\Bus;
 
 class IpPrefillMigrationTest extends TestCase
 {
@@ -15,6 +16,8 @@ class IpPrefillMigrationTest extends TestCase
 
     public function test_new_ip_addresses_have_null_last_seen_by_default()
     {
+        Bus::fake();
+
         $ipService = new IpConversionService();
 
         $subnet = Subnet::create([
@@ -38,6 +41,8 @@ class IpPrefillMigrationTest extends TestCase
 
     public function test_migration_converts_1970_placeholder_to_null()
     {
+        Bus::fake();
+
         $ipService = new IpConversionService();
 
         $subnet = Subnet::create([

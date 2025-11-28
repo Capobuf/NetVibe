@@ -4,10 +4,10 @@ namespace App\Filament\Clusters\Racks\Resources\Devices\Schemas;
 
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Section;
-use Filament\Forms\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Get;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class DeviceForm
@@ -54,7 +54,7 @@ class DeviceForm
                     ->preload()
                     ->label('Rack')
                     ->default(request()->query('rack_id'))
-                    ->options(function (Get $get) {
+                    ->options(function (\Filament\Schemas\Components\Utilities\Get $get) {
                         $query = \App\Models\Rack::query();
                         if ($locationId = $get('location_id')) {
                             $query->where('location_id', $locationId);

@@ -8,9 +8,10 @@ class Vlan extends Model
 {
     protected $table = 'vlans';
 
-    protected $fillable = ['domain_id', 'name', 'number', 'description', 'customer_id'];
+    // use explicit l2_domain_id (clearer than domain_id)
+    protected $fillable = ['l2_domain_id', 'name', 'number', 'description', 'customer_id'];
     
     public function customer() { return $this->belongsTo(Customer::class); }
     public function subnets() { return $this->hasMany(Subnet::class); }
-    public function l2Domain() { return $this->belongsTo(\App\Models\L2Domain::class, 'domain_id'); }
+    public function l2Domain() { return $this->belongsTo(\App\Models\L2Domain::class, 'l2_domain_id'); }
 }

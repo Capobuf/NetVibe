@@ -37,7 +37,7 @@ class IpAddressesRelationManagerTest extends TestCase
         $service = new IpConversionService();
         // ensure any pre-existing row for this subnet/ip is removed for test isolation
         $subnet->ipAddresses()->where('ip_addr', $service->toDecimal('192.168.100.10'))->delete();
-        $this->assertTrue(IpAddressesRelationManager::isIpValidForSubnet($subnet, null, '192.168.100.10'));
+        $this->assertTrue(IpAddressesRelationManager::isIpValidForSubnet($subnet, '192.168.100.10', null));
     }
 
     public function test_ipv6_is_rejected(): void
@@ -50,7 +50,7 @@ class IpAddressesRelationManagerTest extends TestCase
             'cidr' => '192.168.100.0/24',
         ]);
 
-        $this->assertFalse(IpAddressesRelationManager::isIpValidForSubnet($subnet, null, '2001::1'));
+        $this->assertFalse(IpAddressesRelationManager::isIpValidForSubnet($subnet, '2001::1', null));
     }
 
     public function test_duplicate_ip_is_rejected(): void
@@ -74,6 +74,6 @@ class IpAddressesRelationManagerTest extends TestCase
             'ip_str' => '10.5.100.5',
         ]);
 
-        $this->assertFalse(IpAddressesRelationManager::isIpValidForSubnet($subnet, null, '192.168.200.5'));
+        $this->assertFalse(IpAddressesRelationManager::isIpValidForSubnet($subnet, '192.168.200.5', null));
     }
 }

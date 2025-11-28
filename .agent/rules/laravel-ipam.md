@@ -114,3 +114,9 @@ Instead of trying to configure the Resource via CLI arguments, follow this stric
     * The `getPages()` method configuration.
 
 **RULE:** It is faster and safer to write the PHP code yourself than to debug failed CLI wizard flags.
+
+### ⚠️ LIVEWIRE/BLADE RULE (CRITICAL)
+* **SINGLE ROOT ELEMENT:** Every Livewire Blade view (`.blade.php`) MUST have exactly **ONE** root HTML element.
+    * ❌ **NEVER** output multiple divs at the top level.
+    * ❌ **NEVER** place HTML comments `` outside the root div.
+    * ✅ **ALWAYS** wrap your code in `<div>...</div>` or `<x-filament::section>...</x-filament::section>`.

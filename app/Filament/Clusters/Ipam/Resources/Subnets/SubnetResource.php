@@ -12,15 +12,15 @@ use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Card;
-use Filament\Schemas\Components\Select;
-use Filament\Schemas\Components\TextInput;
-use Filament\Schemas\Components\Textarea;
+use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\DeleteAction;
-use Filament\Tables\Actions\Action;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use App\Jobs\ScanSubnetJob;
@@ -37,8 +37,9 @@ class SubnetResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
-            Card::make()->schema([
+            Section::make()->schema([
                 Select::make('vrf_id')->relationship('vrf', 'name')->required(),
+                Select::make('vlan_id')->relationship('vlan', 'name')->preload()->searchable()->nullable(),
                 TextInput::make('cidr')->required(),
                 Textarea::make('description'),
             ]),

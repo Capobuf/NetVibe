@@ -21,6 +21,7 @@ use Filament\Tables\Table;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use App\Jobs\ScanSubnetJob;
@@ -50,7 +51,10 @@ class SubnetResource extends Resource
     {
         return $table->columns([
             Tables\Columns\TextColumn::make('cidr')->searchable()->sortable(),
+            Tables\Columns\TextColumn::make('vlan.name')->label('VLAN')->searchable()->sortable(),
             Tables\Columns\TextColumn::make('description')->limit(50),
+        ])->headerActions([
+            CreateAction::make()->slideOver(),
         ])->recordActions([
             Action::make('scan')
                 ->label('Scan Network')
@@ -63,6 +67,11 @@ class SubnetResource extends Resource
 
             EditAction::make()->slideOver(),
         ]);
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->with(['vlan']);
     }
 
     public static function getRelations(): array

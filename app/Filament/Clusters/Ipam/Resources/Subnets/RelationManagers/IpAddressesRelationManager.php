@@ -7,9 +7,20 @@ namespace App\Filament\Clusters\Ipam\Resources\Subnets\RelationManagers;
 use App\Models\Subnet;
 use App\Services\IpConversionService;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Schema;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Filament\Actions\CreateAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\DeleteAction;
 
 class IpAddressesRelationManager extends RelationManager
 {
+    protected static string $relationship = 'ipAddresses';
+    protected static ?string $recordTitleAttribute = 'ip_addr';
     /**
      * Validate an IP for a given subnet.
      * - Reject non-parsable IPs
@@ -61,5 +72,33 @@ class IpAddressesRelationManager extends RelationManager
         }
 
         return true;
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema->schema([
+            TextInput::make('ip_addr')->required(),
+            TextInput::make('hostname')->default(null),
+            Textarea::make('description')->default(null),
+            Toggle::make('is_gateway')->default(false),
+        ]);
+    }
+
+    public function table(Table $table): Table
+    {
+        return $table->columns([
+            Tables\Columns\TextColumn::make('ip_addr')
+                ->label('IP Address')
+                ->formatStateUsing(fn ($state) => app(IpConversionService::class)->fromDecimal($state))
+                ->searchable()
+                ->sortable(),
+            Tables\Columns\TextColumn::make('hostname')->searchable(),
+            Tables\Columns\TextColumn::make('description')->limit(30),
+        ])->headerActions([
+            CreateAction::make()->slideOver(),
+        ])->recordActions([
+            EditAction::make(),
+            DeleteAction::make(),
+        ]);
     }
 }

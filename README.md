@@ -26,7 +26,6 @@ Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/)
 
 ### Philosophy: "Strict Replica"
 
-- ✅ Replicate phpIPAM workflows exactly (no shortcuts or "improvements")
 - ✅ Modern codebase (Laravel 12, FilamentPHP 4, PHP 8.4)
 - ✅ Docker-based development environment
 - ✅ Clean architecture (Action pattern, DTOs, Services)

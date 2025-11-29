@@ -38,7 +38,7 @@ class RackForm
                     ->searchable()
                     ->preload()
                     ->live()
-                    ->afterStateUpdated(fn (Select $component) => $component->getContainer()->getComponent('location_id')?->state(null)),
+                    ->afterStateUpdated(fn (callable $set) => $set('location_id', null)),
                     
                 Select::make('location_id')
                     ->label('Location')

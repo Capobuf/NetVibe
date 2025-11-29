@@ -24,9 +24,11 @@ class DeviceModelsTable
                     ->sortable()
                     ->label('Model'),
                     
-                TextColumn::make('manufacturer')
+                // `manufacturer` column does not exist in schema — show `type` instead
+                TextColumn::make('type')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->label('Type'),
                     
                 TextColumn::make('description')
                     ->limit(50)
@@ -58,6 +60,6 @@ class DeviceModelsTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('name');
+            ->defaultSort('brand');
     }
 }

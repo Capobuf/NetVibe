@@ -10,6 +10,7 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -62,10 +63,16 @@ class IpAddressResource extends Resource
                     ->preload()
                     ->default(null),
                 Select::make('location_id')
-                    ->relationship('location', 'name')
+                    ->relationship(
+                        name: 'location',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn (\Illuminate\Database\Eloquent\Builder $query, Get $get) =>
+                            $query->when($get('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
+                    )
                     ->searchable()
                     ->preload()
-                    ->default(null),
+                    ->default(null)
+                    ->disabled(fn (Get $get) => ! $get('customer_id')),
                 TextInput::make('port')
                     ->default(null),
                 Textarea::make('note')
@@ -85,7 +92,9 @@ class IpAddressResource extends Resource
                     ->relationship('customer', 'title')
                     ->searchable()
                     ->preload()
-                    ->default(null),
+                    ->default(null)
+                    ->live()
+                    ->afterStateUpdated(fn (callable $set) => $set('location_id', null)),
             ]);
     }
 

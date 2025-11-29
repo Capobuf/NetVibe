@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up()
     {
-        Schema::create('settings', function (Blueprint $table): void {
+        if (! Schema::hasTable('settings')) {
+            Schema::create('settings', function (Blueprint $table): void {
             $table->id();
 
             $table->string('group');
@@ -19,6 +20,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['group', 'name']);
-        });
+            });
+        }
     }
 };

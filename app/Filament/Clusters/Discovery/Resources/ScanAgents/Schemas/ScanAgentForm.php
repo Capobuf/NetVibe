@@ -7,6 +7,7 @@ namespace App\Filament\Clusters\Discovery\Resources\ScanAgents\Schemas;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
 use Filament\Schemas\Schema;
 
 class ScanAgentForm
@@ -29,6 +30,13 @@ class ScanAgentForm
 
             Toggle::make('active')
                 ->default(true),
+
+            Select::make('customer_id')
+                ->relationship('customer', 'name')
+                ->searchable()
+                ->preload()
+                ->label('Dedicated to Customer')
+                ->helperText('Leave empty if this is a Global/Shared agent (e.g. Localhost)')
         ]);
     }
 }

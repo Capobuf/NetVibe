@@ -33,5 +33,6 @@ class DatabaseSeeder extends Seeder
             ]
         );
         $this->call(OrganizationSeeder::class);
+        $this->call(DiscoverySeeder::class);
     }
 }

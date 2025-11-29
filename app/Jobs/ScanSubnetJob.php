@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Models\IpAddress;
 use App\Models\Subnet;
 use App\Services\IpConversionService;
+use App\Settings\DiscoverySettings;
 use App\Services\Scanners\FpingWrapper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,12 +27,18 @@ final class ScanSubnetJob implements ShouldQueue
     {
     }
 
-    public function handle(FpingWrapper $wrapper, IpConversionService $converter): void
+    public function handle(FpingWrapper $wrapper, IpConversionService $converter, DiscoverySettings $settings): void
     {
         $cidr = $this->subnet->cidr;
 
+        // Guard: respect per-subnet discover flag — if discovery is disabled, skip.
+        if (! $this->subnet->discover_subnet) {
+            Log::info('ScanSubnetJob: discovery disabled for subnet', ['subnet_id' => $this->subnet->getKey(), 'cidr' => $cidr]);
+            return;
+        }
+
         try {
-            $found = $wrapper->scan($cidr);
+            $found = $wrapper->scan($cidr, $settings->icmp_timeout_ms, $settings->icmp_retries);
 
             $count = 0;
             foreach ($found as $ip) {

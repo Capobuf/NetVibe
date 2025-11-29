@@ -105,6 +105,40 @@ services:
     profiles:
       - dev
 
+  # Dedicated queue worker
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: modern-ipam-app
+    container_name: modern-ipam-worker
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --tries=3 --timeout=300
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE:-modern_ipam}
+      - DB_USERNAME=${DB_USERNAME:-ipam_user}
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - REDIS_HOST=redis
+    networks:
+      - ipam-network
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep php || true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   ipam-network:
     driver: bridge

@@ -20,15 +20,15 @@ final class FpingWrapper
      *
      * @throws \RuntimeException when fping fails with a fatal exit code (3 or 4)
      */
-    public function scan(string $cidr): array
+    public function scan(string $cidr, int $timeout = 200, int $retries = 1): array
     {
         // Build the command. Use a short timeout (-t 200) and single retry (-r 1) for speed.
         $process = Process::run([
             'fping',
             '-a',     // show only alive hosts
             '-g',     // expand CIDR into list of addresses
-            '-r', '1',
-            '-t', '200',
+            '-r', (string) $retries,
+            '-t', (string) $timeout,
             $cidr,
         ]);
 

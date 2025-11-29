@@ -14,6 +14,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables;
@@ -44,6 +45,23 @@ class SubnetResource extends Resource
                 TextInput::make('cidr')->required(),
                 Textarea::make('description'),
             ]),
+
+            Section::make('Discovery Configuration')->collapsible()
+                ->schema([
+                    Toggle::make('discover_subnet')->label('Enable Auto-Discovery')->default(true),
+
+                    Select::make('scan_interval')
+                        ->label('Scan interval')
+                        ->options([
+                            5 => 'Every 5 Minutes',
+                            60 => 'Every Hour',
+                            1440 => 'Daily',
+                        ])
+                        ->nullable()
+                        ->hint('Leave empty to use the global default'),
+
+                    Select::make('scan_agent_id')->relationship('scanAgent', 'name')->nullable(),
+                ]),
         ]);
     }
 

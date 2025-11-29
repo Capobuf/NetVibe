@@ -24,6 +24,10 @@ class ScanAgentsTable
                     ->default('Localhost')
                     ->sortable(),
 
+                TextColumn::make('customer.name')
+                    ->label('Customer')
+                    ->sortable(),
+
                 TextColumn::make('active')
                     ->label('Status')
                     ->formatStateUsing(fn ($state) => $state ? 'Active' : 'Inactive')

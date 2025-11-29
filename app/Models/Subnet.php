@@ -19,7 +19,7 @@ class Subnet extends Model
         'vlan_id', 'show_name', 'device_id', 'permissions', 'ping_subnet',
         'discover_subnet', 'resolve_dns', 'dns_recursive', 'dns_records',
         'nameserver_id', 'scan_agent_id', 'customer_id', 'location_id',
-        'is_folder', 'is_full', 'is_pool', 'state', 'threshold',
+        'is_folder', 'is_full', 'is_pool', 'state', 'threshold', 'scan_interval',
         'last_scan', 'last_discovery',
     ];
 
@@ -33,6 +33,7 @@ class Subnet extends Model
         'dns_recursive' => 'boolean',
         'dns_records' => 'boolean',
         'is_folder' => 'boolean',
+        'scan_interval' => 'integer',
         'is_full' => 'boolean',
         'is_pool' => 'boolean',
         'last_scan' => 'datetime',

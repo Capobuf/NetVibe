@@ -4,15 +4,15 @@
 
 ---
 
-## ✅ Implemented Features (V1.0)
+## ✅ Implemented Features (V1.0 - Completed)
 
-### 1. Core IPAM (IPv4)
+### 1. Core IPAM (IPv4) — ✅ Completed
 - **Subnets:** Full hierarchical management (Master/Nested), CIDR parsing and validation.
 - **IP Addresses:** Stored as decimal for efficient range queries and indexing.
 - **VRF support:** Logical segmentation for multi-tenant networks.
 - **Pre-fill:** Async pre-fill jobs to populate subnets with IP addresses.
 
-### 2. Rack Management
+### 2. Rack Management — ✅ Completed
 - **Racks:** Full 42U rack support, units, and location linking.
 - **Devices & Models:** Device models with U sizes, device inventory and per-rack positioning.
 - **Visual Rack UI:** 42U visualizations showing device placement, spanning and interactive create/edit (URL-based drag/placement flow).
@@ -20,12 +20,12 @@
 - **Customers:** Multi-tenant support for assets.
 - **VLANs:** L2 Domain support, unique constraints.
 
-### 3. Discovery & Scanning
+### 3. Discovery & Scanning — ✅ Completed
 - **Scan Agents:** Local and pluggable agents for scanning.
 - **Fping wrapper:** Lightweight wrapper (`FpingWrapper`) to run ICMP scans via `fping`.
 - **Jobs & Queue:** Scans are dispatched to the queue and stored with discovery timestamps and results.
 
-### 4. Dashboard & Administration
+### 4. Dashboard & Administration — ✅ Completed
 - **Filament Admin:** Clustered Filament v4 resources for a tidy admin UX.
 - **Dashboard widgets:** System overview and latest scan results widgets.
 - **Authentication & roles:** Secure login and basic role management for admins.
@@ -38,6 +38,13 @@
 - **IPv6 UI Support:** Database schema already prepared; UI support for IPv6 is scheduled (frontend & UX).
 - **Remote API Agents:** Remote agent support for distributed scanning and result ingestion.
 - **SNMP Integration:** Passive discovery via SNMP (walks) and richer device metadata.
+
+### ✅ Marked Complete (summary)
+- **Organization:** Customers, Locations (Multi-tenant logic)
+- **IPAM:** IPv4, VRF, L2 Domains, VLANs, Subnets (nested)
+- **Infrastructure:** Racks (visual/interactive), Devices (cascading selects + quick create)
+- **Discovery:** Async scanning (fping), Scan Agents + Queue workers
+- **Admin:** Settings Page, Dashboard widgets
 
 ## 📋 Roadmap
 

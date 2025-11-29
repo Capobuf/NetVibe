@@ -76,6 +76,15 @@ We use **Filament Clusters** to group related resources and keep the sidebar cle
 
 ---
 
+## 🔑 Key Patterns & Conventions
+
+- **Filament Clusters:** All admin CRUD resources are organized under `app/Filament/Clusters/*` to keep the UI and codebase tidy and coherent.
+- **Native Enums + Eloquent Casts:** The codebase uses PHP 8.1+ native Enums with explicit Eloquent casts so UI/forms and DB remain in sync.
+- **Decimal IP Storage:** Storing IP addresses as decimals/integers improves index performance and simplifies range queries.
+- **Process Wrapper for Scanning:** External scanning tools (e.g., `fping`) are executed through a process wrapper (`FpingWrapper`) to capture outputs and manage timeouts and error codes.
+
+---
+
 ## 🐳 Infrastructure (Docker)
 
 - **App:** PHP 8.4 FPM + Nginx (plus required tooling like `fping` for discovery)

@@ -10,12 +10,16 @@ class GeneralSettingsPageTest extends TestCase
     public function test_general_settings_page_saves_settings()
     {
         // Ensure the settings table exists in test DB (spatie package may query it during boot)
-        \Illuminate\Support\Facades\Schema::create('settings', function (\Illuminate\Database\Schema\Blueprint $table) {
+        // Only create the table if it does not already exist. This avoids conflicts when
+        // the real package migration is present and the test environment runs migrations.
+        if (! \Illuminate\Support\Facades\Schema::hasTable('settings')) {
+            \Illuminate\Support\Facades\Schema::create('settings', function (\Illuminate\Database\Schema\Blueprint $table) {
             $table->string('group');
             $table->string('name');
             $table->json('payload')->nullable();
             $table->timestamps();
-        });
+            });
+        }
 
         // Bind a fake settings instance so tests don't try to hit DB during assert/save
         $fakeSettings = new class extends GeneralSettings {

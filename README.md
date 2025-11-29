@@ -1,5 +1,7 @@
 # Modern IPAM
 
+**Status:** Stable / V1.0 MVP
+
 > A modern Laravel 12 + FilamentPHP 4 implementation of IP Address Management
 
 [![Laravel 12](https://img.shields.io/badge/Laravel-12.x-red)](https://laravel.com)
@@ -44,6 +46,8 @@ Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/)
 | **Web Server** | Nginx | 1.28.0 | High performance, FastCGI |
 | **IP Library** | mlocati/ip-lib | 1.22.0 | Best IPv4/IPv6 support |
 | **Container** | Docker | Compose | Reproducible environments |
+
+Other notable packages: Spatie Settings (spatie/laravel-settings)
 
 📖 **Details:** [ARCHITECTURE.md](ARCHITECTURE.md)
 
@@ -149,7 +153,7 @@ Password: password
 
 ## 📊 Project Status
 
-**Current Version:** 1.0.0 (Phase 6 - Visual Racks & Dashboard)
+**Current Version:** 1.0.0 — Stable / V1.0 MVP
 
 **Stability:** ✅ **Production-Ready** for small-medium deployments
 

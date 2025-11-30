@@ -21,7 +21,7 @@ class DeviceFormUiTest extends TestCase
     {
         $file = file_get_contents(app_path('Filament/Clusters/Racks/Resources/Devices/Schemas/DeviceForm.php'));
         $this->assertStringContainsString("Select::make('rack_id')", $file, 'Device form must contain rack_id select');
-        $this->assertStringContainsString('createOptionForm(function (Get $get)', $file, 'rack_id should use a closure-based createOptionForm');
+        $this->assertStringContainsString('createOptionForm(function ($get)', $file, 'rack_id should use a closure-based createOptionForm');
         $this->assertStringContainsString('->createOptionUsing(function (array $data): int', $file, 'rack_id should define createOptionUsing to return new ID');
         $this->assertStringContainsString("->default(fn () => \$get('customer_id'))", $file, 'Rack quick-create should try to default customer_id from parent form');
         $this->assertStringContainsString("->default(fn () => \$get('location_filter_id') ?? \$get('location_id'))", $file, 'Rack quick-create should try to default location from parent form');

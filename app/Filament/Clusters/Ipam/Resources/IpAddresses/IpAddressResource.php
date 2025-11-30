@@ -10,10 +10,8 @@ use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -43,13 +41,21 @@ class IpAddressResource extends Resource
                     ->default(null),
                 TextInput::make('ip_addr')
                     ->required(),
-                Toggle::make('is_gateway')
-                    ->required(),
+                Select::make('type')
+                    ->required()
+                    ->options([
+                        'host' => 'Host',
+                        'gateway' => 'Gateway',
+                        'broadcast' => 'Broadcast',
+                        'reserved' => 'Reserved',
+                        'dhcp' => 'DHCP',
+                    ])
+                    ->default('host'),
                 TextInput::make('description')
                     ->default(null),
                 TextInput::make('hostname')
                     ->default(null),
-                TextInput::make('mac')
+                TextInput::make('mac_address')
                     ->default(null),
                 TextInput::make('owner')
                     ->default(null),
@@ -66,13 +72,13 @@ class IpAddressResource extends Resource
                     ->relationship(
                         name: 'location',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (\Illuminate\Database\Eloquent\Builder $query, Get $get) =>
+                        modifyQueryUsing: fn (\Illuminate\Database\Eloquent\Builder $query, $get) =>
                             $query->when($get('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
                     )
                     ->searchable()
                     ->preload()
                     ->default(null)
-                    ->disabled(fn (Get $get) => ! $get('customer_id')),
+                    ->disabled(fn ($get) => ! $get('customer_id')),
                 TextInput::make('port')
                     ->default(null),
                 Textarea::make('note')
@@ -94,7 +100,7 @@ class IpAddressResource extends Resource
                     ->preload()
                     ->default(null)
                     ->live()
-                    ->afterStateUpdated(fn (callable $set) => $set('location_id', null)),
+                    ->afterStateUpdated(fn ($set) => $set('location_id', null)),
             ]);
     }
 
@@ -114,7 +120,7 @@ class IpAddressResource extends Resource
                     ->searchable()
                     ->limit(30)
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('mac')
+                Tables\Columns\TextColumn::make('mac_address')
                     ->label('MAC Address')
                     ->searchable()
                     ->toggleable(),
@@ -144,9 +150,17 @@ class IpAddressResource extends Resource
                 Tables\Columns\TextColumn::make('location.name')
                     ->label('Location')
                     ->toggleable(),
-                Tables\Columns\IconColumn::make('is_gateway')
-                    ->label('Gateway')
-                    ->boolean()
+                Tables\Columns\TextColumn::make('type')
+                    ->label('Type')
+                    ->badge()
+                    ->color(fn ($state) => match ($state) {
+                        'gateway' => 'primary',
+                        'host' => 'success',
+                        'broadcast' => 'danger',
+                        'reserved' => 'warning',
+                        'dhcp' => 'secondary',
+                        default => 'secondary',
+                    })
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('port')
                     ->toggleable(isToggledHiddenByDefault: true),

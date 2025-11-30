@@ -13,7 +13,12 @@ return new class extends Migration
         if (Schema::hasTable('subnets')) {
             Schema::table('subnets', function (Blueprint $table) {
                 if (! Schema::hasColumn('subnets', 'last_discovery')) {
-                    $table->timestamp('last_discovery')->nullable()->after('scan_agent_id');
+                    // Add column safely: place after scan_agent_id if present, otherwise append to table.
+                    if (Schema::hasColumn('subnets', 'scan_agent_id')) {
+                        $table->timestamp('last_discovery')->nullable()->after('scan_agent_id');
+                    } else {
+                        $table->timestamp('last_discovery')->nullable();
+                    }
                 }
             });
         }

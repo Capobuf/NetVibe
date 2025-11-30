@@ -6,7 +6,6 @@ use Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
-use App\Jobs\IpPrefillJob;
 use App\Models\Customer;
 use App\Models\Vrf;
 use App\Models\Subnet;
@@ -21,8 +20,7 @@ class MigrateSubnetActionTest extends TestCase
     {
         parent::setUp();
 
-        // Prevent background prefill jobs from running during these unit tests
-        Bus::fake([\App\Jobs\IpPrefillJob::class]);
+        // Prefill jobs removed; tests should not rely on background prefill dispatch.
 
         // Some tests (and app code) read from the settings table via Spatie Settings.
         // Ensure the table exists in the test database to avoid sqlite "no such table" errors.
@@ -49,9 +47,7 @@ class MigrateSubnetActionTest extends TestCase
             IpAddress::where('subnet_id', $subnet->getKey())->delete();
         });
 
-        // Ensure the system would regenerate IPs for the new/empty subnet
-        IpPrefillJob::dispatch($subnet);
-        Bus::assertDispatched(IpPrefillJob::class, fn ($job) => $job->subnet->getKey() === $subnet->getKey());
+        // Prefill logic removed — no dispatch expected. Ensure table is empty instead.
 
         $this->assertEquals(0, $subnet->ipAddresses()->count());
     }
@@ -101,9 +97,7 @@ class MigrateSubnetActionTest extends TestCase
             }
         });
 
-        // Trigger a prefill job that would refill the subnet; the action dispatches this in the app flow
-        IpPrefillJob::dispatch($subnet);
-        Bus::assertDispatched(IpPrefillJob::class, fn ($job) => $job->subnet->getKey() === $subnet->getKey());
+        // Prefill logic removed — no dispatch expected.
 
         $this->assertEquals(1, $subnet->ipAddresses()->count());
         $remaining = $subnet->ipAddresses()->first();
@@ -156,9 +150,7 @@ class MigrateSubnetActionTest extends TestCase
             $subnet->save();
         });
 
-        // After remap, ensure prefill gets dispatched
-        IpPrefillJob::dispatch($subnet);
-        Bus::assertDispatched(IpPrefillJob::class, fn ($job) => $job->subnet->getKey() === $subnet->getKey());
+        // Prefill logic removed — nothing to dispatch
 
         $this->assertEquals('10.10.100.10', $subnet->ipAddresses()->first()->ip_str);
         $this->assertEquals('10.10.100.0/24', $subnet->cidr);

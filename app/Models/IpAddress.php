@@ -12,8 +12,8 @@ class IpAddress extends Model
 {
     use SoftDeletes;
     protected $fillable = [
-        'subnet_id', 'ip_addr', 'is_gateway', 'description', 'hostname',
-        'mac', 'owner', 'state', 'switch_id', 'location_id', 'port',
+        'subnet_id', 'ip_addr', 'description', 'hostname',
+        'mac_address', 'owner', 'state', 'switch_id', 'location_id', 'port',
         'note', 'last_seen', 'exclude_ping', 'ptr_ignore', 'ptr',
         'firewall_address_object', 'customer_id',
         'type', 'device_id',
@@ -21,7 +21,6 @@ class IpAddress extends Model
 
     protected $casts = [
         'ip_addr' => 'string',
-        'is_gateway' => 'boolean',
         'exclude_ping' => 'boolean',
         'ptr_ignore' => 'boolean',
         'last_seen' => 'datetime',

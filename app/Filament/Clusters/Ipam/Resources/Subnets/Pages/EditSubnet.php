@@ -13,7 +13,6 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 
 use App\Services\IpConversionService;
-use App\Jobs\IpPrefillJob;
 use App\Models\IpAddress;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -118,8 +117,7 @@ class EditSubnet extends EditRecord
                             $record->save();
 
                             // 🚀 Regenerate IPs for the updated subnet so the UI reflects the new range.
-                            // The IpPrefillJob will create any missing IPs for this subnet.
-                            IpPrefillJob::dispatch($record);
+                            // Prefill behavior removed — the app now stores IPs on-demand.
                         });
 
                         Notification::make()->success()->title('Subnet migrated')->body('CIDR migration completed')->send();

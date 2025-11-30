@@ -8,7 +8,7 @@ use App\Filament\Clusters\Ipam\IpamCluster;
 use App\Models\Vlan;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Table;
@@ -22,6 +22,11 @@ class VlanResource extends Resource
     protected static ?string $cluster = IpamCluster::class;
 
     protected static string|BackedEnum|null $navigationIcon = null;
+
+    // Normalize labels and capitalization
+    protected static ?string $navigationLabel = 'VLANs';
+    protected static ?string $modelLabel = 'VLAN';
+    protected static ?string $pluralModelLabel = 'VLANs';
 
     public static function form(Schema $schema): Schema
     {

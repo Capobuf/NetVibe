@@ -3,7 +3,6 @@
 namespace App\Filament\Clusters\Racks\Resources\Racks\Schemas;
 
 use App\Models\Location;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -38,12 +37,12 @@ class RackForm
                     ->searchable()
                     ->preload()
                     ->live()
-                    ->afterStateUpdated(fn (callable $set) => $set('location_id', null)),
+                    ->afterStateUpdated(fn ($set) => $set('location_id', null)),
                     
                 Select::make('location_id')
                     ->label('Location')
                     // Show only locations for the selected customer
-                    ->options(fn (\Filament\Schemas\Components\Utilities\Get $get) => Location::query()
+                    ->options(fn ($get) => Location::query()
                         ->where('customer_id', $get('customer_id'))
                         ->pluck('name', 'id'))
                     ->searchable()
@@ -51,7 +50,7 @@ class RackForm
                     // Make location optional
                     ->nullable()
                     // Auto-select when the selected customer has exactly one location
-                    ->default(function (\Filament\Schemas\Components\Utilities\Get $get) {
+                    ->default(function ($get) {
                         $customerId = $get('customer_id');
                         if (! $customerId) {
                             return null;
@@ -61,7 +60,7 @@ class RackForm
                     })
                     ->live()
                     // Keep disabled until a customer is chosen
-                    ->disabled(fn (\Filament\Schemas\Components\Utilities\Get $get) => ! $get('customer_id'))
+                    ->disabled(fn ($get) => ! $get('customer_id'))
                     ->key('location_id'),
                     
                 Textarea::make('description')

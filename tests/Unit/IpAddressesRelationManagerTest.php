@@ -19,8 +19,7 @@ class IpAddressesRelationManagerTest extends TestCase
     {
         parent::setUp();
 
-        // Prevent the Prefill job from running during these unit tests (isolation)
-        \Illuminate\Support\Facades\Bus::fake([\App\Jobs\IpPrefillJob::class]);
+        // Prefill job removed — nothing to fake here.
     }
 
     public function test_ipv4_is_valid_when_not_present_in_subnet(): void

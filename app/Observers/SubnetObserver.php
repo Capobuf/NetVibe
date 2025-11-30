@@ -2,17 +2,15 @@
 
 namespace App\Observers;
 
-use App\Jobs\IpPrefillJob;
+// IpPrefillJob removed - subnet prefill deprecated (sparse storage)
 use App\Models\Subnet;
 
 class SubnetObserver
 {
     public function created(Subnet $subnet): void
     {
-        // Only schedule prefill for reasonably small subnets
-        // The IpPrefillService already enforces mask limits, but here we only dispatch when mask >= 22
-        if ((int) $subnet->mask >= 22) {
-            IpPrefillJob::dispatch($subnet);
-        }
+        // Prefill behavior is deprecated and no scheduling is performed.
+        // Previously we dispatched IpPrefillJob for smaller subnets.
+        // Prefill is deprecated — subnets are now stored sparsely on demand.
     }
 }

@@ -8,7 +8,7 @@ use App\Filament\Clusters\Ipam\IpamCluster;
 use App\Models\L2Domain;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Table;
@@ -22,6 +22,11 @@ class L2DomainResource extends Resource
     protected static ?string $cluster = IpamCluster::class;
 
     protected static string|BackedEnum|null $navigationIcon = null;
+
+    // Normalize labels and capitalization
+    protected static ?string $navigationLabel = 'L2 Domains';
+    protected static ?string $modelLabel = 'L2 Domain';
+    protected static ?string $pluralModelLabel = 'L2 Domains';
 
     public static function form(Schema $schema): Schema
     {

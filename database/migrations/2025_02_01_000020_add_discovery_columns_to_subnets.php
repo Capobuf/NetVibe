@@ -18,7 +18,12 @@ return new class extends Migration
             }
 
             if (! Schema::hasColumn('subnets', 'scan_agent_id')) {
-                $table->foreignId('scan_agent_id')->nullable()->constrained('scan_agents')->nullOnDelete();
+                if (Schema::hasTable('scan_agents')) {
+                    $table->foreignId('scan_agent_id')->nullable()->constrained('scan_agents')->nullOnDelete();
+                } else {
+                    // create the column without FK; a later migration will add the constraint
+                    $table->unsignedBigInteger('scan_agent_id')->nullable();
+                }
             }
 
             if (! Schema::hasColumn('subnets', 'last_discovery')) {

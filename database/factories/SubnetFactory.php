@@ -22,7 +22,7 @@ class SubnetFactory extends Factory
             'vrf_id' => Vrf::factory(),
             'subnet' => $ipService->toDecimal($ip),
             'mask' => $mask,
-            'cidr' => null,
+            // 'cidr' intentionally omitted to avoid invoking the typed setCidrAttribute on null
             'name' => $this->faker->optional()->word(),
             'description' => $this->faker->optional()->sentence(),
         ];

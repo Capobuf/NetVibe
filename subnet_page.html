@@ -1,0 +1,1106 @@
+﻿<!DOCTYPE html>
+<html
+    lang="en"
+    dir="ltr"
+    class="fi"
+>
+    <head>
+        
+
+        <meta charset="utf-8" />
+        <meta name="csrf-token" content="A7xvRqW0jV39Nti1yi99h3lL8UetMnWEoptnnDqS" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        
+        
+        <title>
+            View Subnet -  Modern IPAM
+        </title>
+
+        
+
+        <style>
+            [x-cloak=''],
+            [x-cloak='x-cloak'],
+            [x-cloak='1'] {
+                display: none !important;
+            }
+
+            [x-cloak='inline-flex'] {
+                display: inline-flex !important;
+            }
+
+            @media (max-width: 1023px) {
+                [x-cloak='-lg'] {
+                    display: none !important;
+                }
+            }
+
+            @media (min-width: 1024px) {
+                [x-cloak='lg'] {
+                    display: none !important;
+                }
+            }
+        </style>
+
+        <link
+            href="http://localhost/fonts/filament/filament/inter/index.css?v=4.2.3.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+    
+<style>
+    :root {
+         --danger-50:oklch(0.971 0.013 17.38);  --danger-100:oklch(0.936 0.032 17.717);  --danger-200:oklch(0.885 0.062 18.334);  --danger-300:oklch(0.808 0.114 19.571);  --danger-400:oklch(0.704 0.191 22.216);  --danger-500:oklch(0.637 0.237 25.331);  --danger-600:oklch(0.577 0.245 27.325);  --danger-700:oklch(0.505 0.213 27.518);  --danger-800:oklch(0.444 0.177 26.899);  --danger-900:oklch(0.396 0.141 25.723);  --danger-950:oklch(0.258 0.092 26.042);  --gray-50:oklch(0.985 0 0);  --gray-100:oklch(0.967 0.001 286.375);  --gray-200:oklch(0.92 0.004 286.32);  --gray-300:oklch(0.871 0.006 286.286);  --gray-400:oklch(0.705 0.015 286.067);  --gray-500:oklch(0.552 0.016 285.938);  --gray-600:oklch(0.442 0.017 285.786);  --gray-700:oklch(0.37 0.013 285.805);  --gray-800:oklch(0.274 0.006 286.033);  --gray-900:oklch(0.21 0.006 285.885);  --gray-950:oklch(0.141 0.005 285.823);  --info-50:oklch(0.97 0.014 254.604);  --info-100:oklch(0.932 0.032 255.585);  --info-200:oklch(0.882 0.059 254.128);  --info-300:oklch(0.809 0.105 251.813);  --info-400:oklch(0.707 0.165 254.624);  --info-500:oklch(0.623 0.214 259.815);  --info-600:oklch(0.546 0.245 262.881);  --info-700:oklch(0.488 0.243 264.376);  --info-800:oklch(0.424 0.199 265.638);  --info-900:oklch(0.379 0.146 265.522);  --info-950:oklch(0.282 0.091 267.935);  --primary-50:oklch(0.987 0.022 95.277);  --primary-100:oklch(0.962 0.059 95.617);  --primary-200:oklch(0.924 0.12 95.746);  --primary-300:oklch(0.879 0.169 91.605);  --primary-400:oklch(0.828 0.189 84.429);  --primary-500:oklch(0.769 0.188 70.08);  --primary-600:oklch(0.666 0.179 58.318);  --primary-700:oklch(0.555 0.163 48.998);  --primary-800:oklch(0.473 0.137 46.201);  --primary-900:oklch(0.414 0.112 45.904);  --primary-950:oklch(0.279 0.077 45.635);  --success-50:oklch(0.982 0.018 155.826);  --success-100:oklch(0.962 0.044 156.743);  --success-200:oklch(0.925 0.084 155.995);  --success-300:oklch(0.871 0.15 154.449);  --success-400:oklch(0.792 0.209 151.711);  --success-500:oklch(0.723 0.219 149.579);  --success-600:oklch(0.627 0.194 149.214);  --success-700:oklch(0.527 0.154 150.069);  --success-800:oklch(0.448 0.119 151.328);  --success-900:oklch(0.393 0.095 152.535);  --success-950:oklch(0.266 0.065 152.934);  --warning-50:oklch(0.987 0.022 95.277);  --warning-100:oklch(0.962 0.059 95.617);  --warning-200:oklch(0.924 0.12 95.746);  --warning-300:oklch(0.879 0.169 91.605);  --warning-400:oklch(0.828 0.189 84.429);  --warning-500:oklch(0.769 0.188 70.08);  --warning-600:oklch(0.666 0.179 58.318);  --warning-700:oklch(0.555 0.163 48.998);  --warning-800:oklch(0.473 0.137 46.201);  --warning-900:oklch(0.414 0.112 45.904);  --warning-950:oklch(0.279 0.077 45.635);     }
+
+    </style>
+
+        <link
+            href="http://localhost/css/filament/filament/app.css?v=4.2.3.0"
+            rel="stylesheet"
+            data-navigate-track
+        />
+        
+        
+        
+
+        <style>
+            :root {
+                --font-family: 'Inter Variable';
+                --mono-font-family: 'ui-monospace';
+                --serif-font-family: 'ui-serif';
+                --sidebar-width: 20rem;
+                --collapsed-sidebar-width: 4.5rem;
+                --default-theme-mode: system;
+            }
+        </style>
+
+        
+        
+
+                    <script>
+                const loadDarkMode = () => {
+                    window.theme = localStorage.getItem('theme') ?? 'system'
+                    if (
+                        window.theme === 'dark' ||
+                        (window.theme === 'system' &&
+                            window.matchMedia('(prefers-color-scheme: dark)')
+                                .matches)
+                    ) {
+                        document.documentElement.classList.add('dark')
+                    }
+                }
+
+                loadDarkMode()
+
+                document.addEventListener('livewire:navigated', loadDarkMode)
+            </script>
+        
+        
+    <!-- Livewire Styles --><style >[wire\:loading][wire\:loading], [wire\:loading\.delay][wire\:loading\.delay], [wire\:loading\.inline-block][wire\:loading\.inline-block], [wire\:loading\.inline][wire\:loading\.inline], [wire\:loading\.block][wire\:loading\.block], [wire\:loading\.flex][wire\:loading\.flex], [wire\:loading\.table][wire\:loading\.table], [wire\:loading\.grid][wire\:loading\.grid], [wire\:loading\.inline-flex][wire\:loading\.inline-flex] {display: none;}[wire\:loading\.delay\.none][wire\:loading\.delay\.none], [wire\:loading\.delay\.shortest][wire\:loading\.delay\.shortest], [wire\:loading\.delay\.shorter][wire\:loading\.delay\.shorter], [wire\:loading\.delay\.short][wire\:loading\.delay\.short], [wire\:loading\.delay\.default][wire\:loading\.delay\.default], [wire\:loading\.delay\.long][wire\:loading\.delay\.long], [wire\:loading\.delay\.longer][wire\:loading\.delay\.longer], [wire\:loading\.delay\.longest][wire\:loading\.delay\.longest] {display: none;}[wire\:offline][wire\:offline] {display: none;}[wire\:dirty]:not(textarea):not(input):not(select) {display: none;}:root {--livewire-progress-bar-color: #2299dd;}[x-cloak] {display: none !important;}[wire\:cloak] {display: none !important;}dialog#livewire-error::backdrop {background-color: rgba(0, 0, 0, .6);}</style>
+</head>
+
+    <body
+        class="fi-body fi-panel-admin fi-body-has-navigation fi-body-has-topbar"
+    >
+        
+
+        <div wire:snapshot="{&quot;data&quot;:{&quot;mountedActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;defaultAction&quot;:null,&quot;defaultActionArguments&quot;:null,&quot;defaultActionContext&quot;:null,&quot;defaultTableAction&quot;:null,&quot;defaultTableActionRecord&quot;:null,&quot;defaultTableActionArguments&quot;:null,&quot;componentFileAttachments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;areSchemaStateUpdateHooksDisabledForTesting&quot;:false,&quot;discoveredSchemaNames&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;GlWhNGH0FkEYDkV9YtfY&quot;,&quot;name&quot;:&quot;filament.livewire.topbar&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;0f7c6df4d45d91ac45ee3fe7b83064b6ee56218758a05ae3f89569e2d77c85ac&quot;}" wire:effects="{&quot;partials&quot;:[],&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}},&quot;listeners&quot;:[&quot;refresh-topbar&quot;]}" wire:id="GlWhNGH0FkEYDkV9YtfY" class="fi-topbar-ctn">
+    
+    <nav class="fi-topbar">
+        
+
+        <!--[if BLOCK]><![endif]-->            <button
+                class="fi-icon-btn fi-size-md fi-topbar-open-sidebar-btn" title="Expand sidebar" aria-label="Expand sidebar" type="button" wire:loading.attr="disabled" x-cloak="x-cloak" x-data="{}" x-on:click="$store.sidebar.open()" x-show="! $store.sidebar.isOpen"
+>
+    <svg class="fi-icon fi-size-lg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+</svg>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></button>
+
+            <button
+                class="fi-icon-btn fi-size-md fi-topbar-close-sidebar-btn" title="Collapse sidebar" aria-label="Collapse sidebar" type="button" wire:loading.attr="disabled" x-cloak="x-cloak" x-data="{}" x-on:click="$store.sidebar.close()" x-show="$store.sidebar.isOpen"
+>
+    <svg class="fi-icon fi-size-lg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+</svg>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></button>
+        <!--[if ENDBLOCK]><![endif]-->
+        <div class="fi-topbar-start">
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            
+
+            <!--[if BLOCK]><![endif]-->                <a href="http://localhost/admin">
+                    <!--[if BLOCK]><![endif]-->        <div
+            class="fi-logo"
+        >
+            Modern IPAM
+        </div>
+    <!--[if ENDBLOCK]><![endif]-->
+            
+
+<!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                </a>
+            <!--[if ENDBLOCK]><![endif]-->
+            
+        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <div
+                            x-persist="topbar.end.panel-admin"
+                        class="fi-topbar-end"
+        >
+            
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            
+
+                            <!--[if ENDBLOCK]><![endif]-->
+                                    <div
+    x-data="filamentDropdown"
+    class="fi-dropdown fi-user-menu"
+>
+    <div
+        x-on:keyup.enter="toggle($event)"
+        x-on:keyup.space="toggle($event)"
+        x-on:mousedown="if ($event.button === 0) toggle($event)"
+        class="fi-dropdown-trigger"
+    >
+        <!--[if BLOCK]><![endif]-->            <button
+                aria-label="User menu"
+                type="button"
+                class="fi-user-menu-trigger"
+            >
+                <img
+    class="fi-avatar fi-circular fi-size-md fi-user-avatar" src="https://ui-avatars.com/api/?name=A&amp;color=FFFFFF&amp;background=oklch%280.141+0.005+285.823%29" alt="Avatar of Admin" loading="lazy"
+/>
+            </button>
+        <!--[if ENDBLOCK]><![endif]-->
+    </div>
+
+    <!--[if BLOCK]><![endif]-->        <div
+            x-cloak
+            x-float.placement.bottom-end.flip.teleport.offset="{ offset: 8,  }"
+            x-ref="panel"
+            x-transition:enter-start="fi-opacity-0"
+            x-transition:leave-end="fi-opacity-0"
+                        class="fi-dropdown-panel "
+            style=""
+        >
+            <!--[if BLOCK]><![endif]-->        
+        
+
+        <div
+    class="fi-dropdown-header"
+>
+    <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-5.5-2.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0ZM10 12a5.99 5.99 0 0 0-4.793 2.39A6.483 6.483 0 0 0 10 16.5a6.483 6.483 0 0 0 4.793-2.11A5.99 5.99 0 0 0 10 12Z" clip-rule="evenodd"/>
+</svg>
+
+    <span>
+        Admin
+    </span>
+</div>
+
+        
+    <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->        <div class="fi-dropdown-list">
+    <div
+    x-data="{ theme: null }"
+    x-init="
+        $watch('theme', () => {
+            $dispatch('theme-changed', theme)
+        })
+
+        theme = localStorage.getItem('theme') || 'system'    "
+    class="fi-theme-switcher"
+>
+    <button
+    aria-label="Enable light theme"
+    type="button"
+    x-on:click="(theme = 'light') && close()"
+    x-tooltip="{
+        content: 'Enable light theme',
+        theme: $store.theme,
+    }"
+    x-bind:class="{ 'fi-active': theme === 'light' }"
+    class="fi-theme-switcher-btn"
+>
+    <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path d="M10 2a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 2ZM10 15a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 10 15ZM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM15.657 5.404a.75.75 0 1 0-1.06-1.06l-1.061 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM6.464 14.596a.75.75 0 1 0-1.06-1.06l-1.06 1.06a.75.75 0 0 0 1.06 1.06l1.06-1.06ZM18 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 18 10ZM5 10a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 5 10ZM14.596 15.657a.75.75 0 0 0 1.06-1.06l-1.06-1.061a.75.75 0 1 0-1.06 1.06l1.06 1.06ZM5.404 6.464a.75.75 0 0 0 1.06-1.06l-1.06-1.06a.75.75 0 1 0-1.061 1.06l1.06 1.06Z"/>
+</svg>
+</button>
+
+    <button
+    aria-label="Enable dark theme"
+    type="button"
+    x-on:click="(theme = 'dark') && close()"
+    x-tooltip="{
+        content: 'Enable dark theme',
+        theme: $store.theme,
+    }"
+    x-bind:class="{ 'fi-active': theme === 'dark' }"
+    class="fi-theme-switcher-btn"
+>
+    <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 0 1 .26.77 7 7 0 0 0 9.958 7.967.75.75 0 0 1 1.067.853A8.5 8.5 0 1 1 6.647 1.921a.75.75 0 0 1 .808.083Z" clip-rule="evenodd"/>
+</svg>
+</button>
+
+    <button
+    aria-label="Enable system theme"
+    type="button"
+    x-on:click="(theme = 'system') && close()"
+    x-tooltip="{
+        content: 'Enable system theme',
+        theme: $store.theme,
+    }"
+    x-bind:class="{ 'fi-active': theme === 'system' }"
+    class="fi-theme-switcher-btn"
+>
+    <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z" clip-rule="evenodd"/>
+</svg>
+</button>
+</div>
+</div>
+    <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]-->        <div class="fi-dropdown-list">
+    <!--[if BLOCK]><![endif]-->                <!--[if BLOCK]><![endif]-->                    
+        <form action="http://localhost/admin/logout" method="post"><input type="hidden" name="_token" value="A7xvRqW0jV39Nti1yi99h3lL8UetMnWEoptnnDqS" autocomplete="off">
+        <button                                                class="fi-dropdown-list-item" type="submit"        >
+            <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z" clip-rule="evenodd"/>
+  <path fill-rule="evenodd" d="M19 10a.75.75 0 0 0-.75-.75H8.704l1.048-.943a.75.75 0 1 0-1.004-1.114l-2.5 2.25a.75.75 0 0 0 0 1.114l2.5 2.25a.75.75 0 1 0 1.004-1.114l-1.048-.943h9.546A.75.75 0 0 0 19 10Z" clip-rule="evenodd"/>
+</svg>            
+            <span class="fi-dropdown-list-item-label">
+                Sign out            </span>
+
+                    </button>
+
+        </form>
+        
+                <!--[if ENDBLOCK]><![endif]-->            <!--[if ENDBLOCK]><![endif]-->
+</div>
+    <!--[if ENDBLOCK]><![endif]-->
+        </div>
+    <!--[if ENDBLOCK]><![endif]--></div>
+
+
+                <!--[if ENDBLOCK]><![endif]-->            <!--[if ENDBLOCK]><![endif]-->        </div>
+
+        
+    </nav>
+
+    <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: 'GlWhNGH0FkEYDkV9YtfY',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if ENDBLOCK]><![endif]--></div>
+
+        
+    
+    <div class="fi-layout">
+        
+
+                    <div
+                x-cloak
+                x-data="{}"
+                x-on:click="$store.sidebar.close()"
+                x-show="$store.sidebar.isOpen"
+                x-transition.opacity.300ms
+                class="fi-sidebar-close-overlay"
+            ></div>
+
+            <div wire:snapshot="{&quot;data&quot;:{&quot;mountedActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;defaultAction&quot;:null,&quot;defaultActionArguments&quot;:null,&quot;defaultActionContext&quot;:null,&quot;defaultTableAction&quot;:null,&quot;defaultTableActionRecord&quot;:null,&quot;defaultTableActionArguments&quot;:null,&quot;componentFileAttachments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;areSchemaStateUpdateHooksDisabledForTesting&quot;:false,&quot;discoveredSchemaNames&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;2257mFfhuxhDPaBPRmni&quot;,&quot;name&quot;:&quot;filament.livewire.sidebar&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;a3d869fa7a981c47e2fd06afeeb37456136fe6d08bf5baf6b03c5d8fe817fbfb&quot;}" wire:effects="{&quot;partials&quot;:[],&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}},&quot;listeners&quot;:[&quot;refresh-sidebar&quot;]}" wire:id="2257mFfhuxhDPaBPRmni">
+    
+    
+    <aside
+        x-data="{}"
+                    x-cloak="-lg"
+                x-bind:class="{ 'fi-sidebar-open': $store.sidebar.isOpen }"
+        class="fi-sidebar fi-main-sidebar"
+    >
+        
+
+        <div class="fi-sidebar-header-ctn">
+            <header
+                class="fi-sidebar-header"
+            >
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if ENDBLOCK]><![endif]-->
+                
+
+                <div x-show="$store.sidebar.isOpen" class="fi-sidebar-header-logo-ctn">
+                    <!--[if BLOCK]><![endif]-->                        <a href="http://localhost/admin">
+                            <!--[if BLOCK]><![endif]-->        <div
+            class="fi-logo"
+        >
+            Modern IPAM
+        </div>
+    <!--[if ENDBLOCK]><![endif]-->
+            
+
+<!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                        </a>
+                    <!--[if ENDBLOCK]><![endif]-->                </div>
+
+                
+            </header>
+        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <!--[if ENDBLOCK]><![endif]-->
+        <nav class="fi-sidebar-nav">
+            
+
+            <ul class="fi-sidebar-nav-groups">
+                <!--[if BLOCK]><![endif]-->                    
+                    <li
+    x-data="{ label: null }"
+    data-group-label=""
+    x-bind:class="{ 'fi-collapsed': $store.sidebar.groupIsCollapsed(label) }"
+    class="fi-sidebar-group fi-active fi-collapsible"
+>
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <ul
+                        class="fi-sidebar-group-items"
+    >
+        <!--[if BLOCK]><![endif]-->            
+            <li
+    class="fi-sidebar-item fi-sidebar-item-has-url"
+>
+    <a
+        href="http://localhost/admin"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-btn"
+    >
+        <!--[if BLOCK]><![endif]-->            <svg class="fi-icon fi-size-lg fi-sidebar-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+</svg>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <span
+                        class="fi-sidebar-item-label"
+        >
+            Dashboard
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </span>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </a>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></li>
+                    
+            <li
+    class="fi-sidebar-item fi-active fi-sidebar-item-has-url"
+>
+    <a
+        href="http://localhost/admin/ipam"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-btn"
+    >
+        <!--[if BLOCK]><![endif]-->            <svg class="fi-icon fi-size-lg fi-sidebar-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-.98.626-1.813 1.5-2.122"/>
+</svg>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <span
+                        class="fi-sidebar-item-label"
+        >
+            IPAM
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </span>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </a>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></li>
+                    
+            <li
+    class="fi-sidebar-item fi-sidebar-item-has-url"
+>
+    <a
+        href="http://localhost/admin/racks"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-btn"
+    >
+        <!--[if BLOCK]><![endif]-->            <svg class="fi-icon fi-size-lg fi-sidebar-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a4.5 4.5 0 0 1 .9-2.7L5.737 5.1a3.375 3.375 0 0 1 2.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 0 1 .9 2.7m0 0a3 3 0 0 1-3 3m0 3h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Zm-3 6h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Z"/>
+</svg>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <span
+                        class="fi-sidebar-item-label"
+        >
+            Racks &amp; Devices
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </span>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </a>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></li>
+                    
+            <li
+    class="fi-sidebar-item fi-sidebar-item-has-url"
+>
+    <a
+        href="http://localhost/admin/discovery"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-btn"
+    >
+        <!--[if BLOCK]><![endif]-->            <svg class="fi-icon fi-size-lg fi-sidebar-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+</svg>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <span
+                        class="fi-sidebar-item-label"
+        >
+            Discovery
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </span>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </a>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></li>
+                    
+            <li
+    class="fi-sidebar-item fi-sidebar-item-has-url"
+>
+    <a
+        href="http://localhost/admin/general-settings-page"
+        x-on:click="window.matchMedia(`(max-width: 1024px)`).matches && $store.sidebar.close()"
+                class="fi-sidebar-item-btn"
+    >
+        <!--[if BLOCK]><![endif]-->            <svg class="fi-icon fi-size-lg fi-sidebar-item-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/>
+  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+</svg>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <span
+                        class="fi-sidebar-item-label"
+        >
+            Settings
+
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        </span>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </a>
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></li>
+        <!--[if ENDBLOCK]><![endif]-->    </ul>
+</li>
+                <!--[if ENDBLOCK]><![endif]-->            </ul>
+
+            <script>
+                var collapsedGroups = JSON.parse(
+                    localStorage.getItem('collapsedGroups'),
+                )
+
+                if (collapsedGroups === null || collapsedGroups === 'null') {
+                    localStorage.setItem(
+                        'collapsedGroups',
+                        JSON.stringify([]),
+                    )
+                }
+
+                collapsedGroups = JSON.parse(
+                    localStorage.getItem('collapsedGroups'),
+                )
+
+                document
+                    .querySelectorAll('.fi-sidebar-group')
+                    .forEach((group) => {
+                        if (
+                            !collapsedGroups.includes(group.dataset.groupLabel)
+                        ) {
+                            return
+                        }
+
+                        // Alpine.js loads too slow, so attempt to hide a
+                        // collapsed sidebar group earlier.
+                        group.querySelector(
+                            '.fi-sidebar-group-items',
+                        ).style.display = 'none'
+                        group.classList.add('fi-collapsed')
+                    })
+            </script>
+
+            
+        </nav>
+
+        
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        
+    </aside>
+    
+
+    <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: '2257mFfhuxhDPaBPRmni',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if ENDBLOCK]><![endif]--></div>
+        
+        <div
+                            x-data="{}"
+                x-bind:style="'display: flex; opacity:1;'" 
+                        class="fi-main-ctn"
+        >
+            
+
+            <main
+                class="fi-main fi-width-7xl"
+            >
+                
+
+                <div wire:snapshot="{&quot;data&quot;:{&quot;data&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;mountedActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;defaultAction&quot;:null,&quot;defaultActionArguments&quot;:null,&quot;defaultActionContext&quot;:null,&quot;defaultTableAction&quot;:null,&quot;defaultTableActionRecord&quot;:null,&quot;defaultTableActionArguments&quot;:null,&quot;componentFileAttachments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;areSchemaStateUpdateHooksDisabledForTesting&quot;:false,&quot;discoveredSchemaNames&quot;:[[&quot;infolist&quot;,&quot;content&quot;,&quot;headerWidgets&quot;,&quot;footerWidgets&quot;],{&quot;s&quot;:&quot;arr&quot;}],&quot;parentRecord&quot;:null,&quot;activeRelationManager&quot;:&quot;0&quot;,&quot;record&quot;:[null,{&quot;class&quot;:&quot;App\\Models\\Subnet&quot;,&quot;key&quot;:1,&quot;s&quot;:&quot;mdl&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;Y4iKsH82pbrCbQXWILeI&quot;,&quot;name&quot;:&quot;app.filament.clusters.ipam.resources.subnets.pages.view-subnet&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:{&quot;Y4iKsH82pbrCbQXWILeI.content.App\\Filament\\Clusters\\Ipam\\Resources\\Subnets\\RelationManagers\\IpAddressesRelationManager&quot;:[&quot;div&quot;,&quot;zShWa3LT3fGMxShUaGTL&quot;],&quot;Y4iKsH82pbrCbQXWILeI.footerWidgets.App\\Filament\\Clusters\\Ipam\\Resources\\Subnets\\Widgets\\IpAddressVisualGrid-0&quot;:[&quot;div&quot;,&quot;RQkTrpY4ChkiceiLzI2d&quot;]},&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;6e2654e7e938ea7c79298e8da5252141547304ef2224467775e823b6671b88b3&quot;}" wire:effects="{&quot;partials&quot;:[],&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;activeRelationManager&quot;:{&quot;as&quot;:&quot;relation&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}},&quot;listeners&quot;:[&quot;refresh-page&quot;]}" wire:id="Y4iKsH82pbrCbQXWILeI"
+    class="fi-page fi-resource-view-record-page fi-resource-subnets fi-resource-record-1"
+>
+    
+
+    <div class="fi-page-header-main-ctn">
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            
+            <!--[if BLOCK]><![endif]-->                <header
+    class="fi-header fi-header-has-breadcrumbs"
+>
+    <div>
+        <!--[if BLOCK]><![endif]-->            <nav class="fi-breadcrumbs">
+    <ol class="fi-breadcrumbs-list">
+        <!--[if BLOCK]><![endif]-->            <li class="fi-breadcrumbs-item">
+                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]-->                    <a
+                        href="http://localhost/admin/ipam"
+                        class="fi-breadcrumbs-item-label"
+                    >
+                        Ipam
+                    </a>
+                <!--[if ENDBLOCK]><![endif]-->            </li>
+                    <li class="fi-breadcrumbs-item">
+                <!--[if BLOCK]><![endif]-->                    <svg class="fi-icon fi-size-md fi-breadcrumbs-item-separator fi-ltr" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+</svg>
+
+                    <svg class="fi-icon fi-size-md fi-breadcrumbs-item-separator fi-rtl" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/>
+</svg>
+                <!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]-->                    <a
+                        href="http://localhost/admin/ipam/subnets"
+                        class="fi-breadcrumbs-item-label"
+                    >
+                        Subnets
+                    </a>
+                <!--[if ENDBLOCK]><![endif]-->            </li>
+                    <li class="fi-breadcrumbs-item">
+                <!--[if BLOCK]><![endif]-->                    <svg class="fi-icon fi-size-md fi-breadcrumbs-item-separator fi-ltr" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/>
+</svg>
+
+                    <svg class="fi-icon fi-size-md fi-breadcrumbs-item-separator fi-rtl" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/>
+</svg>
+                <!--[if ENDBLOCK]><![endif]-->
+                <!--[if BLOCK]><![endif]-->                    <span class="fi-breadcrumbs-item-label">
+                        View
+                    </span>
+                <!--[if ENDBLOCK]><![endif]-->            </li>
+        <!--[if ENDBLOCK]><![endif]-->    </ol>
+</nav>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]-->            <h1 class="fi-header-heading">
+                View Subnet
+            </h1>
+        <!--[if ENDBLOCK]><![endif]-->
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></header>
+            <!--[if ENDBLOCK]><![endif]-->        <!--[if ENDBLOCK]><![endif]-->
+        <div class="fi-page-main">
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+            <div class="fi-page-content">
+                
+
+                
+
+                
+
+                <div class="fi-sc  fi-sc-has-gap fi-grid" style="--cols-default: repeat(1, minmax(0, 1fr));" x-data="filamentSchema({ livewireId: 'Y4iKsH82pbrCbQXWILeI' })" x-on:form-validation-error.window="handleFormValidationError">
+                                                
+        <div
+                                        x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-sc  fi-sc-has-gap fi-grid lg:fi-grid-cols" style="--cols-lg: repeat(2, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));" x-data="filamentSchema({ livewireId: 'Y4iKsH82pbrCbQXWILeI' })" x-on:form-validation-error.window="handleFormValidationError">
+                                                
+        <div
+                            wire:partial="schema-component::infolist.customer.name"
+                                        x-data="filamentSchemaComponent({
+                    path: 'customer.name',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.infolist.customer.name"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-in-entry">
+            
+                            <div class="fi-in-entry-label-col">
+                    
+                                            <div class="fi-in-entry-label-ctn">
+                            
+                                                            <dt class="fi-in-entry-label">
+                                    Customer                                </dt>
+                            
+                                                    </div>
+                    
+                                    </div>
+            
+            <div class="fi-in-entry-content-col">
+                
+                <dd class="fi-in-entry-content-ctn">
+                    
+                    <div  class="fi-in-entry-content">
+                        
+            <div class="fi-in-text">
+                            </div>
+
+                                </div>
+
+                                    </dd>
+
+                            </div>
+        </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div
+                            wire:partial="schema-component::infolist.vlan.name"
+                                        x-data="filamentSchemaComponent({
+                    path: 'vlan.name',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.infolist.vlan.name"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-in-entry">
+            
+                            <div class="fi-in-entry-label-col">
+                    
+                                            <div class="fi-in-entry-label-ctn">
+                            
+                                                            <dt class="fi-in-entry-label">
+                                    VLAN                                </dt>
+                            
+                                                    </div>
+                    
+                                    </div>
+            
+            <div class="fi-in-entry-content-col">
+                
+                <dd class="fi-in-entry-content-ctn">
+                    
+                    <div  class="fi-in-entry-content">
+                        
+            <div class="fi-size-sm  fi-in-text-item  fi-wrapped  fi-in-text">
+                
+                                Ufficio                
+                            </div>
+
+                                </div>
+
+                                    </dd>
+
+                            </div>
+        </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div
+                            wire:partial="schema-component::infolist.vrf.name"
+                                        x-data="filamentSchemaComponent({
+                    path: 'vrf.name',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.infolist.vrf.name"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-in-entry">
+            
+                            <div class="fi-in-entry-label-col">
+                    
+                                            <div class="fi-in-entry-label-ctn">
+                            
+                                                            <dt class="fi-in-entry-label">
+                                    VRF                                </dt>
+                            
+                                                    </div>
+                    
+                                    </div>
+            
+            <div class="fi-in-entry-content-col">
+                
+                <dd class="fi-in-entry-content-ctn">
+                    
+                    <div  class="fi-in-entry-content">
+                        
+            <div class="fi-size-sm  fi-in-text-item  fi-wrapped  fi-in-text">
+                
+                                Acme Corp Default VRF                
+                            </div>
+
+                                </div>
+
+                                    </dd>
+
+                            </div>
+        </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div
+                            wire:partial="schema-component::infolist.gateway"
+                                        x-data="filamentSchemaComponent({
+                    path: 'gateway',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.infolist.gateway"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-in-entry">
+            
+                            <div class="fi-in-entry-label-col">
+                    
+                                            <div class="fi-in-entry-label-ctn">
+                            
+                                                            <dt class="fi-in-entry-label">
+                                    Gateway                                </dt>
+                            
+                                                    </div>
+                    
+                                    </div>
+            
+            <div class="fi-in-entry-content-col">
+                
+                <dd class="fi-in-entry-content-ctn">
+                    
+                    <div  class="fi-in-entry-content">
+                        
+            <div class="fi-size-sm  fi-in-text-item  fi-wrapped  fi-in-text">
+                
+                                192.168.1.1                
+                            </div>
+
+                                </div>
+
+                                    </dd>
+
+                            </div>
+        </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div
+                            wire:partial="schema-component::infolist.utilization"
+                                        x-data="filamentSchemaComponent({
+                    path: 'utilization',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.infolist.utilization"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div class="fi-in-entry">
+            
+                            <div class="fi-in-entry-label-col">
+                    
+                                            <div class="fi-in-entry-label-ctn">
+                            
+                                                            <dt class="fi-in-entry-label">
+                                    Utilization                                </dt>
+                            
+                                                    </div>
+                    
+                                    </div>
+            
+            <div class="fi-in-entry-content-col">
+                
+                <dd class="fi-in-entry-content-ctn">
+                    
+                    <div  class="fi-in-entry-content">
+                        
+            <div class="fi-size-sm  fi-in-text-item  fi-wrapped  fi-in-text">
+                
+                                0%                
+                            </div>
+
+                                </div>
+
+                                    </dd>
+
+                            </div>
+        </div>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div
+                            wire:partial="schema-component::content.App\Filament\Clusters\Ipam\Resources\Subnets\RelationManagers\IpAddressesRelationManager"
+                                        x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;" wire:key="Y4iKsH82pbrCbQXWILeI.content.App\Filament\Clusters\Ipam\Resources\Subnets\RelationManagers\IpAddressesRelationManager"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+<!--[if BLOCK]><![endif]-->    <div wire:snapshot="{&quot;data&quot;:{&quot;ownerRecord&quot;:[null,{&quot;class&quot;:&quot;App\\Models\\Subnet&quot;,&quot;key&quot;:1,&quot;s&quot;:&quot;mdl&quot;}],&quot;pageClass&quot;:&quot;App\\Filament\\Clusters\\Ipam\\Resources\\Subnets\\Pages\\ViewSubnet&quot;,&quot;mountedActions&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;defaultAction&quot;:null,&quot;defaultActionArguments&quot;:null,&quot;defaultActionContext&quot;:null,&quot;defaultTableAction&quot;:null,&quot;defaultTableActionRecord&quot;:null,&quot;defaultTableActionArguments&quot;:null,&quot;activeTab&quot;:null,&quot;isTableLoaded&quot;:false,&quot;tableGrouping&quot;:null,&quot;tableRecordsPerPage&quot;:null,&quot;isTableReordering&quot;:false,&quot;tableColumnSearches&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;tableSearch&quot;:&quot;&quot;,&quot;tableSort&quot;:null,&quot;selectedTableRecords&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;deselectedTableRecords&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;isTrackingDeselectedTableRecords&quot;:false,&quot;tableColumns&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;tableFilters&quot;:null,&quot;tableDeferredFilters&quot;:null,&quot;paginators&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;componentFileAttachments&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;areSchemaStateUpdateHooksDisabledForTesting&quot;:false,&quot;discoveredSchemaNames&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;zShWa3LT3fGMxShUaGTL&quot;,&quot;name&quot;:&quot;app.filament.clusters.ipam.resources.subnets.relation-managers.ip-addresses-relation-manager&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;lazyLoaded&quot;:false,&quot;lazyIsolated&quot;:true,&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;f107006c90f4c799a7e81ec26519bfc9f534e27ea4f61c1b8017379c3cbc8a74&quot;}" wire:effects="{&quot;partials&quot;:[],&quot;url&quot;:{&quot;defaultAction&quot;:{&quot;as&quot;:&quot;action&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionArguments&quot;:{&quot;as&quot;:&quot;actionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultActionContext&quot;:{&quot;as&quot;:&quot;actionContext&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableAction&quot;:{&quot;as&quot;:&quot;tableAction&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionRecord&quot;:{&quot;as&quot;:&quot;tableActionRecord&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null},&quot;defaultTableActionArguments&quot;:{&quot;as&quot;:&quot;tableActionArguments&quot;,&quot;use&quot;:&quot;replace&quot;,&quot;alwaysShow&quot;:false,&quot;except&quot;:null}}}" wire:id="zShWa3LT3fGMxShUaGTL" x-intersect="$wire.__lazyLoad(&#039;eyJkYXRhIjp7ImZvck1vdW50IjpbeyJyZWNvcmQiOm51bGwsIm93bmVyUmVjb3JkIjpbbnVsbCx7ImNsYXNzIjoiQXBwXFxNb2RlbHNcXFN1Ym5ldCIsImtleSI6MSwicyI6Im1kbCJ9XSwicGFnZUNsYXNzIjoiQXBwXFxGaWxhbWVudFxcQ2x1c3RlcnNcXElwYW1cXFJlc291cmNlc1xcU3VibmV0c1xcUGFnZXNcXFZpZXdTdWJuZXQifSx7InMiOiJhcnIifV19LCJtZW1vIjp7ImlkIjoiUlZoT2xPYUFmNHE4RmF6V2w0bWoiLCJuYW1lIjoiX19tb3VudFBhcmFtc0NvbnRhaW5lciIsInBhdGgiOiJhZG1pblwvaXBhbVwvc3VibmV0c1wvMSIsIm1ldGhvZCI6IkdFVCIsInJlbGVhc2UiOiJhLWEtYSJ9LCJjaGVja3N1bSI6IjE2ZjkzODNlYTdhNTU3ODEwOTRmMDVkMWViY2E3ZjU1YzE5NjhiMmU2OTZmYTg4NjRjNDEwN2IxM2M5MWU0NGMifQ==&#039;)"
+    style="height: 8rem; ;" class="fi-section fi-loading-section fi-grid-col"
+></div>
+<!--[if ENDBLOCK]><![endif]--><!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                </div>
+                    </div>
+
+                                            </div>
+
+                
+
+                
+        <div class="fi-sc  fi-sc-has-gap fi-grid" style="--cols-default: repeat(1, minmax(0, 1fr));" x-data="filamentSchema({ livewireId: 'Y4iKsH82pbrCbQXWILeI' })" x-on:form-validation-error.window="handleFormValidationError">
+                                                                                                                
+        <div
+                                        x-data="filamentSchemaComponent({
+                    path: '',
+                    containerPath: '',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    <div
+    
+>
+    
+        <div class="fi-sc  fi-sc-has-gap fi-grid lg:fi-grid-cols" style="--cols-lg: repeat(2, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">
+                                                <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+<!--[if BLOCK]><![endif]-->    <div wire:snapshot="{&quot;data&quot;:{&quot;record&quot;:[null,{&quot;class&quot;:&quot;App\\Models\\Subnet&quot;,&quot;key&quot;:1,&quot;s&quot;:&quot;mdl&quot;}],&quot;cells&quot;:[[],{&quot;s&quot;:&quot;arr&quot;}],&quot;renderGrid&quot;:false,&quot;totalHosts&quot;:0},&quot;memo&quot;:{&quot;id&quot;:&quot;RQkTrpY4ChkiceiLzI2d&quot;,&quot;name&quot;:&quot;app.filament.clusters.ipam.resources.subnets.widgets.ip-address-visual-grid&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[],&quot;assets&quot;:[],&quot;lazyLoaded&quot;:false,&quot;lazyIsolated&quot;:true,&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;fd5a32bee2296bde9b1718c35671cca1d4ce81bb9c7e469a0088f9dbbcbe4ce6&quot;}" wire:effects="{&quot;partials&quot;:[]}" wire:id="RQkTrpY4ChkiceiLzI2d" x-intersect="$wire.__lazyLoad(&#039;eyJkYXRhIjp7ImZvck1vdW50IjpbeyJyZWNvcmQiOltudWxsLHsiY2xhc3MiOiJBcHBcXE1vZGVsc1xcU3VibmV0Iiwia2V5IjoxLCJzIjoibWRsIn1dfSx7InMiOiJhcnIifV19LCJtZW1vIjp7ImlkIjoidVcxandDRUZhTHJnSTlyYnduczgiLCJuYW1lIjoiX19tb3VudFBhcmFtc0NvbnRhaW5lciIsInBhdGgiOiJhZG1pblwvaXBhbVwvc3VibmV0c1wvMSIsIm1ldGhvZCI6IkdFVCIsInJlbGVhc2UiOiJhLWEtYSJ9LCJjaGVja3N1bSI6IjhkNDg3Y2VjYTE2MTgzMGNjMjdhZmEyZjE1NTBjNWI1ZjdiYzc3ZTIzNzhlM2I0MWFjZDZjODUwMGRlZDM4MzYifQ==&#039;)"
+    style="height: 8rem; --col-span-lg: span 1 / span 1;" class="fi-section fi-loading-section fi-grid-col lg:fi-grid-col-span"
+></div>
+<!--[if ENDBLOCK]><![endif]--><!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->                                    </div>
+
+        
+</div>
+                </div>
+                    </div>
+
+                                                                                                            </div>
+
+        
+
+                
+            </div>
+
+            <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->        </div>
+
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]-->        <!--[if BLOCK]><![endif]-->    <div
+        wire:partial="action-modals"
+        x-data="filamentActionModals({
+                    livewireId: 'Y4iKsH82pbrCbQXWILeI',
+                })"
+        style="height: 0"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if ENDBLOCK]><![endif]-->    <!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    
+
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->
+    <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]--></div>
+
+                
+            </main>
+
+            
+
+            
+        </div>
+
+        
+    </div>
+
+        <div wire:snapshot="{&quot;data&quot;:{&quot;isFilamentNotificationsComponent&quot;:true,&quot;notifications&quot;:[[],{&quot;class&quot;:&quot;Filament\\Notifications\\Collection&quot;,&quot;s&quot;:&quot;wrbl&quot;}]},&quot;memo&quot;:{&quot;id&quot;:&quot;bb8hUZo0D9tz7MX9r61N&quot;,&quot;name&quot;:&quot;filament.livewire.notifications&quot;,&quot;path&quot;:&quot;admin\/ipam\/subnets\/1&quot;,&quot;method&quot;:&quot;GET&quot;,&quot;release&quot;:&quot;a-a-a&quot;,&quot;children&quot;:[],&quot;scripts&quot;:[&quot;642100889-0&quot;],&quot;assets&quot;:[],&quot;errors&quot;:[],&quot;locale&quot;:&quot;en&quot;},&quot;checksum&quot;:&quot;eb03e549de0c9abf79a1c05725114d90acf5705bdc4f79ef3c42aebc811c5039&quot;}" wire:effects="{&quot;partials&quot;:[],&quot;scripts&quot;:{&quot;642100889-0&quot;:&quot;            &lt;script&gt;\n                window.addEventListener(&#039;EchoLoaded&#039;, () =&gt; {\n                    window.Echo.private(&#039;App.Models.User.3&#039;).notification(\n                        (notification) =&gt; {\n                            setTimeout(\n                                () =&gt;\n                                    $wire.handleBroadcastNotification(\n                                        notification,\n                                    ),\n                                500,\n                            )\n                        },\n                    )\n                })\n\n                if (window.Echo) {\n                    window.dispatchEvent(new CustomEvent(&#039;EchoLoaded&#039;))\n                }\n            &lt;\/script&gt;\n            &quot;},&quot;listeners&quot;:[&quot;notificationsSent&quot;,&quot;notificationSent&quot;,&quot;notificationClosed&quot;]}" wire:id="bb8hUZo0D9tz7MX9r61N">
+    <div
+        class="fi-no fi-align-right fi-vertical-align-start"
+        role="status"
+    >
+        <!--[if BLOCK]><![endif]--><!--[if ENDBLOCK]><![endif]-->    </div>
+
+    <!--[if BLOCK]><![endif]-->                <!--[if ENDBLOCK]><![endif]--></div>
+
+        
+
+        <script>
+        window.filamentData = []    </script>
+
+            
+            <script
+                src="http://localhost/js/filament/actions/actions.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/notifications/notifications.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/schemas/schemas.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/support/support.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/tables/tables.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/filament/echo.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+                
+            <script
+                src="http://localhost/js/filament/filament/app.js?v=4.2.3.0"
+                
+                
+                
+                
+                
+                
+            ></script>
+        
+    
+<style>
+    :root {
+            }
+
+    </style>
+
+        
+                    <script>
+                loadDarkMode()
+            </script>
+        
+        
+        
+
+        
+    <!-- Livewire Scripts -->
+<script src="/livewire/livewire.js?id=f084fdfb"   data-csrf="A7xvRqW0jV39Nti1yi99h3lL8UetMnWEoptnnDqS" data-update-uri="/livewire/update" data-navigate-once="true"></script>
+</body>
+</html>

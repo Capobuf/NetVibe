@@ -6,7 +6,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 class DeviceForm
@@ -25,7 +24,7 @@ class DeviceForm
                     ->options(function () {
                         return \App\Models\Customer::query()->pluck('name', 'id');
                     })
-                    ->afterStateUpdated(fn (callable $set) => $set('location_filter_id', null)),
+                    ->afterStateUpdated(fn ($set) => $set('location_filter_id', null)),
 
                 Select::make('location_filter_id')
                     ->label('Filter by Location')
@@ -33,14 +32,14 @@ class DeviceForm
                     ->live()
                     ->searchable()
                     ->preload()
-                    ->options(function (Get $get) {
+                    ->options(function ($get) {
                         $query = \App\Models\Location::query();
                         if ($customerId = $get('customer_id')) {
                             $query->where('customer_id', $customerId);
                         }
                         return $query->pluck('name', 'id');
                     })
-                    ->afterStateUpdated(fn (callable $set) => $set('rack_id', null)),
+                    ->afterStateUpdated(fn ($set) => $set('rack_id', null)),
 
                 // NOTE: removed legacy fields: `sections`, `type`, and `rack_size`. These are handled
                 // by normalized relationships and the DeviceModel -> u_size value.
@@ -53,7 +52,7 @@ class DeviceForm
                     ->preload()
                     ->label('Rack')
                     ->default(request()->query('rack_id'))
-                    ->createOptionForm(function (Get $get) {
+                    ->createOptionForm(function ($get) {
                         return [
                             TextInput::make('name')->required(),
                             TextInput::make('units')->numeric()->default(42),
@@ -72,7 +71,7 @@ class DeviceForm
                     })
                     ->createOptionModalHeading('Create Rack')
                     ->required()
-                    ->options(function (Get $get) {
+                    ->options(function ($get) {
                         $query = \App\Models\Rack::query();
                         // prefer an explicit location filter coming from the UI filter, else fall back
                         // to the customer's locations when present
@@ -135,18 +134,18 @@ class DeviceForm
                     ->minValue(1)
                     ->maxValue(52),
                 // Keep a proper persisted location field if the Device model expects it; keep it after the details
-                Select::make('location_id')
+                    Select::make('location_id')
                     ->relationship(
                         name: 'location',
                         titleAttribute: 'name',
-                        modifyQueryUsing: fn (\Illuminate\Database\Eloquent\Builder $query, Get $get) => 
+                        modifyQueryUsing: fn (\Illuminate\Database\Eloquent\Builder $query, $get) => 
                             $query->when($get('location_filter_id'), fn ($q, $id) => $q->where('id', $id))
                                   ->when($get('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
                     )
                     ->searchable()
                     ->preload()
                     ->default(null)
-                    ->disabled(fn (Get $get) => ! ($get('customer_id') || $get('location_filter_id'))),
+                    ->disabled(fn ($get) => ! ($get('customer_id') || $get('location_filter_id'))),
             ]);
     }
 }

@@ -43,6 +43,7 @@ services:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     networks:
       - ipam-network
+      - proxy
     depends_on:
       - app
     healthcheck:
@@ -142,6 +143,8 @@ services:
 networks:
   ipam-network:
     driver: bridge
+  proxy:
+    external: true
 
 volumes:
   db-data:

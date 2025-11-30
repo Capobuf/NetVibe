@@ -51,7 +51,11 @@ return new class extends Migration
         // Add vlan_id to subnets when missing
         if (Schema::hasTable('subnets') && ! Schema::hasColumn('subnets', 'vlan_id')) {
             Schema::table('subnets', function (Blueprint $table) {
-                $table->unsignedBigInteger('vlan_id')->nullable()->after('scan_agent_id');
+                if (Schema::hasColumn('subnets', 'scan_agent_id')) {
+                    $table->unsignedBigInteger('vlan_id')->nullable()->after('scan_agent_id');
+                } else {
+                    $table->unsignedBigInteger('vlan_id')->nullable();
+                }
                 $table->index('vlan_id');
                 if (Schema::hasTable('vlans')) {
                     $table->foreign('vlan_id')->references('id')->on('vlans')->onDelete('set null');

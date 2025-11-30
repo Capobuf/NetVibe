@@ -10,4 +10,23 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateIpAddress extends CreateRecord
 {
     protected static string $resource = IpAddressResource::class;
+
+    public function mount(): void
+    {
+        // Prefill form state from query params for faster create flow from the visual grid
+        $subnetId = request()->query('subnet_id');
+        $ipAddr = request()->query('ip_addr');
+
+        $state = [];
+        if ($subnetId) {
+            $state['subnet_id'] = $subnetId;
+        }
+        if ($ipAddr) {
+            $state['ip_addr'] = $ipAddr;
+        }
+
+        if (! empty($state)) {
+            $this->form->fill($state);
+        }
+    }
 }

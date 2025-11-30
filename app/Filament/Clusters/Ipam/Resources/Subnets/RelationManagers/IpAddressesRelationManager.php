@@ -10,7 +10,8 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Select;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions\CreateAction;
@@ -21,6 +22,8 @@ class IpAddressesRelationManager extends RelationManager
 {
     protected static string $relationship = 'ipAddresses';
     protected static ?string $recordTitleAttribute = 'ip_addr';
+    // Hide the auto-generated relation manager title to avoid duplicate headers
+    protected static ?string $title = null;
     /**
      * Validate an IP for a given subnet.
      * - Reject non-parsable IPs
@@ -79,8 +82,20 @@ class IpAddressesRelationManager extends RelationManager
         return $schema->schema([
             TextInput::make('ip_addr')->required(),
             TextInput::make('hostname')->default(null),
+            TextInput::make('owner')->default(null),
+            TextInput::make('mac_address')->default(null),
+            TextInput::make('port')->default(null),
+            Textarea::make('note')->default(null)->columnSpanFull(),
             Textarea::make('description')->default(null),
-            Toggle::make('is_gateway')->default(false),
+            Select::make('type')
+                ->options([
+                    'host' => 'Host',
+                    'gateway' => 'Gateway',
+                    'broadcast' => 'Broadcast',
+                    'reserved' => 'Reserved',
+                    'dhcp' => 'DHCP',
+                ])
+                ->default('host'),
         ]);
     }
 
@@ -92,8 +107,33 @@ class IpAddressesRelationManager extends RelationManager
                 ->formatStateUsing(fn ($state) => app(IpConversionService::class)->fromDecimal($state))
                 ->searchable()
                 ->sortable(),
-            Tables\Columns\TextColumn::make('hostname')->searchable(),
+            Tables\Columns\TextColumn::make('hostname')->searchable()->toggleable(),
+            Tables\Columns\TextColumn::make('owner')->searchable()->toggleable(),
+            Tables\Columns\TextColumn::make('mac_address')
+                ->label('MAC')
+                ->copyable()
+                ->fontFamily('mono')
+                ->toggleable(isToggledHiddenByDefault: true),
             Tables\Columns\TextColumn::make('description')->limit(30),
+            Tables\Columns\TextColumn::make('state')
+                ->label('Status')
+                ->badge()
+                ->color(fn ($state) => match($state) {
+                    1 => 'danger',
+                    2 => 'success',
+                    3 => 'primary',
+                    4 => 'gray',
+                    default => 'secondary',
+                })
+                ->sortable(),
+        ])->filters([
+            SelectFilter::make('type')->options([
+                'host' => 'Host',
+                'gateway' => 'Gateway',
+                'broadcast' => 'Broadcast',
+                'reserved' => 'Reserved',
+                'dhcp' => 'DHCP',
+            ]),
         ])->headerActions([
             CreateAction::make()->slideOver(),
         ])->recordActions([

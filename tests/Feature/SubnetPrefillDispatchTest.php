@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\IpPrefillJob;
 use App\Models\Subnet;
 use App\Services\IpConversionService;
 use Illuminate\Support\Facades\Bus;
@@ -28,8 +27,8 @@ class SubnetPrefillDispatchTest extends TestCase
             'mask' => 24,
         ]);
 
-        // Observer should dispatch the job when created
-        Bus::assertDispatched(IpPrefillJob::class);
+        // Observer must not dispatch any prefill job (prefill removed)
+        Bus::assertNothingDispatched();
     }
 
     public function test_prefill_job_not_dispatched_for_too_large_subnets()
@@ -46,6 +45,6 @@ class SubnetPrefillDispatchTest extends TestCase
             'mask' => 21, // too large (mask < 22)
         ]);
 
-        Bus::assertNotDispatched(IpPrefillJob::class);
+        Bus::assertNothingDispatched();
     }
 }

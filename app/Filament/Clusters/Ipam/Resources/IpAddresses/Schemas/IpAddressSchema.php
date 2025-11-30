@@ -20,22 +20,22 @@ class IpAddressSchema
     {
         return [
             TextInput::make('ip_addr')
+                ->label('IP Address')
                 ->required(),
 
             TextInput::make('hostname')
                 ->default(null),
 
             TextInput::make('mac_address')
-                ->default(null),
+                ->label('MAC Address')
+                ->default(null)
+                ->rules(['nullable', 'regex:/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/'])
+                ->dehydrateStateUsing(fn($state) => $state ? strtolower($state) : null),
 
             Select::make('type')
                 ->options(IpAddressType::class)
                 ->required()
                 ->default(IpAddressType::Host->value),
-
-            TextInput::make('state')
-                ->numeric()
-                ->default(2),
 
             Textarea::make('description')
                 ->default(null),

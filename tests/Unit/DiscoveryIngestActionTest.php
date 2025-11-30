@@ -79,3 +79,41 @@ it('updates last_seen and does not create discovery event when MAC matches', fun
     $events = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
     expect($events->count())->toBe(0);
 });
+
+it('does not create duplicate pending events for repeated ingests and updates existing', function () {
+    $agent = ScanAgent::factory()->create();
+
+    $converter = app(IpConversionService::class);
+    $ip = '192.168.0.30';
+    $ipDecimal = $converter->toDecimal($ip);
+
+    $action = new IngestScanResultsAction();
+
+    $results = [
+        ['ip_addr' => $ip, 'mac_address' => '11:22:33:44:55:66', 'hostname' => 'host-a'],
+    ];
+
+    // First ingest should create a single pending event
+    $action->execute($results, $agent->id);
+
+    $events = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
+    expect($events->count())->toBe(1);
+
+    $event = $events->first();
+    expect($event->mac_address_current)->toBe('11:22:33:44:55:66');
+    expect($event->hostname_current)->toBe('host-a');
+
+    // Second ingest with different mac/hostname should update the existing event
+    $results2 = [
+        ['ip_addr' => $ip, 'mac_address' => 'aa:bb:cc:dd:ee:ff', 'hostname' => 'host-b'],
+    ];
+
+    $action->execute($results2, $agent->id);
+
+    $events2 = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
+    expect($events2->count())->toBe(1);
+
+    $updated = $events2->first();
+    expect($updated->mac_address_current)->toBe('aa:bb:cc:dd:ee:ff');
+    expect($updated->hostname_current)->toBe('host-b');
+});

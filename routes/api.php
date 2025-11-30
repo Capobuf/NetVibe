@@ -27,6 +27,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Agent discovery results ingestion endpoint (protected by sanctum)
     Route::post('/v1/discovery/results', [App\Http\Controllers\Api\DiscoveryIngestController::class, 'store']);
+
+    // Agent logs ingestion endpoint (protected by sanctum)
+    Route::post('/v1/agent/logs', [App\Http\Controllers\Api\AgentLogController::class, 'store']);
 });
 
 // Public health/ping endpoint (optional)

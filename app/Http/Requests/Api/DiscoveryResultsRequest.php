@@ -24,7 +24,7 @@ class DiscoveryResultsRequest extends FormRequest
     {
         return [
             'results' => ['required', 'array', 'min:1'],
-            'results.*.ip_addr' => ['required', 'string'],
+            'results.*.ip_addr' => ['required', 'string', 'ip'],
             'results.*.mac_address' => ['nullable', 'string'],
             'results.*.hostname' => ['nullable', 'string'],
             'results.*.last_seen' => ['nullable', 'date'],

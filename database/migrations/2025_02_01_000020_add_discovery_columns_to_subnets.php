@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('subnets', function (Blueprint $table): void {
             if (! Schema::hasColumn('subnets', 'discover_subnet')) {
-                $table->boolean('discover_subnet')->default(false)->after('cidr');
+                $table->boolean('discover_subnet')->default(true)->after('cidr');
             }
 
             if (! Schema::hasColumn('subnets', 'scan_interval')) {

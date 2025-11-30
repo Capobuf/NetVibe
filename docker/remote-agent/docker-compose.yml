@@ -1,0 +1,15 @@
+services:
+  remote_agent:
+    build: .
+    container_name: ipam-remote-agent
+    # Montaggio dello script PHP locale (che si trova nella stessa cartella di questo file)
+    volumes:
+      - ./remote_scanner.php:/app/remote_scanner.php
+    working_dir: /app
+    # Variabili ENV da fornire tramite file .env locale o iniezione diretta
+    environment:
+      - IPAM_AGENT_API_KEY=${IPAM_AGENT_API_KEY}
+      - IPAM_AGENT_API_URL=${IPAM_AGENT_API_URL}
+    # Loop di esecuzione
+    command: php /app/remote_scanner.php
+    restart: always

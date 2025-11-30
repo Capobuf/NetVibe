@@ -8,8 +8,8 @@ class DiscoverySeeder extends Seeder
 {
     public function run(): void
     {
-        \App\Models\ScanAgent::firstOrCreate(
-            ['name' => 'Local Worker'],
+        \App\Models\ScanAgent::updateOrCreate(
+            ['name' => 'Local Discovery Agent'],
             [
                 'description' => 'Built-in worker running on the app server',
                 'active' => true,

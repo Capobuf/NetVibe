@@ -13,6 +13,9 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use App\Filament\Clusters\Ipam\Resources\IpAddresses\Schemas\IpAddressSchema;
 use Filament\Tables\Filters\SelectFilter;
+// Heading is not provided as a table header component by Filament packages —
+// use a table action as a non-interactive heading instead.
+use Filament\Actions\Action as TableAction;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextInputColumn;
@@ -26,6 +29,11 @@ class IpAddressesRelationManager extends RelationManager
     protected static ?string $recordTitleAttribute = 'ip_addr';
     // Hide the auto-generated relation manager title to avoid duplicate headers
     protected static ?string $title = null;
+
+    public function isReadOnly(): bool
+    {
+        return false;
+    }
     /**
      * Validate an IP for a given subnet.
      * - Reject non-parsable IPs
@@ -138,13 +146,29 @@ class IpAddressesRelationManager extends RelationManager
                 'reserved' => 'Reserved',
                 'dhcp' => 'DHCP',
             ]),
-        ])->headerActions([
-            CreateAction::make()
-                ->label('New')
-                ->icon('heroicon-o-plus')
-                ->button()
-                ->slideOver(),
-        ])->recordActions([
+        ])->emptyStateDescription('No IPs have been discovered or created for this subnet yet. Click the + button to create an IP manually, or run a discovery scan from your agents.')
+            ->headerActions([
+                \Filament\Actions\CreateAction::make('create_ip_header')
+                    ->label('')
+                    ->icon('heroicon-o-plus')
+                    ->button()
+                    ->color('primary')
+                    ->slideOver()
+                    ->tooltip('Create IP for this Subnet')
+                    ->relationship(fn () => $this->getRelationship())
+                    ->visible(fn () => true),
+            ])
+            ->toolbarActions([])
+            ->emptyStateActions([
+                \Filament\Actions\CreateAction::make('create_ip_empty')
+                    ->label('Create IP')
+                    ->icon('heroicon-o-plus')
+                    ->button()
+                    ->slideOver()
+                    ->relationship(fn () => $this->getRelationship())
+                    ->visible(fn () => true),
+            ])
+            ->recordActions([
             EditAction::make()->slideOver(),
             // DeleteAction removed from relation manager record actions per CRUD UX policy
         ]);

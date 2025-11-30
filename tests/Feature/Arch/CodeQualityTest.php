@@ -117,9 +117,8 @@ test('subnet view page has required methods', function () {
     $this->assertStringContainsString("modalHeading('Delete Subnet')", $editSubnet);
     $this->assertStringContainsString('modalDescription', $editSubnet);
     
-    // Ensure Visual Grid widget is registered
-    $this->assertStringContainsString('getFooterWidgets', $viewSubnet);
-    $this->assertStringContainsString('IpAddressVisualGrid::class', $viewSubnet);
+    // Ensure Visual Grid widget is not used in the Subnet view (we replaced it with the IP Table UX)
+    $this->assertStringNotContainsString('IpAddressVisualGrid::class', $viewSubnet);
 });
 
 test('relation managers and table resources do not expose DeleteAction in record actions', function () {

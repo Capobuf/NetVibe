@@ -18,14 +18,10 @@ class ViewSubnet extends ViewRecord
                 ->slideOver()
                 ->icon('heroicon-m-pencil-square')
                 ->label('Edit Subnet'),
-            // DeleteAction removed from view page per CRUD UX policy - delete must be available only on Edit page
         ];
     }
 
-    protected function getFooterWidgets(): array
-    {
-        return [
-            \App\Filament\Clusters\Ipam\Resources\Subnets\Widgets\IpAddressVisualGrid::class,
-        ];
-    }
+    // intentionally removed footer widgets (IpAddressVisualGrid) because the visual map
+    // widget was unreliable and caused rendering issues. The Subnet view now focuses
+    // on the relation manager 'IP Table' for IP address operations.
 }

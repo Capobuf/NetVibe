@@ -7,11 +7,12 @@ namespace App\Models;
 use App\Services\IpConversionService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Enums\IpAddressType;
 
 class IpAddress extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, HasFactory;
     protected $fillable = [
         'subnet_id', 'ip_addr', 'description', 'hostname',
         'mac_address', 'owner', 'state', 'switch_id', 'location_id', 'port',

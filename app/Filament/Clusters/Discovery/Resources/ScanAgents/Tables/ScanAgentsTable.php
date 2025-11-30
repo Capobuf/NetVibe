@@ -20,10 +20,6 @@ class ScanAgentsTable
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('ip_address')
-                    ->default('Localhost')
-                    ->sortable(),
-
                 TextColumn::make('customer.name')
                     ->label('Customer')
                     ->sortable(),

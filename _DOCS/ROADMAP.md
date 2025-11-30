@@ -113,64 +113,58 @@
 
 * **Task 3.3 (Branding UX):** Implement the ability to **upload a logo** that replaces the text `Site Name` (used for dashboard and navigation). (STATUS: PENDING)
 
+
 ## PHASE 3.5: API PUSH & CONFLICT RESOLUTION (CRITICAL SECURITY)
 GOAL: Implementare un modello di comunicazione bidirezionale sicuro (Server ↔ Agent) e un'area di staging per la risoluzione manuale dei conflitti (MAC/Hostname mismatch).
 
-Categoria
+**Stato avanzamento (2025-11-30):**
 
-Task
+- 3.5.1.1: Sanctum installato, trait HasApiTokens aggiunto a ScanAgent, migrazioni eseguite.
+- 3.5.1.2: Tabella discovery_events creata e modello implementato.
+- 3.5.2: Generazione e revoca token API implementata su ScanAgentResource (DONE).
+- 3.5.3: Endpoint /api/v1/agent/config protetto da Sanctum, restituisce subnets assegnate (DONE).
+- 3.5.4: Endpoint /api/v1/discovery/results protetto, validazione con FormRequest, dispatch asincrono a Job ProcessDiscoveryIngestJob. Logica DIFF implementata: solo mismatch MAC/Hostname crea DiscoveryEvent, altrimenti aggiorna last_seen (DONE, test di integrazione passati).
+- 3.5.5: Risorsa Filament DiscoveryEventResource creata (cluster Discovery), tabella con badge, filtro PENDING, bulk actions Approva/Merge (aggiorna ip_addresses e segna APPROVED) e Scarta (soft delete) — **implementato e testato**.
+- 3.5.6: Test API e test di integrazione/feature per la logica di diff e le azioni massive implementati e passati.
 
-Dettagli
+**Note tecniche:**
+- Tutte le azioni massive sono testate via Pest (feature/unit) e la logica di merge/scarto è verificata.
+- Correzioni Filament: proprietà $model e $navigationGroup aggiornate per compatibilità con Filament v4.
+- La risorsa DiscoveryEventResource è visibile nel cluster Discovery e mostra solo i record PENDING per default.
+- La logica di merge aggiorna ip_addresses solo se l'evento è approvato manualmente.
+- La soft delete degli eventi scartati è auditabile.
 
-- Architettura Agent 3.5.0.1: Agente Remoto (Stack)
-	- L'agente remoto sarà un singolo container Docker (basato su PHP-FPM Alpine) per coerenza e riutilizzo delle librerie.
+**Prossimi step consigliati:**
+- Estendere la logica di diff per gestire anche i conflitti hostname e casi edge.
+- Aggiungere notifiche/admin audit per le azioni massive.
+- UI: migliorare la visualizzazione dei dettagli evento e aggiungere filtri avanzati.
 
-- Configurazione Infra 3.5.0.2: Variabili ENV Remote
-	- Definire la variabile di deployment remota REMOTE_AGENT_API_KEY e REMOTE_AGENT_API_URL che verranno iniettate nel comando docker run generato dalla UI.
+## PHASE 3.6: AGENT OBSERVABILITY & ALERTS (FINAL)
+**GOAL:** Implementare un sistema completo di logging per gli agenti remoti con retention automatica e allarmi critici via notifica UI.
 
-- Backend & Schema 3.5.1.1: Setup Laravel Sanctum
-	- Installare `laravel/sanctum`, eseguire le migrazioni e aggiungere il trait `HasApiTokens` al modello `ScanAgent`.
+* **Task 3.6.1: Database & Notifications Infrastructure**
+    * **Action (Log Table):** Creare la migrazione per la tabella `agent_logs` (`agent_id`, `level`, `message`, `context_json`, `created_at`).
+    * **Action (Notifications):** Eseguire `php artisan notifications:table` e migrare per abilitare il centro notifiche di Filament (Campanella).
+    * **Action (Provider):** Abilitare `databaseNotifications()` nel `AdminPanelProvider`.
 
-- Backend & Schema 3.5.1.2: Staging Table
-	- Creare il modello e la migrazione per la tabella `discovery_events` per gestire i record in stato di conflitto (staging).
+* **Task 3.6.2: Settings & Configuration**
+    * **Action (Discovery Settings):** Aggiungere `prune_logs_days` (int, default 3) in `DiscoverySettings` (o GeneralSettings, se preferito per coerenza retention).
+    * **Action (General Settings):** Aggiungere `agent_alert_level` (enum: 'WARNING', 'ERROR', 'CRITICAL', 'off') in `GeneralSettings`. Questo determina la soglia per far scattare la campanella.
+    * **Action (Agent Config):** Aggiungere `log_level` (filtro invio) nella tabella `scan_agents`.
 
-- Sicurezza Token 3.5.2: (STATUS: DONE)
-	- 3.5.2.1: Generazione Chiavi — Implementata: Custom Action su `ScanAgentResource` per generare una Sanctum API Key (scope `ipam:ingest`).
-	- 3.5.2.2: Revoca e Scope — Implementata: generazione di un nuovo token revoca le chiavi precedenti; i token sono permanenti per default.
+* **Task 3.6.3: API Ingestion & Alerting Logic**
+    * **Action (Endpoint):** Implementare `POST /api/v1/agent/logs`.
+    * **Action (Logic):** Salvare il log nel DB.
+    * **Action (Alert Trigger):** Se il livello del log è >= `agent_alert_level`, inviare una `Filament\Notifications\Notification` (Database Channel) a tutti gli utenti Admin.
 
--- Comunicazione PULL (Config) 3.5.3: (PRIORITY: IMMEDIATE BACKEND TASK)
-	- Questo diventa il nuovo task di codifica immediato per il backend.
-    
-	3.5.3.1: Endpoint Config
-	- Implementare l'endpoint protetto `/api/v1/agent/config` (Agent → Server). Questo endpoint risponderà con l'elenco delle Subnet ID assegnate a quell'agente (`Subnet.scan_agent_id = Agente.id`).
-
-- Comunicazione PULL (Config) 3.5.3.2: Assegnazione UI
-	- Assicurare che l'assegnazione di Subnet a un agente avvenga impostando il campo `scan_agent_id` nel record Subnet (gestito dalla UI/Actions).
-
-- Comunicazione PUSH (Data) 3.5.4.1: Endpoint Ingestion
-	- Implementare l'endpoint protetto `/api/v1/discovery/results` (Agent → Server).
-
-- Comunicazione PUSH (Data) 3.5.4.2: Validazione & Coda
-	- Proteggere l'endpoint con una Laravel Form Request dedicata. Il Controller deve inoltrare il payload RAW immediatamente a un Job Asincrono (Coda).
-
-- Risoluzione Conflitti 3.5.4.3: Logica Ingestione (DIFF)
-	- All'interno del Job asincrono, eseguire il diff tra il dato in ingresso e il record esistente: solo se c'è un mismatch MAC/Hostname, creare il record in `discovery_events` (Staging) e NON toccare `ip_addresses`.
-
-- Risoluzione Conflitti 3.5.4.4: Health Check (Last Seen)
-	- Aggiornare il campo `last_seen` del `ScanAgent` per ogni chiamata riuscita a `/api/v1/discovery/results` (Health check passivo).
-
-- Frontend/UX Review 3.5.5.1: Risorsa Conflitti
-	- Creare la risorsa Filament `DiscoveryEventsResource` per permettere all'amministratore di visualizzare gli eventi di conflitto in staging.
-
-- Frontend/UX Review 3.5.5.2: Azioni Massive
-	- Implementare azioni massive (Batch Actions) nella risorsa `DiscoveryEventsResource` per: 1) Approvare/Merge (sovrascrive l'IP Address) e 2) Scartare (ignora l'evento).
-
-- Testing 3.5.6.1: Test API Feature
-	- Scrivere Test API Feature per l'autenticazione token (401/403) e la validazione (422) di `/api/v1/discovery/results`.
-
-- Testing 3.5.6.2: Test Unitari Logica
-	- Scrivere Unit Tests per la logica di diff (conflitto) all'interno dell'`DiscoveryIngestAction`.
+* **Task 3.6.4: UI & Maintenance**
+    * **Action (UI):** Aggiungere il Relation Manager `AgentLogsRelationManager` nella risorsa `ScanAgentResource` (visualizzazione tabellare dei log).
+    * **Action (Maintenance):** Creare il Job schedulato `PruneAgentLogsJob` per eliminare i vecchi log.
 
 ## PHASE 4: ARCHITECTURAL DEEPENING
 * **Task 4.1:** Subnet Hierarchical Tree View.
 * **Task 4.2:** Implement IPAM L2 Domain/VLAN workflow clarity.
+
+**Task 3.5.3.3 (Deployment File):** Creare il file `docker-compose.remote-agent.yml` nella root. Questo file deve definire un servizio `remote_agent` basato su un'immagine CLI (es. `php:8.4-cli-alpine`) e configurato per il polling.
+    * **Task 3.5.3.4 (Agent Script):** Creare lo script PHP `remote_scanner.php` che implementa la logica di Polling (GET config) e Push (POST results) all'interno di un loop continuo (vedi dettagli sopra).
+    * **Task 3.5.3.5 (UX Update):** Modificare la notifica dell'azione `Generate API Key` per fornire istruzioni di deployment basate sul nuovo `docker-compose.remote-agent.yml` e l'iniezione della chiave API (via ENV).

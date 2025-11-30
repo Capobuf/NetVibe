@@ -60,7 +60,23 @@ class SubnetResource extends Resource
                 ->preload()
                 ->searchable()
                 ->nullable()
-                ->label('VLAN'),
+                ->label('VLAN')
+                ->reactive()
+                ->afterStateUpdated(function ($state, callable $set) {
+                    if ($state) {
+                        $vlan = \App\Models\Vlan::find($state);
+                        if ($vlan && $vlan->customer_id) {
+                            $set('customer_id', $vlan->customer_id);
+                        }
+                    }
+                }),
+
+            Select::make('customer_id')
+                ->relationship('customer', 'name')
+                ->searchable()
+                ->nullable()
+                ->label('Customer')
+                ->helperText('Automatically inherited from VLAN if selected'),
 
             TextInput::make('cidr')
                 ->required()
@@ -72,8 +88,8 @@ class SubnetResource extends Resource
 
             Textarea::make('description'),
 
-            // Discovery configuration inputs — keep the individual inputs inline
-            Toggle::make('discover_subnet')->label('Enable Auto-Discovery')->default(true)->hiddenOn('create'),
+            // Discovery configuration inputs
+            Toggle::make('discover_subnet')->label('Enable Auto-Discovery')->default(true),
 
             Select::make('scan_interval')
                 ->label('Scan interval')
@@ -83,10 +99,9 @@ class SubnetResource extends Resource
                     1440 => 'Daily',
                 ])
                 ->nullable()
-                ->hint('Leave empty to use the global default')
-                ->hiddenOn('create'),
+                ->hint('Leave empty to use the global default'),
 
-            Select::make('scan_agent_id')->relationship('scanAgent', 'name')->nullable()->hiddenOn('create'),
+            Select::make('scan_agent_id')->relationship('scanAgent', 'name')->nullable(),
         ])->columns(1);
     }
 
@@ -100,15 +115,6 @@ class SubnetResource extends Resource
             Tables\Columns\TextColumn::make('vlan.name')->label('VLAN')->searchable()->sortable(),
             Tables\Columns\TextColumn::make('description')->limit(50),
         ])->recordActions([
-            Action::make('scan')
-                ->label('Scan Network')
-                ->icon(Heroicon::OutlinedSignal)
-                ->color('primary')
-                ->action(function (Subnet $record) {
-                    ScanSubnetJob::dispatch($record);
-                    Notification::make()->title('Scan started')->success()->send();
-                }),
-
             ViewAction::make(),
             EditAction::make()->slideOver(),
             // DeleteAction removed from table record actions per CRUD UX policy

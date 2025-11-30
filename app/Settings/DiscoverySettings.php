@@ -14,6 +14,11 @@ class DiscoverySettings extends Settings
     public int $default_scan_interval_minutes = 60;
 
     /**
+     * Enable auto-discovery globally (can be overridden per subnet)
+     */
+    public bool $auto_discovery_enabled = true;
+
+    /**
      * ICMP timeout in milliseconds for the scanner
      */
     public int $icmp_timeout_ms = 200;
@@ -22,6 +27,11 @@ class DiscoverySettings extends Settings
      * Number of ICMP retries for the scanner
      */
     public int $icmp_retries = 1;
+
+    /**
+     * Agent logs retention in days
+     */
+    public int $prune_logs_days = 3;
 
     public static function group(): string
     {

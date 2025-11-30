@@ -39,7 +39,9 @@ class ScanAgentResource extends Resource
 
     public static function getRelations(): array
     {
-        return [];
+        return [
+            RelationManagers\AgentLogsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

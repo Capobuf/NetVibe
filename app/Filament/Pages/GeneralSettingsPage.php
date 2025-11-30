@@ -29,6 +29,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
     /** @var string[] form properties */
     public string $site_name = '';
     public string $site_color = '#0ea5a4';
+    public string $agent_alert_level = 'ERROR';
 
     protected function getFormSchema(): array
     {
@@ -42,6 +43,18 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
                 ColorPicker::make('site_color')
                     ->label('Site color')
                     ->columnSpanFull(),
+
+                Forms\Components\Select::make('agent_alert_level')
+                    ->label('Agent Critical Alert Level')
+                    ->options([
+                        'WARNING' => 'Warning & Above',
+                        'ERROR' => 'Error & Above',
+                        'CRITICAL' => 'Critical Only',
+                        'off' => 'Disabled (No Alerts)',
+                    ])
+                    ->default('ERROR')
+                    ->required()
+                    ->helperText('Trigger a dashboard notification when an agent reports an issue of this level or higher'),
             ])->columns(1),
         ];
     }
@@ -53,6 +66,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
         $this->form->fill([
             'site_name' => $settings->site_name,
             'site_color' => $settings->site_color,
+            'agent_alert_level' => $settings->agent_alert_level,
         ]);
     }
 
@@ -63,6 +77,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
         $settings = app(GeneralSettings::class);
         $settings->site_name = $state['site_name'] ?? $settings->site_name;
         $settings->site_color = $state['site_color'] ?? $settings->site_color;
+        $settings->agent_alert_level = $state['agent_alert_level'] ?? $settings->agent_alert_level;
 
         $settings->save();
 

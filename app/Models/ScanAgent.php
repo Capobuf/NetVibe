@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Contracts\Auth\Authenticatable;
 
-class ScanAgent extends Model
+class ScanAgent extends Model implements Authenticatable
 {
 
     use HasApiTokens;
@@ -34,5 +35,46 @@ class ScanAgent extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function agentLogs()
+    {
+        return $this->hasMany(AgentLog::class, 'scan_agent_id');
+    }
+
+    // Authenticatable interface methods
+    public function getAuthIdentifierName()
+    {
+        return 'id';
+    }
+
+    public function getAuthIdentifier()
+    {
+        return $this->getKey();
+    }
+
+    public function getAuthPassword()
+    {
+        return null; // Agents use API tokens, not passwords
+    }
+
+    public function getRememberToken()
+    {
+        return null;
+    }
+
+    public function setRememberToken($value)
+    {
+        // Not applicable for API tokens
+    }
+
+    public function getRememberTokenName()
+    {
+        return null;
+    }
+
+    public function getAuthPasswordName()
+    {
+        return null;
     }
 }

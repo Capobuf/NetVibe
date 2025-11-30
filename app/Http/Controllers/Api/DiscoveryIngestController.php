@@ -30,6 +30,9 @@ class DiscoveryIngestController extends Controller
             return response()->json(['message' => 'Unauthenticated or invalid agent'], 401);
         }
 
+        // Health check: Update last_seen timestamp
+        $agent->update(['last_seen' => now()]);
+
         $results = $request->validated()['results'];
 
         // Dispatch the async job to process the ingest. Job will handle persisting/staging and diffing.

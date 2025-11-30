@@ -21,11 +21,38 @@ class AgentConfigController extends Controller
             return response()->json(['message' => 'Unauthenticated or invalid agent'], 401);
         }
 
-        $subnets = Subnet::query()
-            ->where('scan_agent_id', $agent->id)
-            ->get(['id', 'subnet', 'cidr', 'vlan_id']);
+        // Health check: Update last_seen timestamp
+        $agent->update(['last_seen' => now()]);
 
-        return response()->json(['subnets' => $subnets]);
+        // Query subnets with customer inheritance logic
+        $query = Subnet::query()
+            ->where('discover_subnet', true)
+            ->where(function ($q) use ($agent) {
+                // Include subnets directly assigned to this agent
+                $q->where('scan_agent_id', $agent->id);
+                
+                // OR include subnets belonging to the agent's customer
+                if ($agent->customer_id) {
+                    $q->orWhere('customer_id', $agent->customer_id);
+                }
+            });
+        
+        $subnets = $query->get();
+
+        // Explicitly map to force accessor evaluation
+        $data = $subnets->map(function ($subnet) {
+            return [
+                'id' => $subnet->id,
+                'cidr' => $subnet->cidr, // Forces getCidrAttribute() accessor call
+                'vlan_id' => $subnet->vlan_id,
+                'description' => $subnet->description,
+            ];
+        });
+
+        return response()->json([
+            'subnets' => $data,
+            'log_level' => $agent->log_level ?? 'ERROR',
+        ]);
     }
 
     /**

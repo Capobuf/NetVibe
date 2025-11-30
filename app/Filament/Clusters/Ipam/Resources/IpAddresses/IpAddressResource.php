@@ -37,20 +37,35 @@ class IpAddressResource extends Resource
         return $schema
             ->components(array_merge([
                 Select::make('subnet_id')
-                    ->relationship('subnet', 'subnet')
+                    ->relationship('subnet')
+                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->cidr ?? app(\App\Services\IpConversionService::class)->toCidr((string) $record->subnet, (int) $record->mask))
                     ->searchable()
                     ->preload()
-                    ->default(null),
-            ], IpAddressSchema::schema(), [
-                TextInput::make('owner')
                     ->default(null),
 
-                Select::make('switch_id')
-                    ->relationship('switchDevice', 'hostname')
-                    ->label('Switch')
+                // Customer should be higher in the form and inherit from the selected subnet when present
+                Select::make('customer_id')
+                    ->relationship('customer', 'name')
                     ->searchable()
                     ->preload()
-                    ->default(null),
+                    ->default(function ($get) {
+                        $subnetId = $get('subnet_id');
+                        if (! $subnetId) {
+                            return null;
+                        }
+
+                        $subnet = \App\Models\Subnet::with('vlan')->find($subnetId);
+                        if (! $subnet) {
+                            return null;
+                        }
+
+                        // Prefer explicit subnet customer, fallback to vlan->customer if present
+                        return $subnet->customer_id ?? optional($subnet->vlan)->customer_id ?? null;
+                    })
+                    ->live()
+                    ->afterStateUpdated(fn ($set) => $set('location_id', null)),
+            ], IpAddressSchema::schema(), [
+                // Keep only the fields necessary for manual IP management
 
                 Select::make('location_id')
                     ->relationship(
@@ -64,35 +79,9 @@ class IpAddressResource extends Resource
                     ->default(null)
                     ->disabled(fn ($get) => ! $get('customer_id')),
 
-                TextInput::make('port')
-                    ->default(null),
-
-                Textarea::make('note')
-                    ->default(null)
-                    ->columnSpanFull(),
-
-                DateTimePicker::make('last_seen'),
-
                 Toggle::make('exclude_ping')
+                    ->label('Exclude Ping')
                     ->required(),
-
-                Toggle::make('ptr_ignore')
-                    ->required(),
-
-                TextInput::make('ptr')
-                    ->numeric()
-                    ->default(0),
-
-                TextInput::make('firewall_address_object')
-                    ->default(null),
-
-                Select::make('customer_id')
-                    ->relationship('customer', 'name')
-                    ->searchable()
-                    ->preload()
-                    ->default(null)
-                    ->live()
-                    ->afterStateUpdated(fn ($set) => $set('location_id', null)),
             ]));
     }
 

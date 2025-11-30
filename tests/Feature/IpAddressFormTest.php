@@ -36,12 +36,10 @@ it('can create an ip address using the enum', function () {
         ->set('data.subnet_id', $subnet->id)
         // Livewire/Filament expects the enum-backed value for select inputs
         ->set('data.type', \App\Enums\IpAddressType::Gateway->value)
-        ->set('data.state', 2)
         ->set('data.description', 'Test Gateway')
         // toggles are required in the form schema — set to pass validation
         ->set('data.exclude_ping', true)
-        ->set('data.ptr_ignore', true)
-        ->set('data.ptr', 0)
+        // form schema no longer includes ptr related fields
         ->call('create');
 
     $this->assertDatabaseHas('ip_addresses', [

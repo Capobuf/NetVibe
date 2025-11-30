@@ -113,6 +113,64 @@
 
 * **Task 3.3 (Branding UX):** Implement the ability to **upload a logo** that replaces the text `Site Name` (used for dashboard and navigation). (STATUS: PENDING)
 
+## PHASE 3.5: API PUSH & CONFLICT RESOLUTION (CRITICAL SECURITY)
+GOAL: Implementare un modello di comunicazione bidirezionale sicuro (Server ↔ Agent) e un'area di staging per la risoluzione manuale dei conflitti (MAC/Hostname mismatch).
+
+Categoria
+
+Task
+
+Dettagli
+
+- Architettura Agent 3.5.0.1: Agente Remoto (Stack)
+	- L'agente remoto sarà un singolo container Docker (basato su PHP-FPM Alpine) per coerenza e riutilizzo delle librerie.
+
+- Configurazione Infra 3.5.0.2: Variabili ENV Remote
+	- Definire la variabile di deployment remota REMOTE_AGENT_API_KEY e REMOTE_AGENT_API_URL che verranno iniettate nel comando docker run generato dalla UI.
+
+- Backend & Schema 3.5.1.1: Setup Laravel Sanctum
+	- Installare `laravel/sanctum`, eseguire le migrazioni e aggiungere il trait `HasApiTokens` al modello `ScanAgent`.
+
+- Backend & Schema 3.5.1.2: Staging Table
+	- Creare il modello e la migrazione per la tabella `discovery_events` per gestire i record in stato di conflitto (staging).
+
+- Sicurezza Token 3.5.2: (STATUS: DONE)
+	- 3.5.2.1: Generazione Chiavi — Implementata: Custom Action su `ScanAgentResource` per generare una Sanctum API Key (scope `ipam:ingest`).
+	- 3.5.2.2: Revoca e Scope — Implementata: generazione di un nuovo token revoca le chiavi precedenti; i token sono permanenti per default.
+
+-- Comunicazione PULL (Config) 3.5.3: (PRIORITY: IMMEDIATE BACKEND TASK)
+	- Questo diventa il nuovo task di codifica immediato per il backend.
+    
+	3.5.3.1: Endpoint Config
+	- Implementare l'endpoint protetto `/api/v1/agent/config` (Agent → Server). Questo endpoint risponderà con l'elenco delle Subnet ID assegnate a quell'agente (`Subnet.scan_agent_id = Agente.id`).
+
+- Comunicazione PULL (Config) 3.5.3.2: Assegnazione UI
+	- Assicurare che l'assegnazione di Subnet a un agente avvenga impostando il campo `scan_agent_id` nel record Subnet (gestito dalla UI/Actions).
+
+- Comunicazione PUSH (Data) 3.5.4.1: Endpoint Ingestion
+	- Implementare l'endpoint protetto `/api/v1/discovery/results` (Agent → Server).
+
+- Comunicazione PUSH (Data) 3.5.4.2: Validazione & Coda
+	- Proteggere l'endpoint con una Laravel Form Request dedicata. Il Controller deve inoltrare il payload RAW immediatamente a un Job Asincrono (Coda).
+
+- Risoluzione Conflitti 3.5.4.3: Logica Ingestione (DIFF)
+	- All'interno del Job asincrono, eseguire il diff tra il dato in ingresso e il record esistente: solo se c'è un mismatch MAC/Hostname, creare il record in `discovery_events` (Staging) e NON toccare `ip_addresses`.
+
+- Risoluzione Conflitti 3.5.4.4: Health Check (Last Seen)
+	- Aggiornare il campo `last_seen` del `ScanAgent` per ogni chiamata riuscita a `/api/v1/discovery/results` (Health check passivo).
+
+- Frontend/UX Review 3.5.5.1: Risorsa Conflitti
+	- Creare la risorsa Filament `DiscoveryEventsResource` per permettere all'amministratore di visualizzare gli eventi di conflitto in staging.
+
+- Frontend/UX Review 3.5.5.2: Azioni Massive
+	- Implementare azioni massive (Batch Actions) nella risorsa `DiscoveryEventsResource` per: 1) Approvare/Merge (sovrascrive l'IP Address) e 2) Scartare (ignora l'evento).
+
+- Testing 3.5.6.1: Test API Feature
+	- Scrivere Test API Feature per l'autenticazione token (401/403) e la validazione (422) di `/api/v1/discovery/results`.
+
+- Testing 3.5.6.2: Test Unitari Logica
+	- Scrivere Unit Tests per la logica di diff (conflitto) all'interno dell'`DiscoveryIngestAction`.
+
 ## PHASE 4: ARCHITECTURAL DEEPENING
 * **Task 4.1:** Subnet Hierarchical Tree View.
 * **Task 4.2:** Implement IPAM L2 Domain/VLAN workflow clarity.

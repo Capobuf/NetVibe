@@ -13,6 +13,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Table;
+use Filament\Actions\DeleteAction;
 use Filament\Tables\Columns\TextColumn;
 use BackedEnum;
 
@@ -64,7 +65,8 @@ class VlanResource extends Resource
                 TextColumn::make('subnets_count')->label('Subnets')->sortable(),
             ])
             ->recordActions([
-                \Filament\Actions\EditAction::make()->slideOver(),
+                    \Filament\Actions\EditAction::make()->slideOver(),
+                    // DeleteAction removed from table record actions per CRUD UX policy
             ]);
     }
 
@@ -77,6 +79,7 @@ class VlanResource extends Resource
     {
         return [
             'index' => Pages\ListVlans::route('/'),
+            'edit' => Pages\EditVlan::route('/{record}/edit'),
         ];
     }
 }

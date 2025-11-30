@@ -11,6 +11,7 @@ use Filament\Schemas\Schema;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
+use App\Filament\Clusters\Ipam\Resources\IpAddresses\Schemas\IpAddressSchema;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -80,24 +81,12 @@ class IpAddressesRelationManager extends RelationManager
 
     public function form(Schema $schema): Schema
     {
-        return $schema->schema([
-            TextInput::make('ip_addr')->required(),
-            TextInput::make('hostname')->default(null),
+        // Reuse canonical IpAddress schema and append relation-manager specific fields
+        return $schema->schema(array_merge(IpAddressSchema::schema(), [
             TextInput::make('owner')->default(null),
-            TextInput::make('mac_address')->default(null),
             TextInput::make('port')->default(null),
             Textarea::make('note')->default(null)->columnSpanFull(),
-            Textarea::make('description')->default(null),
-            Select::make('type')
-                ->options([
-                    'host' => 'Host',
-                    'gateway' => 'Gateway',
-                    'broadcast' => 'Broadcast',
-                    'reserved' => 'Reserved',
-                    'dhcp' => 'DHCP',
-                ])
-                ->default('host'),
-        ]);
+        ]));
     }
 
     public function table(Table $table): Table
@@ -124,14 +113,12 @@ class IpAddressesRelationManager extends RelationManager
                 ->inline()
                 ->searchable(),
 
-            TextInputColumn::make('mac_address')
-                ->label('MAC')
-                ->rules(['nullable', 'max:255'])
-                ->inline()
-                ->fontFamily('mono')
-                ->copyable()
-                ->toggleable(isToggledHiddenByDefault: true),
-            Tables\Columns\TextColumn::make('description')->limit(30),
+            Tables\Columns\TextInputColumn::make('mac_address')
+                ->label('MAC Address')
+                ->searchable(),
+            Tables\Columns\TextColumn::make('type')
+                ->badge(),
+            Tables\Columns\TextColumn::make('description'),
             Tables\Columns\TextColumn::make('state')
                 ->label('Status')
                 ->badge()
@@ -159,7 +146,7 @@ class IpAddressesRelationManager extends RelationManager
                 ->slideOver(),
         ])->recordActions([
             EditAction::make()->slideOver(),
-            DeleteAction::make(),
+            // DeleteAction removed from relation manager record actions per CRUD UX policy
         ]);
     }
 }

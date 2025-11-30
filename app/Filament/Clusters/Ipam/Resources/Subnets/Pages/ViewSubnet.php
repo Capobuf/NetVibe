@@ -11,6 +11,17 @@ class ViewSubnet extends ViewRecord
 {
     protected static string $resource = SubnetResource::class;
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\EditAction::make()
+                ->slideOver()
+                ->icon('heroicon-m-pencil-square')
+                ->label('Edit Subnet'),
+            // DeleteAction removed from view page per CRUD UX policy - delete must be available only on Edit page
+        ];
+    }
+
     protected function getFooterWidgets(): array
     {
         return [

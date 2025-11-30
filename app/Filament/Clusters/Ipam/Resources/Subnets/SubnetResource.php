@@ -12,7 +12,6 @@ use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Infolists\Components\Section as InfolistSection;
 use Filament\Forms\Components\Select;
 use App\Models\Vrf;
 use Filament\Forms\Components\Toggle;
@@ -112,6 +111,7 @@ class SubnetResource extends Resource
 
             ViewAction::make(),
             EditAction::make()->slideOver(),
+            // DeleteAction removed from table record actions per CRUD UX policy
         ]);
     }
 
@@ -122,48 +122,44 @@ class SubnetResource extends Resource
 
     public static function getRelations(): array
     {
-        // The IP table + visual map are provided on the Subnet view page. Only
-        // expose the relation manager when rendering the resource *view* page so
-        // it does not appear on edit pages (we keep edits metadata-only).
-        if (app()->runningInConsole()) {
-            return [];
-        }
-
-        $path = request()->path() ?? '';
-
-        if (str_contains($path, '/view')) {
-            return [
-                IpAddressesRelationManager::class,
-            ];
-        }
-
-        return [];
+        return [
+            IpAddressesRelationManager::class,
+        ];
     }
 
     public static function infolist(Schema $schema): Schema
     {
         // Show key subnet metadata and utilization
         return $schema
-            ->components([
-                Section::make('Network')->schema([
-                    TextEntry::make('cidr')->label('Network'),
-                    TextEntry::make('gateway')->label('Gateway')->getStateUsing(fn ($record) => 
-                    // prefer explicit gateway if present (type='gateway'), otherwise first usable IP
-                    optional($record->ipAddresses()->where('type', 'gateway')->first())->ip_str ?? app(\App\Services\IpConversionService::class)->fromDecimal(bcadd((string)$record->subnet, '1'))?->toString()
-                ),
-                ]),
-                Section::make('Metadata')->schema([
-                    TextEntry::make('vlan.name')->label('VLAN'),
-                    TextEntry::make('customer.name')->label('Customer'),
-                    TextEntry::make('vrf.name')->label('VRF'),
-                    TextEntry::make('utilization')->label('Utilization')->getStateUsing(function ($record) {
-                        $service = app(\App\Services\IpConversionService::class);
-                        $total = (int) $service->calculateUsableHosts((int) $record->mask);
-                        $used = (int) $record->ipAddresses()->count();
-                        return $total > 0 ? round(($used / $total) * 100, 1) . '%' : 'N/A';
-                    }),
-                ]),
-                // (additional infolist entries could go here)
+            ->schema([
+                \Filament\Schemas\Components\Section::make('Subnet Details')
+                    ->columns(4)
+                    ->schema([
+                        \Filament\Infolists\Components\TextEntry::make('network')
+                            // Use the model accessor to return a formatted CIDR string (getCidrAttribute)
+                            ->state(fn ($record) => $record->cidr)
+                            ->label('Network')
+                            ->weight('bold'),
+                        \Filament\Infolists\Components\TextEntry::make('mask')->label('Netmask'),
+                        \Filament\Infolists\Components\TextEntry::make('gateway')->label('Gateway')->getStateUsing(fn ($record) => 
+                            optional($record->ipAddresses()->where('type', 'gateway')->first())->ip_str ?? app(\App\Services\IpConversionService::class)->fromDecimal(bcadd((string)$record->subnet, '1'))?->toString()
+                        ),
+                        \Filament\Infolists\Components\TextEntry::make('vlan.number')
+                            ->label('VLAN')
+                            ->badge(),
+                        \Filament\Infolists\Components\TextEntry::make('vrf.name')->label('VRF'),
+                        \Filament\Infolists\Components\TextEntry::make('customer.name')->label('Customer'),
+                        \Filament\Infolists\Components\TextEntry::make('utilization')
+                            ->state(function ($record) {
+                                $service = app(\App\Services\IpConversionService::class);
+                                $total = (int) $service->calculateUsableHosts((int) $record->mask);
+                                $used = (int) $record->ipAddresses()->count();
+                                return $used . ' / ' . $total;
+                            })
+                            ->label('Utilization')
+                            ->badge()
+                            ->color('gray'),
+                    ]),
             ]);
     }
 
@@ -172,6 +168,7 @@ class SubnetResource extends Resource
         return [
             'index' => Pages\ListSubnets::route('/'),
             'view' => Pages\ViewSubnet::route('/{record}'),
+            'edit' => Pages\EditSubnet::route('/{record}/edit'),
         ];
     }
 }

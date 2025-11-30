@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Services\IpConversionService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Enums\IpAddressType;
 
 class IpAddress extends Model
 {
@@ -21,6 +22,7 @@ class IpAddress extends Model
 
     protected $casts = [
         'ip_addr' => 'string',
+        'type' => IpAddressType::class,
         'exclude_ping' => 'boolean',
         'ptr_ignore' => 'boolean',
         'last_seen' => 'datetime',

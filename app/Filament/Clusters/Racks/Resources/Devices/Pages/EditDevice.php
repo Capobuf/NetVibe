@@ -13,7 +13,11 @@ class EditDevice extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->requiresConfirmation()
+                ->modalHeading('Delete Device')
+                ->modalDescription('This will permanently delete this device. This action cannot be undone.')
+                ->color('danger'),
         ];
     }
 }

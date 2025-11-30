@@ -21,6 +21,8 @@ class IpAddressVisualGrid extends Widget
     public bool $renderGrid = false;
     public int $totalHosts = 0;
 
+    protected int | string | array $columnSpan = 'full';
+
     public function mount(): void
     {
         if (! $this->record) {

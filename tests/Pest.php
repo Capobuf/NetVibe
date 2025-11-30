@@ -11,9 +11,13 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
+uses(Tests\TestCase::class)
+    ->beforeEach(function () {
+        // Chiama la funzione di setup del pannello prima di ogni test di Feature/Unit
+        $this->bootFilament();
+    })
     ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
-    ->in('Feature');
+    ->in('Feature', 'Unit');
 
 /*
 |--------------------------------------------------------------------------
@@ -45,3 +49,9 @@ function something()
 {
     // ..
 }
+// End of Pest helpers
+
+// Provide a minimal Pest\Livewire\livewire() helper when the Pest livewire plugin is not installed.
+// Keep tests portable across environments by loading a small shim file which declares the
+// Pest\Livewire namespace and the livewire() helper.
+require_once __DIR__ . '/Helpers/PestLivewireShim.php';

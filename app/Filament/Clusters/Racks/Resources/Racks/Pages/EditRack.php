@@ -13,7 +13,11 @@ class EditRack extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->requiresConfirmation()
+                ->modalHeading('Delete Rack')
+                ->modalDescription('This will permanently delete this rack and all nested devices. This action cannot be undone.')
+                ->color('danger'),
         ];
     }
 }

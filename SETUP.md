@@ -1,30 +1,17 @@
 # Project Setup Guide
 
-> **Navigation:** [← README](README.md) | [Architecture](ARCHITECTURE.md) | [Issues](ISSUES.md) | [📚 Docs Map](NAVIGATION.md)
 
 ---
 
 ## 🛠️ Prerequisites
 
-- **Docker Desktop** (Windows/Mac/Linux)
+- **Docker (Engine & Compose)** (Windows/Mac/Linux)
 - **Git**
 - **Terminal** (PowerShell, Bash, or Zsh)
 
 ---
-````markdown
-# Project Setup Guide
-
-> **Navigation:** [← README](README.md) | [Architecture](ARCHITECTURE.md) | [Issues](ISSUES.md) | [📚 Docs Map](NAVIGATION.md)
-
----
-
-## 🛠️ Prerequisites
-
-- **Docker Desktop** (Windows/Mac/Linux)
-- **Git**
-- **Terminal** (PowerShell, Bash, or Zsh)
-
----
+ 
+ 
 
 ## 🚀 Installation
 
@@ -37,58 +24,58 @@ cd phpipam-laravel
 ### 2. Environment Setup
 ```bash
 cp .env.example .env
-# Edit .env if needed (DB credentials usually default in docker compose)
+# Modifica .env se necessario (DB credentials di default in docker-compose)
 ```
 
 ### 3. Start Containers
 ```bash
-docker compose up -d
+docker-compose up -d
 ```
 
 ### 4. Install Dependencies & Seed
 ```bash
-# Install PHP dependencies
-docker compose exec app composer install
+# Installa dipendenze PHP
+docker-compose exec app composer install
 
-# Generate Key
-docker compose exec app php artisan key:generate
+# Genera Key
+docker-compose exec app php artisan key:generate
 
-# Run Migrations & Seeds
-docker compose exec app php artisan migrate --seed
+# Esegui Migrations & Seeds
+docker-compose exec app php artisan migrate --seed
 
-# Install Node dependencies (for assets)
-docker compose exec app npm install
-docker compose exec app npm run build
+# Installa dipendenze Node (per gli asset)
+docker-compose exec app npm install
+docker-compose exec app npm run build
 ```
 
 ---
 
 ## 💻 Development Workflow
 
-### Running Commands
-Always run Artisan commands inside the container:
+### Esecuzione Comandi
+Esegui sempre i comandi Artisan all'interno del container:
 ```bash
-docker compose exec app php artisan <command>
+docker-compose exec app php artisan <command>
 ```
 
-### Clearing Cache
-If you change Filament resources or config:
+### Svuotare la Cache
+Se modifichi le risorse Filament o la configurazione:
 ```bash
-docker compose exec app php artisan optimize:clear
-docker compose exec app php artisan filament:cache-components
+docker-compose exec app php artisan optimize:clear
+docker-compose exec app php artisan filament:cache-components
 ```
 
-### Accessing the App
+### Accesso all'App
 - **URL:** http://localhost:8080/admin
-- **Login:** `admin@modernipam.local` / `password`
+- **Login:** admin@modernipam.local / password
 
 ---
 
 ## 🧪 Testing
 
-Run tests inside the container:
+Esegui i test all'interno del container. Il test runner è configurato per usare SQLite in-memory:
 ```bash
-docker compose exec app php artisan test
+docker-compose exec app php artisan test
 ```
 
 ---
@@ -101,4 +88,8 @@ Run `docker compose exec app composer dump-autoload`
 **Database connection refused:**
 Ensure containers are running: `docker compose ps`
 
-````
+---
+
+**Last Updated:** 2025-11-30
+
+ 

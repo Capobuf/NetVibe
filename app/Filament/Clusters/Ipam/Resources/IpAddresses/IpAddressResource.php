@@ -13,6 +13,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Toggle;
+use App\Filament\Clusters\Ipam\Resources\IpAddresses\Schemas\IpAddressSchema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Actions\EditAction;
@@ -33,41 +35,23 @@ class IpAddressResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema
-            ->components([
+            ->components(array_merge([
                 Select::make('subnet_id')
                     ->relationship('subnet', 'subnet')
                     ->searchable()
                     ->preload()
                     ->default(null),
-                TextInput::make('ip_addr')
-                    ->required(),
-                Select::make('type')
-                    ->required()
-                    ->options([
-                        'host' => 'Host',
-                        'gateway' => 'Gateway',
-                        'broadcast' => 'Broadcast',
-                        'reserved' => 'Reserved',
-                        'dhcp' => 'DHCP',
-                    ])
-                    ->default('host'),
-                TextInput::make('description')
-                    ->default(null),
-                TextInput::make('hostname')
-                    ->default(null),
-                TextInput::make('mac_address')
-                    ->default(null),
+            ], IpAddressSchema::schema(), [
                 TextInput::make('owner')
                     ->default(null),
-                TextInput::make('state')
-                    ->numeric()
-                    ->default(2),
+
                 Select::make('switch_id')
                     ->relationship('switchDevice', 'hostname')
                     ->label('Switch')
                     ->searchable()
                     ->preload()
                     ->default(null),
+
                 Select::make('location_id')
                     ->relationship(
                         name: 'location',
@@ -79,29 +63,37 @@ class IpAddressResource extends Resource
                     ->preload()
                     ->default(null)
                     ->disabled(fn ($get) => ! $get('customer_id')),
+
                 TextInput::make('port')
                     ->default(null),
+
                 Textarea::make('note')
                     ->default(null)
                     ->columnSpanFull(),
+
                 DateTimePicker::make('last_seen'),
+
                 Toggle::make('exclude_ping')
                     ->required(),
+
                 Toggle::make('ptr_ignore')
                     ->required(),
+
                 TextInput::make('ptr')
                     ->numeric()
                     ->default(0),
+
                 TextInput::make('firewall_address_object')
                     ->default(null),
+
                 Select::make('customer_id')
-                    ->relationship('customer', 'title')
+                    ->relationship('customer', 'name')
                     ->searchable()
                     ->preload()
                     ->default(null)
                     ->live()
                     ->afterStateUpdated(fn ($set) => $set('location_id', null)),
-            ]);
+            ]));
     }
 
     public static function table(Table $table): Table
@@ -153,14 +145,6 @@ class IpAddressResource extends Resource
                 Tables\Columns\TextColumn::make('type')
                     ->label('Type')
                     ->badge()
-                    ->color(fn ($state) => match ($state) {
-                        'gateway' => 'primary',
-                        'host' => 'success',
-                        'broadcast' => 'danger',
-                        'reserved' => 'warning',
-                        'dhcp' => 'secondary',
-                        default => 'secondary',
-                    })
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('port')
                     ->toggleable(isToggledHiddenByDefault: true),

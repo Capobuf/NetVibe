@@ -49,7 +49,7 @@ class CustomerResource extends Resource
             
             ->actions([
                 EditAction::make()->slideOver(),
-                DeleteAction::make(),
+                // DeleteAction removed from table actions per CRUD UX policy
             ]);
     }
 

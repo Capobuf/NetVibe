@@ -9,11 +9,11 @@
 
             <div>
                 {{-- Filament table portion --}}
-                @isset($table)
+                @if (isset($table))
                     {!! $table !!}
                 @else
                     {!! $this->table !!}
-                @endisset
+                @endif
             </div>
         </div>
 
@@ -34,7 +34,7 @@
                     </div>
 
                     <div class="w-full border rounded p-2 bg-white shadow-sm">
-                        <div class="grid grid-cols-10 md:grid-cols-20 gap-1">
+                        <div class="grid grid-cols-10 md:grid-cols-20 gap-1 ip-panel-grid">
                             @foreach ($cells as $cell)
                                 @php
                                     $ip = $cell['ip'] ?? null;
@@ -79,3 +79,30 @@
         </div>
     </div>
 </div>
+
+<style>
+    /* Make legacy panel grid cells square and stable like the visual grid */
+    .ip-panel-grid {
+        align-items: stretch;
+        justify-items: stretch;
+    }
+
+    .ip-panel-grid > a {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 0;
+        padding-top: 100%;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    .ip-panel-grid > a > * {
+        /* Ensure the anchor's content fills the cell area */
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>

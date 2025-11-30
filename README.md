@@ -14,13 +14,12 @@
 ## 📋 Quick Links
 
 - **🚀 [Setup Guide](SETUP.md)** - Installation & configuration
-- **🏗️ [Architecture](ARCHITECTURE.md)** - System design & technical decisions
+- **🏗️ [Project Status & Architecture](_DOCS/STATUS.md)** - System design, schema notes & current green test status
 - **✨ [Features](FEATURES.md)** - Implemented features & roadmap
-- **🐛 [Known Issues](ISSUES.md)** - Problems, fixes & technical debt
-- **📝 [Changelog](CHANGELOG.md)** - Release history
-- **📚 [Navigation Map](NAVIGATION.md)** - Full documentation index
+- **🐛 [Known Issues & Technical Debt (archived)](_DOCS/archive/ISSUES.md)** - Problems, fixes & technical debt (archived)
+- **📝 [Changelog (archived)](_DOCS/archive/CHANGELOG.md)** - Release history (archived)
+- **📚 [Agent Behaviour & Docs Index](_DOCS/AGENT_BEHAVIOR.md)** - Guidance for integrators and AI agents
 
----
 
 ## 🎯 Project Overview
 
@@ -32,7 +31,6 @@ Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/)
 - ✅ Docker-based development environment
 - ✅ Clean architecture (Action pattern, DTOs, Services)
 
----
 
 ## ⚡ Technology Stack
 
@@ -49,74 +47,72 @@ Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/)
 
 Other notable packages: Spatie Settings (spatie/laravel-settings)
 
-📖 **Details:** [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 **Details:** [_DOCS/STATUS.md](_DOCS/STATUS.md)
 
----
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- Git
+# Modern IPAM
 
-### 1. Clone & Setup
+**Status:** Stable / V1.0 MVP
 
-```bash
-git clone <repository-url> phpipam-laravel
-cd phpipam-laravel
-cp .env.example .env
-```
+> A modern Laravel 12 + FilamentPHP 4 implementation of IP Address Management
 
-### 2. Start Docker Stack
-
-```bash
-docker compose up -d
-```
-
-### 3. Initialize Database (first-run)
-
-Run migrations and seed the database. For a clean start (development) we recommend a fresh migrate and seeds:
-
-```bash
-docker compose exec app php artisan migrate:fresh --seed
-```
-
-Notes:
-- The seeder inserts a default admin user; check the seed output or your database for the created admin credentials.
-- If you're running against an existing DB (production or persisted data), use `php artisan migrate --seed` instead of `migrate:fresh`.
-
-### 4. Run background workers (required for scanning)
-
-Some discovery and scan jobs run asynchronously and require the queue worker to be running. Start a queue worker inside the app container:
-
-```bash
-docker compose exec app php artisan queue:work
-```
-
-### 5. Access Admin Panel
-
-```
-URL: http://localhost:8080/admin
-Email: admin@modernipam.local
-Password: password
-```
-
-📖 **Full Setup Guide:** [SETUP.md](SETUP.md)
+[![Laravel 12](https://img.shields.io/badge/Laravel-12.x-red)](https://laravel.com)
+[![FilamentPHP 4](https://img.shields.io/badge/Filament-4.x-orange)](https://filamentphp.com)
+[![PHP 8.4](https://img.shields.io/badge/PHP-8.4-blue)](https://php.net)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## ✨ Current Features
+## 📋 Quick Links & Context Vault
 
-### ✅ Fully Implemented
+Per la documentazione completa e il contesto architettonico aggiornato, consulta la cartella `_DOCS/`.
 
-- **IP Management**
-  - Subnets with hierarchical support (`master_subnet_id`)
-  - IP Addresses with decimal storage (efficient queries)
-  - IP state management (Used, Reserved, DHCP, Offline)
-  - IP pre-fill for subnets (async job-based)
-  
-- **Network Infrastructure**
+- **🟢 [Project Status](_DOCS/STATUS.md)** - Stato attuale e obiettivi raggiunti (Source of Truth per l'AI)
+- **🗺️ [Roadmap](_DOCS/ROADMAP.md)** - Prossime funzionalità e task pianificati
+- **🚀 [Setup Guide](SETUP.md)** - Istruzioni di installazione e configurazione
+
+---
+
+## 🎯 Project Overview
+
+Modern IPAM è una reimplementazione di [phpIPAM](https://phpipam.net/) che utilizza framework PHP moderni, mantenendo la compatibilità UI/UX con l'originale.
+
+### Filosofia: "Strict Replica"
+
+- ✅ Codebase moderno (Laravel 12, FilamentPHP 4, PHP 8.4)
+- ✅ Ambiente di sviluppo basato su Docker
+- ✅ Architettura pulita (Action pattern, DTOs, Services)
+
+---
+
+## ⚡ Technology Stack
+
+| Component | Choice | Version | Rationale |
+|---|---|---|---|
+| **PHP** | 8.4.x | Latest | Performance, modern syntax |
+| **Framework** | Laravel | 12.x | Long-term support |
+| **Admin UI** | FilamentPHP | 4.x | Best admin panel for Laravel |
+| **Database** | MariaDB | 11.x LTS | MySQL compatible |
+| **Queue/Cache** | Redis | 8.x | Fast session + cache driver |
+
+📖 **Full Architettura & Regole per l'AI:** [_DOCS/AGENT_BEHAVIOR.md](_DOCS/AGENT_BEHAVIOR.md)
+
+---
+
+## 🤝 Contribuzione
+
+1. Leggi [SETUP.md] per configurare l'ambiente
+2. Consulta [_DOCS/STATUS.md] for the current status
+
+---
+
+## 📝 Licenza
+
+MIT License - consulta il file LICENSE per i dettagli
   - VLANs with L2 domain support
   - Devices inventory
   - Locations management
@@ -149,7 +145,6 @@ Password: password
 
 📖 **Full Feature List:** [FEATURES.md](FEATURES.md)
 
----
 
 ## 📊 Project Status
 
@@ -164,9 +159,8 @@ Password: password
 - ✅ Legacy code eliminated
 - ⚠️ CI/CD pipeline recommended before scaling
 
-📖 **Known Issues & Fixes:** [ISSUES.md](ISSUES.md)
+📖 **Known Issues & Fixes (archived):** [_DOCS/archive/ISSUES.md](_DOCS/archive/ISSUES.md)
 
----
 
 ## 🏗️ Architecture Highlights
 
@@ -193,9 +187,8 @@ app/
 - **UI Pattern:** Filament Resources + Actions (no raw controllers)
 - **Data Flow:** Request → Action → Service → Model
 
-📖 **Full Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+📖 **Architecture & Status:** [_DOCS/STATUS.md](_DOCS/STATUS.md)
 
----
 
 ## 📚 Documentation for AI Agents
 
@@ -207,9 +200,8 @@ This project is designed to be maintainable by AI coding agents. All documentati
 - ✅ Code examples with explanations
 - ✅ Decision rationale
 
-**Start here:** [NAVIGATION.md](NAVIGATION.md) - Complete documentation index
+**Start here:** [_DOCS/AGENT_BEHAVIOR.md](_DOCS/AGENT_BEHAVIOR.md) - Agent behavioural protocol & docs landing
 
----
 
 ## 🤝 Contributing
 
@@ -227,13 +219,11 @@ This project is designed to be maintainable by AI coding agents. All documentati
 3. Check `docs/IMPLEMENTATION_GAP.md` for what exists
 4. Follow patterns in [ARCHITECTURE.md](ARCHITECTURE.md)
 
----
 
 ## 📝 License
 
 MIT License - see LICENSE file for details
 
----
 
 ## 🔗 Related Documentation
 
@@ -241,8 +231,7 @@ MIT License - see LICENSE file for details
 - **Laravel 12:** https://laravel.com/docs/12.x
 - **FilamentPHP 4:** https://filamentphp.com/docs
 
----
 
-**Last Updated:** 2025-11-28  
+**Last Updated:** 2025-11-30  
 **Project Maintainer:** See git history  
-**For Support:** Check [ISSUES.md](ISSUES.md) or open an issue
+**For Support:** Check [_DOCS/archive/ISSUES.md](_DOCS/archive/ISSUES.md) or open an issue

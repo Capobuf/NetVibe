@@ -8,6 +8,7 @@ use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ColorPicker;
+use Filament\Schemas\Components\Section;
 use App\Settings\GeneralSettings;
 use Filament\Notifications\Notification;
 
@@ -19,32 +20,29 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-cog-6-tooth';
     protected static ?string $navigationLabel = 'Settings';
     protected static ?string $title = 'Global Settings';
-    protected static ?int $navigationSort = 999;
+    protected static ?int $navigationSort = 100;
 
-    // keep this page isolated at the bottom of the navigation
-    protected static UnitEnum|string|null $navigationGroup = null;
+    // Group under Administration for global configuration
+    protected static UnitEnum|string|null $navigationGroup = 'Administration';
     protected string $view = 'filament.pages.general-settings';
 
     /** @var string[] form properties */
     public string $site_name = '';
-    public int $scan_ping_timeout = 1000;
     public string $site_color = '#0ea5a4';
 
     protected function getFormSchema(): array
     {
+        // Wrap fields in a Section to ensure proper spacing and avoid UI button crowding
         return [
-            TextInput::make('site_name')
-                ->label('Site name')
-                ->required(),
+            Section::make('General')->schema([
+                TextInput::make('site_name')
+                    ->label('Site name')
+                    ->required(),
 
-            TextInput::make('scan_ping_timeout')
-                ->label('Scan ping timeout (ms)')
-                ->numeric()
-                ->required(),
-
-            ColorPicker::make('site_color')
-                ->label('Site color')
-                ->columnSpanFull(),
+                ColorPicker::make('site_color')
+                    ->label('Site color')
+                    ->columnSpanFull(),
+            ])->columns(1),
         ];
     }
 
@@ -54,7 +52,6 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
 
         $this->form->fill([
             'site_name' => $settings->site_name,
-            'scan_ping_timeout' => $settings->scan_ping_timeout,
             'site_color' => $settings->site_color,
         ]);
     }
@@ -65,7 +62,6 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
 
         $settings = app(GeneralSettings::class);
         $settings->site_name = $state['site_name'] ?? $settings->site_name;
-        $settings->scan_ping_timeout = (int) ($state['scan_ping_timeout'] ?? $settings->scan_ping_timeout);
         $settings->site_color = $state['site_color'] ?? $settings->site_color;
 
         $settings->save();

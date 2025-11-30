@@ -16,70 +16,81 @@
     <h3 class="text-white text-lg font-semibold mb-4">Rack Visualization (42U)</h3>
     @php
         // graphical rendering constants
-        $unitHeight = 24; // px per U
+        // increase per-unit height so placeholders and device blocks are visually clear
+        $unitHeight = 36; // px per U
         $totalUnits = 42;
         $totalHeight = $unitHeight * $totalUnits; // px
     @endphp
 
     <div class="flex gap-4">
-        {{-- Optional left column shows small ruler/labels (hidden on very small screens) --}}
-        <div class="hidden sm:flex flex-col-reverse w-12 text-xs text-gray-400 select-none" aria-hidden="true">
-            @for ($u = $totalUnits; $u >= 1; $u--)
-                <div style="height: {{ $unitHeight }}px; line-height: {{ $unitHeight }}px;" class="flex items-center justify-center">U{{ $u }}</div>
-            @endfor
-        </div>
+        {{-- Left ruler removed to avoid duplication of unit labels; UI should show graphical rack only --}}
 
-        {{-- The rack drawing area: absolute positioning with bottom-origin so U1 is bottom --}}
-        <div class="relative flex-1 bg-gray-800 border border-gray-700 rounded p-2 overflow-hidden" style="height: {{ $totalHeight }}px;">
+        {{-- The rack drawing area: block-based grid using flex-col-reverse so U1 is bottom --}}
+        <div class="relative w-72 mx-auto bg-gray-800 border border-gray-700 rounded p-3 overflow-hidden" style="min-height: {{ $totalHeight }}px;">
 
-            {{-- background grid lines (visual guide) --}}
-            <div class="absolute inset-0 pointer-events-none">
-                @for ($u = 0; $u <= $totalUnits; $u++)
-                    @php $y = $u * $unitHeight; @endphp
-                    <div style="position:absolute; left:0; right:0; bottom: {{ $y }}px; border-bottom: 1px solid rgba(255,255,255,0.04);"></div>
-                @endfor
+            {{-- units container: render blocks bottom-to-top using flex-col-reverse (1U increments) --}}
+            <div class="w-full h-full flex flex-col-reverse gap-1 overflow-auto" style="height: {{ $totalHeight }}px;">
+                @php $u = 1; @endphp
+                @while($u <= $totalUnits)
+                    @php $data = $units[$u] ?? ['type' => 'empty']; @endphp
+
+                    @if($data['type'] === 'spanned')
+                        {{-- skip spanned units (part of a device rendered at the starting unit) --}}
+                        @php $u++; continue; @endphp
+                    @endif
+
+                    @if($data['type'] === 'device')
+                        @php
+                            $device = $data['device'];
+                            $span = (int) ($data['span'] ?? 1);
+                            $heightPx = max(32, $span * $unitHeight);
+                            $colorKey = $device->deviceModel->type?->getColor() ?? 'gray';
+                            $classes = $colorMap[$colorKey] ?? $colorMap['gray'];
+                            $editUrl = \App\Filament\Clusters\Racks\Resources\Devices\DeviceResource::getUrl('edit', ['record' => $device->id]);
+                        @endphp
+
+                        <a href="{{ $editUrl }}" title="Edit {{ $device->hostname }}" aria-label="Edit {{ $device->hostname }}"
+                           class="block w-full flex items-center justify-center px-2 py-1 transition-shadow hover:shadow-md"
+                           style="height: {{ $heightPx }}px; background-color: transparent;">
+                            <div class="w-full h-full flex flex-col items-center justify-center text-xs font-medium rounded {{ $classes['bg'] }} {{ $classes['text'] }} border border-gray-600">
+                                <div class="font-semibold truncate px-1">{{ $device->hostname }}</div>
+                                <div class="text-[11px] opacity-80 truncate px-1">{{ $device->deviceModel->name ?? 'Unknown' }}</div>
+                            </div>
+                        </a>
+
+                        @php $u += $span; continue; @endphp
+                    @else
+                        @php
+                            $createUrl = \App\Filament\Clusters\Racks\Resources\Devices\DeviceResource::getUrl('create') . '?rack_id=' . ($rack->id ?? '') . '&rack_position=' . $u;
+                        @endphp
+
+                        <a href="{{ $createUrl }}" title="Create device at U{{ $u }}" aria-label="Create device at U{{ $u }}"
+                           class="block w-full flex items-center justify-between px-3 text-sm text-gray-200 border border-gray-600 bg-gray-700/40 hover:bg-gray-700 transition-colors"
+                           style="height: {{ $unitHeight }}px;">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-3 bg-gray-400/30 rounded"></div>
+                                <div class="opacity-90 font-semibold">U{{ $u }}</div>
+                            </div>
+                            <div class="text-sm opacity-80">Create</div>
+                        </a>
+
+                        @php $u++; continue; @endphp
+                    @endif
+                @endwhile
             </div>
 
-            {{-- Empty slot hotspots (preserve Quick Create) --}}
-            @foreach($units as $unit => $data)
-                @if($data['type'] === 'empty')
-                    @php
-                        $createUrl = \App\Filament\Clusters\Racks\Resources\Devices\DeviceResource::getUrl('create') . '?rack_id=' . ($rack->id ?? '') . '&rack_position=' . $unit;
-                        $bottom = ($unit - 1) * $unitHeight;
-                    @endphp
+            @php
+                // friendly message if everything somehow still empty
+                $hasAny = collect($units)->contains(function ($data) {
+                    return $data['type'] !== 'spanned';
+                });
+            @endphp
 
-                    <a href="{{ $createUrl }}"
-                       class="absolute left-2 right-2 border-2 border-dashed border-gray-600 rounded hover:bg-gray-700 transition-colors flex items-center justify-center text-xs font-medium text-gray-400"
-                       style="bottom: {{ $bottom }}px; height: {{ $unitHeight }}px;">
-                        <span>U{{ $unit }}</span>
-                    </a>
-                @endif
-            @endforeach
-
-            {{-- Device blocks (render on top) --}}
-            @foreach($units as $unit => $data)
-                @if($data['type'] === 'device')
-                    @php
-                        $device = $data['device'];
-                        $span = (int) ($data['span'] ?? 1);
-                        $colorKey = $device->deviceModel->type?->getColor() ?? 'gray';
-                        $classes = $colorMap[$colorKey] ?? $colorMap['gray'];
-                        $heightPx = max(32, $span * $unitHeight);
-                        // position bottom at the UNIT's bottom coordinate (U1 bottom = 0)
-                        $bottom = ($unit - 1) * $unitHeight;
-                        $editUrl = \App\Filament\Clusters\Racks\Resources\Devices\DeviceResource::getUrl('edit', ['record' => $device->id]);
-                    @endphp
-
-                    <a href="{{ $editUrl }}"
-                       class="absolute left-2 right-2 rounded cursor-pointer transition-shadow shadow-sm hover:shadow-md flex items-center justify-center z-10"
-                       style="bottom: {{ $bottom }}px; height: {{ $heightPx }}px;">
-                        <div class="w-full h-full flex flex-col items-center justify-center text-xs font-medium rounded {{ $classes['bg'] }} {{ $classes['text'] }}">
-                            <div class="font-semibold truncate px-1">{{ $device->hostname }}</div>
-                            <div class="text-[11px] opacity-80 truncate px-1">{{ $device->deviceModel->name ?? 'Unknown' }}</div>
-                        </div>
-                    </a>
-                @endif
-            @endforeach
+            @unless($hasAny)
+                <div class="absolute inset-0 flex items-center justify-center text-sm text-gray-400 select-none pointer-events-none">
+                    This rack is empty — use the slots to create devices.
+                </div>
+            @endunless
 
         </div>
     </div>

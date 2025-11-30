@@ -10,6 +10,7 @@ The application is stable but has severe UX/Data presentation flaws that must be
 2.  **Rack Visualization Broken:** The View Rack page shows a vertical list of units (U42, U41) instead of the intended graphical device drawing (`RackVisual` component failure).
 3.  **Missing CRUD Actions:** Delete buttons are missing from the Edit pages for Subnets and VLANs, violating CRUD standards.
 4.  **Visual Map Mess:** The `IpAddressVisualGrid` widget is not optimized (vertical list, missing ability to add IP).
+5.  **Spatie Missing Settings Error:** The General Settings page throws `Spatie\LaravelSettings\Exceptions\MissingSettings` when saving changes, requiring all properties (`site_name`, `site_color`) to be manually included in the save logic. (STATUS: PENDING FIX)
 
 ## 🚀 CURRENT FOCUS (Next Phase)
 * **Goal:** Resolve P1 UX Defects.

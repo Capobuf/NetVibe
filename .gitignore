@@ -24,6 +24,9 @@ yarn-error.log
 /docker/mysql-data/
 /docker/redis-data/
 
+# Local docker compose override (dev)
+docker/dev/docker-compose.override.yml
+
 # OS
 .DS_Store
 Thumbs.db

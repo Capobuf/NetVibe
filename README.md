@@ -52,6 +52,20 @@ Other notable packages: Spatie Settings (spatie/laravel-settings)
 
 ## 🚀 Quick Start
 
+### Start (development)
+
+Use the development override to mount your local files and expose the webserver port:
+
+```bash
+docker compose -f docker/docker-compose.yml -f docker/dev/docker-compose.override.yml up -d
+```
+
+### Start (production example)
+
+```bash
+docker compose -f docker/docker-compose.yml -f docker/production/docker-compose.prod.yml up -d
+```
+
 ### Prerequisites
 
 # Modern IPAM

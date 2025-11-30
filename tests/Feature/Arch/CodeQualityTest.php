@@ -148,6 +148,13 @@ test('subnet resource has required configuration', function () {
     $this->assertStringContainsString('public static function infolist', $subnetResource);
 });
 
+test('rack table name column links to view page', function () {
+    $racksTable = file_get_contents(app_path('Filament/Clusters/Racks/Resources/Racks/Tables/RacksTable.php'));
+
+    // The name column should link to the resource "view" page rather than edit
+    $this->assertStringContainsString("RackResource::getUrl('view'", $racksTable);
+});
+
 test('clusters do not depend on root resources', function () {
     $files = \Illuminate\Support\Facades\File::allFiles(app_path('Filament/Clusters'));
 

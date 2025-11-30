@@ -28,24 +28,33 @@ cp .env.example .env
 ```
 
 ### 3. Start Containers
+
+For development (recommended) — use the override file that mounts your local source and exposes the webserver port:
+
 ```bash
-docker-compose up -d
+docker compose -f docker/docker-compose.yml -f docker/dev/docker-compose.override.yml up -d
+```
+
+For production (example) — combine the base file with the production override:
+
+```bash
+docker compose -f docker/docker-compose.yml -f docker/production/docker-compose.prod.yml up -d
 ```
 
 ### 4. Install Dependencies & Seed
 ```bash
 # Installa dipendenze PHP
-docker-compose exec app composer install
+docker compose exec app composer install
 
 # Genera Key
-docker-compose exec app php artisan key:generate
+docker compose exec app php artisan key:generate
 
 # Esegui Migrations & Seeds
-docker-compose exec app php artisan migrate --seed
+docker compose exec app php artisan migrate --seed
 
 # Installa dipendenze Node (per gli asset)
-docker-compose exec app npm install
-docker-compose exec app npm run build
+docker compose exec app npm install
+docker compose exec app npm run build
 ```
 
 ---
@@ -53,9 +62,9 @@ docker-compose exec app npm run build
 ## 💻 Development Workflow
 
 ### Esecuzione Comandi
-Esegui sempre i comandi Artisan all'interno del container:
+Esegui sempre i comandi Artisan all'interno del container (development example using the override):
 ```bash
-docker-compose exec app php artisan <command>
+docker compose exec app php artisan <command>
 ```
 
 ### Svuotare la Cache
@@ -66,7 +75,9 @@ docker-compose exec app php artisan filament:cache-components
 ```
 
 ### Accesso all'App
-- **URL:** http://localhost:8080/admin
+- **Dev URL (override):** http://localhost:9693/admin
+
+If your environment uses a reverse proxy or different port mapping for production, consult the deployment configuration.
 - **Login:** admin@modernipam.local / password
 
 ---

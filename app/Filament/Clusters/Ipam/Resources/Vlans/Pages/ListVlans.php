@@ -14,6 +14,12 @@ class ListVlans extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->slideOver()];
+        return [
+            CreateAction::make()
+                ->label('New')
+                ->icon('heroicon-o-plus')
+                ->button()
+                ->slideOver(),
+        ];
     }
 }

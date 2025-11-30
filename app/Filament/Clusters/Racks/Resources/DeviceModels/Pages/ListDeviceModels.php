@@ -12,7 +12,11 @@ class ListDeviceModels extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            \Filament\Actions\CreateAction::make()->slideOver(),
+            \Filament\Actions\CreateAction::make()
+                ->label('New')
+                ->icon('heroicon-o-plus')
+                ->button()
+                ->slideOver(),
         ];
     }
 }

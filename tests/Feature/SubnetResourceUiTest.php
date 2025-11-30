@@ -14,8 +14,8 @@ class SubnetResourceUiTest extends TestCase
 
     public function test_subnet_resource_has_create_header_action()
     {
-        $file = file_get_contents(app_path('Filament/Clusters/Ipam/Resources/Subnets/SubnetResource.php'));
-        $this->assertStringContainsString('CreateAction::make()', $file, 'SubnetResource table should register CreateAction in headerActions');
+        $file = file_get_contents(app_path('Filament/Clusters/Ipam/Resources/Subnets/Pages/ListSubnets.php'));
+        $this->assertStringContainsString('CreateAction::make()', $file, 'ListSubnets page should register CreateAction in getHeaderActions');
     }
 
     public function test_ip_addresses_relation_manager_exports_table_and_form()

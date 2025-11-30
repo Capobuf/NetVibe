@@ -14,6 +14,7 @@ use Filament\Forms\Components\Select;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Tables\Columns\TextInputColumn;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
@@ -107,12 +108,28 @@ class IpAddressesRelationManager extends RelationManager
                 ->formatStateUsing(fn ($state) => app(IpConversionService::class)->fromDecimal($state))
                 ->searchable()
                 ->sortable(),
-            Tables\Columns\TextColumn::make('hostname')->searchable()->toggleable(),
-            Tables\Columns\TextColumn::make('owner')->searchable()->toggleable(),
-            Tables\Columns\TextColumn::make('mac_address')
+            Tables\Columns\TextInputColumn::make('hostname')
+                ->label('Hostname')
+                ->rules(['nullable', 'max:255'])
+                ->inline()
+                ->searchable(),
+
+            TextInputColumn::make('owner')
+                ->rules(['nullable', 'max:255'])
+                ->inline()
+                ->searchable(),
+
+            TextInputColumn::make('port')
+                ->rules(['nullable', 'max:255'])
+                ->inline()
+                ->searchable(),
+
+            TextInputColumn::make('mac_address')
                 ->label('MAC')
-                ->copyable()
+                ->rules(['nullable', 'max:255'])
+                ->inline()
                 ->fontFamily('mono')
+                ->copyable()
                 ->toggleable(isToggledHiddenByDefault: true),
             Tables\Columns\TextColumn::make('description')->limit(30),
             Tables\Columns\TextColumn::make('state')
@@ -135,9 +152,13 @@ class IpAddressesRelationManager extends RelationManager
                 'dhcp' => 'DHCP',
             ]),
         ])->headerActions([
-            CreateAction::make()->slideOver(),
+            CreateAction::make()
+                ->label('New')
+                ->icon('heroicon-o-plus')
+                ->button()
+                ->slideOver(),
         ])->recordActions([
-            EditAction::make(),
+            EditAction::make()->slideOver(),
             DeleteAction::make(),
         ]);
     }

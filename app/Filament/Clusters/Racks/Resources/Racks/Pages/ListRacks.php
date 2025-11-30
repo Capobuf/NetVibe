@@ -13,7 +13,11 @@ class ListRacks extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->slideOver(),
+            CreateAction::make()
+                ->label('New')
+                ->icon('heroicon-o-plus')
+                ->button()
+                ->slideOver(),
         ];
     }
 }

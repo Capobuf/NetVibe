@@ -8,7 +8,7 @@ use App\Filament\Clusters\Ipam\IpamCluster;
 use App\Models\L2Domain;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Forms\Components\Section;
+use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables\Table;
@@ -28,13 +28,16 @@ class L2DomainResource extends Resource
     protected static ?string $modelLabel = 'L2 Domain';
     protected static ?string $pluralModelLabel = 'L2 Domains';
 
+    // Ordering in IPAM navigation
+    protected static ?int $navigationSort = 3;
+
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
-            Section::make()->schema([
+            Section::make('General')->schema([
                 TextInput::make('name')->required()->maxLength(255),
                 Textarea::make('description'),
-            ]),
+            ])->columns(1),
         ]);
     }
 

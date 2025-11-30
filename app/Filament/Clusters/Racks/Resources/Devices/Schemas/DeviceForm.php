@@ -4,8 +4,6 @@ namespace App\Filament\Clusters\Racks\Resources\Devices\Schemas;
 
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Schema;
 
 class DeviceForm

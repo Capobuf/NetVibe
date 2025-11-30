@@ -71,7 +71,7 @@ cp .env.example .env
 ### 2. Start Docker Stack
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 3. Initialize Database (first-run)
@@ -79,7 +79,7 @@ docker-compose up -d
 Run migrations and seed the database. For a clean start (development) we recommend a fresh migrate and seeds:
 
 ```bash
-docker-compose exec app php artisan migrate:fresh --seed
+docker compose exec app php artisan migrate:fresh --seed
 ```
 
 Notes:
@@ -91,7 +91,7 @@ Notes:
 Some discovery and scan jobs run asynchronously and require the queue worker to be running. Start a queue worker inside the app container:
 
 ```bash
-docker-compose exec app php artisan queue:work
+docker compose exec app php artisan queue:work
 ```
 
 ### 5. Access Admin Panel

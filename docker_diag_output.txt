@@ -1,0 +1,261 @@
+]633;E;{   echo "=== DATE ==="\x3b date\x3b   echo "\\n=== docker-compose ps --all ==="\x3b docker-compose ps --all 2>&1 || true\x3b   echo "\\n=== docker ps -a (modern-ipam) ==="\x3b docker ps -a --filter "name=modern-ipam-" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}" 2>&1 || true\x3b   echo "\\n=== docker/nginx/default.conf (host) ==="\x3b if [ -f docker/nginx/default.conf ]\x3b then sed -n '1,240p' docker/nginx/default.conf\x3b else echo "MISSING: docker/nginx/default.conf"\x3b fi\x3b   echo "\\n=== public dir listing (host) ==="\x3b ls -la public 2>&1 || true\x3b   echo "\\n=== webserver logs (last 200) ==="\x3b docker logs --tail 200 modern-ipam-webserver 2>&1 || echo "no logs or container missing"\x3b   echo "\\n=== worker logs (last 200) ==="\x3b docker logs --tail 200 modern-ipam-worker 2>&1 || echo "no logs or container missing"\x3b   echo "\\n=== webserver inspect (Mounts & State) ==="\x3b docker inspect modern-ipam-webserver --format 'State: {{.State.Status}} (ExitCode: {{.State.ExitCode}})\\nMounts:\\n{{range .Mounts}}{{printf " - %s -> %s\\n" .Source .Destination}}{{end}}' 2>&1 || echo "inspect failed"\x3b   echo "\\n=== Host perms and nginx conf owner ==="\x3b ls -ld . docker/nginx docker/nginx/default.conf 2>&1 || true\x3b   echo "\\n=== Host project root listing (first 200 lines) ==="\x3b ls -la | sed -n '1,200p' 2>&1 || true\x3b   echo "\\n=== Inside app container: /var/www/html owner and public dir ==="\x3b docker-compose exec app sh -lc 'ls -ld /var/www/html /var/www/html/public || true' 2>&1 || true\x3b } > "$OUT" 2>&1 || true;1975cd0e-5200-4eaf-a0dd-bfbca153d632]633;C=== DATE ===
+Sun Nov 30 07:06:11 AM CET 2025
+\n=== docker-compose ps --all ===
+               Name                             Command                  State                        Ports                  
+-----------------------------------------------------------------------------------------------------------------------------
+3de4e894861e_modern-ipam-webserver   /docker-entrypoint.sh ngin ...   Exit 128                                               
+modern-ipam-app                      docker-php-entrypoint php-fpm    Up (healthy)   9000/tcp                                
+modern-ipam-db                       docker-entrypoint.sh mariadbd    Up (healthy)   0.0.0.0:3306->3306/tcp,:::3306->3306/tcp
+modern-ipam-redis                    docker-entrypoint.sh redis ...   Up (healthy)   0.0.0.0:6379->6379/tcp,:::6379->6379/tcp
+modern-ipam-worker                   docker-php-entrypoint php  ...   Up (healthy)   9000/tcp                                
+\n=== docker ps -a (modern-ipam) ===
+NAMES                                STATUS                    PORTS
+3de4e894861e_modern-ipam-webserver   Created                   
+modern-ipam-worker                   Up 9 minutes (healthy)    9000/tcp
+modern-ipam-app                      Up 16 minutes (healthy)   9000/tcp
+modern-ipam-db                       Up 17 minutes (healthy)   0.0.0.0:3306->3306/tcp, [::]:3306->3306/tcp
+modern-ipam-redis                    Up 17 minutes (healthy)   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+\n=== docker/nginx/default.conf (host) ===
+server {
+    listen 80;
+    server_name localhost;
+    root /var/www/html/public;
+
+    index index.php index.html;
+
+    charset utf-8;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Logging
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/json;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass app:9000;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_hide_header X-Powered-By;
+        
+        # Increase timeouts for long-running scans
+        fastcgi_read_timeout 300;
+        fastcgi_send_timeout 300;
+        
+        # Buffer settings
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 256 16k;
+        fastcgi_busy_buffers_size 256k;
+        fastcgi_temp_file_write_size 256k;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+\n=== public dir listing (host) ===
+total 36
+drwxr-xr-x  6 root root 4096 Nov 30 06:23 .
+drwxr-xr-x 20 root root 4096 Nov 30 07:06 ..
+drwxr-xr-x  3 root root 4096 Nov 30 06:23 build
+drwxr-xr-x  3 root root 4096 Nov 30 06:23 css
+-rw-r--r--  1 root root    0 Nov 30 06:23 favicon.ico
+drwxr-xr-x  3 root root 4096 Nov 30 06:23 fonts
+-rw-r--r--  1 root root  740 Nov 30 06:23 .htaccess
+-rw-r--r--  1 root root  543 Nov 30 06:23 index.php
+drwxr-xr-x  3 root root 4096 Nov 30 06:23 js
+-rw-r--r--  1 root root   24 Nov 30 06:23 robots.txt
+\n=== webserver logs (last 200) ===
+Error response from daemon: No such container: modern-ipam-webserver
+no logs or container missing
+\n=== worker logs (last 200) ===
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+
+Warning: require(/var/www/html/vendor/autoload.php): Failed to open stream: No such file or directory in /var/www/html/artisan on line 10
+
+Fatal error: Uncaught Error: Failed opening required '/var/www/html/vendor/autoload.php' (include_path='.:/usr/local/lib/php') in /var/www/html/artisan:10
+Stack trace:
+#0 {main}
+  thrown in /var/www/html/artisan on line 10
+\n=== webserver inspect (Mounts & State) ===
+
+Error: No such object: modern-ipam-webserver
+inspect failed
+\n=== Host perms and nginx conf owner ===
+drwxr-xr-x 20 root root 4096 Nov 30 07:06 .
+drwxr-xr-x  2 root root 4096 Nov 30 06:23 docker/nginx
+-rw-r--r--  1 root root 1457 Nov 30 06:23 docker/nginx/default.conf
+\n=== Host project root listing (first 200 lines) ===
+total 952
+drwxr-xr-x 20 root root   4096 Nov 30 07:06 .
+drwx------ 12 root root   4096 Nov 30 06:22 ..
+drwxr-xr-x  3 root root   4096 Nov 30 06:23 .agent
+drwxr-xr-x 15 root root   4096 Nov 30 06:23 app
+-rw-r--r--  1 root root   4308 Nov 30 06:23 ARCHITECTURE.md
+-rw-r--r--  1 root root    425 Nov 30 06:23 artisan
+drwxr-xr-x  3 root root   4096 Nov 30 06:23 bootstrap
+-rw-r--r--  1 root root   7137 Nov 30 06:23 CHANGELOG.md
+-rw-r--r--  1 root root   3083 Nov 30 06:23 composer.json
+-rw-r--r--  1 root root 423611 Nov 30 06:23 composer.lock
+drwxr-xr-x  2 root root   4096 Nov 30 06:23 config
+-rw-r--r--  1 root root   7089 Nov 30 06:23 CURRENT_STATE.md
+drwxr-xr-x  5 root root   4096 Nov 30 06:23 database
+drwxr-xr-x  5 root root   4096 Nov 30 06:23 docker
+-rwxr-xr-x  1 root root   3843 Nov 30 06:52 docker-compose.yml
+-rw-r--r--  1 root root  11495 Nov 30 07:06 docker_diag_output.txt
+drwxr-xr-x  2 root root   4096 Nov 30 06:23 docs
+drwxr-xr-x 11 root root   4096 Nov 30 06:23 docs-filamentv4
+drwxr-xr-x  2 root root   4096 Nov 30 06:23 docs-laravelv12
+-rw-r--r--  1 root root   1181 Nov 30 06:23 .env.example
+-rw-r--r--  1 root root   2918 Nov 30 06:23 FEATURES.md
+drwxr-xr-x  8 root root   4096 Nov 30 06:40 .git
+drwxr-xr-x  3 root root   4096 Nov 30 06:23 .github
+-rw-r--r--  1 root root    433 Nov 30 06:23 .gitignore
+-rw-r--r--  1 root root   9479 Nov 30 06:23 ISSUES.md
+-rw-r--r--  1 root root 200704 Nov 30 06:40 modern_ipam
+-rw-r--r--  1 root root   6829 Nov 30 06:23 NAVIGATION.md
+-rw-r--r--  1 root root    414 Nov 30 06:23 package.json
+-rw-r--r--  1 root root  92239 Nov 30 06:23 package-lock.json
+-rw-r--r--  1 root root   1284 Nov 30 06:23 phpunit.xml
+drwxr-xr-x  6 root root   4096 Nov 30 06:23 public
+-rw-r--r--  1 root root   7103 Nov 30 06:23 README.md
+drwxr-xr-x  5 root root   4096 Nov 30 06:23 resources
+drwxr-xr-x  2 root root   4096 Nov 30 06:23 routes
+drwxr-xr-x  2 root root   4096 Nov 30 06:40 scripts
+-rw-r--r--  1 root root   1737 Nov 30 06:23 SETUP.md
+drwxr-xr-x  5 root root   4096 Nov 30 06:23 storage
+-rw-r--r--  1 root root  62948 Nov 30 06:40 subnet_page.html
+drwxr-xr-x  4 root root   4096 Nov 30 06:23 tests
+drwxr-xr-x 58 root root   4096 Nov 30 06:56 vendor
+-rw-r--r--  1 root root    215 Nov 30 06:23 vite.config.js
+\n=== Inside app container: /var/www/html owner and public dir ===
+
+# show in chunks
+sed -n '1,200p' "$OUT" || true
+echo "\n---- next chunk ----\n"
+sed -n '201,400p' "$OUT" || true
+echo "\n---- final chunk (401-800) ----\n"
+sed -n '401,800p' "$OUT" || true
+drwxr-xr-x   20 root     root          4096 Nov 30 06:06 [1;34m/var/www/html[m
+drwxr-xr-x    6 root     root          4096 Nov 30 05:23 [1;34m/var/www/html/public[m

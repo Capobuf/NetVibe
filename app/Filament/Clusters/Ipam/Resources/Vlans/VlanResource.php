@@ -6,9 +6,10 @@ namespace App\Filament\Clusters\Ipam\Resources\Vlans;
 
 use App\Filament\Clusters\Ipam\IpamCluster;
 use App\Models\Vlan;
+use App\Models\L2Domain;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Forms\Components\Section;
+use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Tables\Table;
@@ -21,6 +22,9 @@ class VlanResource extends Resource
 
     protected static ?string $cluster = IpamCluster::class;
 
+    // Ordering in IPAM navigation
+    protected static ?int $navigationSort = 1;
+
     protected static string|BackedEnum|null $navigationIcon = null;
 
     // Normalize labels and capitalization
@@ -31,13 +35,21 @@ class VlanResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->schema([
-            Section::make()->schema([
-                TextInput::make('number')->numeric()->required(),
+            Section::make('General')->schema([
+                TextInput::make('number')->numeric()->required()->label('VLAN ID'),
                 TextInput::make('name')->required()->maxLength(255),
-                Select::make('l2_domain_id')->relationship('l2Domain', 'name')->preload()->searchable()->nullable(),
+                Select::make('l2_domain_id')
+                    ->relationship('l2Domain', 'name')
+                    ->label('L2 Domain')
+                    ->preload()
+                    ->searchable()
+                    ->nullable()
+                    ->default(fn() => L2Domain::first()?->id)
+                    ->hidden(fn() => L2Domain::count() === 1)
+                    ->dehydratedWhenHidden(),
                 Select::make('customer_id')->relationship('customer', 'name')->preload()->searchable()->nullable(),
                 TextInput::make('description')->nullable(),
-            ]),
+            ])->columns(1),
         ]);
     }
 
@@ -50,6 +62,9 @@ class VlanResource extends Resource
                 TextColumn::make('l2Domain.name')->label('L2 Domain')->sortable(),
                 TextColumn::make('customer.name')->label('Customer')->sortable(),
                 TextColumn::make('subnets_count')->label('Subnets')->sortable(),
+            ])
+            ->recordActions([
+                \Filament\Actions\EditAction::make()->slideOver(),
             ]);
     }
 
@@ -62,8 +77,6 @@ class VlanResource extends Resource
     {
         return [
             'index' => Pages\ListVlans::route('/'),
-            'create' => Pages\CreateVlan::route('/create'),
-            'edit' => Pages\EditVlan::route('/{record}/edit'),
         ];
     }
 }

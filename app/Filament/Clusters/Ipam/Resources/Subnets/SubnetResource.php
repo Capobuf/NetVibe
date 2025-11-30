@@ -12,9 +12,9 @@ use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Forms\Components\Section as FormSection;
 use Filament\Infolists\Components\Section as InfolistSection;
 use Filament\Forms\Components\Select;
+use App\Models\Vrf;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -27,6 +27,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Infolists;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Schemas\Components\Section;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use App\Jobs\ScanSubnetJob;
@@ -40,33 +41,54 @@ class SubnetResource extends Resource
 
     protected static ?string $cluster = IpamCluster::class;
 
+    // Ordering in IPAM navigation
+    protected static ?int $navigationSort = 2;
+
     public static function form(Schema $schema): Schema
     {
+        // Ensure form uses only Forms components (no Schema layout components inside forms)
         return $schema->schema([
-            FormSection::make()->schema([
-                Select::make('vrf_id')->relationship('vrf', 'name')->required(),
-                Select::make('vlan_id')->relationship('vlan', 'name')->preload()->searchable()->nullable(),
-                TextInput::make('cidr')->required(),
-                Textarea::make('description'),
-            ]),
+            Select::make('vrf_id')
+                ->relationship('vrf', 'name')
+                ->required()
+                ->default(fn () => Vrf::first()?->id)
+                ->hidden(fn () => Vrf::count() === 1)
+                ->dehydratedWhenHidden()
+                ->label('VRF'),
 
-            FormSection::make('Discovery Configuration')->collapsible()
-                ->schema([
-                    Toggle::make('discover_subnet')->label('Enable Auto-Discovery')->default(true),
+            Select::make('vlan_id')
+                ->relationship('vlan', 'name')
+                ->preload()
+                ->searchable()
+                ->nullable()
+                ->label('VLAN'),
 
-                    Select::make('scan_interval')
-                        ->label('Scan interval')
-                        ->options([
-                            5 => 'Every 5 Minutes',
-                            60 => 'Every Hour',
-                            1440 => 'Daily',
-                        ])
-                        ->nullable()
-                        ->hint('Leave empty to use the global default'),
-
-                    Select::make('scan_agent_id')->relationship('scanAgent', 'name')->nullable(),
+            TextInput::make('cidr')
+                ->required()
+                ->label('CIDR')
+                ->rules([
+                    'required',
+                    new \App\Rules\ValidCidr(),
                 ]),
-        ]);
+
+            Textarea::make('description'),
+
+            // Discovery configuration inputs — keep the individual inputs inline
+            Toggle::make('discover_subnet')->label('Enable Auto-Discovery')->default(true)->hiddenOn('create'),
+
+            Select::make('scan_interval')
+                ->label('Scan interval')
+                ->options([
+                    5 => 'Every 5 Minutes',
+                    60 => 'Every Hour',
+                    1440 => 'Daily',
+                ])
+                ->nullable()
+                ->hint('Leave empty to use the global default')
+                ->hiddenOn('create'),
+
+            Select::make('scan_agent_id')->relationship('scanAgent', 'name')->nullable()->hiddenOn('create'),
+        ])->columns(1);
     }
 
     public static function table(Table $table): Table
@@ -78,8 +100,6 @@ class SubnetResource extends Resource
                 ->url(fn (Subnet $record): string => static::getUrl('view', ['record' => $record])),
             Tables\Columns\TextColumn::make('vlan.name')->label('VLAN')->searchable()->sortable(),
             Tables\Columns\TextColumn::make('description')->limit(50),
-        ])->headerActions([
-            CreateAction::make()->slideOver(),
         ])->recordActions([
             Action::make('scan')
                 ->label('Scan Network')
@@ -102,8 +122,21 @@ class SubnetResource extends Resource
 
     public static function getRelations(): array
     {
-        // The IP table + visual map are now provided by a single panel widget
-        // shown on the Subnet view page. Keep relations array empty here.
+        // The IP table + visual map are provided on the Subnet view page. Only
+        // expose the relation manager when rendering the resource *view* page so
+        // it does not appear on edit pages (we keep edits metadata-only).
+        if (app()->runningInConsole()) {
+            return [];
+        }
+
+        $path = request()->path() ?? '';
+
+        if (str_contains($path, '/view')) {
+            return [
+                IpAddressesRelationManager::class,
+            ];
+        }
+
         return [];
     }
 
@@ -112,19 +145,25 @@ class SubnetResource extends Resource
         // Show key subnet metadata and utilization
         return $schema
             ->components([
-                TextEntry::make('customer.name')->label('Customer'),
-                TextEntry::make('vlan.name')->label('VLAN'),
-                TextEntry::make('vrf.name')->label('VRF'),
-                TextEntry::make('gateway')->label('Gateway')->getStateUsing(fn ($record) => 
+                Section::make('Network')->schema([
+                    TextEntry::make('cidr')->label('Network'),
+                    TextEntry::make('gateway')->label('Gateway')->getStateUsing(fn ($record) => 
                     // prefer explicit gateway if present (type='gateway'), otherwise first usable IP
                     optional($record->ipAddresses()->where('type', 'gateway')->first())->ip_str ?? app(\App\Services\IpConversionService::class)->fromDecimal(bcadd((string)$record->subnet, '1'))?->toString()
                 ),
-                TextEntry::make('utilization')->label('Utilization')->getStateUsing(function ($record) {
-                    $service = app(\App\Services\IpConversionService::class);
-                    $total = (int) $service->calculateUsableHosts((int) $record->mask);
-                    $used = (int) $record->ipAddresses()->count();
-                    return $total > 0 ? round(($used / $total) * 100, 1) . '%' : 'N/A';
-                }),
+                ]),
+                Section::make('Metadata')->schema([
+                    TextEntry::make('vlan.name')->label('VLAN'),
+                    TextEntry::make('customer.name')->label('Customer'),
+                    TextEntry::make('vrf.name')->label('VRF'),
+                    TextEntry::make('utilization')->label('Utilization')->getStateUsing(function ($record) {
+                        $service = app(\App\Services\IpConversionService::class);
+                        $total = (int) $service->calculateUsableHosts((int) $record->mask);
+                        $used = (int) $record->ipAddresses()->count();
+                        return $total > 0 ? round(($used / $total) * 100, 1) . '%' : 'N/A';
+                    }),
+                ]),
+                // (additional infolist entries could go here)
             ]);
     }
 
@@ -132,9 +171,7 @@ class SubnetResource extends Resource
     {
         return [
             'index' => Pages\ListSubnets::route('/'),
-            'create' => Pages\CreateSubnet::route('/create'),
             'view' => Pages\ViewSubnet::route('/{record}'),
-            'edit' => Pages\EditSubnet::route('/{record}/edit'),
         ];
     }
 }

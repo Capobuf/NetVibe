@@ -10,4 +10,15 @@ use Filament\Resources\Pages\ListRecords;
 class ListSubnets extends ListRecords
 {
     protected static string $resource = SubnetResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\CreateAction::make()
+                ->label('New')
+                ->icon('heroicon-o-plus')
+                ->button()
+                ->slideOver(),
+        ];
+    }
 }

@@ -2,6 +2,7 @@
 
 ## 1. 🛡️ ANTI-HALLUCINATION & CONTEXT
 * **READ FIRST:** Always read `_DOCS/STATUS.md` at the start of a new chat.
+* **BRANDING NOTE:** The repository and composer package are now branded as `netvibe/ipam` (NetVibe). Container names and core config keys have been updated accordingly.
 * **SOURCE OF TRUTH:** The database schema is defined by the Models and verified by the latest migration (`2025_12_02_...`).
 * **NO GUESSING:** If a Filament method or component is needed, verify the namespace against Filament v4 documentation.
 

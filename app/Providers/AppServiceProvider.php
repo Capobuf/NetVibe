@@ -25,6 +25,23 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\Subnet::observe(\App\Observers\SubnetObserver::class);
         }
 
+        // Apply runtime URL settings from GeneralSettings. Wrap in try/catch
+        // because during deploy or migrate the settings source (DB) may not
+        // be available yet.
+        try {
+            $settings = app(\App\Settings\GeneralSettings::class);
+
+            if (! empty($settings->app_url)) {
+                \Illuminate\Support\Facades\URL::forceRootUrl($settings->app_url);
+            }
+
+            if (! empty($settings->force_https)) {
+                \Illuminate\Support\Facades\URL::forceScheme('https');
+            }
+        } catch (\Throwable $e) {
+            // ignore; this allows migrations and early bootstrap to succeed
+        }
+
         // Explicitly register Livewire components for Filament widgets so component
         // discovery is reliable across deployments and environments that use
         // cached manifests / opcache. Register both the new panel name and the

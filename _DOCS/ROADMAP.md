@@ -2,10 +2,10 @@
 
 ## 📦 EPIC 1: GENESIS (Identity & Infrastructure)
 * **Goal:** Trasformare il progetto in "NetVibe" e adottare un'infrastruttura container singola ad alte prestazioni.
-    * **Task 1.1: Rebranding:**
-        * Rinomina `APP_NAME`, `composer.json` e Namespace principali in **NetVibe**.
-        * Pulizia riferimenti "phpIPAM" dal codice e dai commenti.
-    * **Task 1.2: FrankenPHP Migration (Critical):**
+    * **Task 1.1: Rebranding — DONE (2025-12-01):**
+        * Rinomina `APP_NAME`, `composer.json` e Namespace principali in **NetVibe** (es. composer name → `netvibe/ipam`).
+        * Pulizia riferimenti `phpIPAM` e `Modern IPAM` nel codice, commenti e configurazione interna. Container slugs aggiornati a `netvibe-*`.
+    * **Task 1.2:** **FrankenPHP/Octane Migration (CRITICAL):**
         * **Dockerfile:** Sostituzione immagine con `dunglas/frankenphp:php8.4`.
         * **Docker Compose:** Eliminazione servizio `webserver` (Nginx). Il servizio `app` espone direttamente la porta 80/443.
         * **Octane:** Installazione `laravel/octane` per gestire il server application (lifecycle, worker bootstrap, static caches).
@@ -62,8 +62,12 @@
 
 # Acceptance criteria
 
-- FrankenPHP (dunglas/frankenphp:php8.4) + Octane deployed; `webserver` service removed.
-- `ports` / `links` / `cable_types` schema defined and `GenerateDevicePortsAction` implemented by reusing `DeviceModel` fields.
-- `RackVisual` renders ports-grid; Cable Manager Livewire component is interactive and idempotent.
-- Pest rules/checks enforced in CI and `strict_types=1` applied across sources.
+---
+
+## Implementation Notes & Priorities
+
+- Prioritize a safe, incremental rollout: begin with `Task 1.2` (FrankenPHP image build verification + CI smoke tests), then `Task 1.5` DB tenancy fix, `Task 2.1` TenantScope, `Task 3` physical layer as a feature flagged rollout.
+- Avoid breaking production: container name/image renames must be coordinated with DevOps; migrations for `ports` and `links` should include idempotent/planned backfills and an opt-in run.
+- Testing: add acceptance E2E harness for RackVisual / Cable Manager to catch UI regressions early.
+- Security: All restore operations must run under elevated admin roles and be rate-limited with audit logging.
 

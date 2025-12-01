@@ -11,6 +11,17 @@ class GeneralSettings extends Settings
     public string $site_color = '#0ea5a4';
 
     /**
+     * Application URL used for URL generation and redirects
+     * Defaults to http://localhost to preserve backwards compatibility
+     */
+    public string $app_url = 'http://localhost';
+
+    /**
+     * When enabled, force generated URLs to use the HTTPS scheme.
+     */
+    public bool $force_https = false;
+
+    /**
      * Agent critical alert level threshold
      */
     public string $agent_alert_level = 'ERROR';

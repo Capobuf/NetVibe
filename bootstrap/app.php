@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,6 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Configure trusted proxies from environment.
+        // Accept comma-separated list in TRUSTED_PROXIES, fallback to '*'.
+        $proxies = env('TRUSTED_PROXIES', '*');
+        $middleware->trustProxies(
+            at: $proxies,
+            headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO | Request::HEADER_X_FORWARDED_AWS_ELB
+        );
+
         // Ensure the setup middleware runs for web routes so we can intercept and
         // redirect to the setup flow if necessary.
         $middleware->appendToGroup('web', [\App\Http\Middleware\EnsureAppIsInstalled::class]);

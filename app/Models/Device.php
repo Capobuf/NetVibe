@@ -21,12 +21,18 @@ class Device extends Model
         'rack_position',
         'rack_size',
         'location_id',
+        'customer_id',
         'ip_addr',
     ];
 
     public function location()
     {
         return $this->belongsTo(Location::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function deviceModel()

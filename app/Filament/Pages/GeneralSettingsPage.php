@@ -31,6 +31,8 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
     public string $site_color = '#0ea5a4';
     public string $agent_alert_level = 'ERROR';
     public string $time_display_format = 'relative';
+    public string $app_url = 'http://localhost';
+    public bool $force_https = false;
 
     protected function getFormSchema(): array
     {
@@ -65,6 +67,15 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
                     ->default('ERROR')
                     ->required()
                     ->helperText('Trigger a dashboard notification when an agent reports an issue of this level or higher'),
+                
+                    TextInput::make('app_url')
+                        ->label('Application URL')
+                        ->url()
+                        ->required(),
+
+                    Forms\Components\Toggle::make('force_https')
+                        ->label('Force HTTPS Schema')
+                        ->helperText('Enable this if you are behind an SSL Proxy'),
             ])->columns(1),
         ];
     }
@@ -78,6 +89,8 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
             'site_color' => $settings->site_color,
             'agent_alert_level' => $settings->agent_alert_level,
             'time_display_format' => $settings->time_display_format ?? 'relative',
+            'app_url' => $settings->app_url ?? 'http://localhost',
+            'force_https' => $settings->force_https ?? false,
         ]);
     }
 
@@ -90,6 +103,8 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
         $settings->site_color = $state['site_color'] ?? $settings->site_color;
         $settings->agent_alert_level = $state['agent_alert_level'] ?? $settings->agent_alert_level;
         $settings->time_display_format = $state['time_display_format'] ?? $settings->time_display_format;
+        $settings->app_url = $state['app_url'] ?? $settings->app_url;
+        $settings->force_https = $state['force_https'] ?? $settings->force_https;
 
         $settings->save();
 

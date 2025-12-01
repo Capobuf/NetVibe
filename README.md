@@ -2,6 +2,8 @@
 
 **Status:** Stable / V1.0 MVP
 
+**Rebranding:** This project has been rebranded from "Modern IPAM" to **NetVibe**. All internal code, configuration and container slugs have been updated to reflect the NetVibe identity (see `_DOCS/STATUS.md`).
+
 > A modern Laravel 12 + FilamentPHP 4 implementation of IP Address Management
 
 [![Laravel 12](https://img.shields.io/badge/Laravel-12.x-red)](https://laravel.com)

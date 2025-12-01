@@ -1,9 +1,15 @@
 # 🟣 PROJECT STATUS — NetVibe (Source of Truth)
 **Last Updated:** 2025-12-01
 
-## 🆔 Identity
-- **Project Name:** NetVibe (formerly Modern IPAM)
+## 🆔 Identity (REBRANDING COMPLETE)
+- **Project Name:** NetVibe
 - **Tagline / Identity:** Vibe‑Native Network Infrastructure Management
+
+All internal code, container slugs and primary UI strings have been rebranded from "Modern IPAM" to **NetVibe**. This repository now reflects the canonical NetVibe identity (see Roadmap V2.0 Task 1.1 marked DONE in `_DOCS/ROADMAP.md`).
+
+## 🚧 Current Work — ROADMAP V2.0 (Final Scope)
+- **Plan:** The consolidated Roadmap V2.0 (Final Scope) is approved and committed to `_DOCS/ROADMAP.md`.
+- **Next Block:** EPIC 1 — GENESIS (FrankenPHP/Octane migration and infra hardening) is the immediate implementation priority (critical path for v2.0 rollout).
 
 ## 🏗️ Architecture & Runtime
 - **Runtime migration (Critical):** Application migrated to FrankenPHP (dunglas/frankenphp:php8.4) and runs with Laravel Octane, replacing the previous Nginx + FPM split — single high-performance container model.

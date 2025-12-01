@@ -4,12 +4,12 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use Filament\Forms;
-use Filament\Forms\Components\Wizard;
+use Filament\Schemas\Components\Wizard;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Form;
+use Filament\Schemas\Schema;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use App\Services\SystemHealthCheckService;
@@ -69,9 +69,9 @@ class SetupPage extends Component implements HasForms
         ];
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form->schema([
+        return $schema->schema([
             Wizard::make([
                 Wizard\Step::make('System Health')
                     ->schema([

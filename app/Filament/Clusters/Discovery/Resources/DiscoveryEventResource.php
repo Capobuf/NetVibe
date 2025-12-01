@@ -30,6 +30,13 @@ class DiscoveryEventResource extends Resource
     {
         return $table
             ->columns([
+                TextColumn::make('scanAgent.name')
+                    ->label('Agent')
+                    ->sortable(),
+                TextColumn::make('created_at')
+                    ->label('Time')
+                    ->dateTime()
+                    ->sortable(),
                 TextColumn::make('ip_addr')
                     ->label('IP')
                     ->formatStateUsing(fn ($state) => app(\App\Services\IpConversionService::class)->fromDecimal($state))

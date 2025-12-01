@@ -15,6 +15,11 @@ class GeneralSettings extends Settings
      */
     public string $agent_alert_level = 'ERROR';
 
+    /**
+     * How to display timestamps in UI (relative vs precise)
+     */
+    public string $time_display_format = 'relative';
+
     public static function group(): string
     {
         return 'general';

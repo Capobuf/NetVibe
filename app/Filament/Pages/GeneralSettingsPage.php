@@ -30,6 +30,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
     public string $site_name = '';
     public string $site_color = '#0ea5a4';
     public string $agent_alert_level = 'ERROR';
+    public string $time_display_format = 'relative';
 
     protected function getFormSchema(): array
     {
@@ -43,6 +44,15 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
                 ColorPicker::make('site_color')
                     ->label('Site color')
                     ->columnSpanFull(),
+
+                Forms\Components\Select::make('time_display_format')
+                    ->label('Date/Time Display Format')
+                    ->options([
+                        'relative' => 'Relative (e.g. 2 hours ago)',
+                        'precise' => 'Precise (Y-m-d H:i:s)',
+                    ])
+                    ->default('relative')
+                    ->required(),
 
                 Forms\Components\Select::make('agent_alert_level')
                     ->label('Agent Critical Alert Level')
@@ -67,6 +77,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
             'site_name' => $settings->site_name,
             'site_color' => $settings->site_color,
             'agent_alert_level' => $settings->agent_alert_level,
+            'time_display_format' => $settings->time_display_format ?? 'relative',
         ]);
     }
 
@@ -78,6 +89,7 @@ class GeneralSettingsPage extends Page implements Forms\Contracts\HasForms
         $settings->site_name = $state['site_name'] ?? $settings->site_name;
         $settings->site_color = $state['site_color'] ?? $settings->site_color;
         $settings->agent_alert_level = $state['agent_alert_level'] ?? $settings->agent_alert_level;
+        $settings->time_display_format = $state['time_display_format'] ?? $settings->time_display_format;
 
         $settings->save();
 

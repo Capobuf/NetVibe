@@ -87,25 +87,34 @@ it('does not create duplicate pending events for repeated ingests and updates ex
     $ip = '192.168.0.30';
     $ipDecimal = $converter->toDecimal($ip);
 
+    // Create a subnet and an existing ip so the ingest produces a pending event
+    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24']);
+    $existing = IpAddress::create([
+        'subnet_id' => $subnet->id,
+        'ip_addr' => $ipDecimal,
+        'mac_address' => '11:22:33:44:55:66',
+        'last_seen' => now()->subDay(),
+    ]);
+
     $action = new IngestScanResultsAction();
 
     $results = [
-        ['ip_addr' => $ip, 'mac_address' => '11:22:33:44:55:66', 'hostname' => 'host-a'],
+        ['ip_addr' => $ip, 'mac_address' => 'aa:bb:cc:dd:ee:ff', 'hostname' => 'host-a'],
     ];
 
-    // First ingest should create a single pending event
+    // First ingest should create a single pending event (MAC mismatch)
     $action->execute($results, $agent->id);
 
     $events = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
     expect($events->count())->toBe(1);
 
     $event = $events->first();
-    expect($event->mac_address_current)->toBe('11:22:33:44:55:66');
+    expect($event->mac_address_current)->toBe('aa:bb:cc:dd:ee:ff');
     expect($event->hostname_current)->toBe('host-a');
 
     // Second ingest with different mac/hostname should update the existing event
     $results2 = [
-        ['ip_addr' => $ip, 'mac_address' => 'aa:bb:cc:dd:ee:ff', 'hostname' => 'host-b'],
+        ['ip_addr' => $ip, 'mac_address' => 'dd:ee:ff:00:11:22', 'hostname' => 'host-b'],
     ];
 
     $action->execute($results2, $agent->id);
@@ -114,6 +123,67 @@ it('does not create duplicate pending events for repeated ingests and updates ex
     expect($events2->count())->toBe(1);
 
     $updated = $events2->first();
-    expect($updated->mac_address_current)->toBe('aa:bb:cc:dd:ee:ff');
+    expect($updated->mac_address_current)->toBe('dd:ee:ff:00:11:22');
     expect($updated->hostname_current)->toBe('host-b');
+});
+
+it('auto-imports a new IP into ip_addresses and records an APPROVED discovery event', function () {
+    $agent = ScanAgent::factory()->create();
+
+    $converter = app(IpConversionService::class);
+    $ip = '192.168.0.40';
+    $ipDecimal = $converter->toDecimal($ip);
+
+    // create a subnet covering our IP so it inherits subnet_id/customer
+    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'customer_id' => null]);
+
+    $action = new IngestScanResultsAction();
+
+    $results = [
+        ['ip_addr' => $ip, 'mac_address' => '11:11:11:11:11:11', 'hostname' => 'new-host', 'state' => 'host'],
+    ];
+
+    $action->execute($results, $agent->id);
+
+    // ip_addresses should now contain the new ip
+    $ipRecord = IpAddress::where('ip_addr', $ipDecimal)->first();
+    expect($ipRecord)->not->toBeNull();
+    expect($ipRecord->mac_address)->toBe('11:11:11:11:11:11');
+    expect($ipRecord->hostname)->toBe('new-host');
+
+    // There should be an APPROVED discovery event recorded for history
+    $events = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
+    expect($events->count())->toBeGreaterThanOrEqual(1);
+    $found = $events->first();
+    expect($found->status)->toBe(DiscoveryEvent::STATUS_APPROVED);
+});
+
+it('does not auto-import when subnet discovery is disabled (creates PENDING event)', function () {
+    $agent = ScanAgent::factory()->create();
+
+    $converter = app(IpConversionService::class);
+    $ip = '192.168.0.50';
+    $ipDecimal = $converter->toDecimal($ip);
+
+    // Ensure no other subnets are discoverable, then create a subnet covering our IP but discovery disabled
+    \App\Models\Subnet::query()->update(['discover_subnet' => false]);
+    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'discover_subnet' => false]);
+
+    $action = new IngestScanResultsAction();
+
+    $results = [
+        ['ip_addr' => $ip, 'mac_address' => 'aa:aa:aa:aa:aa:aa', 'hostname' => 'no-import', 'state' => 'host'],
+    ];
+
+    $action->execute($results, $agent->id);
+
+    // ip_addresses should NOT contain the new ip (auto-import disabled)
+    $ipRecord = IpAddress::where('ip_addr', $ipDecimal)->first();
+    expect($ipRecord)->toBeNull();
+
+    // There should be a PENDING discovery event recorded
+    $events = DiscoveryEvent::where('ip_addr', $ipDecimal)->get();
+    expect($events->count())->toBeGreaterThanOrEqual(1);
+    $found = $events->first();
+    expect($found->status)->toBe(DiscoveryEvent::STATUS_PENDING);
 });

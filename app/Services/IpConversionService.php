@@ -132,4 +132,61 @@ class IpConversionService
         
         return $range->contains($ipAddress);
     }
+
+    /**
+     * Find the first available IP address in a subnet (IPv4 only).
+     * Scans up to 500 addresses. Treats SoftDeleted records as free.
+     */
+    public function getNextFreeIp(\App\Models\Subnet $subnet): ?string
+    {
+        // 1. Guard Clause: IPv6 not supported for auto-calc
+        if (str_contains($subnet->cidr ?? '', ':')) {
+            return null;
+        }
+
+        // 2. Calculate Boundaries
+        try {
+            $range = Factory::parseRangeString($subnet->cidr);
+            if (!$range) return null;
+            // Convert the IPLib address objects to decimal strings using our existing helper
+            $startDecimal = $this->toDecimal($range->getStartAddress()->toString()); // Network
+            $endDecimal = $this->toDecimal($range->getEndAddress()->toString()); // Broadcast
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        // 3. Fetch Occupied IPs (Sparse Storage Optimization)
+        // CRITICO: whereNull('deleted_at') assicura che i SoftDeleted non siano in questa lista,
+        // quindi verranno considerati "liberi" dal check successivo.
+        $occupiedIps = \App\Models\IpAddress::where('subnet_id', $subnet->id)
+            ->whereNull('deleted_at')
+            ->orderBy('ip_addr', 'asc')
+            ->limit(500)
+            ->pluck('ip_addr')
+            ->toArray();
+
+        // 4. Iterate (Smart Loop)
+        // Start from Network + 1 (Usable Host)
+        $current = bcadd($startDecimal, '1');
+        $limit = 500;
+        $attempts = 0;
+
+        while ($attempts < $limit) {
+            // Safety: Don't go past Broadcast - 1
+            if (bccomp($current, bcsub($endDecimal, '1')) > 0) {
+                return null; // Subnet finished
+            }
+
+            // Check if occupied
+            if (!in_array($current, $occupiedIps)) {
+                return $this->fromDecimal($current)?->toString();
+            }
+
+            // Increment
+            $current = bcadd($current, '1');
+            $attempts++;
+        }
+
+        return null; // No free IP found in the first 500 slots
+    }
 }

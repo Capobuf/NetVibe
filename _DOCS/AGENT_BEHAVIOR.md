@@ -30,3 +30,4 @@
 ## 8. 🎯 VERIFICA MANUALE (CRITICA)
 * **RULE:** Non segnalare MAI un task UX o Feature come completato finché non ricevi una conferma manuale esplicita dall'utente.
 * **FAILURE:** Se una funzione o un'azione è stata modificata, il prossimo prompt deve richiedere all'utente di verificare la funzionalità.
+* **API CHANGE RULE:** Quando modifichi la logica dell'API, esegui sempre i test di regressione pertinenti (es. `DiscoveryIngestEndpointTest`) e conferma che i test passino prima di marcare la modifica come completata.

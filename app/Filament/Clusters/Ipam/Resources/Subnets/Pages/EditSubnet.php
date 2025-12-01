@@ -22,4 +22,14 @@ class EditSubnet extends EditRecord
                 ->color('danger'),
         ];
     }
+
+    /**
+     * Override relation managers for the Edit page. We intentionally return an
+     * empty array so relation managers (eg. IpAddresses) are not shown on the
+     * subnet edit screen while still being available on the View page.
+     */
+    public function getRelationManagers(): array
+    {
+        return [];
+    }
 }

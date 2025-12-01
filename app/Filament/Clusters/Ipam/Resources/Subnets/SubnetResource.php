@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Clusters\Ipam\Resources\Subnets;
 
 use App\Filament\Clusters\Ipam\IpamCluster;
-use App\Filament\Clusters\Ipam\Resources\Subnets\RelationManagers\IpAddressesRelationManager;
+use App\Filament\Clusters\Ipam\Resources\Subnets\RelationManagers;
 use App\Models\Subnet;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Pages\CreateRecord;
@@ -129,7 +129,7 @@ class SubnetResource extends Resource
     public static function getRelations(): array
     {
         return [
-            IpAddressesRelationManager::class,
+            RelationManagers\IpAddressesRelationManager::class,
         ];
     }
 

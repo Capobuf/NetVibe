@@ -12,7 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Ensure the setup middleware runs for web routes so we can intercept and
+        // redirect to the setup flow if necessary.
+        $middleware->appendToGroup('web', [\App\Http\Middleware\EnsureAppIsInstalled::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

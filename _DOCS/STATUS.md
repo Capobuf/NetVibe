@@ -1,17 +1,17 @@
 # 🟢 PROJECT STATUS (Source of Truth)
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-01
 **Frameworks:** Laravel 12.x | Filament v4 (Clusters) | PHP 8.4
-**Test Status:** 40 Feature Tests Passed (GREEN)
+**Test Status:** 40+ Feature Tests Passed (GREEN)
 
-## ⚠️ CRITICAL UX DEFECTS (P1)
-The application is stable but has severe UX/Data presentation flaws that must be fixed before proceeding to new features (Docker Split/Wizard).
+## ✅ KEY ACHIEVEMENTS
 
-1.  **Decimal IP Display:** Subnet view shows DECIMAL IP (e.g., 3232235776) instead of formatted CIDR (e.g., 192.168.1.0/24) in the "Network" field.
-2.  **Rack Visualization Broken:** The View Rack page shows a vertical list of units (U42, U41) instead of the intended graphical device drawing (`RackVisual` component failure).
-3.  **Missing CRUD Actions:** Delete buttons are missing from the Edit pages for Subnets and VLANs, violating CRUD standards.
-4.  **Visual Map Mess:** The `IpAddressVisualGrid` widget is not optimized (vertical list, missing ability to add IP).
-5.  **Spatie Missing Settings Error:** The General Settings page throws `Spatie\LaravelSettings\Exceptions\MissingSettings` when saving changes, requiring all properties (`site_name`, `site_color`) to be manually included in the save logic. (STATUS: PENDING FIX)
+- Setup Wizard: Complete Livewire-based installer implemented (Health Check → DB Migrations → Admin creation → Config/Finish).
+- Remote Discovery / Agent Architecture: Sanctum-protected agent endpoints, polling remote-agent scaffold and ingest API implemented.
+- Conflict Resolution: `discovery_events` staging with smart retry and auto-import logic implemented and tested.
+- Observability: Centralized agent logs table and Filament-based alerting integrated (agent log ingestion + notifications).
 
-## 🚀 CURRENT FOCUS (Next Phase)
-* **Goal:** Resolve P1 UX Defects.
-* **Phase 1:** Docker Split (Pending P1 Fixes).
+## 🚀 CURRENT FOCUS
+
+- Infrastructure hardening and operational readiness: Docker split remains the priority (final verification/rollout of `docker/production` and CI deployment checks).
+
+**Test Status note:** The project is green with 40+ feature tests passing — continue adding regression tests for API and UI workflows before release.

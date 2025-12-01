@@ -19,6 +19,9 @@ use Filament\Actions\Action as TableAction;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextInputColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\SelectColumn;
+use App\Enums\IpAddressType;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
@@ -99,54 +102,91 @@ class IpAddressesRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table->columns([
-            Tables\Columns\TextColumn::make('ip_addr')
-                ->label('IP Address')
-                ->formatStateUsing(fn ($state) => app(IpConversionService::class)->fromDecimal($state))
-                ->searchable()
-                ->sortable(),
-            Tables\Columns\TextInputColumn::make('hostname')
-                ->label('Hostname')
-                ->rules(['nullable', 'max:255'])
-                ->inline()
-                ->searchable(),
+        // Helper used by CreateAction mountUsing to avoid duplicated inline closures
+        // and reduce apparent duplication for static analysis.
+        $prefill = fn () => [
+            'ip_addr' => app(\App\Services\IpConversionService::class)->getNextFreeIp($this->getOwnerRecord()),
+            'customer_id' => $this->getOwnerRecord()->customer_id,
+        ];
+        return $table
+            ->defaultSort('ip_addr', 'asc')
+            ->columns([
+                TextColumn::make('ip_addr')
+                    ->label('IP Address')
+                    ->formatStateUsing(fn ($state) => app(IpConversionService::class)->fromDecimal($state)?->toString())
+                    ->searchable()
+                    ->sortable(),
 
-            TextInputColumn::make('owner')
-                ->rules(['nullable', 'max:255'])
-                ->inline()
-                ->searchable(),
+                TextInputColumn::make('hostname')
+                    ->label('Hostname')
+                    ->rules(['nullable', 'max:255'])
+                    ->inline()
+                    ->searchable(),
 
-            TextInputColumn::make('port')
-                ->rules(['nullable', 'max:255'])
-                ->inline()
-                ->searchable(),
+                TextInputColumn::make('description')
+                    ->label('Description')
+                    ->rules(['nullable', 'max:255'])
+                    ->inline()
+                    ->searchable(),
 
-            Tables\Columns\TextInputColumn::make('mac_address')
-                ->label('MAC Address')
-                ->searchable(),
-            Tables\Columns\TextColumn::make('type')
-                ->badge(),
-            Tables\Columns\TextColumn::make('description'),
-            Tables\Columns\TextColumn::make('state')
-                ->label('Status')
-                ->badge()
-                ->color(fn ($state) => match($state) {
-                    1 => 'danger',
-                    2 => 'success',
-                    3 => 'primary',
-                    4 => 'gray',
-                    default => 'secondary',
-                })
-                ->sortable(),
-        ])->filters([
-            SelectFilter::make('type')->options([
+                SelectColumn::make('type')
+                    ->label('Type')
+                    ->options(fn () => collect(IpAddressType::cases())->mapWithKeys(fn ($c) => [$c->value => $c->getLabel()])->toArray())
+                    ->inline()
+                    ->sortable(),
+
+                TextInputColumn::make('mac_address')
+                    ->label('MAC Address')
+                    ->rules(['nullable', 'regex:/^([0-9A-Fa-f]{2}(:|-)){5}[0-9A-Fa-f]{2}$/'])
+                    ->inline()
+                    ->searchable(),
+
+                TextColumn::make('last_seen')
+                    ->label('Last Seen')
+                    ->formatStateUsing(function ($state) {
+                        if (! $state) return '-';
+                        $format = app(\App\Settings\GeneralSettings::class)->time_display_format;
+                        return $format === 'precise' ? $state->format('Y-m-d H:i:s') : $state->diffForHumans();
+                    })
+                    ->sortable(),
+
+                TextInputColumn::make('owner')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->rules(['nullable', 'max:255'])
+                    ->inline(),
+
+                TextInputColumn::make('switch_id')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->rules(['nullable', 'max:255'])
+                    ->inline(),
+
+                TextInputColumn::make('port')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->rules(['nullable', 'max:255'])
+                    ->inline(),
+
+                TextColumn::make('state')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn ($state) => match ($state) {
+                        1 => 'danger',
+                        2 => 'success',
+                        3 => 'primary',
+                        4 => 'gray',
+                        default => 'secondary',
+                    })
+                    ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('type')->options([
                 'host' => 'Host',
                 'gateway' => 'Gateway',
                 'broadcast' => 'Broadcast',
                 'reserved' => 'Reserved',
                 'dhcp' => 'DHCP',
-            ]),
-        ])->emptyStateDescription('No IPs have been discovered or created for this subnet yet. Click the + button to create an IP manually, or run a discovery scan from your agents.')
+                ]),
+            ])
+            ->emptyStateDescription('No IPs have been discovered or created for this subnet yet. Click the + button to create an IP manually, or run a discovery scan from your agents.')
             ->headerActions([
                 \Filament\Actions\CreateAction::make('create_ip_header')
                     ->label('')
@@ -155,19 +195,11 @@ class IpAddressesRelationManager extends RelationManager
                     ->color('primary')
                     ->slideOver()
                     ->tooltip('Create IP for this Subnet')
+                    ->mountUsing(fn ($form) => $form->fill($prefill()))
                     ->relationship(fn () => $this->getRelationship())
                     ->visible(fn () => true),
             ])
             ->toolbarActions([])
-            ->emptyStateActions([
-                \Filament\Actions\CreateAction::make('create_ip_empty')
-                    ->label('Create IP')
-                    ->icon('heroicon-o-plus')
-                    ->button()
-                    ->slideOver()
-                    ->relationship(fn () => $this->getRelationship())
-                    ->visible(fn () => true),
-            ])
             ->recordActions([
             EditAction::make()->slideOver(),
             // DeleteAction removed from relation manager record actions per CRUD UX policy

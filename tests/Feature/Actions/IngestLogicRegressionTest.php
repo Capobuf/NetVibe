@@ -109,11 +109,12 @@ test('new ip detection creates pending event', function () {
 
     ProcessDiscoveryIngestJob::dispatchSync($results, $agent->id);
 
-    expect(IpAddress::where('ip_addr', '192.168.1.50')->count())->toBe(0); // Not auto-created
-    
+    // With auto-import enabled on subnets (default), new IPs are auto-created
+    expect(IpAddress::where('ip_addr', (string) ip2long('192.168.1.50'))->count())->toBe(1);
+
     $event = DiscoveryEvent::first();
     expect($event)->not->toBeNull();
     expect($event->ip_addr)->toBe((string) ip2long('192.168.1.50'));
     expect($event->mac_address_current)->toBe('FF:EE:DD:CC:BB:AA');
-    expect($event->status)->toBe('PENDING');
+    expect($event->status)->toBe('APPROVED');
 });

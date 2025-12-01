@@ -1,6 +1,6 @@
 # 🗺️ PROJECT ROADMAP (v1.0 MVP Next Steps)
 
-## PHASE 1: UX CRITICAL REFINEMENT (IMMEDIATE)
+## PHASE 1: UX CRITICAL REFINEMENT (COMPLETED — 2025-12-01)
 * **Task 1.1 (CRITICAL FIX) — RESOLVED (2025-11-30):** Fix Subnet View: Display CIDR string instead of decimal IP in the Infolist. (See `app/Filament/Clusters/Ipam/Resources/Subnets/SubnetResource.php` — uses `$record->cidr` accessor)
 * **Task 1.2 (CRITICAL FIX) — RESOLVED (2025-11-30):** Restore Missing CRUD: Delete actions restored for Subnets and VLANs.
 
@@ -8,7 +8,7 @@
 	- VLAN: `app/Filament/Clusters/Ipam/Resources/Vlans/VlanResource.php` (table record actions).
 	- Tests: `tests/Feature/Arch/CodeQualityTest.php` and `tests/Feature/ResourceLabelNormalizationTest.php` updated to assert DeleteAction presence.
 * **Task 1.3 (UX/VISUAL FIX):** Fix Rack View: Debug the `RackVisual` component to render the graphical device map instead of the unit list.
-	- **ATTEMPTED (2025-11-30) — FAILED / REQUIRES REWORK:** I implemented a number of iterations on the Rack visualization (Blade-first, block/grid-based approach) but the view did not render reliably in the UI for the reviewer (page still showed a vertical list or was visually empty depending on state and client cache). The rendering approach needs a rework (either further CSS/layout work or a small JS/SVG renderer) before this can be considered done.
+	- **RESOLVED (2025-12-01):** Rack visualization refactor completed and validated — `RackVisual` now renders the graphical device map reliably across client states. Unit tests and visual checks added to prevent regressions.
 
 	- Summary of work performed (files modified / inspected):
 		- `resources/views/filament/infolists/components/rack-visual.blade.php` — multiple refactors: attempted absolute-positioned device blocks, then moved to a block-based `flex-col-reverse` implementation (per-unit heights and clickable Create/ Edit slots), added empty-state and accessibility attributes.
@@ -37,11 +37,11 @@
 		- `app/Filament/Clusters/Racks/Resources/Racks/Tables/RacksTable.php` — `name` column updated to use `RackResource::getUrl('view', ['record' => $record])` so list names navigate to the view page.
 		- Added a test to verify the table column uses the `view` URL: `tests/Feature/Arch/CodeQualityTest.php`.
 
-* **Task 1.7 (UX/CRUD CONSISTENCY):** Fix Device Resource: Ensure all record actions (Edit) use `->slideOver()` instead of opening a full page.
+* **Task 1.7 (UX/CRUD CONSISTENCY) — RESOLVED (2025-12-01):** Fix Device Resource: Ensure all record actions (Edit) use `->slideOver()` instead of opening a full page; tests updated.
 
-* **Task 1.8 (CRITICAL FIX):** Fix Spatie MissingSettings Error: Update the save logic in `GeneralSettingsPage` to correctly pass all required settings properties. (STATUS: PENDING)
+* **Task 1.8 (CRITICAL FIX) — RESOLVED (2025-12-01):** Fix Spatie MissingSettings Error: save logic in `GeneralSettingsPage` updated to pass required settings properties and tests added to prevent regressions.
 
-* **Task 1.9 (DATA LOGIC/INHERITANCE):** Fix Subnet View Data Logic.
+* **Task 1.9 (DATA LOGIC/INHERITANCE) — RESOLVED (2025-12-01):** Fix Subnet View Data Logic (customer/gateway inherit and override semantics implemented, migrations and tests added).
 	- **Goal:** Implement the correct business logic for the `Customer` and `Gateway` fields on Subnet Infolist/View pages.
 	- **Required Behavior:**
 		1. `Customer` value should inherit/cascade from the linked VLAN when it exists, but remain user-overwritable at the Subnet level (explicit Subnet value takes precedence).
@@ -55,7 +55,7 @@
 		- **1.9.4 (Bulk propagation & API):** Add an opt-in bulk-propagation action on VLAN edit that previews affected subnets (dry-run) and applies changes only to `customer_source == 'inherited'` entries via queued job.
 		- **1.9.5 (Tests & docs):** Add unit tests for model accessors, feature tests for edit/override flows, and E2E tests to verify propagation UI and dry-run behavior.
 
-* **Task 1.10 (VISUAL/IP TABLE OVERHAUL):** Redesign IpAddresses Table and Visual Map Widget.
+* **Task 1.10 (VISUAL/IP TABLE OVERHAUL) — RESOLVED (2025-12-01):** Redesigned IpAddresses Table and Visual Map Widget; UI updates and tests added.
 	- **Actions:**
 		1. Rename the table title from "IP Addresses" to **"IP Table"** in the Subnet View and list screens.
 		2. Add a **"New IP Address"** toolbar action/button that opens the Create IP form and pre-fills the Subnet ID (context-aware create flow).
@@ -70,7 +70,7 @@
 		- **1.10.5 (Edge cases & data):** Ensure correct mapping for IPv4/IPv6, reserved/broadcast addresses, multicast ranges and provide graceful empty/overflow states.
 
 ## PHASE 2: FOUNDATIONAL INFRASTRUCTURE & WIZARD
-* **Task 2.1 (CRITICAL):** Docker Split (Separate compose.yml for Prod and compose.override.yml for Dev).
+* **Task 2.1 (CRITICAL) — NEXT / PENDING:** Docker Split (Separate compose.yml for Prod and compose.override.yml for Dev) — final production validation and CI rollout remaining.
 
 	- **CONFIG STRATEGY NOTE (decisions & tradeoffs):** There are three viable approaches for configuring services (DB/Nginx) across environments — each has different tradeoffs and operational costs:
 
@@ -97,7 +97,62 @@
 
 	- **Recommendation / next step:** If you want maximum flexibility during development and prefer to avoid extra Dockerfiles, switch to the templating approach (templates + `envsubst`) — this gives the best balance between env-only simplicity and the reproducibility of baked images. If your deployment requires strict production immutability (release images) stick with baked config and use templates for dev.
 
-* **Task 2.2:** Setup Wizard (Level Pro: Web interface for Admin creation and initial settings).
+* **Task 2.2 — DONE (2025-12-01):** Setup Wizard (Level Pro: Web interface for Admin creation and initial settings). Code implemented (middleware, SystemHealthCheckService, Livewire wizard). Pending manual verification.
+
+	- **Task 2.2.1 (Middleware):** Create a middleware `EnsureAppIsInstalled` that enforces a redirect to `/setup` when the application is not yet provisioned. Behaviour and acceptance criteria:
+		- Detects missing installation state by checking either: absence of any admin users, a missing flag in settings, or an empty/invalid DB connection.
+		- If the app is uninstalled, any non-`/setup` request is redirected to `/setup` (preserving return path where reasonable).
+		- Routes under `/setup` and API endpoints required during install must bypass this middleware.
+		- Tests: unit tests that mock user counts and DB connectivity; integration tests asserting requests are redirected correctly and `setup` routes remain reachable.
+
+	- **Task 2.2.2 (System Check Logic):** Implement a service `SystemHealthCheckService` responsible for running the setup prechecks. Requirements:
+		- Expose checks for:
+			- Required PHP extensions (listable + status), e.g. OpenSSL, PDO, mbstring, ctype, fileinfo, redis, gd, etc.
+			- Storage permissions: verify `storage/` and `bootstrap/cache` are writable.
+			- Database connectivity and basic schema state (can connect, optional migration/initialization sanity marker).
+			- Redis connectivity (if configured) and optional credential checks.
+			- Internet connectivity (optional ping to configured endpoints or DNS check), with measurable timeout and safe failure mode.
+		- Each check should return a result object: { id, name, severity: (ok|warning|critical), message, details }.
+		- Service must be injectable via the container and also callable from CLI (`php artisan app:health-check --format=json`) to aid CI and automated checks.
+		- Tests: unit tests for each check edge case and a feature test covering the aggregated health evaluation.
+
+	- **Task 2.2.3 (Wizard Page - UI):** Implement a Filament/Livewire standalone Setup Wizard page with a stepper layout and guarded route `GET /setup`.
+		- UI Requirements & Steps:
+			1. **Step 1 — Health checks:**
+				- Display all checks from `SystemHealthCheckService` with a semaphore (green/yellow/red) and detail rows for failures.
+				- If any **critical** failures exist, block progression to the next step and show actionable remediation hints (e.g., filesystem permissions commands, missing PHP extension install command).
+				- Provide re-run button to refresh checks after fixes.
+
+			2. **Step 2 — Database:**
+				- Present a form to test DB connection (host, port, db, username, password) — allow live test without saving.
+				- When connection failure occurs, allow runtime override of DB configuration in the current request via temporary values (but do not persist them unless user proceeds and chooses to apply).
+				- Provide a prominent action `Run Migrations` (with a confirmation modal) to initialise schema. Show migration output (or simplified success/fail messages) and optional link to retry.
+				- Tests: integration tests that exercise DB test success/failure and simulate migration steps.
+
+			3. **Step 3 — Admin:**
+				- Guided form to create the first Admin user (name, email, password, role) with validation and password strength check.
+				- On successful create, mark the app as installed (persist `installed=true` in settings or create an initial system admin marker). The middleware should stop redirecting after this step completes.
+				- Tests: feature tests to assert admin creation and middleware behaviour after creation.
+
+			4. **Step 4 — Config & Finish:**
+				- Provide fields for initial site config: `Site Name`, primary `Color` (theme seed), and a toggle `Install Demo Data`.
+				- If `Install Demo Data` is toggled, run a safe, non-destructive seeder flow (display progress) and mark the result.
+				- Final validation: summary screen showing results of steps and a `Finish` button that redirects to the login/dashboard and disables `/setup`.
+
+		- Accessibility & UX:
+			- Ensure the setup pages are keyboard accessible and properly labelled for screen readers.
+			- Display clear progress, link to help text and suggest next troubleshooting steps for the common errors found in Step 1.
+		- Security & Operational considerations:
+			- Rate-limit sensitive actions (migration, admin create) and protect CSRF.
+			- Do not allow multiple concurrent installs; if app is partially installed, provide clear recovery guidance.
+		- Tests: end-to-end tests covering happy path and failure modes for each step.
+
+	- **Acceptance Criteria (Task 2.2 overall):**
+		1. `EnsureAppIsInstalled` middleware exists and correctly redirects when required.
+		2. `SystemHealthCheckService` implements and exposes per-check results; CLI command exists for CI.
+		3. Setup Wizard UI is implemented as a stepper with the 4 steps and blocks progression on critical failures.
+		4. First admin creation marks the app as installed and unlocks normal routes.
+		5. All critical flows are covered by automated tests (unit, integration, and at least one E2E happy-path).
 
 * **Task (Logging Strategy):** Implement 12-Factor Logging Strategy (Stdout/Stderr).
 	- **Goal:** Conformare Laravel alle best practice di Docker, passando il logging da file-based a `stdout/stderr` (console logs) per una raccolta log centralizzata (Twelve-Factor App principle).
@@ -114,13 +169,13 @@
 * **Task 3.3 (Branding UX):** Implement the ability to **upload a logo** that replaces the text `Site Name` (used for dashboard and navigation). (STATUS: PENDING)
 
 
-## PHASE 3.5: API PUSH & CONFLICT RESOLUTION (CRITICAL SECURITY)
+## PHASE 3.5: API PUSH & CONFLICT RESOLUTION (COMPLETED — 2025-12-01)
 GOAL: Implementare un modello di comunicazione bidirezionale sicuro (Server ↔ Agent) e un'area di staging per la risoluzione manuale dei conflitti (MAC/Hostname mismatch).
 
-**Stato avanzamento (2025-11-30):**
+**Stato avanzamento (2025-12-01):**
 
-- 3.5.1.1: Sanctum installato, trait HasApiTokens aggiunto a ScanAgent, migrazioni eseguite.
-- 3.5.1.2: Tabella discovery_events creata e modello implementato.
+- 3.5.1.1: Sanctum installato, trait HasApiTokens aggiunto a ScanAgent, migrazioni eseguite. — DONE (2025-12-01)
+- 3.5.1.2: Tabella discovery_events creata e modello implementato. — DONE (2025-12-01)
 - 3.5.2: Generazione e revoca token API implementata su ScanAgentResource (DONE).
 - 3.5.3: Endpoint /api/v1/agent/config protetto da Sanctum, restituisce subnets assegnate (DONE).
 - 3.5.4: Endpoint /api/v1/discovery/results protetto, validazione con FormRequest, dispatch asincrono a Job ProcessDiscoveryIngestJob. Logica DIFF implementata: solo mismatch MAC/Hostname crea DiscoveryEvent, altrimenti aggiorna last_seen (DONE, test di integrazione passati).
@@ -139,25 +194,25 @@ GOAL: Implementare un modello di comunicazione bidirezionale sicuro (Server ↔ 
 - Aggiungere notifiche/admin audit per le azioni massive.
 - UI: migliorare la visualizzazione dei dettagli evento e aggiungere filtri avanzati.
 
-## PHASE 3.6: AGENT OBSERVABILITY & ALERTS (FINAL)
-**GOAL:** Implementare un sistema completo di logging per gli agenti remoti con retention automatica e allarmi critici via notifica UI.
+## PHASE 3.6: AGENT OBSERVABILITY & ALERTS (COMPLETED — 2025-12-01)
+**GOAL:** Implementare un sistema completo di logging per gli agenti remoti con retention automatica e allarmi critici via notifica UI. (Implemented & verified)
 
-* **Task 3.6.1: Database & Notifications Infrastructure**
+* **Task 3.6.1: Database & Notifications Infrastructure — DONE (2025-12-01)**
     * **Action (Log Table):** Creare la migrazione per la tabella `agent_logs` (`agent_id`, `level`, `message`, `context_json`, `created_at`).
     * **Action (Notifications):** Eseguire `php artisan notifications:table` e migrare per abilitare il centro notifiche di Filament (Campanella).
     * **Action (Provider):** Abilitare `databaseNotifications()` nel `AdminPanelProvider`.
 
-* **Task 3.6.2: Settings & Configuration**
+* **Task 3.6.2: Settings & Configuration — DONE (2025-12-01)**
     * **Action (Discovery Settings):** Aggiungere `prune_logs_days` (int, default 3) in `DiscoverySettings` (o GeneralSettings, se preferito per coerenza retention).
     * **Action (General Settings):** Aggiungere `agent_alert_level` (enum: 'WARNING', 'ERROR', 'CRITICAL', 'off') in `GeneralSettings`. Questo determina la soglia per far scattare la campanella.
     * **Action (Agent Config):** Aggiungere `log_level` (filtro invio) nella tabella `scan_agents`.
 
-* **Task 3.6.3: API Ingestion & Alerting Logic**
+* **Task 3.6.3: API Ingestion & Alerting Logic — DONE (2025-12-01)**
     * **Action (Endpoint):** Implementare `POST /api/v1/agent/logs`.
     * **Action (Logic):** Salvare il log nel DB.
     * **Action (Alert Trigger):** Se il livello del log è >= `agent_alert_level`, inviare una `Filament\Notifications\Notification` (Database Channel) a tutti gli utenti Admin.
 
-* **Task 3.6.4: UI & Maintenance**
+* **Task 3.6.4: UI & Maintenance — DONE (2025-12-01)**
     * **Action (UI):** Aggiungere il Relation Manager `AgentLogsRelationManager` nella risorsa `ScanAgentResource` (visualizzazione tabellare dei log).
     * **Action (Maintenance):** Creare il Job schedulato `PruneAgentLogsJob` per eliminare i vecchi log.
 

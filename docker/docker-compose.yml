@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: docker/php/Dockerfile
-    container_name: modern-ipam-app
+    container_name: netvibe-app
     restart: unless-stopped
     working_dir: /var/www/html
     # Keep the base configuration production-friendly —
@@ -33,7 +33,7 @@ services:
   # Nginx Web Server
   webserver:
     image: nginx:1.28.0-alpine
-    container_name: modern-ipam-webserver
+    container_name: netvibe-webserver
     restart: unless-stopped
     # Ports and local volumes are provided in docker/dev/docker-compose.override.yml for dev
     networks:
@@ -52,8 +52,8 @@ services:
     build:
       context: ./mysql
       dockerfile: Dockerfile
-    image: modern-ipam-db:11.8
-    container_name: modern-ipam-db
+    image: netvibe-db:11.8
+    container_name: netvibe-db
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootsecret}
@@ -73,7 +73,7 @@ services:
   # Redis Cache & Sessions
   redis:
     image: redis:8.4.0-alpine
-    container_name: modern-ipam-redis
+    container_name: netvibe-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -91,8 +91,8 @@ services:
     build:
       context: ..
       dockerfile: docker/php/Dockerfile
-    image: modern-ipam-app
-    container_name: modern-ipam-worker
+    image: netvibe-app
+    container_name: netvibe-worker
     restart: unless-stopped
     working_dir: /var/www/html
     command: ${WORKER_CMD:-php artisan queue:work --tries=3 --timeout=300}

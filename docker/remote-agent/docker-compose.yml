@@ -1,7 +1,7 @@
 services:
   remote_agent:
     build: .
-    container_name: ipam-remote-agent
+    container_name: netvibe-remote-agent
     # Montaggio dello script PHP locale (che si trova nella stessa cartella di questo file)
     volumes:
       - ./remote_scanner.php:/app/remote_scanner.php

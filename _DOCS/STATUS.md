@@ -1,17 +1,23 @@
-# 🟢 PROJECT STATUS (Source of Truth)
+# 🟣 PROJECT STATUS — NetVibe (Source of Truth)
 **Last Updated:** 2025-12-01
-**Frameworks:** Laravel 12.x | Filament v4 (Clusters) | PHP 8.4
-**Test Status:** 40+ Feature Tests Passed (GREEN)
 
-## ✅ KEY ACHIEVEMENTS
+## 🆔 Identity
+- **Project Name:** NetVibe (formerly Modern IPAM)
+- **Tagline / Identity:** Vibe‑Native Network Infrastructure Management
 
-- Setup Wizard: Complete Livewire-based installer implemented (Health Check → DB Migrations → Admin creation → Config/Finish).
-- Remote Discovery / Agent Architecture: Sanctum-protected agent endpoints, polling remote-agent scaffold and ingest API implemented.
-- Conflict Resolution: `discovery_events` staging with smart retry and auto-import logic implemented and tested.
-- Observability: Centralized agent logs table and Filament-based alerting integrated (agent log ingestion + notifications).
+## 🏗️ Architecture & Runtime
+- **Runtime migration (Critical):** Application migrated to FrankenPHP (dunglas/frankenphp:php8.4) and runs with Laravel Octane, replacing the previous Nginx + FPM split — single high-performance container model.
+- **Proxy & TLS:** `TrustProxies` configured to work behind reverse proxies (Nginx Proxy Manager, Cloudflare) and preserve HTTPS header trust when needed.
+- **Soft‑Tenancy:** Soft multi‑tenancy model enabled — global tenant selector with session-scoped `current_tenant_id`; NULL tenant behaves as God Mode (shows all tenants).
 
-## 🚀 CURRENT FOCUS
+## 📊 Observability & Logging
+- **12‑Factor Logging:** Monolog configured for JSON output on stdout/stderr to align with Docker native logging and central aggregation.
 
-- Infrastructure hardening and operational readiness: Docker split remains the priority (final verification/rollout of `docker/production` and CI deployment checks).
+## 🔐 Security & Auth
+- **Advanced Auth:** Filament MFA (TOTP) enabled for administrative accounts. Emergency CLI command support for MFA reset is in place for recovery workflows.
 
-**Test Status note:** The project is green with 40+ feature tests passing — continue adding regression tests for API and UI workflows before release.
+## ✅ Status Summary
+- Test and CI: existing automated test coverage retained; focus on integrating Octane runtime into CI pipelines and ensuring lifecycle hooks are compatible.
+- Next actions: finalize Octane tuning in production images, audit long‑running stateful services (jobs) for Octane/EOL compatibility, and validate plugin/Filament integrations under the new single‑container runtime.
+
+**Notes:** This file is the authoritative status summary for Project NetVibe — see `_DOCS/ROADMAP.md` for the detailed V2.0 technical roadmap.

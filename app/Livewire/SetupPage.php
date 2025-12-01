@@ -29,7 +29,7 @@ class SetupPage extends Component implements HasForms
     public string $user_email = '';
     public string $password = '';
     public string $password_confirmation = '';
-    public string $site_name = 'Modern IPAM';
+    public string $site_name = 'NetVibe';
     public string $site_color = '#0ea5a4';
     public bool $install_demo_data = false;
 
@@ -61,7 +61,7 @@ class SetupPage extends Component implements HasForms
 
                 Wizard\Step::make('Configuration')
                     ->schema([
-                        TextInput::make('site_name')->label('Site name')->default('Modern IPAM')->required(),
+                        TextInput::make('site_name')->label('Site name')->default('NetVibe')->required(),
                         ColorPicker::make('site_color')->label('Site color')->default('#0ea5a4'),
                         Toggle::make('install_demo_data')->label('Install Demo Data (Recommended for testing)'),
                     ]),
@@ -97,7 +97,7 @@ class SetupPage extends Component implements HasForms
 
                 Wizard\Step::make('Configuration')
                     ->schema([
-                        TextInput::make('site_name')->label('Site name')->default('Modern IPAM')->required(),
+                        TextInput::make('site_name')->label('Site name')->default('NetVibe')->required(),
                         ColorPicker::make('site_color')->label('Site color')->default('#0ea5a4'),
                         Toggle::make('install_demo_data')->label('Install Demo Data (Recommended for testing)'),
                     ]),

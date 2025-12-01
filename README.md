@@ -1,4 +1,4 @@
-# Modern IPAM
+# NetVibe
 
 **Status:** Stable / V1.0 MVP
 
@@ -23,7 +23,7 @@
 
 ## 🎯 Project Overview
 
-Modern IPAM is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/) using modern PHP frameworks while maintaining strict UI/UX compatibility with the original.
+NetVibe is a clean-slate reimplementation of [phpIPAM](https://phpipam.net/) using modern PHP frameworks while maintaining strict UI/UX compatibility with the original.
 
 ### Philosophy: "Strict Replica"
 
@@ -68,7 +68,7 @@ docker compose -f docker/docker-compose.yml -f docker/production/docker-compose.
 
 ### Prerequisites
 
-# Modern IPAM
+# NetVibe
 
 **Status:** Stable / V1.0 MVP
 
@@ -93,7 +93,7 @@ Per la documentazione completa e il contesto architettonico aggiornato, consulta
 
 ## 🎯 Project Overview
 
-Modern IPAM è una reimplementazione di [phpIPAM](https://phpipam.net/) che utilizza framework PHP moderni, mantenendo la compatibilità UI/UX con l'originale.
+NetVibe è una reimplementazione di [phpIPAM](https://phpipam.net/) che utilizza framework PHP moderni, mantenendo la compatibilità UI/UX con l'originale.
 
 ### Filosofia: "Strict Replica"
 

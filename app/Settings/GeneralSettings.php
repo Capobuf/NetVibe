@@ -6,7 +6,7 @@ use Spatie\LaravelSettings\Settings;
 
 class GeneralSettings extends Settings
 {
-    public string $site_name = 'Modern IPAM';
+    public string $site_name = 'NetVibe';
 
     public string $site_color = '#0ea5a4';
 

@@ -16,7 +16,7 @@ ini_set('error_log', 'php://stderr');
 $currentLogLevel = 'INFO'; // Default
 const LOG_LEVELS = ['INFO' => 1, 'WARNING' => 2, 'ERROR' => 3, 'CRITICAL' => 4];
 
-echo "[INFO] Modern IPAM Remote Agent starting...\n";
+echo "[INFO] NetVibe Remote Agent starting...\n";
 
 // --- Configuration ---
 $apiUrl = getenv('IPAM_AGENT_API_URL');
@@ -105,7 +105,7 @@ function pushLog(string $level, string $message) {
 }
 
 // --- Startup Log ---
-pushLog('INFO', 'Modern IPAM Agent Starting...');
+pushLog('INFO', 'NetVibe Agent Starting...');
 
 // --- CLI Arguments ---
 $runOnce = in_array('--once', $argv, true);

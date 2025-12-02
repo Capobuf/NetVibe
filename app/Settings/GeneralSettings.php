@@ -14,7 +14,7 @@ class GeneralSettings extends Settings
      * Application URL used for URL generation and redirects
      * Defaults to http://localhost to preserve backwards compatibility
      */
-    public string $app_url = 'http://localhost';
+    public string $app_url = '';
 
     /**
      * When enabled, force generated URLs to use the HTTPS scheme.

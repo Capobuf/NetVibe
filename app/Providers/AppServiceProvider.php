@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
@@ -20,6 +21,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $appUrl = config('app.url');
+
+        if ($appUrl) {
+            // 1. Force Root URL (Routes/Links)
+            \Illuminate\Support\Facades\URL::forceRootUrl($appUrl);
+
+            // 2. Force HTTPS scheme if URL is https (Fixes Mixed Content)
+            if (str_starts_with($appUrl, 'https://')) {
+                \Illuminate\Support\Facades\URL::forceScheme('https');
+            }
+
+            // 3. Auto-set Asset URL if not explicitly set in .env (Fixes Vite/CSS)
+            if (empty(config('app.asset_url'))) {
+                config(['app.asset_url' => $appUrl]);
+            }
+        }
+
         // Register model observers
         if (class_exists(\App\Models\Subnet::class) && class_exists(\App\Observers\SubnetObserver::class)) {
             \App\Models\Subnet::observe(\App\Observers\SubnetObserver::class);

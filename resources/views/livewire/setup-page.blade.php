@@ -1,40 +1,26 @@
 <div>
-    <div class="mb-6">
-        <p class="text-slate-300">Follow the setup wizard to validate your system and configure the database.</p>
-    </div>
-
-    <div class="bg-slate-900 p-4 border border-slate-700 rounded">
-        {{-- Render the Filament form (Wizard) --}}
-        {{ $this->form }}
-    </div>
-
-    <div class="mt-6 space-y-3">
-        <div class="p-4 bg-slate-800 rounded border border-slate-700">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="text-sm text-slate-300 font-semibold">Database connection</div>
-                    <div class="text-xs text-slate-400">Status: <span class="font-mono text-sm">{{ $dbTestStatus }}</span></div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button wire:click="testConnection" class="px-3 py-1 rounded bg-slate-700 text-slate-100 text-sm border border-slate-600 hover:bg-slate-600">Test Connection</button>
-                    <button wire:click="runMigrations" class="px-3 py-1 rounded bg-green-600 text-white text-sm hover:bg-green-500" @if($migrating) disabled @endif>
-                        @if($migrating) Running... @else Run Migrations @endif
-                    </button>
-                </div>
-            </div>
-            @if(str_contains($dbTestStatus ?? '', 'cannot connect'))
-                <div class="mt-3 text-sm text-yellow-400">Database connection failed — check your docker-compose.yml and DB credentials.</div>
-            @endif
+    @if($setupCompleted)
+        <div class="bg-slate-900 p-8 border border-slate-700 rounded-lg text-center">
+            <div class="text-6xl mb-4">🎉</div>
+            <h2 class="text-2xl font-bold text-white mb-2">Setup Complete!</h2>
+            <p class="text-slate-300 mb-6">NetVibe has been successfully installed and configured.</p>
+            
+            <a href="/admin/login" class="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Go to Login
+            </a>
         </div>
-    </div>
+    @else
+        <div class="mb-8 text-center">
+            <div class="text-4xl mb-2">🎉</div>
+            <h1 class="text-3xl font-bold text-white">Welcome to NetVibe</h1>
+            <p class="text-slate-400 mt-2">Let's get your system up and running in a few steps.</p>
+        </div>
 
-    <div class="mt-6 p-4 bg-slate-800 rounded border border-slate-700 flex items-center justify-between">
-        <div>
-            <div class="text-sm text-slate-300 font-semibold">Finish Setup</div>
-            <div class="text-xs text-slate-400">Creates the first admin account, saves basic site settings and optionally installs demo data.</div>
+        <div class="bg-slate-900 p-4 border border-slate-700 rounded-lg">
+            {{-- Render the Filament form (Wizard) --}}
+            <form wire:submit.prevent="finishSetup">
+                {{ $this->form }}
+            </form>
         </div>
-        <div class="flex items-center gap-2">
-            <button wire:click="finishSetup" class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-500">Finish & Create Admin</button>
-        </div>
-    </div>
+    @endif
 </div>

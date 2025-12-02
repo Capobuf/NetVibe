@@ -1,70 +1,39 @@
-# Project Setup Guide
+# NetVibe Setup Guide
 
+## 1. Environment Setup
 
----
-
-## 🛠️ Prerequisites
-
-- **Docker (Engine & Compose)** (Windows/Mac/Linux)
-- **Git**
-- **Terminal** (PowerShell, Bash, or Zsh)
-
----
- 
- 
-
-## 🚀 Installation
-
-### 1. Clone Repository
-```bash
-git clone <repo_url> phpipam-laravel
-cd phpipam-laravel
-```
-
-### 2. Environment Setup
+Copy the example environment file and configure it:
 ```bash
 cp .env.example .env
-# Modifica .env se necessario (DB credentials di default in docker-compose)
+nano .env
 ```
 
-### 3. Start Containers
+## 2. Docker Start
 
-For development (recommended) — use the override file that mounts your local source and exposes the webserver port:
-
+Start the application containers:
 ```bash
-docker compose -f docker/docker-compose.yml -f docker/dev/docker-compose.override.yml up -d
+docker compose up -d
 ```
 
-For production (example) — combine the base file with the production override:
+## 3. Frontend Assets Build
+
+Since the Node.js service is not included in the runtime stack, you need to build assets using a temporary container:
 
 ```bash
-docker compose -f docker/docker-compose.yml -f docker/production/docker-compose.prod.yml up -d
+docker run --rm \
+    -v $(pwd):/app \
+    -w /app \
+    node:22-alpine \
+    sh -c "npm install && npm run build"
 ```
 
-### 4. Install Dependencies & Seed
+This command mounts your current directory, installs dependencies, and builds the production assets into `public/build/`.
+
+## 4. Database Setup
+
+Run migrations and seed the database:
 ```bash
-# Installa dipendenze PHP
-docker compose exec app composer install
-
-# Genera Key
-docker compose exec app php artisan key:generate
-
-# Esegui Migrations & Seeds
 docker compose exec app php artisan migrate --seed
-
-# Installa dipendenze Node (per gli asset)
-docker compose exec app npm install
-docker compose exec app npm run build
-```
-
----
-
-## 💻 Development Workflow
-
-### Esecuzione Comandi
-Esegui sempre i comandi Artisan all'interno del container (development example using the override):
-```bash
-docker compose exec app php artisan <command>
 ```
 
 ### Svuotare la Cache
@@ -75,10 +44,8 @@ docker-compose exec app php artisan filament:cache-components
 ```
 
 ### Accesso all'App
-- **Dev URL (override):** http://localhost:9693/admin
-
-If your environment uses a reverse proxy or different port mapping for production, consult the deployment configuration.
-- **Login:** admin@modernipam.local / password
+- **URL:** https://ipam.zeroloop.it
+- **Login:** admin@modernipam.local / password (default) or the one created during setup.
 
 ---
 
@@ -101,6 +68,4 @@ Ensure containers are running: `docker compose ps`
 
 ---
 
-**Last Updated:** 2025-11-30
-
- 
+**Last Updated:** 2025-12-02

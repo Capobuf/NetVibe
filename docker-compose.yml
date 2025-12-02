@@ -1,22 +1,37 @@
 services:
-  # PHP-FPM Application Container
+  # =============================================================================
+  # CORE SERVICES
+  # =============================================================================
+  
+  # PHP Application Container
   app:
     build:
-      context: ..
+      context: .
       dockerfile: docker/php/Dockerfile
     container_name: netvibe-web
     restart: unless-stopped
     working_dir: /var/www/html
-    # Keep the base configuration production-friendly —
-    # development mounts and debug flags belong in docker/dev/docker-compose.override.yml
+    env_file: .env
     environment:
-      - APP_ENV=${APP_ENV:-production}
-      - APP_DEBUG=${APP_DEBUG:-false}
+      - TZ=${TZ}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
       - DB_HOST=db
-      - DB_DATABASE=${DB_DATABASE:-modern_ipam}
-      - DB_USERNAME=${DB_USERNAME:-ipam_user}
-      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PORT=6379
+    # Volume mount: Useful for editing code even in "prod-like" env
+    volumes:
+      - ./:/var/www/html
+    # Port exposure: 9693 -> 80 (HTTP). Nginx Proxy Manager handles HTTPS termination.
+    ports:
+      - "9693:80"
     networks:
       - ipam-network
       - proxy
@@ -25,29 +40,26 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # Use artisan to start Octane with FrankenPHP server so the CLI flags are correct
+    # Always run Octane with FrankenPHP in production mode
     command: ["php", "artisan", "octane:start", "--server=frankenphp", "--host=0.0.0.0", "--port=80", "--admin-port=2019"]
     healthcheck:
-      test: ["CMD-SHELL", "/usr/local/bin/http-healthcheck"]
+      test: ["CMD-SHELL", "wget --spider --quiet --tries=1 http://127.0.0.1/up || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # NOTE: webserver removed — FrankenPHP serves HTTP directly from the app container.
-
-  # MariaDB Database (built image to include my.cnf in-image)
+  # MariaDB Database
   db:
-    build:
-      context: ./mysql
-      dockerfile: Dockerfile
-    image: netvibe-db:11.8
+    image: mariadb:11.8
     container_name: netvibe-db
     restart: unless-stopped
+    env_file: .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootsecret}
-      MYSQL_DATABASE: ${DB_DATABASE:-modern_ipam}
-      MYSQL_USER: ${DB_USERNAME:-ipam_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
+      - TZ=${TZ}
+      - MARIADB_ROOT_PASSWORD=${DB_PASSWORD}
+      - MARIADB_DATABASE=${DB_DATABASE}
+      - MARIADB_USER=${DB_USERNAME}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
     volumes:
       - db-data:/var/lib/mysql
     networks:
@@ -60,10 +72,12 @@ services:
 
   # Redis Cache & Sessions
   redis:
-    image: redis:8.4.0-alpine
+    image: redis:8.4-alpine
     container_name: netvibe-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
+    environment:
+      - TZ=${TZ}
     volumes:
       - redis-data:/data
     networks:
@@ -74,25 +88,21 @@ services:
       timeout: 5s
       retries: 3
 
-  # Dedicated queue worker
+  # Queue Worker
   worker:
     build:
-      context: ..
+      context: .
       dockerfile: docker/php/Dockerfile
     image: netvibe-app
     container_name: netvibe-worker
     restart: unless-stopped
     working_dir: /var/www/html
+    env_file: .env
     command: ${WORKER_CMD:-php artisan queue:work --tries=3 --timeout=300}
-    # Keep worker environment defaulting to production in base
     environment:
-      - APP_ENV=${APP_ENV:-production}
-      - APP_DEBUG=${APP_DEBUG:-false}
-      - DB_HOST=db
-      - DB_DATABASE=${DB_DATABASE:-modern_ipam}
-      - DB_USERNAME=${DB_USERNAME:-ipam_user}
-      - DB_PASSWORD=${DB_PASSWORD:-secret}
-      - REDIS_HOST=redis
+      - TZ=${TZ}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
     networks:
       - ipam-network
     depends_on:

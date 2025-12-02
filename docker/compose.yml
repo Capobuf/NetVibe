@@ -1,0 +1,126 @@
+services:
+  # PHP-FPM Application Container
+  app:
+    build:
+      context: ..
+      dockerfile: docker/php/Dockerfile
+    container_name: netvibe-web
+    restart: unless-stopped
+    working_dir: /var/www/html
+    # Keep the base configuration production-friendly —
+    # development mounts and debug flags belong in docker/dev/compose.override.yml
+    environment:
+      - TZ=${TZ}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      # DB CONNECTION
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      # REDIS CONNECTION
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PORT=6379
+    networks:
+      - ipam-network
+      - proxy
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Use artisan to start Octane with FrankenPHP server so the CLI flags are correct
+    command: ["php", "artisan", "octane:start", "--server=frankenphp", "--host=0.0.0.0", "--port=80", "--admin-port=2019"]
+    healthcheck:
+      # Prefer IPv4 to avoid wget attempting IPv6 first which may fail in some containers
+      test: ["CMD-SHELL", "wget --spider --quiet --tries=1 http://127.0.0.1/up || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # NOTE: webserver removed — FrankenPHP serves HTTP directly from the app container.
+
+  # MariaDB Database (official image)
+  db:
+    image: mariadb:11.8
+    container_name: netvibe-db
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - MARIADB_ROOT_PASSWORD=${DB_PASSWORD}
+      - MARIADB_DATABASE=${DB_DATABASE}
+      - MARIADB_USER=${DB_USERNAME}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - ipam-network
+    healthcheck:
+      # Use the official MariaDB healthcheck script. It will try TCP connect and check InnoDB initialization.
+      # This is reliable with official mariadb images (it uses built-in healthcheck users if available).
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Redis Cache & Sessions (official image)
+  redis:
+    image: redis:8.4-alpine
+    container_name: netvibe-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - redis-data:/data
+    networks:
+      - ipam-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Dedicated queue worker
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/php/Dockerfile
+    image: netvibe-app
+    container_name: netvibe-worker
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: ${WORKER_CMD:-php artisan queue:work --tries=3 --timeout=300}
+    # Keep worker environment defaulting to production in base
+    environment:
+      - TZ=${TZ}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+    networks:
+      - ipam-network
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep php || true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  ipam-network:
+    driver: bridge
+  proxy:
+    external: true
+
+volumes:
+  db-data:
+    driver: local
+  redis-data:
+    driver: local

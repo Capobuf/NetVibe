@@ -18,31 +18,30 @@ class EnsureAppIsInstalled
      */
     public function handle(Request $request, Closure $next)
     {
-        // Excluded paths that must remain reachable during setup / dev assets
-        $excluded = [
-            'setup',
-            'livewire/*',
-            'filament/assets*',
-            '_debugbar*',
-        ];
-
-        foreach ($excluded as $pattern) {
-            if ($request->is($pattern)) {
-                return $next($request);
-            }
-        }
-
         try {
-            // Safely check whether any users exist. This might throw if DB isn't reachable.
+            // Check installation status first
             $installed = \App\Models\User::exists();
 
-            // If already installed, send attempts to /setup to /admin
+            // If already installed and trying to access /setup, redirect to /admin
             if ($installed && $request->is('setup')) {
                 return redirect('/admin');
             }
 
-            // If not installed, all non-setup requests should redirect to /setup
+            // If not installed and not accessing /setup, redirect to /setup
+            // EXCEPT for excluded paths (livewire, assets, etc.)
             if (! $installed && ! $request->is('setup')) {
+                $excluded = [
+                    'livewire/*',
+                    'filament/assets*',
+                    '_debugbar*',
+                ];
+
+                foreach ($excluded as $pattern) {
+                    if ($request->is($pattern)) {
+                        return $next($request);
+                    }
+                }
+
                 return redirect('/setup');
             }
 

@@ -21,9 +21,11 @@ return Application::configure(basePath: dirname(__DIR__))
             headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO | Request::HEADER_X_FORWARDED_AWS_ELB
         );
 
-        // Ensure the setup middleware runs for web routes so we can intercept and
-        // redirect to the setup flow if necessary.
-        $middleware->appendToGroup('web', [\App\Http\Middleware\EnsureAppIsInstalled::class]);
+        // Optionally force canonical host before other web middleware when enabled via
+        // the FORCE_CANONICAL_URL env var. This redirect is useful when you want a
+        // single public hostname (APP_URL) and to avoid serving the same app from
+        // alternate hostnames (localhost, IPs, etc.). It is disabled by default.
+        $middleware->appendToGroup('web', [\App\Http\Middleware\ForceCanonicalUrl::class, \App\Http\Middleware\EnsureAppIsInstalled::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

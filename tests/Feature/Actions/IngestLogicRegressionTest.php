@@ -29,7 +29,7 @@ test('happy path updates last_seen without creating event', function () {
         'hostname' => 'server1',
     ]);
 
-    $agent = ScanAgent::factory()->create();
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
     
     $results = [
         [
@@ -64,7 +64,7 @@ test('mac mismatch creates conflict event without modifying ip', function () {
         'hostname' => 'server1',
     ]);
 
-    $agent = ScanAgent::factory()->create();
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
     
     $results = [
         [
@@ -97,7 +97,7 @@ test('new ip detection creates pending event', function () {
         'mask' => 24,
     ]);
 
-    $agent = ScanAgent::factory()->create();
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
     
     $results = [
         [

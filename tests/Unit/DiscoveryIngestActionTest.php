@@ -135,7 +135,8 @@ it('auto-imports a new IP into ip_addresses and records an APPROVED discovery ev
     $ipDecimal = $converter->toDecimal($ip);
 
     // create a subnet covering our IP so it inherits subnet_id/customer
-    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'customer_id' => null]);
+    // assign this subnet to the agent to ensure it is within the agent's scope
+    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'customer_id' => null, 'scan_agent_id' => $agent->id]);
 
     $action = new IngestScanResultsAction();
 

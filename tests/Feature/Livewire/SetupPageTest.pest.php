@@ -7,7 +7,7 @@ use App\Livewire\SetupPage;
 use App\Models\User;
 use App\Services\EnvEditor;
 
-uses(Tests\TestCase::class, Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 beforeEach(function () {
     // Minimal replacement for the health check dependency

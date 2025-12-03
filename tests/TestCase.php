@@ -10,27 +10,21 @@ abstract class TestCase extends BaseTestCase
 {
     use CreatesApplication;
 
-    // Aggiunto per forzare l'uso di SQLite in-memory, risolvendo i problemi di 'Permission denied' in Docker.
+    // Optionally configure environment for tests. Kept empty so phpunit.xml env vars
+    // control the DB connection (allows switching between sqlite/mysql in CI).
     protected function getEnvironmentSetUp($app)
     {
-        // Rende la connessione DB e il database in-memory espliciti per il test environment.
-        $app['config']->set('database.connections.sqlite', [
-            'driver'   => 'sqlite',
-            'database' => ':memory:',
-            'prefix'   => '',
-        ]);
-        $app['config']->set('database.default', 'sqlite');
+        // Ensure tests use the dedicated testing database (netvibe_testing) when running inside containers
         $app['config']->set('queue.default', 'sync');
         $app['config']->set('cache.default', 'array');
 
-        // Ensure environment vars are consistent with the test sqlite configuration.
-        // Some test helpers access DB_DATABASE from env directly when refreshing sqlite files.
-        putenv('DB_CONNECTION=sqlite');
-        putenv('DB_DATABASE=:memory:');
-        $_ENV['DB_CONNECTION'] = 'sqlite';
-        $_ENV['DB_DATABASE'] = ':memory:';
-        $_SERVER['DB_CONNECTION'] = 'sqlite';
-        $_SERVER['DB_DATABASE'] = ':memory:';
+        // Force tests to use the dedicated testing database credentials
+        $app['config']->set('database.default', 'mysql');
+        $app['config']->set('database.connections.mysql.host', env('DB_HOST', '127.0.0.1'));
+        $app['config']->set('database.connections.mysql.port', env('DB_PORT', 3306));
+        $app['config']->set('database.connections.mysql.database', 'netvibe_testing');
+        $app['config']->set('database.connections.mysql.username', 'netvibe');
+        $app['config']->set('database.connections.mysql.password', 'netvibe');
     }
 
     // NUOVA FUNZIONE: Bootstrappa il Pannello Admin di Filament

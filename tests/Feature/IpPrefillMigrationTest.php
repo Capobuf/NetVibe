@@ -61,17 +61,20 @@ class IpPrefillMigrationTest extends TestCase
 
         $ipDecimal = $ipService->toDecimal('10.10.11.1');
 
-        // Insert a record with legacy placeholder timestamp
+        // Insert a record with legacy placeholder timestamp using a safe epoch value
+        // (use 1 year offset so TIMESTAMP conversions with server TZ remain valid)
         $rowId = IpAddress::create([
             'subnet_id' => $subnet->id,
             'ip_addr' => $ipDecimal,
             'state' => 0,
-            'last_seen' => '1970-01-01 00:00:01',
+            'last_seen' => \Carbon\Carbon::createFromTimestamp(31536000),
         ])->id;
 
         // Simulate migration conversion: update rows with placeholder to NULL
+        $placeholder = \Carbon\Carbon::createFromTimestamp(31536000)->toDateTimeString();
+
         DB::table('ip_addresses')
-            ->where('last_seen', '1970-01-01 00:00:01')
+            ->where('last_seen', $placeholder)
             ->update(['last_seen' => null]);
 
         $ip = IpAddress::find($rowId);

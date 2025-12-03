@@ -103,6 +103,8 @@ Problemi osservati:
 - `migrate:fresh` è distruttivo e può essere lento; l'esecuzione sincrona nella stessa request Livewire può portare a timeout/long-running operations.
 - Scrivere `.env` direttamente e cambiare runtime config richiede attenzione ai permessi, atomicità e gestione di errori (rollback parziale in caso di failure).
 
+STATUS: STABLE — migration ordering issue for `settings` was fixed (creation migration moved earlier) and SetupPage was hardened for Day‑0; future work should move long-running migrations into background jobs after bootstrap.
+
 ---> Requisito operativo: il wizard deve essere reso idempotente e le operazioni lunghe dovrebbero essere eseguite in lavoro asincrono (queue/Job) con reporting di stato.
 
 ---

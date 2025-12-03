@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace App\Livewire;
 
@@ -207,7 +208,7 @@ class SetupPage extends Component implements HasSchemas
 
     protected function saveDatabaseSettings(array $data): void
     {
-        $editor = new EnvEditor();
+        $editor = app(EnvEditor::class);
         $editor->setKeys([
             'DB_HOST' => $data['db_host'],
             'DB_PORT' => $data['db_port'],
@@ -230,6 +231,8 @@ class SetupPage extends Component implements HasSchemas
 
     public function runMigrations(): void
     {
+        // Protect long-running migration step from PHP timeout
+        @set_time_limit(300);
         // Acquire a lock so only a single server/worker runs setup migrations at once.
         $lock = Cache::lock('netvibe.setup.migrations', 1200); // 20 minutes
 
@@ -283,11 +286,20 @@ class SetupPage extends Component implements HasSchemas
         }
     }
 
-    public function finishSetup()
+    public function finishSetup(): void
     {
         $data = $this->form->getState();
 
+        // Day-0 protection: allow longer execution and run migrations synchronously
+        @set_time_limit(300);
+
         try {
+            // Ensure DB config is persisted and runtime connection updated before migrations
+            $this->saveDatabaseSettings($data);
+
+            // Run minimal, synchronous migrations needed for Day-0 bootstrap
+            $this->runMigrations();
+
             // Create or update the Admin user in an idempotent way.
             if (! empty($data['user_email'])) {
                 $existing = \App\Models\User::where('email', $data['user_email'])->first();
@@ -314,6 +326,7 @@ class SetupPage extends Component implements HasSchemas
             // Save Site Settings - ensure all properties are set
             // Save Site Settings in a safe / defensive manner. The Settings repository may
             // not be available until migrations have run; guard with Schema checks and try/catch.
+            $settings = null;
 
             if (IlluminateSchema::hasTable('settings')) {
                 try {
@@ -350,20 +363,27 @@ class SetupPage extends Component implements HasSchemas
                 // settings table not available — skip gracefully and avoid referencing missing columns
                 Log::info('Setup detected missing settings table — skipping GeneralSettings save.');
             }
-            // Set other required properties to defaults if not already set
-            if (empty($settings->app_url)) {
-                $settings->app_url = config('app.url', '');
+            // Only set defaults and persist if $settings was successfully resolved
+            if ($settings !== null) {
+                if (empty($settings->app_url)) {
+                    $settings->app_url = config('app.url', '');
+                }
+                if (! isset($settings->force_https)) {
+                    $settings->force_https = str_starts_with(config('app.url', ''), 'https://');
+                }
+                if (empty($settings->agent_alert_level)) {
+                    $settings->agent_alert_level = 'ERROR';
+                }
+                if (empty($settings->time_display_format)) {
+                    $settings->time_display_format = 'relative';
+                }
+
+                try {
+                    $settings->save();
+                } catch (Throwable $e) {
+                    Log::warning('Could not save settings defaults: ' . $e->getMessage());
+                }
             }
-            if (!isset($settings->force_https)) {
-                $settings->force_https = str_starts_with(config('app.url', ''), 'https://');
-            }
-            if (empty($settings->agent_alert_level)) {
-                $settings->agent_alert_level = 'ERROR';
-            }
-            if (empty($settings->time_display_format)) {
-                $settings->time_display_format = 'relative';
-            }
-            $settings->save();
 
             // Install Demo Data
             if (! empty($data['install_demo_data'])) {

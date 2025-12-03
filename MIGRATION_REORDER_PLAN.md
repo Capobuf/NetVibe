@@ -10,10 +10,13 @@ Background
 ----------
 La suite di migrations contiene operazioni di CREATE, ALTER e INSERT/SEED. Laravel esegue le migration in ordine alfabetico (timestamp nel filename). Se una migration che scrive/aggiorna una tabella precede la migration che crea quella tabella, l'esecuzione fallirà (es. `DB::table('settings')->updateOrInsert` prima di `Schema::create('settings')`).
 
-Analisi Anomalie (scoperta)
----------------------------
-- `2025_02_01_000005_add_discovery_settings.php` — esegue `DB::table('settings')->updateOrInsert(...)`.
-- `2025_11_29_133422_create_settings_table.php` — crea la tabella `settings` ma ha timestamp successivo (Nov 29) rispetto al file che la usa (Feb 01).
+Status: APPLIED
+
+Action taken:
+- Created `database/migrations/2025_01_01_000004_create_settings_table.php` and removed late `2025_11_29_133422_create_settings_table.php` to ensure `settings` table is created before any seed/insert migrations.
+- Ran `php artisan migrate:fresh --env=testing` and executed the test-suite. Migration ordering issue was resolved.
+
+Current recommendation: keep migration files as individual PHP files (no schema dump) and avoid inserting rows into tables before the table creation migration in future commits.
 
 Conseguenza: le migration falliscono su installazione pulita (Day-0) perché si tenta di inserire/aggiornare `settings` prima che la tabella sia stata creata.
 

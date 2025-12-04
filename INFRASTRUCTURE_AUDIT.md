@@ -3,7 +3,7 @@
 Data: 2025-12-03
 
 Scopo: analisi rapida delle possibili cause infrastrutturali per il problema del Setup Wizard che "torna allo step 1 senza errori".
-Basato su: `docker-compose.yml` (root), `docker/compose.yml`, `docker/php/Dockerfile`, `.env.example`, `config/session.php`
+Basato su: `docker-compose.yml` (root), `docker/php/Dockerfile`, `.env.example`, `config/session.php`
 
 ---
 
@@ -32,7 +32,7 @@ Impatto: le operazioni di chown durante il build funzionano solo per i file che 
 - `app` usa `volumes: - ./:/var/www/html` (bind-mount TOTALE della sorgente). Questo è comodo per dev ma per produzione è pericoloso quando si lascia `USER www-data` e non si assicura ownership corretta sul host.
 - `app` usa `env_file: .env` quindi l'app ha dipendenza diretta dal file `.env` montato nel container; se il wizard falla scrivendo `.env` i fallback del caricamento sconosciuti possono causare inconsistenze.
 
-3) docker/compose.yml (altro file in repo)
+3) docker/compose.yml (rimosso/obsoleto — usare `docker-compose.yml` nella root)
 - Questo file non monta `./:/var/www/html` — copia il codice nella build. Esiste quindi ambiguità: alcuni utenti possono usare il compose root (che monta bind) e questo può essere la causa della differenza tra ambiente di build e runtime.
 
 4) .env.example e config/session.php

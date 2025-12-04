@@ -51,10 +51,44 @@ docker-compose exec app php artisan filament:cache-components
 
 ## 🧪 Testing
 
-Esegui i test all'interno del container. Il test runner è configurato per usare SQLite in-memory:
+Esegui i test all'interno del container. Per coerenza con l'ambiente CI e le impostazioni di `phpunit.xml` i test usano MariaDB (database `netvibe_testing`) — non usare SQLite in-memory per i test dell'intera applicazione.
+
+Passaggi consigliati per eseguire i test localmente con MariaDB (container):
+
+1. Assicurati di avere `DB_DATABASE` impostato su `netvibe_testing` nella tua `.env` prima di avviare i container. Questo permette al servizio MariaDB di creare il database iniziale:
+
 ```bash
-docker-compose exec app php artisan test
+cp .env.example .env
+# Edit .env and set:
+# DB_DATABASE=netvibe_testing
+nano .env
 ```
+
+2. Avvia i servizi Docker necessari (DB, Redis, App):
+
+```bash
+docker compose up -d db redis app
+```
+
+3. (Opzionale) Se il database non è stato creato automaticamente — per esempio se `DB_DATABASE` era differente — crea il DB di test manualmente nella container DB:
+
+```bash
+docker compose exec db mysql -u root -p${DB_PASSWORD} -e "CREATE DATABASE IF NOT EXISTS netvibe_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+4. Esegui i test dentro il container `app` (ciò garantisce che la connessione punti al container DB):
+
+```bash
+docker compose exec app ./vendor/bin/pest --filter <TestFileOrPattern>
+# oppure
+docker compose exec app php artisan test
+```
+
+Note:
+- `tests/TestCase.php` forza l'uso del database `netvibe_testing` in fase di test; ciò assicura l'isolamento dei test se il servizio MariaDB è correttamente in ascolto.
+- Se preferisci eseguire test in locale senza MariaDB (per singoli test più veloci), è possibile impostare un driver `sqlite` locale; tuttavia, il progetto e la CI usano MariaDB e gli integration tests sono scritti con dipendenze MySQL compatibili (es. SQL dialect e storage engine), quindi non è consigliato.
+
+Se hai bisogno, posso aggiungere un breve script `scripts/run-tests.sh` che automatizza questi passaggi per ambienti di sviluppo.
 
 ---
 

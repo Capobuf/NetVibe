@@ -5,7 +5,7 @@
             <h2 class="text-2xl font-bold text-white mb-2">Setup Complete!</h2>
             <p class="text-slate-300 mb-6">NetVibe has been successfully installed and configured.</p>
             
-            <a href="/admin/login" class="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <a href="{{ filament()->getLoginUrl() }}" class="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                 Go to Login
             </a>
         </div>

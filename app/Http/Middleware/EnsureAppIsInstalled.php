@@ -33,18 +33,27 @@ class EnsureAppIsInstalled
             return $next($request);
         }
 
+        Log::info('EnsureAppIsInstalled: checking path ' . $request->path());
+
         try {
             // Check installation status first
             $installed = \App\Models\User::exists();
+            Log::info('EnsureAppIsInstalled: User::exists() returned: ' . ($installed ? 'true' : 'false'));
 
-            // If already installed and trying to access /setup, redirect to /admin
+            // If already installed and trying to access /setup, redirect to /login
             if ($installed && $request->is('setup')) {
-                return redirect('/');
+                return redirect('/login');
             }
 
-            // If not installed and not accessing /setup, redirect to /setup
+            // If not installed and not accessing /setup, redirect to /setup so the
+            // wizard is the default landing in a fresh (empty DB) environment.
             if (! $installed && ! $request->is('setup')) {
                 return redirect('/setup');
+            }
+
+            // If installed and accessing the root route, send users to the login screen.
+            if ($installed && $request->is('/')) {
+                return redirect('/login');
             }
 
             // Allow the request
@@ -52,6 +61,7 @@ class EnsureAppIsInstalled
         } catch (Throwable $e) {
             // If the DB is down or throws, forward the user to /setup so the wizard can guide
             Log::warning('EnsureAppIsInstalled middleware encountered an exception during User::exists(): '.$e->getMessage());
+            Log::info('EnsureAppIsInstalled: redirecting to /setup due to exception, current path: ' . $request->path());
             
             if (! $request->is('setup')) {
                 return redirect('/setup');

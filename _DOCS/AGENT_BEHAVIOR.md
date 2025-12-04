@@ -13,7 +13,7 @@
 		`docker compose -f docker/docker-compose.yml -f docker/dev/docker-compose.override.yml up -d`
 	- Production (example):
 		`docker compose -f docker/docker-compose.yml -f docker/production/docker-compose.prod.yml up -d`
-* **Environment:** Assume the test environment is stable (`sqlite:memory`) but the development environment uses MariaDB (`DB_HOST=db`).
+* **Environment:** Assume the test environment is stable (MariaDB `netvibe_testing`) and the development environment uses MariaDB (`DB_HOST=db`).
 
 ## 3. 🏗️ CODING STANDARDS
 * **Filament:** Use only **Clusters**. Do not use the root `app/Filament/Resources` directory.

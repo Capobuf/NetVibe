@@ -7,7 +7,7 @@ use App\Livewire\SetupPage;
 use App\Models\User;
 use App\Services\EnvEditor;
 
-uses(Illuminate\Foundation\Testing\RefreshDatabase::class);
+// Apply database refresh selectively only for tests that need it.
 
 beforeEach(function () {
     // Minimal replacement for the health check dependency
@@ -16,14 +16,25 @@ beforeEach(function () {
     });
 });
 
-it('guest sees setup when no user exists', function () {
+it('guest sees setup when accessing /setup', function () {
     $this->get('/setup')->assertStatus(200);
 });
 
-it('redirects to admin when user exists', function () {
+it('guest is redirected to setup when no user exists and visits root', function () {
+    $this->get('/')->assertRedirect('/setup');
+});
+
+it('redirects to login when user exists and visits /setup', function () {
+    $this->uses(Illuminate\Foundation\Testing\RefreshDatabase::class);
     User::factory()->create();
 
-    $this->get('/setup')->assertRedirect('/admin');
+    $this->get('/setup')->assertRedirect('/login');
+});
+
+it('guest is redirected to login when user exists and visits root', function () {
+    $this->uses(Illuminate\Foundation\Testing\RefreshDatabase::class);
+    User::factory()->create();
+    $this->get('/')->assertRedirect('/login');
 });
 
 it('wizard happy path creates admin and settings table on MariaDB', function () {

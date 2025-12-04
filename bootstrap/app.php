@@ -29,7 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // the FORCE_CANONICAL_URL env var. This redirect is useful when you want a
         // single public hostname (APP_URL) and to avoid serving the same app from
         // alternate hostnames (localhost, IPs, etc.). It is disabled by default.
-        $middleware->appendToGroup('web', [\App\Http\Middleware\ForceCanonicalUrl::class, \App\Http\Middleware\EnsureAppIsInstalled::class]);
+        $middleware->appendToGroup('web', [
+            \App\Http\Middleware\ForceCanonicalUrl::class,
+            \App\Http\Middleware\CheckSystemInstalled::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

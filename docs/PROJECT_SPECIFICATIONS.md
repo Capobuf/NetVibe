@@ -42,7 +42,7 @@ Le linee guida sono: leggere il dump sequenzialmente e riflettere esattamente il
 - Queue/Cache: Redis (driver predefinito), uso intensivo di job queued (ShouldQueue)
 - DB relazionale: MySQL / MariaDB (test DB: netvibe_testing)
 - Container / local dev: Docker + Laravel Sail (container-first rule)
-- Webserver: frankenphp / Octane compatibile (frankenphp-worker.php presente)
+- Webserver: ServerSideUp (Nginx + PHP-FPM) - immagine `serversideup/php:8.4-fpm-nginx`
 - Sicurezza: Laravel Sanctum per autenticazione agent/API
 - Utility IP: mlocati/ip-lib + BCMath per conversioni numeriche IPv4
 
@@ -63,6 +63,7 @@ La piattaforma è divisa in:
 - Racks / DCIM: Rack, Device, DeviceModel e widget di visualizzazione
 - Setup e bootstrap: Livewire-based SetupPage che configura DB e deploya migrator/seeder
 - Background processing: Laravel queue (Redis), Scheduled tasks (prune agent logs etc.)
+- Runtime container: `netvibe-web` usa l'immagine `serversideup/php:8.4-fpm-nginx`. I permessi sono gestiti nativamente tramite le variabili d'ambiente `PUID`/`PGID` (User Mapping) per allinearsi all'host. Il container espone la porta 8080 (non 80) per il traffico HTTP interno, che viene poi gestito dal reverse proxy (Nginx Proxy Manager).
 
 ## 5) Discovery Engine — flusso completo
 
@@ -393,12 +394,16 @@ Problemi individuati nel dump e suggerimenti:
    - Problema: possibile drift schema e duplication
    - Mitigazione: consolidare migrations, creare single source of truth per settings schema
 
+5) Login Loop dietro Nginx Proxy Manager
+   - Problema: Laravel non rileva correttamente HTTPS o il middleware di autenticazione invalida la sessione.
+   - Mitigazione: Configurare `TrustProxies` su `*` in `bootstrap/app.php` e, se necessario, disabilitare `AuthenticateSession` in `AdminPanelProvider` per evitare race condition con Redis.
+
 ## 16) Runbook di debug rapido
 
 - Rabbit / Redis queue worker non processa jobs: eseguire dentro container: sail artisan queue:work redis --queue=default
 - Discovery ingests non appaiono: controllare redis queue, ProcessDiscoveryIngestJob stefll, logs di workers e DB row su DiscoveryEvent
-- Wizard freeze su Docker: ispezionare logs di container laravel.test (php-fpm/FrankenPHP) e nginx, verificare lock 'netvibe.setup.migrations' in cache
-- Fping error / scan fail: eseguire fping su host container e verificare exit code; controllare app/Services/Scanners/FpingWrapper.php
+- Wizard freeze su Docker: ispezionare logs del container `netvibe-web` (nginx e php-fpm).
+- Validazione permessi: assicurarsi che `netvibe-web` giri con `PUID`/`PGID` allineati all'host (es. 1000:1000) e che il container esponga la porta 8080. I log si trovano in `/var/log/nginx` o via stdout del container.
 
 ## 17) Allegati — file chiave e riferimenti (estratti dal dump)
 
@@ -439,12 +444,11 @@ Checklist rapida (ordine raccomandato):
 1. Controlla log applicativi nei container (inserirsi nel container o usare sail/docker-compose):
 
 ```bash
-# dentro l'ambiente di sviluppo con Sail
-sail logs --tail=300 laravel.test
-sail logs --tail=300 nginx
+# dentro l'ambiente di sviluppo con Docker Compose
+docker compose logs --tail=300 netvibe-web
 
-# oppure per docker compose
-docker compose logs --tail=300 --services laravel.test nginx
+# Controllare specificamente nginx o php se necessario (dipende dalla configurazione di logging s6)
+# Solitamente tutto confluisce in stdout/stderr del container
 ```
 
 2. Verifica lock migration nel cache (chiave: netvibe.setup.migrations):

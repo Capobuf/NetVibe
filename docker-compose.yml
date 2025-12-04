@@ -3,53 +3,61 @@ services:
   # CORE SERVICES
   # =============================================================================
   
-  # PHP Application Container
-  app:
+  # PHP Application Container (ServerSideUp FPM-NGINX)
+  netvibe-web:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
+    image: netvibe-app
     container_name: netvibe-web
     restart: unless-stopped
     working_dir: /var/www/html
     env_file: .env
     environment:
-      - TZ=${TZ}
+      # ServerSideUp user mapping
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
+      # PHP settings
+      - PHP_OPCACHE_ENABLE=1
+      - PHP_DATE_TIMEZONE=${TZ:-UTC}
+      # Disable auto-migrations (we use setup wizard)
+      - AUTORUN_ENABLED=false
+      # Laravel settings
       - APP_ENV=${APP_ENV}
       - APP_DEBUG=${APP_DEBUG}
       - APP_KEY=${APP_KEY}
       - DB_CONNECTION=mysql
-      - DB_HOST=db
+      - DB_HOST=${DB_HOST}
       - DB_PORT=3306
       - DB_DATABASE=${DB_DATABASE}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_PORT=6379
-    # Volume mount: Useful for editing code even in "prod-like" env
+    # Persistent storage for Production (Dev overrides with bind mounts)
     volumes:
-      - ./:/var/www/html
-    # Port exposure: 9693 -> 80 (HTTP). Nginx Proxy Manager handles HTTPS termination.
+      - app-storage:/var/www/html/storage
+      - app-uploads:/var/www/html/public/uploads
+    # ServerSideUp uses port 8080 internally
     ports:
-      - "9693:80"
+      - "9693:8080"
     networks:
       - ipam-network
       - proxy
     depends_on:
-      db:
+      netvibe-db:
         condition: service_healthy
-      redis:
+      netvibe-redis:
         condition: service_healthy
-    # Always run Octane with FrankenPHP in production mode
-    command: ["php", "artisan", "octane:start", "--server=frankenphp", "--host=0.0.0.0", "--port=80", "--admin-port=2019"]
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider --quiet --tries=1 http://127.0.0.1/up || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/up"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # MariaDB Database
-  db:
+  netvibe-db:
     image: mariadb:11.8
     container_name: netvibe-db
     restart: unless-stopped
@@ -71,8 +79,8 @@ services:
       retries: 3
 
   # Redis Cache & Sessions
-  redis:
-    image: redis:8.4-alpine
+  netvibe-redis:
+    image: redis:8-alpine
     container_name: netvibe-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
@@ -89,7 +97,7 @@ services:
       retries: 3
 
   # Queue Worker
-  worker:
+  netvibe-worker:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
@@ -98,27 +106,43 @@ services:
     restart: unless-stopped
     working_dir: /var/www/html
     env_file: .env
-    command: ${WORKER_CMD:-php artisan queue:work --tries=3 --timeout=300}
     environment:
-      - TZ=${TZ}
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
       - APP_ENV=${APP_ENV}
       - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      - app-storage:/var/www/html/storage
+      - app-uploads:/var/www/html/public/uploads
+    # Override S6 to run queue worker instead of NGINX
+    command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=300"]
     networks:
       - ipam-network
     depends_on:
-      db:
+      netvibe-db:
         condition: service_healthy
-      redis:
+      netvibe-redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep php || true"]
+      test: ["CMD-SHELL", "pgrep php || exit 0"]
       interval: 30s
       timeout: 10s
       retries: 3
 
 networks:
   ipam-network:
-    driver: bridge
+    # Driver is implicitly bridge for user-defined networks
+
   proxy:
     external: true
 
@@ -126,4 +150,8 @@ volumes:
   db-data:
     driver: local
   redis-data:
+    driver: local
+  app-storage:
+    driver: local
+  app-uploads:
     driver: local

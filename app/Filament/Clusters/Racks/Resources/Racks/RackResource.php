@@ -177,9 +177,37 @@ class RackResource extends Resource
         $hostname = $device->hostname ?? $device->name;
         $model = $device->deviceModel?->name ?? 'Unknown';
 
-        $portEntries = $device->ports
-            ->map(fn (Port $port): TextEntry => self::makePortActionEntry($rack, $unit, $device, $port))
-            ->all();
+        // Group ports by physical media
+        $portGroups = $device->ports->groupBy('physical_media');
+        $portSections = [];
+
+        foreach ($portGroups as $media => $ports) {
+            $actions = $ports->map(function (Port $port) use ($rack, $unit, $device) {
+                $isActive = $port->status === 'active';
+                $color = $isActive ? 'success' : 'gray';
+                
+                return SchemaActions\Action::make("port-{$port->id}")
+                    ->label((string) $port->number)
+                    ->color($color)
+                    ->size('xs')
+                    ->button()
+                    ->tooltip($port->name . ($isActive ? " (Linked)" : ""))
+                    ->extraAttributes([
+                        'style' => 'min-width: 24px; padding: 2px 4px; font-size: 0.7rem;',
+                    ])
+                    ->action(fn () => Notification::make()->title('Port ' . $port->number . ' clicked')->info()->send());
+            })->all();
+
+            $portSections[] = Section::make(ucfirst($media ?? 'Ports'))
+                ->compact()
+                ->schema([
+                    Grid::make(12) // Default to 12 columns, can be adjusted
+                        ->schema(fn() => $actions)
+                        ->extraAttributes(['style' => 'gap: 4px;']),
+                ])
+                ->extraAttributes(['class' => 'mb-2'])
+                ->collapsible();
+        }
 
         return Flex::make([
             self::makeUnitLeftColumn($rack, $unit, self::makeUnitLabelEntry($rack, $unit, badge: true)),
@@ -208,15 +236,14 @@ class RackResource extends Resource
                             ]),
                     ])->alignment(Alignment::End)->extraAttributes(['style' => 'position: absolute; top: 2px; right: 2px; z-index: 10; opacity: 0.5;']),
 
-                    Grid::make(12)
-                        ->schema($portEntries)
-                        ->extraAttributes([
-                            'style' => 'display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; align-items: center; width: 100%; padding-right: 24px;', 
-                        ]),
+                    // Render Port Sections
+                    Group::make()
+                        ->schema($portSections)
+                        ->extraAttributes(['style' => 'width: 100%;']),
                 ])
                 ->grow(true)
                 ->extraAttributes([
-                    'style' => 'padding: 0.5rem; position: relative;', 
+                    'style' => 'padding: 0.5rem; position: relative; display: flex; flex-direction: column; justify-content: center;', 
                 ]),
         ])
         ->extraAttributes([

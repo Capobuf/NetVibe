@@ -5,6 +5,10 @@ namespace App\Filament\Clusters\Racks\Resources\DeviceModels\Schemas;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\ColorPicker;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Schema;
 use App\Enums\DeviceType;
 
@@ -55,6 +59,50 @@ class DeviceModelForm
                     ->rows(3)
                     ->columnSpanFull()
                     ->placeholder('Additional notes about this model'),
+
+                Section::make('Visual Layout Designer')
+                    ->columnSpanFull()
+                    ->schema([
+                        // Outer repeater: physical rows (horizontal rows on the device)
+                        Repeater::make('visual_layout')
+                            ->label('Physical Rows')
+                            ->defaultItems(1)
+                            ->reorderable()
+                            ->cloneable()
+                            ->collapsible()
+                            ->itemLabel(fn (array $state): ?string => $state['name'] ?? null)
+                            ->schema([
+                                // Inner repeater: banks/groups placed horizontally inside the row
+                                Repeater::make('banks')
+                                    ->label('Port Groups')
+                                    ->grid(2) // render groups side-by-side to simulate physical layout
+                                    ->itemLabel(fn (array $state): ?string => $state['name'] ?? 'Group')
+                                    ->schema([
+                                        TextInput::make('name')
+                                            ->required()
+                                            ->placeholder('es. Eth 1-12'),
+
+                                        Grid::make(3)
+                                            ->schema([
+                                                TextInput::make('start_port')
+                                                    ->numeric()
+                                                    ->required()
+                                                    ->label('Start #'),
+
+                                                TextInput::make('port_count')
+                                                    ->numeric()
+                                                    ->required()
+                                                    ->label('Count'),
+
+                                                ColorPicker::make('color')
+                                                    ->label('Color'),
+                                            ])
+                                    ])
+                                    ->collapsible()
+                                    ->defaultItems(1),
+                            ])
+                            ->columnSpanFull(),
+                    ]),
             ]);
     }
 }

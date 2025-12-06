@@ -20,6 +20,7 @@ class DeviceModel extends Model
         'ethernet_ports',
         'sfp_ports',
         'description',
+        'visual_layout',
     ];
 
     protected $casts = [
@@ -27,6 +28,7 @@ class DeviceModel extends Model
         'u_size' => 'integer',
         'ethernet_ports' => 'integer',
         'sfp_ports' => 'integer',
+        'visual_layout' => 'array',
     ];
 
     public function devices()

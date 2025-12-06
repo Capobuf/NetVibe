@@ -39,7 +39,15 @@ class VlanResource extends Resource
                 TextInput::make('number')->numeric()->required()->label('VLAN ID'),
                 TextInput::make('name')->required()->maxLength(255),
                 // L2Domain removed — VLANs are tenant-scoped by customer
-                Select::make('customer_id')->relationship('customer', 'name')->preload()->searchable()->nullable(),
+                Select::make('customer_id')
+                    ->relationship('customer', 'name')
+                    ->preload()
+                    ->searchable()
+                    ->nullable()
+                    // If a tenant is selected, default to it and hide the field
+                    ->default(fn () => session('tenant_id'))
+                    ->hidden(fn () => ! blank(session('tenant_id')))
+                    ->dehydratedWhenHidden(),
                 TextInput::make('description')->nullable(),
             ])->columns(1),
         ]);

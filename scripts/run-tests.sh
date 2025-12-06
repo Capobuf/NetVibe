@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Simple helper to run test-suite safely inside the netvibe-web container
 # - ensures the DB name is set to a safe default (netvibe-test)
-# - optionally creates the test DB via existing PHP helper
+# - forces the DB name to the test database (netvibe-test)
 # - runs pest inside the container with optional filter
 #
 # Usage:
@@ -20,7 +20,7 @@ Usage: $(basename "$0") [--pattern PATTERN] [--yes]
 
 Runs the project's Pest test-suite from inside the ${COMPOSE_SERVICE} container
 in a safe manner. By default the script will require that the DB used for tests
-is '${TEST_DB_NAME}' (the test database) and will refuse to run (or will ask
+is '${TEST_DB_NAME}' (the test database) and will ignore any environment settings.
 for interactive confirmation) if your environment appears different.
 
 Options:
@@ -63,20 +63,6 @@ done
 check_env_db() {
   # If .env exists, try to parse DB_DATABASE, otherwise check env from compose
   local db_from_env=""
-  if [[ -f "$ROOT_DIR/.env" ]]; then
-    # Parse DB_DATABASE from .env (rudimentary)
-    db_from_env=$(grep -E '^DB_DATABASE=' "$ROOT_DIR/.env" | cut -d'=' -f2- || true)
-  fi
-
-  if [[ -z "$db_from_env" ]]; then
-    # Try to read via docker compose but avoid failure if compose is not running
-    if docker compose ps >/dev/null 2>&1; then
-      # Ask the container what it thinks the env var is (best-effort)
-      db_from_env=$(docker compose exec -T ${COMPOSE_SERVICE} sh -lc 'echo "${DB_DATABASE:-}"' || true)
-    fi
-  fi
-
-  echo "$db_from_env"
 }
 
 confirm_or_abort() {
@@ -93,15 +79,8 @@ confirm_or_abort() {
 }
 
 # 1) Verify DB name
-db_found=$(check_env_db)
-if [[ -z "$db_found" ]]; then
-  echo "[run-tests] Could not determine DB_DATABASE from .env or container — continuing with caution." >&2
-else
-  if [[ "$db_found" != "$TEST_DB_NAME" ]]; then
-    echo "[run-tests] WARNING: DB_DATABASE appears to be '$db_found' (requires '$TEST_DB_NAME' to be safe)."
-    confirm_or_abort "Proceed anyway?"
-  fi
-fi
+# 1) We're not going to inspect the environment — always force the test DB.
+echo "[run-tests] Forcing DB_DATABASE=${TEST_DB_NAME} for the test run inside ${COMPOSE_SERVICE}"
 
 # 2) Ensure the test DB exists (best-effort)
 echo "[run-tests] Ensuring test database '${TEST_DB_NAME}' exists (best-effort)..."

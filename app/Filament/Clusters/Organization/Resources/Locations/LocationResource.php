@@ -38,7 +38,10 @@ class LocationResource extends Resource
                 ->searchable()
                 ->preload()
                 ->required()
-                ->label('Customer'),
+                ->label('Customer')
+                ->default(fn () => session('tenant_id'))
+                ->hidden(fn () => ! blank(session('tenant_id')))
+                ->dehydratedWhenHidden(),
             Textarea::make('address')->rows(3)->nullable(),
         ])->columns(1);
     }
@@ -61,6 +64,7 @@ class LocationResource extends Resource
     {
         return [
             'index' => Pages\ListLocations::route('/'),
+            'create' => Pages\CreateLocation::route('/create'),
         ];
     }
 }

@@ -19,6 +19,9 @@ class DeviceForm
                     ->live()
                     ->searchable()
                     ->preload()
+                    // When in tenant mode, default the filter to the tenant and hide the control
+                    ->default(fn () => session('tenant_id'))
+                    ->hidden(fn () => ! blank(session('tenant_id')))
                     ->options(function () {
                         return \App\Models\Customer::query()->pluck('name', 'id');
                     })

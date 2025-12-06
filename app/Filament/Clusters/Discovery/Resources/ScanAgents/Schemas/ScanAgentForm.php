@@ -36,7 +36,10 @@ class ScanAgentForm
                         ->searchable()
                         ->preload()
                         ->label('Dedicated to Customer')
-                        ->helperText('Leave empty if this is a Global/Shared agent (e.g. Localhost)'),
+                        ->helperText('Leave empty if this is a Global/Shared agent (e.g. Localhost)')
+                        ->default(fn () => session('tenant_id'))
+                        ->hidden(fn () => ! blank(session('tenant_id')))
+                        ->dehydratedWhenHidden(),
 
                     Select::make('log_level')
                         ->label('Log Level')

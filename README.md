@@ -14,6 +14,8 @@ Abbiamo aggiunto due protezioni/aiuti per eseguire i test in modo sicuro durante
 
 - Un controllo di sicurezza nel bootstrap dei test: `tests/Pest.php` rifiuta di eseguire la suite di test a meno che `DB_DATABASE` sia `netvibe-test`.
 - Uno script helper `scripts/run-tests.sh` per avviare i test dal container `netvibe-web` in modo sicuro e ripetibile.
+ - Un controllo di sicurezza nel bootstrap dei test: `tests/Pest.php` rifiuta di eseguire la suite di test a meno che `DB_DATABASE` sia `netvibe-test`.
+ - Uno script helper `scripts/run-tests.sh` per avviare i test dal container `netvibe-web`. Nota: lo script ora forza sempre `DB_DATABASE=netvibe-test` per il processo di test (ignora eventuali valori env passati) — questo evita rischi accidentali causati da variabili d'ambiente non intenzionali.
 
 Esempi d'uso di `scripts/run-tests.sh`:
 
@@ -21,7 +23,7 @@ Esempi d'uso di `scripts/run-tests.sh`:
 # Mostra l'help
 ./scripts/run-tests.sh --help
 
-# Esegue l'intera suite (interattivo — chiederà conferma se DB non corrisponde a netvibe-test)
+# Esegue l'intera suite (non-interattivo — lo script forzerà l'uso del DB di test `netvibe-test`)
 ./scripts/run-tests.sh
 
 # Esegue un singolo file di test (non-interattivo)

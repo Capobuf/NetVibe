@@ -37,6 +37,11 @@ class RackForm
                     ->searchable()
                     ->preload()
                     ->live()
+                    // If a tenant is selected in session, use it as the default and hide the field
+                    ->default(fn () => session('tenant_id'))
+                    ->hidden(fn () => ! blank(session('tenant_id')))
+                    // Ensure the value is persisted even when hidden
+                    ->dehydratedWhenHidden()
                     ->afterStateUpdated(fn ($set) => $set('location_id', null)),
                     
                 Select::make('location_id')

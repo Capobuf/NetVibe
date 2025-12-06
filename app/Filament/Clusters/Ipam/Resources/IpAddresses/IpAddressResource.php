@@ -48,7 +48,12 @@ class IpAddressResource extends Resource
                     ->relationship('customer', 'name')
                     ->searchable()
                     ->preload()
+                    // Prefer session tenant_id, otherwise inherit from selected subnet/vlan
                     ->default(function ($get) {
+                        if (! blank(session('tenant_id'))) {
+                            return session('tenant_id');
+                        }
+
                         $subnetId = $get('subnet_id');
                         if (! $subnetId) {
                             return null;
@@ -63,6 +68,9 @@ class IpAddressResource extends Resource
                         return $subnet->customer_id ?? optional($subnet->vlan)->customer_id ?? null;
                     })
                     ->live()
+                    // If a tenant is selected, hide the control and ensure it's persisted
+                    ->hidden(fn () => ! blank(session('tenant_id')))
+                    ->dehydratedWhenHidden()
                     ->afterStateUpdated(fn ($set) => $set('location_id', null)),
             ], IpAddressSchema::schema(), [
                 // Keep only the fields necessary for manual IP management

@@ -26,7 +26,7 @@ class DevicesRelationManager extends RelationManager
             ])
             ->headerActions([
                 // allow quick creation as before
-                CreateAction::make()
+                CreateAction::make()->slideOver()
                     ->relationship(fn () => $this->getRelationship())
                     ->label('Create device'),
 

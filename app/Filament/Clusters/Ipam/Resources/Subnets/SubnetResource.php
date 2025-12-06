@@ -70,6 +70,9 @@ class SubnetResource extends Resource
                 ->nullable()
                 ->label('Customer')
                 ->helperText('Automatically inherited from VLAN if selected')
+                // Default to tenant if present and hide the control in tenant mode
+                ->default(fn () => session('tenant_id'))
+                ->hidden(fn () => ! blank(session('tenant_id')))
                 ->dehydratedWhenHidden(),
             
             TextInput::make('cidr')
@@ -167,6 +170,7 @@ class SubnetResource extends Resource
     {
         return [
             'index' => Pages\ListSubnets::route('/'),
+            'create' => Pages\CreateSubnet::route('/create'),
             'view' => Pages\ViewSubnet::route('/{record}'),
             'edit' => Pages\EditSubnet::route('/{record}/edit'),
         ];

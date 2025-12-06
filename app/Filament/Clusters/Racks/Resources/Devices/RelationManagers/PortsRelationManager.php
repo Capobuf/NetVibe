@@ -10,7 +10,7 @@ use Filament\Forms;
 use Filament\Schemas\Schema;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
-use Filament\Tables\Actions\Action as TableAction;
+use Filament\Actions\Action as TableAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
@@ -34,7 +34,7 @@ class PortsRelationManager extends RelationManager
 
     public function table(Table $table): Table
     {
-        return $table
+        $table = $table
             ->recordTitleAttribute('name')
             // Note: Filament documentation does not document "contentGrid" for table()
             // Use standard columns and actions; layout can be done using ViewColumn or
@@ -53,7 +53,15 @@ class PortsRelationManager extends RelationManager
                         default => 'gray',
                     }),
             ])
-            ->actions([
+            ;
+        // Defensive guard: if the Filament Action class is unavailable for
+        // any reason (version mismatch, missing vendor), avoid registering
+        // the actions to prevent a fatal ClassNotFound error at runtime.
+        if (! class_exists(\Filament\Actions\Action::class)) {
+            return $table;
+        }
+
+        return $table->actions([
                 TableAction::make('connect')
                     ->icon('heroicon-m-link')
                     ->color('primary')

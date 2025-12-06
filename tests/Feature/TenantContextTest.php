@@ -90,6 +90,69 @@ it('creates scan agent for active tenant automatically', function () {
     ]);
 });
 
+it('creates device in tenant mode and sets customer from session', function () {
+    $this->actingAs(createAdminUser());
+
+    $customer = Customer::factory()->create();
+
+    $deviceModel = \App\Models\DeviceModel::create([
+        'brand' => 'ACME',
+        'model' => 'X1',
+        'type' => \App\Enums\DeviceType::Router->value,
+        'u_size' => 1,
+        'ethernet_ports' => 0,
+        'sfp_ports' => 0,
+    ]);
+
+    $this->withSession(['tenant_id' => $customer->id]);
+
+    $component = livewire(CreateDevice::class)
+        ->set('data.hostname', 'tenant-device.example')
+        ->set('data.device_model_id', $deviceModel->id)
+        ->call('create')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('devices', [
+        'hostname' => 'tenant-device.example',
+        'customer_id' => $customer->id,
+    ]);
+});
+
+it('creates device and inherits customer from rack when provided', function () {
+    $this->actingAs(createAdminUser());
+
+    $customer = Customer::factory()->create();
+    $location = \App\Models\Location::create([
+        'customer_id' => $customer->id,
+        'name' => 'Tenant Location',
+    ]);
+    $rack = \App\Models\Rack::create(['name' => 'T-Rack', 'units' => 42, 'location_id' => $location->id, 'customer_id' => $customer->id]);
+
+    $deviceModel = \App\Models\DeviceModel::create([
+        'brand' => 'ACME',
+        'model' => 'X2',
+        'type' => \App\Enums\DeviceType::Router->value,
+        'u_size' => 1,
+        'ethernet_ports' => 0,
+        'sfp_ports' => 0,
+    ]);
+
+    $this->withSession(['tenant_id' => null]);
+
+    $component = livewire(CreateDevice::class)
+        ->set('data.hostname', 'rack-device.example')
+        ->set('data.device_model_id', $deviceModel->id)
+        ->set('data.rack_id', $rack->id)
+        ->call('create')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('devices', [
+        'hostname' => 'rack-device.example',
+        'customer_id' => $customer->id,
+        'rack_id' => $rack->id,
+    ]);
+});
+
 // Helper for an admin user in tests
 function createAdminUser()
 {

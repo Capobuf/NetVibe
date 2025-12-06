@@ -10,7 +10,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
-use Filament\Tables\Actions\ViewAction;
+use Filament\Actions\ViewAction;
 
 class AgentLogsRelationManager extends RelationManager
 {
@@ -42,11 +42,11 @@ class AgentLogsRelationManager extends RelationManager
                     ->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
-            ->actions([
+            ->when(class_exists(\Filament\Actions\ViewAction::class), fn ($t) => $t->actions([
                 ViewAction::make()
                     ->modalHeading('Log Details')
                     ->modalContent(fn (AgentLog $record) => view('filament.modals.agent-log-details', ['record' => $record])),
-            ])
+            ]))
             ->headerActions([])
             ->emptyStateHeading('No logs yet')
             ->emptyStateDescription('This agent has not sent any logs.');

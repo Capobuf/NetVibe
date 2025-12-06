@@ -71,7 +71,6 @@ class DeviceForm
                         return $rack->getKey();
                     })
                     ->createOptionModalHeading('Create Rack')
-                    ->required()
                     ->options(function ($get) {
                         $query = \App\Models\Rack::query();
 

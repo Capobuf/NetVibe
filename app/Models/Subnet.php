@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Services\IpConversionService;
+use App\Models\Concerns\TenantAware;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -13,6 +14,7 @@ class Subnet extends Model
 {
     use HasFactory;
     use SoftDeletes;
+    use TenantAware;
     protected $fillable = [
         'subnet', 'mask', 'cidr', 'name', 'section_id', 'description', 'linked_subnet_id',
         'firewall_address_object', 'master_subnet_id', 'allow_requests',

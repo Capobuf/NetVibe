@@ -23,6 +23,22 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        \Filament\Support\Facades\FilamentView::registerRenderHook(
+            \Filament\View\PanelsRenderHook::SIDEBAR_NAV_START,
+            function () {
+                // Render the Livewire TenantSwitcher safely; if Livewire mount fails fall back to view
+                    // Render the livewire component via Blade so the Livewire lifecycle (mount)
+                    // runs correctly and the component can initialize from session on full page loads.
+                    try {
+                        return \Illuminate\Support\Facades\Blade::render("@livewire('tenant-switcher')");
+                    } catch (\Throwable $e) {
+                        // If Blade rendering fails, fallback to rendering the view directly with options
+                        $options = \App\Models\Customer::query()->orderBy('name')->pluck('name', 'id')->toArray();
+                        return view('livewire.tenant-switcher', ['options' => $options])->render();
+                    }
+            }
+        );
+
         return $panel
             ->default()
             ->id('admin')

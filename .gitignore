@@ -38,7 +38,3 @@ storage/logs/*.log
 .project
 .settings
 .buildpath
-
-**/caddy
-frankenphp
-frankenphp-worker.php

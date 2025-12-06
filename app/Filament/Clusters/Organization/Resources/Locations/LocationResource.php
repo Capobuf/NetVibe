@@ -37,11 +37,13 @@ class LocationResource extends Resource
                 ->relationship('customer', 'name')
                 ->searchable()
                 ->preload()
-                ->required()
-                ->label('Customer')
+                // Default to the session tenant when set, hide and persist in tenant mode
                 ->default(fn () => session('tenant_id'))
                 ->hidden(fn () => ! blank(session('tenant_id')))
-                ->dehydratedWhenHidden(),
+                ->dehydratedWhenHidden()
+                ->live()
+                ->required(fn () => blank(session('tenant_id')))
+                ->label('Customer'),
             Textarea::make('address')->rows(3)->nullable(),
         ])->columns(1);
     }

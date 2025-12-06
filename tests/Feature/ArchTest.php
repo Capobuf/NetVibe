@@ -28,4 +28,58 @@ class ArchTest extends TestCase
     {
         $this->assertNotContains(TenantAware::class, class_uses(DeviceModel::class));
     }
+
+    public function test_does_not_reference_legacy_filament_forms_layout_components()
+    {
+        $files = \Illuminate\Support\Facades\File::allFiles(app_path());
+
+        $forbidden = [
+            'Filament\\Forms\\Components\\Group',
+            'Filament\\Forms\\Components\\Section',
+            'Filament\\Forms\\Components\\Grid',
+            'Filament\\Forms\\Components\\Split',
+            'Filament\\Forms\\Components\\Tabs',
+        ];
+
+        foreach ($files as $file) {
+            $path = $file->getRealPath();
+
+            if (! str_ends_with($path, '.php')) {
+                continue;
+            }
+
+            $content = file_get_contents($path);
+
+            foreach ($forbidden as $pattern) {
+                if (str_contains($content, $pattern)) {
+                    $this->fail("Found forbidden legacy Filament Forms layout usage [{$pattern}] in file: " . $file->getRelativePathname());
+                }
+            }
+        }
+
+        $this->assertTrue(true);
+    }
+
+    public function test_app_filament_uses_schemas_group_namespace()
+    {
+        // Basic positive check: ensure at least one file in app/Filament references
+        // Filament\Schemas\Components\Group (so we don't ban the layout in total)
+        $files = \Illuminate\Support\Facades\File::allFiles(app_path('Filament'));
+        $found = false;
+
+        foreach ($files as $file) {
+            $path = $file->getRealPath();
+            if (! str_ends_with($path, '.php')) {
+                continue;
+            }
+
+            $content = file_get_contents($path);
+            if (str_contains($content, 'Filament\\Schemas\\Components\\Group') || str_contains($content, 'Filament\\Schemas\\Components\\Section') || str_contains($content, 'Filament\\Schemas\\Components\\Grid')) {
+                $found = true;
+                break;
+            }
+        }
+
+        $this->assertTrue($found, 'Expected at least one file in app/Filament to use Filament\\Schemas\\Components\Group/Section/Grid');
+    }
 }

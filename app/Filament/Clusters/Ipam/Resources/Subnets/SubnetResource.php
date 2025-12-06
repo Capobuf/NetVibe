@@ -67,13 +67,20 @@ class SubnetResource extends Resource
             Select::make('customer_id')
                 ->relationship('customer', 'name')
                 ->searchable()
-                ->nullable()
                 ->label('Customer')
                 ->helperText('Automatically inherited from VLAN if selected')
                 // Default to tenant if present and hide the control in tenant mode
                 ->default(fn () => session('tenant_id'))
                 ->hidden(fn () => ! blank(session('tenant_id')))
-                ->dehydratedWhenHidden(),
+                ->dehydratedWhenHidden()
+                // In God mode the field must be visible, required and reactive
+                ->live()
+                ->required(fn () => blank(session('tenant_id')))
+                ->afterStateUpdated(function ($state, callable $set) {
+                    // Changing customer should clear any dependent selections
+                    $set('vlan_id', null);
+                    $set('location_id', null);
+                }),
             
             TextInput::make('cidr')
                 ->required()

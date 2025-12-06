@@ -8,14 +8,28 @@ use Filament\Schemas\Schema;
 
 class DeviceForm
 {
-    public static function configure(Schema $schema): Schema
+    /**
+     * Return the canonical components array used by this schema.
+     * This allows other code (CreateAction forms, tests) to reuse the same
+     * definition without duplicating the component tree.
+     *
+     * @return array
+     */
+    public static function schema(): array
     {
-        return $schema
-            ->components([
-                // ---- Location filters (virtual helpers - not persisted on Device) ----
+        return [
+            // ---- Tenant-aware customer field ----
                 Select::make('customer_id')
-                    ->label('Filter by Customer')
-                    ->dehydrated(false)
+                    ->label('Customer')
+                    // Persist the customer id when the field is hidden (tenant mode)
+                    ->dehydratedWhenHidden()
+                    ->live()
+                    ->searchable()
+                    ->preload()
+                    // When in tenant mode default and hide the field
+                    ->default(fn () => session('tenant_id'))
+                    ->hidden(fn () => ! blank(session('tenant_id')))
+                    ->nullable()
                     ->live()
                     ->searchable()
                     ->preload()
@@ -23,7 +37,7 @@ class DeviceForm
                     ->default(fn () => session('tenant_id'))
                     ->hidden(fn () => ! blank(session('tenant_id')))
                     ->options(function () {
-                        return \App\Models\Customer::query()->pluck('name', 'id');
+                        return \App\Models\Customer::query()->orderBy('name')->pluck('name', 'id');
                     })
                     ->afterStateUpdated(fn ($set) => $set('location_filter_id', null)),
 
@@ -48,7 +62,28 @@ class DeviceForm
                 
 
                 Select::make('rack_id')
-                    ->relationship('rack', 'name')
+                    ->options(function ($get) {
+                        $query = \App\Models\Rack::query();
+
+                        // Attempt to scope using location filter or customer if provided
+                        if ($locationId = $get('location_filter_id')) {
+                            $query->where('location_id', $locationId);
+                        } elseif ($customerId = $get('customer_id')) {
+                            $query->where(function ($q) use ($customerId) {
+                                $q->where('customer_id', $customerId)
+                                  ->orWhereIn('location_id', function ($q2) use ($customerId) {
+                                      $q2->from('locations')->select('id')->where('customer_id', $customerId);
+                                  });
+                            });
+                        }
+
+                        $defaultRackId = request()->query('rack_id');
+                        if (! empty($defaultRackId)) {
+                            $query->orWhere('id', $defaultRackId);
+                        }
+
+                        return $query->orderBy('name')->pluck('name', 'id');
+                    })
                     ->searchable()
                     ->preload()
                     ->label('Rack')
@@ -58,10 +93,14 @@ class DeviceForm
                             TextInput::make('name')->required(),
                             TextInput::make('units')->numeric()->default(42),
                             Select::make('customer_id')
-                                ->relationship('customer', 'name')
+                                ->options(function () {
+                                    return \App\Models\Customer::query()->orderBy('name')->pluck('name', 'id');
+                                })
                                 ->default(fn () => $get('customer_id')),
                             Select::make('location_id')
-                                ->relationship('location', 'name')
+                                ->options(function () {
+                                    return \App\Models\Location::query()->orderBy('name')->pluck('name', 'id');
+                                })
                                 ->default(fn () => $get('location_filter_id') ?? $get('location_id')),
                             TextInput::make('description')->default(null),
                         ];
@@ -70,40 +109,13 @@ class DeviceForm
                         $rack = \App\Models\Rack::create($data);
                         return $rack->getKey();
                     })
-                    ->createOptionModalHeading('Create Rack')
-                    ->options(function ($get) {
-                        $query = \App\Models\Rack::query();
-
-                        // keep an explicit location filter if provided by the UI
-                        $defaultRackId = request()->query('rack_id');
-
-                        if ($locationId = $get('location_filter_id')) {
-                            $query->where('location_id', $locationId);
-                        } elseif ($customerId = $get('customer_id')) {
-                            // include racks that belong directly to the selected customer
-                            // OR racks whose location belongs to the selected customer
-                            $query->where(function ($q) use ($customerId) {
-                                $q->where('customer_id', $customerId)
-                                  ->orWhereIn('location_id', function ($q2) use ($customerId) {
-                                      $q2->from('locations')->select('id')->where('customer_id', $customerId);
-                                  });
-                            });
-                        }
-
-                        // ensure the default rack_id passed via request remains selectable
-                        if (! empty($defaultRackId)) {
-                            $query->orWhere('id', $defaultRackId);
-                        }
-
-                        return $query->pluck('name', 'id');
-                    }),
+                    ->createOptionModalHeading('Create Rack'),
 
                 // ---- Device details ----
                 Select::make('device_model_id')
                     ->label('Hardware Model')
-                    ->relationship('deviceModel')
-                    ->getOptionLabelFromRecordUsing(fn ($record): string => trim(sprintf('%s %s', $record->brand ?? '', $record->model ?? '')))
-                    ->searchable(['brand', 'model'])
+                    ->options(fn () => \App\Models\DeviceModel::query()->orderBy('brand')->orderBy('model')->get()->mapWithKeys(fn($r) => [$r->id => trim(sprintf('%s %s', $r->brand ?? '', $r->model ?? ''))])->toArray())
+                    ->searchable()
                     ->preload()
                     ->required()
                     ->createOptionForm([
@@ -160,6 +172,11 @@ class DeviceForm
                     ->preload()
                     ->default(null)
                     ->disabled(fn ($get) => ! ($get('customer_id') || $get('location_filter_id'))),
-            ]);
+                    ];
     }
+
+                public static function configure(Schema $schema): Schema
+                {
+                return $schema->components(self::schema());
+                }
 }

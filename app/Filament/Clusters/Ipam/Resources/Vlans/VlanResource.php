@@ -43,11 +43,14 @@ class VlanResource extends Resource
                     ->relationship('customer', 'name')
                     ->preload()
                     ->searchable()
-                    ->nullable()
+                    // Default to session tenant when present and hide the control in tenant mode
                     // If a tenant is selected, default to it and hide the field
                     ->default(fn () => session('tenant_id'))
                     ->hidden(fn () => ! blank(session('tenant_id')))
-                    ->dehydratedWhenHidden(),
+                    ->dehydratedWhenHidden()
+                    ->live()
+                    ->required(fn () => blank(session('tenant_id')))
+                    ->afterStateUpdated(fn ($state, callable $set) => $set('location_id', null)),
                 TextInput::make('description')->nullable(),
             ])->columns(1),
         ]);

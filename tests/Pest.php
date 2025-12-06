@@ -11,13 +11,28 @@
 |
 */
 
-// Safety guard: prevent running tests against non-test database.
-// If `DB_DATABASE` is not `netvibe-test`, abort to avoid accidental data loss.
-if ((getenv('DB_DATABASE') ?: env('DB_DATABASE')) !== 'netvibe-test') {
-    fwrite(STDERR, "Refusing to run tests: DB_DATABASE is not set to 'netvibe-test'.\n");
-    fwrite(STDERR, "Set `DB_DATABASE=netvibe-test` when running tests.\n");
-    exit(1);
-}
+// Force test DB configuration to the known test instance so tests always run
+// against the `netvibe-db` test database. This avoids needing to export env vars
+// externally in CI/local environment. Be careful: this intentionally overrides
+// environment and will make tests attempt to connect to the named host.
+putenv('DB_CONNECTION=mysql');
+putenv('DB_DATABASE=netvibe-test');
+putenv('DB_HOST=netvibe-db');
+putenv('DB_USERNAME=root');
+putenv('DB_PASSWORD=secret');
+
+// Also populate superglobals so code using env('...') or $_ENV/$_SERVER sees them
+$_ENV['DB_CONNECTION'] = 'mysql';
+$_ENV['DB_DATABASE'] = 'netvibe-test';
+$_ENV['DB_HOST'] = 'netvibe-db';
+$_ENV['DB_USERNAME'] = 'root';
+$_ENV['DB_PASSWORD'] = 'secret';
+
+$_SERVER['DB_CONNECTION'] = 'mysql';
+$_SERVER['DB_DATABASE'] = 'netvibe-test';
+$_SERVER['DB_HOST'] = 'netvibe-db';
+$_SERVER['DB_USERNAME'] = 'root';
+$_SERVER['DB_PASSWORD'] = 'secret';
 
 uses(Tests\TestCase::class)
     ->beforeEach(function () {
@@ -58,6 +73,19 @@ function something()
     // ..
 }
 // End of Pest helpers
+
+// Common test helper: create an admin user for test suites
+// Guard the helper against multiple declarations so test files that accidentally
+// declare the same helper don't cause a fatal error when the whole suite runs.
+if (! function_exists('createAdminUser')) {
+    function createAdminUser()
+    {
+    // Create and return a basic user for use as an authenticated admin in tests.
+    // If the project uses roles, this helper can be extended to give the user
+    // an admin role. For now return a simple factory-created user.
+    return \App\Models\User::factory()->create();
+    }
+}
 
 // Provide a minimal Pest\Livewire\livewire() helper when the Pest livewire plugin is not installed.
 // Keep tests portable across environments by loading a small shim file which declares the

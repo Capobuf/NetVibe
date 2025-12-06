@@ -38,6 +38,15 @@ class IpAddressResource extends Resource
             ->components(array_merge([
                 Select::make('subnet_id')
                     ->relationship('subnet')
+                    ->reactive()
+                    ->afterStateUpdated(function ($state, callable $set) {
+                        if ($state) {
+                            $subnet = \App\Models\Subnet::with('vlan')->find($state);
+                            if ($subnet && $subnet->customer_id) {
+                                $set('customer_id', $subnet->customer_id);
+                            }
+                        }
+                    })
                     ->getOptionLabelFromRecordUsing(fn ($record) => $record->cidr ?? app(\App\Services\IpConversionService::class)->toCidr((string) $record->subnet, (int) $record->mask))
                     ->searchable()
                     ->preload()
@@ -71,6 +80,9 @@ class IpAddressResource extends Resource
                     // If a tenant is selected, hide the control and ensure it's persisted
                     ->hidden(fn () => ! blank(session('tenant_id')))
                     ->dehydratedWhenHidden()
+                    // Make the field required when not operating in tenant mode
+                    ->required(fn () => blank(session('tenant_id')))
+                    // Clearing customer should clear the location selection
                     ->afterStateUpdated(fn ($set) => $set('location_id', null)),
             ], IpAddressSchema::schema(), [
                 // Keep only the fields necessary for manual IP management

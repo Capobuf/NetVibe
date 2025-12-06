@@ -153,10 +153,5 @@ it('creates device and inherits customer from rack when provided', function () {
     ]);
 });
 
-// Helper for an admin user in tests
-function createAdminUser()
-{
-    // Use existing user factory; create a user with admin role (if roles are used).
-    // Fallback to creating a plain user.
-    return \App\Models\User::factory()->create();
-}
+// The createAdminUser helper lives in tests/Pest.php to avoid duplicated helpers
+// across individual test files.

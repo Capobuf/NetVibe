@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use Tests\TestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Models\Customer;
-use App\Models\Vrf;
 use App\Models\Subnet;
 use App\Models\IpAddress;
 use App\Services\IpConversionService;
@@ -25,10 +24,9 @@ class IpAddressesRelationManagerTest extends TestCase
     public function test_ipv4_is_valid_when_not_present_in_subnet(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '192.168.100.0/24',
         ]);
 
@@ -42,10 +40,9 @@ class IpAddressesRelationManagerTest extends TestCase
     public function test_ipv6_is_rejected(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '192.168.100.0/24',
         ]);
 
@@ -55,11 +52,10 @@ class IpAddressesRelationManagerTest extends TestCase
     public function test_duplicate_ip_is_rejected(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
 
         // Use a distinct subnet so any prefilled IPs from other tests do not collide
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '10.5.100.0/24',
         ]);
 

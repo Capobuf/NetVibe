@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\L2Domain;
+use App\Models\Customer;
 use App\Models\Subnet;
 use App\Models\Vlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,31 +17,31 @@ class Layer2SchemaTest extends TestCase
 
     public function test_layer2_tables_and_columns_exist(): void
     {
-        $this->assertTrue(Schema::hasTable('l2_domains'));
+        // L2 domains deprecated — ensure VLAN and customer columns exist
         $this->assertTrue(Schema::hasTable('vlans'));
         $this->assertTrue(Schema::hasColumn('subnets', 'vlan_id'));
+        $this->assertTrue(Schema::hasColumn('subnets', 'customer_id'));
     }
 
     public function test_relations_between_l2_domain_vlan_and_subnet(): void
     {
-        $l2 = L2Domain::create(['name' => 'test-l2', 'description' => 'desc']);
+        $customer = Customer::factory()->create();
 
         $vlan = Vlan::create([
-            'l2_domain_id' => $l2->id,
+            'customer_id' => $customer->id,
             'number' => 200,
             'name' => 'vlan200',
         ]);
 
-        $vrf = \App\Models\Vrf::factory()->create();
-
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '192.0.2.0/24',
             'vlan_id' => $vlan->id,
             'name' => 'subnet-cidr',
         ]);
 
         $this->assertSame($vlan->id, $subnet->vlan->id);
-        $this->assertCount(1, $l2->vlans);
+        $this->assertCount(1, $customer->vlans);
+        $this->assertCount(1, $customer->subnets);
     }
 }

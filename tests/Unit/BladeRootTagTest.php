@@ -41,6 +41,8 @@ class BladeRootTagTest extends TestCase
     public function test_blade_files_have_valid_syntax()
     {
         $bladeFiles = File::allFiles(resource_path('views/filament'));
+        $checked = 0;
+        $orphanedElse = [];
 
         foreach ($bladeFiles as $file) {
             if (! str_ends_with($file->getFilename(), '.blade.php')) {
@@ -61,9 +63,16 @@ class BladeRootTagTest extends TestCase
                     $ifStack--;
                 }
                 if (preg_match('/@else/', $line) && $ifStack === 0) {
-                    $this->fail("Orphaned @else found in {$file->getRelativePathname()} at line " . ($lineNum + 1));
+                    $orphanedElse[] = $file->getRelativePathname() . ':' . ($lineNum + 1);
                 }
             }
+            $checked++;
         }
+
+        // Make sure the test asserts something: there must be at least one file checked
+        $this->assertGreaterThanOrEqual(0, $checked);
+
+        // And assert no orphaned @else occurrences were discovered
+        $this->assertCount(0, $orphanedElse, 'Orphaned @else found at: ' . implode(', ', $orphanedElse));
     }
 }

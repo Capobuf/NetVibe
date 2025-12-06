@@ -15,8 +15,10 @@ class PurgeEmptyIpsMigrationTest extends TestCase
     {
         $ipService = app(\App\Services\IpConversionService::class);
 
+        $customer = \App\Models\Customer::factory()->create();
+
         $subnet = Subnet::create([
-            'vrf_id' => \App\Models\Vrf::factory()->create(['customer_id' => \App\Models\Customer::factory()->create()])->id,
+            'customer_id' => $customer->id,
             'subnet' => $ipService->toDecimal('192.168.77.0'),
             'mask' => 29,
         ]);

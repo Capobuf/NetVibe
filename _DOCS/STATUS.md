@@ -9,10 +9,10 @@ All internal code, container slugs and primary UI strings have been rebranded fr
 
 ## 🚧 Current Work — ROADMAP V2.0 (Final Scope)
 - **Plan:** The consolidated Roadmap V2.0 (Final Scope) is approved and committed to `_DOCS/ROADMAP.md`.
-- **Next Block:** EPIC 1 — GENESIS (FrankenPHP/Octane migration and infra hardening) is the immediate implementation priority (critical path for v2.0 rollout).
+- **Next Block:** EPIC 1 — GENESIS (Nginx stack consolidation and infra hardening) is the immediate implementation priority (critical path for v2.0 rollout).
 
-## 🏗️ Architecture & Runtime
-- **Runtime migration (Critical):** Application migrated to FrankenPHP (dunglas/frankenphp:php8.4) and runs with Laravel Octane, replacing the previous Nginx + FPM split — single high-performance container model.
+- ## 🏗️ Architecture & Runtime
+- **Stack:** Docker (Nginx + PHP 8.4 FPM) is the declared runtime for production images. CI/CD and docs updated to reflect Nginx + FPM; Octane/FrankenPHP references removed unless an intentional migration is planned.
 - **Proxy & TLS:** `TrustProxies` configured to work behind reverse proxies (Nginx Proxy Manager, Cloudflare) and preserve HTTPS header trust when needed.
 - **Soft‑Tenancy:** Soft multi‑tenancy model enabled — global tenant selector with session-scoped `current_tenant_id`; NULL tenant behaves as God Mode (shows all tenants).
 

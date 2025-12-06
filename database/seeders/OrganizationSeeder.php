@@ -4,7 +4,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\Customer;
 use App\Models\Location;
-use App\Models\Vrf;
+// Vrf removed — no longer used in seeders
 
 class OrganizationSeeder extends Seeder
 {
@@ -29,13 +29,7 @@ class OrganizationSeeder extends Seeder
                 'name' => $customer->name . ' Branch',
                 'address' => 'Via Secondaria 2, Città',
             ]);
-            // Default VRF
-            Vrf::create([
-                'customer_id' => $customer->id,
-                'name' => $customer->name . ' Default VRF',
-                'rd' => null,
-                'description' => 'VRF di default per ' . $customer->name,
-            ]);
+            // VRF concept removed — nothing to seed here
         }
     }
 }

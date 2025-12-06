@@ -21,9 +21,8 @@ class ResourceLabelNormalizationTest extends TestCase
         // Ensure Vlan resource exposes edit page route
         $this->assertStringContainsString("'edit' => Pages\\EditVlan::route('/{record}/edit')", $vlan);
 
-        $l2 = file_get_contents(app_path('Filament/Clusters/Ipam/Resources/L2Domains/L2DomainResource.php'));
-        $this->assertStringContainsString('protected static ?string $navigationLabel = \'L2 Domains\'', $l2);
-        $this->assertStringContainsString('protected static ?string $modelLabel = \'L2 Domain\'', $l2);
+        // L2Domain resource removed — ensure resource file is not present
+        $this->assertFileDoesNotExist(app_path('Filament/Clusters/Ipam/Resources/L2Domains/L2DomainResource.php'));
         // Ensure Subnet resource exposes edit page route (Subnet check placed here for convenience)
         $subnet = file_get_contents(app_path('Filament/Clusters/Ipam/Resources/Subnets/SubnetResource.php'));
         $this->assertStringContainsString("'edit' => Pages\\EditSubnet::route('/{record}/edit')", $subnet);

@@ -49,57 +49,61 @@ docker-compose exec app php artisan filament:cache-components
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing (Safe local instructions)
 
-Esegui i test all'interno del container. Per coerenza con l'ambiente CI e le impostazioni di `phpunit.xml` i test usano MariaDB (database `netvibe_testing`) — non usare SQLite in-memory per i test dell'intera applicazione.
+Important: do not run the full test-suite against your production database. The test helper `RefreshDatabase` will recreate/drop tables and will destroy real data if pointed at a non-test DB.
 
-Passaggi consigliati per eseguire i test localmente con MariaDB (container):
+Recommended local approach (no extra containers required):
 
-1. Assicurati di avere `DB_DATABASE` impostato su `netvibe_testing` nella tua `.env` prima di avviare i container. Questo permette al servizio MariaDB di creare il database iniziale:
-
-```bash
-cp .env.example .env
-# Edit .env and set:
-# DB_DATABASE=netvibe_testing
-nano .env
-```
-
-2. Avvia i servizi Docker necessari (DB, Redis, App):
+1) Ensure your `.env` is configured to use the dedicated test database name `netvibe-test` before starting containers (or override the env for the test command). Example edit:
 
 ```bash
-docker compose up -d db redis app
+cp .env .env.local
+# Edit and set DB_DATABASE=netvibe-test
+nano .env.local
 ```
 
-3. (Opzionale) Se il database non è stato creato automaticamente — per esempio se `DB_DATABASE` era differente — crea il DB di test manualmente nella container DB:
+2) Start the necessary services (DB, Redis, App):
 
 ```bash
-docker compose exec db mysql -u root -p${DB_PASSWORD} -e "CREATE DATABASE IF NOT EXISTS netvibe_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+docker compose up -d netvibe-db netvibe-redis netvibe-web
 ```
 
-4. Esegui i test dentro il container `app` (ciò garantisce che la connessione punti al container DB):
+3) If the `netvibe-test` database does not exist, create it from the app container helper:
 
 ```bash
-docker compose exec app ./vendor/bin/pest --filter <TestFileOrPattern>
-# oppure
-docker compose exec app php artisan test
+# runs the PHP helper that creates `netvibe-test`
+docker compose exec netvibe-web php scripts/create_test_db.php
 ```
 
-Note:
-- `tests/TestCase.php` forza l'uso del database `netvibe_testing` in fase di test; ciò assicura l'isolamento dei test se il servizio MariaDB è correttamente in ascolto.
-- Se preferisci eseguire test in locale senza MariaDB (per singoli test più veloci), è possibile impostare un driver `sqlite` locale; tuttavia, il progetto e la CI usano MariaDB e gli integration tests sono scritti con dipendenze MySQL compatibili (es. SQL dialect e storage engine), quindi non è consigliato.
+4) Run the tests inside the app container. Two safe options:
 
-Se hai bisogno, posso aggiungere un breve script `scripts/run-tests.sh` che automatizza questi passaggi per ambienti di sviluppo.
+- Temporarily override the env var for the command (recommended when you can't change `.env`):
+
+```bash
+docker compose exec netvibe-web sh -c "DB_DATABASE=netvibe-test ./vendor/bin/pest"
+```
+
+- If you edited `.env` to set `DB_DATABASE=netvibe-test`, run normally inside the app container:
+
+```bash
+docker compose exec netvibe-web ./vendor/bin/pest
+```
+
+Safety note: we added a guard in `tests/Pest.php` that refuses to run the test suite unless `DB_DATABASE` equals `netvibe-test`. If you see a refusal message, set the env as shown above.
+
+If you prefer an automated helper, we can add `scripts/run-tests.sh` to wrap these steps.
 
 ---
 
 ## 📦 Troubleshooting
 
 **"Class not found" errors:**
-Run `docker compose exec app composer dump-autoload`
+Run `docker compose exec netvibe-web composer dump-autoload`
 
 **Database connection refused:**
 Ensure containers are running: `docker compose ps`
 
 ---
 
-**Last Updated:** 2025-12-02
+**Last Updated:** 2025-12-06

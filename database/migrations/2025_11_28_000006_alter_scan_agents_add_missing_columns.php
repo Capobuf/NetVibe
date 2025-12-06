@@ -14,21 +14,49 @@ return new class extends Migration
             return;
         }
 
-        Schema::table('scan_agents', function (Blueprint $table) {
+        // Attempt to add the missing columns in small guarded blocks. Some test/CI
+        // environments might trigger duplicate-add attempts due to parallel runs
+        // or older migrations already having applied these columns. We guard
+        // against duplicate column errors to make migrations idempotent.
+
+        try {
             if (! Schema::hasColumn('scan_agents', 'active')) {
-                $table->boolean('active')->default(true)->after('description');
+                Schema::table('scan_agents', function (Blueprint $table) {
+                    $table->boolean('active')->default(true)->after('description');
+                });
             }
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Ignore duplicate column race
+            if (stripos($e->getMessage(), 'Duplicate column') === false) {
+                throw $e;
+            }
+        }
 
+        try {
             if (! Schema::hasColumn('scan_agents', 'ip_address')) {
-                $table->string('ip_address')->nullable()->after('active');
+                Schema::table('scan_agents', function (Blueprint $table) {
+                    $table->string('ip_address')->nullable()->after('active');
+                });
             }
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (stripos($e->getMessage(), 'Duplicate column') === false) {
+                throw $e;
+            }
+        }
 
+        try {
             if (! Schema::hasColumn('scan_agents', 'last_seen')) {
                 // Keep this nullable to avoid forcing values during seed in older DBs
-                $table->timestamp('last_seen')->nullable()->after('ip_address');
-                $table->index('last_seen');
+                Schema::table('scan_agents', function (Blueprint $table) {
+                    $table->timestamp('last_seen')->nullable()->after('ip_address');
+                    $table->index('last_seen');
+                });
             }
-        });
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (stripos($e->getMessage(), 'Duplicate column') === false) {
+                throw $e;
+            }
+        }
     }
 
     public function down(): void

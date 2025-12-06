@@ -22,12 +22,16 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="mysql"/>
-        <env name="DB_HOST" value="db"/>
-        <env name="DB_PORT" value="3306"/>
-        <env name="DB_DATABASE" value="netvibe_testing"/>
-        <env name="DB_USERNAME" value="netvibe"/>
-        <env name="DB_PASSWORD" value="netvibe"/>
+           <!-- Use the internal Docker service name so tests run inside the container route to
+               the application DB. Use an explicit testing database name and defer username/password
+               to environment variables (or defaults) to avoid hardcoding credentials here. -->
+           <env name="DB_CONNECTION" value="mysql"/>
+           <env name="DB_HOST" value="netvibe-db"/>
+           <env name="DB_PORT" value="3306"/>
+        <env name="DB_DATABASE" value="netvibe-test"/>
+           <!-- Use placeholders so the container's environment / .env defines username and password. -->
+           <env name="DB_USERNAME" value="${DB_USERNAME}"/>
+           <env name="DB_PASSWORD" value="${DB_PASSWORD}"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

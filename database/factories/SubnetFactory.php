@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Subnet;
-use App\Models\Vrf;
+use App\Models\Customer;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class SubnetFactory extends Factory
@@ -19,7 +19,8 @@ class SubnetFactory extends Factory
         $mask = 24;
 
         return [
-            'vrf_id' => Vrf::factory(),
+            // tenant ownership moved to customer
+            'customer_id' => Customer::factory(),
             'subnet' => $ipService->toDecimal($ip),
             'mask' => $mask,
             // 'cidr' intentionally omitted to avoid invoking the typed setCidrAttribute on null

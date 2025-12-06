@@ -21,10 +21,9 @@ class IpPrefillMigrationTest extends TestCase
         $ipService = new IpConversionService();
 
         $customer = \App\Models\Customer::factory()->create();
-        $vrf = \App\Models\Vrf::factory()->create(['customer_id' => $customer->id]);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'subnet' => $ipService->toDecimal('10.10.10.0'),
             'mask' => 30,
             'description' => 'migration-test',
@@ -50,10 +49,9 @@ class IpPrefillMigrationTest extends TestCase
         $ipService = new IpConversionService();
 
         $customer2 = \App\Models\Customer::factory()->create();
-        $vrf2 = \App\Models\Vrf::factory()->create(['customer_id' => $customer2->id]);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf2->id,
+            'customer_id' => $customer2->id,
             'subnet' => $ipService->toDecimal('10.10.11.0'),
             'mask' => 30,
             'description' => 'migration-test-1970',

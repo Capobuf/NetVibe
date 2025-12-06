@@ -14,7 +14,7 @@ class IpAddressVisualGridTest extends TestCase
     public function test_grid_renders_for_small_subnet()
     {
         $subnet = Subnet::create([
-            'vrf_id' => \App\Models\Vrf::factory()->create(['customer_id' => \App\Models\Customer::factory()->create()])->id,
+            'customer_id' => \App\Models\Customer::factory()->create()->id,
             'cidr' => '192.168.200.0/29',
         ]);
 
@@ -29,7 +29,7 @@ class IpAddressVisualGridTest extends TestCase
     public function test_grid_disables_for_large_subnet()
     {
         $subnet = Subnet::create([
-            'vrf_id' => \App\Models\Vrf::factory()->create(['customer_id' => \App\Models\Customer::factory()->create()])->id,
+            'customer_id' => \App\Models\Customer::factory()->create()->id,
             'cidr' => '10.0.0.0/21',
         ]);
 

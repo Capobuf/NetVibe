@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\TenantAware;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Rack extends Model
 {
     use SoftDeletes;
+    use TenantAware;
 
     // Keep backward-compatible fields but honour the new schema fields
     protected $fillable = [

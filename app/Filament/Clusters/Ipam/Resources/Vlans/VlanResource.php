@@ -6,7 +6,6 @@ namespace App\Filament\Clusters\Ipam\Resources\Vlans;
 
 use App\Filament\Clusters\Ipam\IpamCluster;
 use App\Models\Vlan;
-use App\Models\L2Domain;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Section;
@@ -39,15 +38,7 @@ class VlanResource extends Resource
             Section::make('General')->schema([
                 TextInput::make('number')->numeric()->required()->label('VLAN ID'),
                 TextInput::make('name')->required()->maxLength(255),
-                Select::make('l2_domain_id')
-                    ->relationship('l2Domain', 'name')
-                    ->label('L2 Domain')
-                    ->preload()
-                    ->searchable()
-                    ->nullable()
-                    ->default(fn() => L2Domain::first()?->id)
-                    ->hidden(fn() => L2Domain::count() === 1)
-                    ->dehydratedWhenHidden(),
+                // L2Domain removed — VLANs are tenant-scoped by customer
                 Select::make('customer_id')->relationship('customer', 'name')->preload()->searchable()->nullable(),
                 TextInput::make('description')->nullable(),
             ])->columns(1),
@@ -60,7 +51,7 @@ class VlanResource extends Resource
             ->columns([
                 TextColumn::make('number')->sortable(),
                 TextColumn::make('name')->searchable()->sortable(),
-                TextColumn::make('l2Domain.name')->label('L2 Domain')->sortable(),
+                // L2Domain removed
                 TextColumn::make('customer.name')->label('Customer')->sortable(),
                 TextColumn::make('subnets_count')->label('Subnets')->sortable(),
             ])
@@ -72,7 +63,7 @@ class VlanResource extends Resource
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->with(['l2Domain', 'customer'])->withCount('subnets');
+        return parent::getEloquentQuery()->with(['customer'])->withCount('subnets');
     }
 
     public static function getPages(): array

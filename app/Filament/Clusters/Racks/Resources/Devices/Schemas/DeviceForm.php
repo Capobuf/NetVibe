@@ -71,15 +71,28 @@ class DeviceForm
                     ->required()
                     ->options(function ($get) {
                         $query = \App\Models\Rack::query();
-                        // prefer an explicit location filter coming from the UI filter, else fall back
-                        // to the customer's locations when present
+
+                        // keep an explicit location filter if provided by the UI
+                        $defaultRackId = request()->query('rack_id');
+
                         if ($locationId = $get('location_filter_id')) {
                             $query->where('location_id', $locationId);
                         } elseif ($customerId = $get('customer_id')) {
-                            $query->whereIn('location_id', function ($q) use ($customerId) {
-                                $q->from('locations')->select('id')->where('customer_id', $customerId);
+                            // include racks that belong directly to the selected customer
+                            // OR racks whose location belongs to the selected customer
+                            $query->where(function ($q) use ($customerId) {
+                                $q->where('customer_id', $customerId)
+                                  ->orWhereIn('location_id', function ($q2) use ($customerId) {
+                                      $q2->from('locations')->select('id')->where('customer_id', $customerId);
+                                  });
                             });
                         }
+
+                        // ensure the default rack_id passed via request remains selectable
+                        if (! empty($defaultRackId)) {
+                            $query->orWhere('id', $defaultRackId);
+                        }
+
                         return $query->pluck('name', 'id');
                     }),
 
@@ -130,7 +143,8 @@ class DeviceForm
                     ->numeric()
                     ->label('Rack Unit (U)')
                     ->minValue(1)
-                    ->maxValue(52),
+                    ->maxValue(52)
+                    ->disabled(fn ($get) => filled($get('rack_position'))),
                 // Keep a proper persisted location field if the Device model expects it; keep it after the details
                     Select::make('location_id')
                     ->relationship(

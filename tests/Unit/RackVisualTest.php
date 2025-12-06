@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Filament\Infolists\Components\RackVisual;
+use App\Filament\Clusters\Racks\Resources\Racks\RackResource;
 use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\Rack;
@@ -54,7 +54,7 @@ class RackVisualTest extends TestCase
             'rack_position' => 12,
         ]);
 
-        $units = RackVisual::buildUnits($rack);
+        $units = RackResource::buildUnits($rack);
 
         // Verify device at 10
         $this->assertArrayHasKey(10, $units);
@@ -62,9 +62,9 @@ class RackVisualTest extends TestCase
         $this->assertSame(2, $units[10]['span']);
         $this->assertSame($dev1->id, $units[10]['device']->id);
 
-        // The U above (11) should be 'spanned'
+        // The U above (11) should be 'ghost' (occupied by the spanning device)
         $this->assertArrayHasKey(11, $units);
-        $this->assertSame('spanned', $units[11]['type']);
+        $this->assertSame('ghost', $units[11]['type']);
 
         // Device at 12
         $this->assertArrayHasKey(12, $units);

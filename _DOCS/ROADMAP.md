@@ -1,50 +1,65 @@
 # 🗺️ NETVIBE ROADMAP (V2.0)
 
-## 📦 EPIC 1: GENESIS (Identity & Infrastructure)
-* **Goal:** Trasformare il progetto in "NetVibe" e adottare un'infrastruttura container singola ad alte prestazioni.
+## 📦 EPIC 1: GENESIS (Identity & Optimization)
+* **Goal:** Consolidare l'identità NetVibe e stabilizzare lo stack operativo: Nginx + PHP-FPM in container Docker.
     * **Task 1.1: Rebranding — DONE (2025-12-01):**
         * Rinomina `APP_NAME`, `composer.json` e Namespace principali in **NetVibe** (es. composer name → `netvibe/ipam`).
         * Pulizia riferimenti `phpIPAM` e `Modern IPAM` nel codice, commenti e configurazione interna. Container slugs aggiornati a `netvibe-*`.
-    * **Task 1.2:** **FrankenPHP/Octane Migration (CRITICAL):**
-        * **Dockerfile:** Sostituzione immagine con `dunglas/frankenphp:php8.4`.
-        * **Docker Compose:** Eliminazione servizio `webserver` (Nginx). Il servizio `app` espone direttamente la porta 80/443.
-        * **Octane:** Installazione `laravel/octane` per gestire il server application (lifecycle, worker bootstrap, static caches).
+    * **Task 1.2: Nginx Stack Consolidation:**
+        * Ufficializzare l'immagine runtime in produzione come `serversideup/php:8.4-fpm-nginx`.
+        * Rimuovere riferimenti attivi a Octane/FrankenPHP nella documentazione e `.env.example` a meno che non si pianifichi una migration coordinata.
+        * Aggiornare CI/CD smoke tests per verificare il comportamento sotto Nginx + FPM.
     * **Task 1.3: Proxy Trust:** Configurazione `TrustProxies` per supporto HTTPS dietro Nginx Proxy Manager/Cloudflare.
     * **Task 1.4: Structured Logging:** Configurazione Monolog per output JSON su `stdout` (Docker Native Logging).
+    * **Task 1.6 (Security Hardening):**
+        * **TRUSTED_PROXIES:** Non usare il wildcard `*` in produzione. Documentare e preferire una lista di CIDR/mask (es. load-balancer, proxy public IP ranges) via `TRUSTED_PROXIES` env var.
+        * **Rate Limiting:** Implementare rate limiting per gli endpoint agent (/api/v1/discovery/* e /api/v1/agent/*). Configurare soglie ragionevoli e policy per gestire burst e backoff.
+        * **Docs & Alerts:** Documentare il rischio di header spoofing e aggiungere monitor/alerting per anomalie sugli endpoint di ingest (frequenza, fail rate).
 
 ## 🔐 EPIC 2: ACCESS & MULTI-TENANCY
 * **Goal:** Implementare una "Soft Multi-tenancy" sicura e trasparente.
-    * **Task 2.1: Tenant Scope Infrastructure:**
-        * **Selector:** Implementare un selettore globale di Cliente nella Topbar (Filament Hook).
-        * **Session:** Salvare `current_tenant_id` in sessione.
-        * **Global Scope:** Applicare `TenantScope` a tutti i modelli principali (Subnet, Device, Rack).
-        * **Logic:** Se `current_tenant_id` è NULL -> Mostra TUTTO (God Mode).
+    * **Task 2.1: Tenant Scope Infrastructure (Hybrid):**
+        * **Trait:** Implementare un `TenantAware` trait che applica automaticamente `where('customer_id', session('tenant_id'))` sui modelli che lo usano.
+        * **Global Scope:** Applicare il trait ai modelli *tenant-owned* (Device, Rack, Subnet, Vlan) in modo che il filtro sia automatico nelle query Eloquent.
+        * **Exclusion:** I modelli *globali* (DeviceModel, Settings, User) devono rimanere senza `TenantAware` — accesso cross-tenant è intenzionale.
+        * **Override / Admin & Jobs:** Il trait deve permettere `withoutTenantScope()` (or `TenantAware::disable()` context) per job di background, task amministrativi e migrations backfill.
+        * **UI Selector & session:** Conservare il selettore cliente in UI (Topbar) che imposta `session('tenant_id')`; quando `tenant_id` è NULL l'utente in scope admin vede tutte le risorse (god-mode) con chiaro visual indicator.
     * **Task 2.2: Advanced Auth:**
         * **MFA:** Abilitare Filament Two-Factor Authentication (TOTP).
         * **Emergency:** Implementare comando CLI `netvibe:reset-mfa {email}` per recovery.
         * **Password Reset:** Implementare flow standard Laravel Fortify/UI.
 
-## 🔌 EPIC 3: PHYSICAL LAYER (The Cable Manager)
-* **Goal:** Gestione fisica dei collegamenti (Layer 1) sfruttando i dati esistenti.
-    * **Task 3.1: Schema "Ports & Links":**
-        * **Table `ports`:** `device_id`, `name` (es. "Gi1/0/1"), `type` (RJ45/SFP), `mac_address`.
-        * **Table `links`:** `port_a_id`, `port_b_id`, `cable_type_id`, `color`, `length`.
-        * **Table `cable_types`:** Catalogo cavi (Cat6, Fibra OM4, DAC) con colori HEX associati.
-    * **Task 3.2: Port Generation Logic:**
-        * **Action:** `GenerateDevicePortsAction`. Quando si crea un Device, leggere i campi esistenti `ethernet_ports` e `sfp_ports` dal `DeviceModel` associato.
-        * **Logic:** Generare automaticamente i record nella tabella `ports` (es. 24 porte Eth + 4 SFP) con naming standard.
-    * **Task 3.3: Rack View 2.0 (Interactive):**
-        * **Refactor:** Aggiornare `RackVisual` per renderizzare una Griglia CSS delle porte (basata sui record `ports`).
-        * **State:** Visualizzazione stato porta (Verde=Link, Grigio=Vuoto).
-    * **Task 3.4: Cable Manager (Livewire Component):**
-        * **UI:** Interfaccia "Click-to-Connect": seleziona Porta A -> Porta B -> Modale tipo Cavo -> Salva.
-    * **Task 3.5: Print & Documentation:**
-        * **PDF:** Generazione etichette cavi (Brother TZe style) con QR Code.
-        * **Connection Table:** Vista tabellare filtrabile di tutte le patch.
+## 🔌 EPIC 3: PHYSICAL LAYER (Filament Native)
+* **Goal:** Gestione del cablaggio utilizzando componenti nativi Filament (Forms, Actions, Infolists) invece di UI custom complesse.
+
+    * **Task 3.1: Schema "Ports & Links" (Foundation):**
+        * **Migration 1:** Tabella `cable_types` (id, name, color, category).
+        * **Migration 2:** Tabella `ports` (device_id, name, type, status).
+        * **Migration 3:** Tabella `links` (port_a_id, port_b_id, cable_type_id, color).
+
+    * **Task 3.2: Port Automation:**
+        * **Action:** `GenerateDevicePortsAction`. Alla creazione di un Device, genera N record nella tabella `ports` basandosi sui contatori `ethernet_ports` e `sfp_ports` del `DeviceModel`.
+        * **Logic:** Naming sequenziale standard (1, 2, 3... e SFP1, SFP2...).
+
+    * **Task 3.3: Rack View 2.0 (Infolist-Based):**
+        * **Refactor:** Aggiornare `RackVisual` per usare una Blade View semplificata che renderizza le porte come una griglia di **Filament Actions** o **Badges**.
+        * **Interaction:** Cliccando su una porta (Badge), si apre una `ManagePortAction` (Modale).
+
+    * **Task 3.4: Connection Workflow (The Form):**
+        * **UI:** Implementare l'azione di connessione come un Form Filament standard dentro la modale della porta.
+        * **Fields:**
+            1.  `Select::make('target_device_id')` (Searchable).
+            2.  `Select::make('target_port_id')` (Filtrato per mostrare solo porte libere del device scelto).
+            3.  `Select::make('cable_type_id')`.
+        * **Logic:** Creazione record nella tabella `links`.
+
+    * **Task 3.5: Connection Explorer:**
+        * Una Risorsa Filament standard `LinkResource` per vedere, filtrare ed esportare tutte le connessioni in formato tabellare.
 
 ## 🧪 EPIC 4: QUALITY & AI GUARDRAILS
 * **Goal:** Prevenire il degrado del codice.
-    * **Task 4.1: Pest Architecture Testing:**
+    * **Task 4.1: Pest Conversion (Legacy Cleanup):**
+        * Convertire i 42 file di test legacy di stile PHPUnit in Pest nativo.
         * Regola: "Controllers must not use Eloquent Models directly".
         * Regola: "No `dd`, `dump`, `ray` in production code".
         * Regola: "All source files must have `strict_types=1`".

@@ -15,6 +15,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
 use BackedEnum;
+use App\Filament\Clusters\Racks\Resources\Devices\RelationManagers\PortsRelationManager;
 
 class DeviceResource extends Resource
 {
@@ -40,7 +41,7 @@ class DeviceResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            PortsRelationManager::class,
         ];
     }
 

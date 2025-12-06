@@ -19,10 +19,9 @@ class SubnetPrefillDispatchTest extends TestCase
         $service = new IpConversionService();
 
         $customer = \App\Models\Customer::factory()->create();
-        $vrf = \App\Models\Vrf::factory()->create(['customer_id' => $customer->id]);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'subnet' => $service->toDecimal('10.10.0.0'),
             'mask' => 24,
         ]);
@@ -37,10 +36,9 @@ class SubnetPrefillDispatchTest extends TestCase
 
         $service = new IpConversionService();
         $customer2 = \App\Models\Customer::factory()->create();
-        $vrf2 = \App\Models\Vrf::factory()->create(['customer_id' => $customer2->id]);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf2->id,
+            'customer_id' => $customer2->id,
             'subnet' => $service->toDecimal('10.0.0.0'),
             'mask' => 21, // too large (mask < 22)
         ]);

@@ -13,7 +13,6 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Forms\Components\Select;
-use App\Models\Vrf;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -47,13 +46,7 @@ class SubnetResource extends Resource
     {
         // Ensure form uses only Forms components (no Schema layout components inside forms)
         return $schema->schema([
-            Select::make('vrf_id')
-                ->relationship('vrf', 'name')
-                ->required()
-                ->default(fn () => Vrf::first()?->id)
-                ->hidden(fn () => Vrf::count() === 1)
-                ->dehydratedWhenHidden()
-                ->label('VRF'),
+            // VRF removed: tenancy by customer. Customer selection remains nullable and can be inherited from VLAN.
 
             Select::make('vlan_id')
                 ->relationship('vlan', 'name')
@@ -76,8 +69,9 @@ class SubnetResource extends Resource
                 ->searchable()
                 ->nullable()
                 ->label('Customer')
-                ->helperText('Automatically inherited from VLAN if selected'),
-
+                ->helperText('Automatically inherited from VLAN if selected')
+                ->dehydratedWhenHidden(),
+            
             TextInput::make('cidr')
                 ->required()
                 ->label('CIDR')
@@ -123,7 +117,7 @@ class SubnetResource extends Resource
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->with(['vlan']);
+        return parent::getEloquentQuery()->with(['vlan', 'customer']);
     }
 
     public static function getRelations(): array
@@ -153,7 +147,7 @@ class SubnetResource extends Resource
                         \Filament\Infolists\Components\TextEntry::make('vlan.number')
                             ->label('VLAN')
                             ->badge(),
-                        \Filament\Infolists\Components\TextEntry::make('vrf.name')->label('VRF'),
+                        // VRF removed — no longer shown
                         \Filament\Infolists\Components\TextEntry::make('customer.name')->label('Customer'),
                         \Filament\Infolists\Components\TextEntry::make('utilization')
                             ->state(function ($record) {

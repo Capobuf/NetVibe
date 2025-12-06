@@ -11,6 +11,14 @@
 |
 */
 
+// Safety guard: prevent running tests against non-test database.
+// If `DB_DATABASE` is not `netvibe-test`, abort to avoid accidental data loss.
+if ((getenv('DB_DATABASE') ?: env('DB_DATABASE')) !== 'netvibe-test') {
+    fwrite(STDERR, "Refusing to run tests: DB_DATABASE is not set to 'netvibe-test'.\n");
+    fwrite(STDERR, "Set `DB_DATABASE=netvibe-test` when running tests.\n");
+    exit(1);
+}
+
 uses(Tests\TestCase::class)
     ->beforeEach(function () {
         // Chiama la funzione di setup del pannello prima di ogni test di Feature/Unit

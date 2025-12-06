@@ -14,7 +14,7 @@ class IpAddressVisualGridViewTest extends TestCase
     public function test_grid_view_contains_grid_classes_and_single_root()
     {
         $subnet = Subnet::create([
-            'vrf_id' => \App\Models\Vrf::factory()->create(['customer_id' => \App\Models\Customer::factory()->create()])->id,
+            'customer_id' => \App\Models\Customer::factory()->create()->id,
             'cidr' => '192.168.200.0/29',
         ]);
 

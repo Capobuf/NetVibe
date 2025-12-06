@@ -4,8 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use App\Models\Vrf;
-use App\Models\L2Domain;
+// VRF and L2Domain removed — no models to seed
 use App\Models\Customer;
 
 class SystemDefaultsSeeder extends Seeder
@@ -20,15 +19,6 @@ class SystemDefaultsSeeder extends Seeder
             ['contact_email' => null, 'notes' => 'Auto-created system owner']
         );
 
-        Vrf::firstOrCreate(
-            ['name' => 'Default'],
-            ['description' => 'System default VRF', 'customer_id' => $customer->getKey()]
-        );
-
-        // Ensure an L2 Domain exists so VLANs can default sensibly
-        L2Domain::firstOrCreate(
-            ['name' => 'Default'],
-            ['description' => 'System default L2 domain']
-        );
+        // VRF and L2Domain concepts removed — we only ensure the 'System' customer exists
     }
 }

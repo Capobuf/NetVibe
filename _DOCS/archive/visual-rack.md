@@ -50,7 +50,7 @@ This behaviour makes it fast to place devices into a rack from the visual repres
 If you prefer automated verification, the test `tests/Unit/RackVisualTest.php` validates the algorithm for the unit layout.
 
 ## 3) Notes
-- The infolist entry `RackVisual` renders device blocks only at their starting (bottom) U, and marks >1U upper units as "spanned" so that the visual shows correctly sized devices without duplication.
+- The infolist entry `RackVisual` renders device blocks only at their starting (bottom) U, and marks >1U upper units as "ghost" so that the visual shows correctly sized devices without duplication.
 - The view page is available at the Rack resource view (Filament UI) once you navigate to the record.
 
 ## 4) Dashboard

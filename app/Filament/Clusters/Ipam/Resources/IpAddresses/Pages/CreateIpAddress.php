@@ -29,4 +29,12 @@ class CreateIpAddress extends CreateRecord
             $this->form->fill($state);
         }
     }
+
+    /**
+     * Prefer returning to the previous URL (referrer) after creation when available.
+     */
+    protected function getRedirectUrl(): string
+    {
+        return $this->previousUrl ?? parent::getRedirectUrl();
+    }
 }

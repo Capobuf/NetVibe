@@ -15,12 +15,12 @@ it('can render the subnet list', function () {
 
 it('can create a subnet', function () {
     $user = User::factory()->create();
-    $vrf = \App\Models\Vrf::factory()->create();
+    $customer = \App\Models\Customer::factory()->create();
 
     // Create using model factory / Eloquent directly as a first-step Filament-compatible test
     \App\Models\Subnet::create([
         'cidr' => '10.0.0.0/24',
-        'vrf_id' => $vrf->id,
+        'customer_id' => $customer->id,
         'name' => 'Test Subnet',
     ]);
 

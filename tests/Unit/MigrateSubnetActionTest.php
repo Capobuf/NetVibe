@@ -7,7 +7,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use App\Models\Customer;
-use App\Models\Vrf;
 use App\Models\Subnet;
 use App\Models\IpAddress;
 use App\Services\IpConversionService;
@@ -30,10 +29,9 @@ class MigrateSubnetActionTest extends TestCase
     public function test_wipe_strategy_deletes_all_ips(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
-
+        
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '192.168.10.0/24',
         ]);
 
@@ -55,10 +53,9 @@ class MigrateSubnetActionTest extends TestCase
     public function test_prune_strategy_deletes_out_of_range_ips(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
-
+        
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '10.5.0.0/16',
         ]);
 
@@ -107,10 +104,9 @@ class MigrateSubnetActionTest extends TestCase
     public function test_remap_strategy_moves_ips_preserving_host_offsets(): void
     {
         $customer = Customer::create(['name' => 'cust']);
-        $vrf = Vrf::create(['customer_id' => $customer->id, 'name' => 'vrf1']);
 
         $subnet = Subnet::create([
-            'vrf_id' => $vrf->id,
+            'customer_id' => $customer->id,
             'cidr' => '192.168.100.0/24',
         ]);
 

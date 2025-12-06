@@ -18,13 +18,15 @@ abstract class TestCase extends BaseTestCase
         $app['config']->set('queue.default', 'sync');
         $app['config']->set('cache.default', 'array');
 
-        // Force tests to use the dedicated testing database credentials
-        $app['config']->set('database.default', 'mysql');
-        $app['config']->set('database.connections.mysql.host', env('DB_HOST', '127.0.0.1'));
-        $app['config']->set('database.connections.mysql.port', env('DB_PORT', 3306));
-        $app['config']->set('database.connections.mysql.database', 'netvibe_testing');
-        $app['config']->set('database.connections.mysql.username', 'netvibe');
-        $app['config']->set('database.connections.mysql.password', 'netvibe');
+        // Respect environment-driven configuration for tests. phpunit.xml and the container
+        // environment will provide DB_* variables when tests run inside Docker. We fallback to
+        // the current environment values so nothing is hard-coded here.
+        $app['config']->set('database.default', env('DB_CONNECTION', $app['config']->get('database.default')));
+        $app['config']->set('database.connections.mysql.host', env('DB_HOST', $app['config']->get('database.connections.mysql.host')));
+        $app['config']->set('database.connections.mysql.port', env('DB_PORT', $app['config']->get('database.connections.mysql.port')));
+        $app['config']->set('database.connections.mysql.database', env('DB_DATABASE', $app['config']->get('database.connections.mysql.database')));
+        $app['config']->set('database.connections.mysql.username', env('DB_USERNAME', $app['config']->get('database.connections.mysql.username')));
+        $app['config']->set('database.connections.mysql.password', env('DB_PASSWORD', $app['config']->get('database.connections.mysql.password')));
     }
 
     // NUOVA FUNZIONE: Bootstrappa il Pannello Admin di Filament

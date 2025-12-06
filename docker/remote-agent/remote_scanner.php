@@ -16,6 +16,13 @@ ini_set('error_log', 'php://stderr');
 $currentLogLevel = 'INFO'; // Default
 const LOG_LEVELS = ['INFO' => 1, 'WARNING' => 2, 'ERROR' => 3, 'CRITICAL' => 4];
 
+// Use composer autoload so we can rely on Symfony Process and IPLib
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+use Symfony\Component\Process\Process;
+use Symfony\Component\Process\ExecutableFinder;
+use IPLib\Factory as IPLibFactory;
+
 echo "[INFO] NetVibe Remote Agent starting...\n";
 
 // --- Configuration ---
@@ -27,6 +34,10 @@ if (!$apiUrl || !$apiKey) {
     error_log("[CRITICAL] IPAM_AGENT_API_URL or IPAM_AGENT_API_KEY not set. Exiting.");
     exit(1);
 }
+
+// Should we push logs to the remote API? We default to true except when explicitly disabled
+$rawPush = getenv('IPAM_AGENT_PUSH_LOGS');
+$pushLogs = $rawPush === null ? (getenv('APP_ENV') !== 'local') : (filter_var($rawPush, FILTER_VALIDATE_BOOLEAN));
 
 // Helper: HTTP Request (using stream_context for zero-dependency)
 function sendRequest(string $method, string $url, array $headers, ?string $body = null): array
@@ -73,7 +84,11 @@ function pushLog(string $level, string $message) {
         return;
     }
 
-    // 3. Remote Push (Try/Catch)
+    // 3. Remote Push (Try/Catch) — controlled by env/IPAM_AGENT_PUSH_LOGS
+    global $pushLogs;
+    if (! $pushLogs) {
+        return;
+    }
     try {
         $logUrl = rtrim($apiUrl, '/') . '/v1/agent/logs';
         $authHeader = 'Authorization: Bearer ' . $apiKey;
@@ -107,6 +122,15 @@ function pushLog(string $level, string $message) {
 // --- Startup Log ---
 pushLog('INFO', 'NetVibe Agent Starting...');
 
+$shouldStop = false;
+
+// Setup signal handling for graceful shutdown in long-running agent
+if (function_exists('pcntl_async_signals')) {
+    pcntl_async_signals(true);
+    pcntl_signal(SIGTERM, function () use (&$shouldStop) { $shouldStop = true; });
+    pcntl_signal(SIGINT, function () use (&$shouldStop) { $shouldStop = true; });
+}
+
 // --- CLI Arguments ---
 $runOnce = in_array('--once', $argv, true);
 
@@ -126,14 +150,22 @@ while (true) {
         
         $response = sendRequest('GET', $configUrl, $headers);
         
-        if ($response['status'] === 401 || $response['status'] === 403) {
+        // Allow tests to inject a deterministic config payload (bypass HTTP polling)
+        $shouldProcess = false;
+        if (getenv('IPAM_AGENT_TEST_SUBNETS')) {
+            $data = json_decode(getenv('IPAM_AGENT_TEST_SUBNETS'), true);
+            $shouldProcess = true;
+        } elseif ($response['status'] === 401 || $response['status'] === 403) {
             pushLog('CRITICAL', "API Key rejected (401/403). Exiting loop.");
             exit(1);
+        } elseif ($response['status'] >= 200 && $response['status'] < 300) {
+            $data = json_decode($response['body'], true);
+            $shouldProcess = true;
+        } else {
+            pushLog('ERROR', "Server returned status " . $response['status']);
         }
 
-        if ($response['status'] >= 200 && $response['status'] < 300) {
-            $data = json_decode($response['body'], true);
-            
+        if ($shouldProcess) {
             // 2. Config Update
             if (isset($data['log_level'])) {
                 $currentLogLevel = $data['log_level'];
@@ -149,18 +181,65 @@ while (true) {
                 $resultsPayload = [];
 
                 // 3. SCANNING (EXEC STUB)
+                // Use ExecutableFinder to locate fping if available
+                $finder = new ExecutableFinder();
+                // Allow tests to override fping location or explicitly disable it.
+                $overrideFping = getenv('IPAM_AGENT_FPING_PATH');
+                if ($overrideFping !== false) {
+                    // Explicit empty or NONE disables fping
+                    if ($overrideFping === '' || strtoupper($overrideFping) === 'NONE') {
+                        $fpingPath = null;
+                    } else {
+                        $fpingPath = $overrideFping;
+                    }
+                } else {
+                    $fpingPath = $finder->find('fping');
+                }
+
+                if (! $fpingPath) {
+                    pushLog('ERROR', 'fping executable not found on PATH; scanning skipped.');
+                }
+
                 foreach ($subnetsToScan as $subnetData) {
                     $cidr = $subnetData['cidr'] ?? 'unknown';
+
+                    // Validate CIDR properly using IPLib — robust for IPv4/IPv6
+                    $range = IPLibFactory::parseRangeString($cidr);
+                    if (! $range) {
+                        pushLog('WARNING', "Skipping invalid CIDR: {$cidr}");
+                        continue;
+                    }
                     echo "   -> Scanning target: $cidr\n";
                     
-                    // Esecuzione REALE di fping
+                    // Esecuzione REALE di fping (via Symfony Process when available)
                     // -a: alive, -A: address only, -q: quiet, -g: generate (subnet)
                     // -r 1: retry 1 time, -t 500: timeout 500ms
-                    $cmd = "fping -aAqg -r 1 -t 500 " . escapeshellarg($cidr);
                     $output = [];
                     $returnVar = 0;
-                    
-                    exec($cmd, $output, $returnVar);
+
+                    if (! $fpingPath) {
+                        // fping not present: record an error in logs and skip.
+                        pushLog('ERROR', "fping not available; cannot scan {$cidr}");
+                        continue;
+                    }
+
+                    try {
+                        // Build process safely using argument array (no shell interpolation)
+                        $process = new Process([$fpingPath, '-aAqg', '-r', '1', '-t', '500', $cidr]);
+                        $process->setTimeout(60); // guard against long hangs
+                        $process->run();
+
+                        if (! $process->isSuccessful()) {
+                            // collect stderr and log but continue
+                            pushLog('ERROR', sprintf('fping failed for %s: %s', $cidr, $process->getErrorOutput()));
+                        }
+
+                        $rawOut = $process->getOutput();
+                        $output = $rawOut === null ? [] : preg_split('/\r?\n/', trim($rawOut));
+                    } catch (\Throwable $e) {
+                        pushLog('ERROR', "Exception running fping for {$cidr}: " . $e->getMessage());
+                        continue;
+                    }
                     
                     // Parsing Output
                     // fping restituisce un array di IP (uno per riga)
@@ -193,7 +272,8 @@ while (true) {
                     }
                 }
             }
-        } else {
+        }
+        else {
             pushLog('ERROR', "Server returned status " . $response['status']);
         }
 
@@ -206,6 +286,18 @@ while (true) {
         break;
     }
 
+    if ($shouldStop) {
+        pushLog('INFO', 'SIGTERM received — shutting down agent loop gracefully');
+        break;
+    }
+
     echo "[WAIT] Sleeping for {$pollIntervalSeconds}s...\n";
-    sleep($pollIntervalSeconds);
+    // Use shorter sleep chunks so signals are noticed promptly
+    $sleep = (int)$pollIntervalSeconds;
+    $chunk = 5;
+    while ($sleep > 0 && ! $shouldStop) {
+        $step = min($chunk, $sleep);
+        sleep($step);
+        $sleep -= $step;
+    }
 }

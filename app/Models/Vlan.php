@@ -10,10 +10,9 @@ class Vlan extends Model
     use HasFactory;
     protected $table = 'vlans';
 
-    // use explicit l2_domain_id (clearer than domain_id)
-    protected $fillable = ['l2_domain_id', 'name', 'number', 'description', 'customer_id'];
+    protected $fillable = ['name', 'number', 'description', 'customer_id'];
     
     public function customer() { return $this->belongsTo(Customer::class); }
     public function subnets() { return $this->hasMany(Subnet::class); }
-    public function l2Domain() { return $this->belongsTo(\App\Models\L2Domain::class, 'l2_domain_id'); }
+    // l2_domain no longer used as tenancy; VLANs are scoped by customer
 }

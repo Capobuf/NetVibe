@@ -10,4 +10,12 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateScanAgent extends CreateRecord
 {
     protected static string $resource = ScanAgentResource::class;
+
+    /**
+     * Prefer returning to the previous URL (referrer) after creation when available.
+     */
+    protected function getRedirectUrl(): string
+    {
+        return $this->previousUrl ?? parent::getRedirectUrl();
+    }
 }

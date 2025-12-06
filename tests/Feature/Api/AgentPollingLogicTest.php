@@ -5,13 +5,9 @@ declare(strict_types=1);
 use App\Models\ScanAgent;
 use App\Models\Subnet;
 use App\Models\Customer;
-use App\Models\Vrf;
 use Laravel\Sanctum\Sanctum;
 
-beforeEach(function () {
-    // Ensure we have a default VRF for subnet creation
-    Vrf::factory()->create();
-});
+// No VRF required after tenancy migration — SubnetFactory creates its own Customer
 
 it('returns subnets directly assigned to the agent', function () {
     $agent = ScanAgent::factory()->create();

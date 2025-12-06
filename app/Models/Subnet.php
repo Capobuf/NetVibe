@@ -14,7 +14,7 @@ class Subnet extends Model
     use HasFactory;
     use SoftDeletes;
     protected $fillable = [
-        'subnet', 'mask', 'cidr', 'name', 'vrf_id', 'section_id', 'description', 'linked_subnet_id',
+        'subnet', 'mask', 'cidr', 'name', 'section_id', 'description', 'linked_subnet_id',
         'firewall_address_object', 'master_subnet_id', 'allow_requests',
         'vlan_id', 'show_name', 'device_id', 'permissions', 'ping_subnet',
         'discover_subnet', 'resolve_dns', 'dns_recursive', 'dns_records',
@@ -69,10 +69,7 @@ class Subnet extends Model
         return $this->belongsTo(Section::class);
     }
 
-    public function vrf()
-    {
-        return $this->belongsTo(Vrf::class);
-    }
+    // vrf tenancy removed — tenant ownership is managed by Customer
 
     public function vlan()
     {

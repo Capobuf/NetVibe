@@ -1,0 +1,18 @@
+services:
+  remote_agent:
+    build: .
+    container_name: netvibe-remote-agent
+    env_file:
+      - .env
+    # Use env_file variables for all runtime configuration. Avoid using
+    # ${VAR} substitution in this compose file (which looks at the shell
+    # environment where you run `docker compose`) — that was causing the
+    # "variable not set, defaulting to blank" warnings when the compose
+    # invocation didn't have those shell variables set. Keep an explicit
+    # container-level LOG_LEVEL default for convenience.
+    environment:
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+    command: php /app/agent.php

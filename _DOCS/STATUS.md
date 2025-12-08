@@ -26,4 +26,30 @@ All internal code, container slugs and primary UI strings have been rebranded fr
 - Test and CI: existing automated test coverage retained; focus on integrating Octane runtime into CI pipelines and ensuring lifecycle hooks are compatible.
 - Next actions: finalize Octane tuning in production images, audit long‑running stateful services (jobs) for Octane/EOL compatibility, and validate plugin/Filament integrations under the new single‑container runtime.
 
+## 🔴 CRITICAL: Phase 4 Ingest Actions — Security Audit (2025-12-16)
+**Status:** 4 Production Vulnerabilities Identified  
+**Documentation:** `_DOCS/SECURITY_AUDIT_PHASE4_INGEST_ACTIONS.md`
+
+### Vulnerabilities Found:
+1. **CRITICAL:** Race condition in `IngestMikrotikArpAction` — concurrent IP updates not protected by `DB::transaction()` or `->lockForUpdate()`
+   - Impact: Data corruption, duplicate MACs, lost topology data
+   - Fix: Add pessimistic locking or upsert pattern
+   
+2. **HIGH:** Missing MAC address normalization — different formats (AA:BB:CC vs aa-bb-cc vs aabbcc) stored as separate records
+   - Impact: Topology links fail to match, duplicate MAC entries
+   - Fix: Create `MacAddressService`, normalize before all DB inserts
+   
+3. **HIGH:** Unidirectional topology links — `connected_to_port_id` only set one direction
+   - Impact: Incomplete topology if one device offline, directional bias in reporting
+   - Fix: Create reverse links automatically or redesign with `PortLink` table
+   
+4. **MEDIUM:** Missing transaction wrapper in `IngestMikrotikInventoryAction`
+   - Impact: Partial device updates if save fails mid-operation
+   - Fix: Wrap in `DB::transaction()` for atomicity
+
+### Deployment Blockers:
+- ⚠️ **DO NOT DEPLOY Phase 4 Job Dispatching to production** until vulnerabilities fixed
+- Estimated fix effort: 5.5 hours
+- See security audit document for detailed implementation guidance
+
 **Notes:** This file is the authoritative status summary for Project NetVibe — see `_DOCS/ROADMAP.md` for the detailed V2.0 technical roadmap.

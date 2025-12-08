@@ -18,9 +18,13 @@ use BackedEnum;
 
 class VlanResource extends Resource
 {
+    // Ensure the resource appears under the IPAM top-navigation dropdown
+    // Filament (and PHP 8.4) allows enums in the signature; match parent type
+    protected static string | \UnitEnum | null $navigationGroup = 'IPAM';
     protected static ?string $model = Vlan::class;
 
-    protected static ?string $cluster = IpamCluster::class;
+    // Detached from cluster to allow top-nav dropdown driven by navigationGroup
+    // protected static ?string $cluster = IpamCluster::class;
 
     // Ordering in IPAM navigation
     protected static ?int $navigationSort = 1;

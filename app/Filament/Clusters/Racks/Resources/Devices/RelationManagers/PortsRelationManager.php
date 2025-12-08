@@ -29,6 +29,18 @@ class PortsRelationManager extends RelationManager
             Forms\Components\Select::make('type')
                 ->options(['rj45' => 'RJ45', 'sfp' => 'SFP', 'fiber' => 'Fiber'])
                 ->default('rj45'),
+            Forms\Components\Select::make('vlan_mode')
+                ->label('VLAN Mode')
+                ->options(['access' => 'Access', 'trunk' => 'Trunk'])
+                ->nullable(),
+            Forms\Components\TextInput::make('pvid')->label('PVID')->numeric()->nullable(),
+            Forms\Components\Textarea::make('tagged_vlans')->label('Tagged VLANs')->helperText('Comma-separated list of tagged VLAN IDs')->nullable()
+                ->dehydrateStateUsing(fn ($state) => is_string($state) ? array_values(array_filter(array_map('trim', preg_split('/\s*,\s*/', (string) $state)))) : $state),
+            Forms\Components\TextInput::make('mtu')->label('MTU')->numeric()->nullable(),
+            Forms\Components\TextInput::make('speed')->label('Speed')->nullable(),
+            Forms\Components\TextInput::make('duplex')->label('Duplex')->nullable(),
+            Forms\Components\Select::make('external_type')->label('Type')->options(['ether' => 'Ether', 'bridge' => 'Bridge', 'vlan' => 'VLAN'])->nullable(),
+            Forms\Components\TextInput::make('description')->label('Description')->nullable(),
         ]);
     }
 
@@ -52,6 +64,14 @@ class PortsRelationManager extends RelationManager
                         'down' => 'danger',
                         default => 'gray',
                     }),
+                TextColumn::make('vlan_mode')->label('VLAN Mode')->toggleable(),
+                TextColumn::make('pvid')->label('PVID')->toggleable(),
+                TextColumn::make('tagged_vlans')->label('Tagged VLANs')->formatStateUsing(fn ($state) => is_array($state) ? implode(',', $state) : (string) $state ?? '')->toggleable(),
+                TextColumn::make('mtu')->label('MTU')->toggleable(),
+                TextColumn::make('speed')->label('Speed')->toggleable(),
+                TextColumn::make('duplex')->label('Duplex')->toggleable(),
+                TextColumn::make('external_type')->label('Ext Type')->toggleable(),
+                TextColumn::make('description')->label('Description')->limit(40)->toggleable(),
             ])
             ;
         // Defensive guard: if the Filament Action class is unavailable for
@@ -63,7 +83,7 @@ class PortsRelationManager extends RelationManager
 
         return $table->actions([
                 TableAction::make('connect')
-                    ->icon('heroicon-m-link')
+                    ->icon('heroicon-o-link')
                     ->color('primary')
                     ->hidden(fn (Port $record) => $record->status === 'active')
                     ->form([
@@ -135,7 +155,7 @@ class PortsRelationManager extends RelationManager
                     }),
 
                 TableAction::make('disconnect')
-                    ->icon('heroicon-m-scissors')
+                    ->icon('heroicon-o-scissors')
                     ->color('danger')
                     ->requiresConfirmation()
                     ->visible(fn (Port $record) => $record->status === 'active')

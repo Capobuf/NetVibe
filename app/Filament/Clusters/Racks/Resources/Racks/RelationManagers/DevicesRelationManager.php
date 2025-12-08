@@ -105,7 +105,7 @@ class DevicesRelationManager extends RelationManager
                 // it behaves consistently and is mountable in tests.
                 Action::make('edit')
                     ->label('Edit')
-                    ->icon('heroicon-m-pencil')
+                    ->icon('heroicon-o-pencil-square')
                     ->slideOver()
                     ->form(\App\Filament\Clusters\Racks\Resources\Devices\Schemas\DeviceForm::schema())
                     ->action(function (array $data, Device $record) {
@@ -117,7 +117,7 @@ class DevicesRelationManager extends RelationManager
 
                 Action::make('detach')
                     ->label('Unmount')
-                    ->icon('heroicon-m-arrow-right-start-on-rectangle')
+                    ->icon('heroicon-o-arrow-right-start-on-rectangle')
                     ->color('warning')
                     ->requiresConfirmation()
                     ->action(function (Device $record) {
@@ -144,7 +144,7 @@ class DevicesRelationManager extends RelationManager
                     DeleteBulkAction::make(),
                     BulkAction::make('unmount_selected')
                         ->label('Unmount Selected')
-                        ->icon('heroicon-m-arrow-right-start-on-rectangle')
+                        ->icon('heroicon-o-arrow-right-start-on-rectangle')
                         ->requiresConfirmation()
                         ->action(function (\Illuminate\Support\Collection $records) {
                             $ids = $records->pluck('id')->all();

@@ -57,6 +57,17 @@ class Device extends Model
                 logger()->warning('GenerateDevicePortsAction failed: ' . $e->getMessage());
             }
         });
+
+        static::saving(function (Device $device) {
+            // Safety net: if the schema is not yet migrated with scan_agent_id, avoid SQL errors.
+            try {
+                if (! \Schema::hasColumn($device->getTable(), 'scan_agent_id')) {
+                    unset($device->scan_agent_id);
+                }
+            } catch (\Throwable $e) {
+                // ignore schema check failures
+            }
+        });
     }
 
     protected $fillable = [
@@ -70,7 +81,25 @@ class Device extends Model
         'rack_size',
         'location_id',
         'customer_id',
+        'scan_agent_id',
         'ip_addr',
+        'credential_profile_id',
+        'auth_username',
+        'auth_password',
+        'is_monitored',
+        'auth_driver',
+        'management_ip',
+        'brand',
+        'auth_extra',
+        'auth_status',
+        'last_seen_at',
+    ];
+
+    protected $casts = [
+        'auth_extra' => 'encrypted:array',
+        'auth_password' => 'encrypted',
+        'is_monitored' => 'boolean',
+        'last_seen_at' => 'datetime',
     ];
 
     public function location()
@@ -83,16 +112,32 @@ class Device extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    public function credentialProfile()
+    {
+        return $this->belongsTo(CredentialProfile::class, 'credential_profile_id');
+    }
+
     public function deviceModel()
     {
         return $this->belongsTo(DeviceModel::class);
     }
+
+    
 
     public function ports()
     {
         return $this->hasMany(Port::class);
     }
 
+    public function agentJobs()
+    {
+        return $this->hasMany(AgentJob::class);
+    }
+
+    public function scanAgent()
+    {
+        return $this->belongsTo(ScanAgent::class);
+    }
     public function rack()
     {
         return $this->belongsTo(Rack::class);

@@ -30,8 +30,7 @@ class IpAddressesRelationManager extends RelationManager
 {
     protected static string $relationship = 'ipAddresses';
     protected static ?string $recordTitleAttribute = 'ip_addr';
-    // Hide the auto-generated relation manager title to avoid duplicate headers
-    protected static ?string $title = null;
+    protected static ?string $title = 'IP Address Table';
 
     public function isReadOnly(): bool
     {
@@ -97,7 +96,7 @@ class IpAddressesRelationManager extends RelationManager
             TextInput::make('owner')->default(null),
             TextInput::make('port')->default(null),
             Textarea::make('note')->default(null)->columnSpanFull(),
-        ]));
+        ]))->columns(2);
     }
 
     public function table(Table $table): Table
@@ -109,7 +108,12 @@ class IpAddressesRelationManager extends RelationManager
             'customer_id' => $this->getOwnerRecord()->customer_id,
         ];
         return $table
+            ->heading('IP Address Table')
             ->defaultSort('ip_addr', 'asc')
+            ->searchPlaceholder('Search IP, hostname or MAC')
+            ->paginationPageOptions([10, 25, 50, 100])
+            ->striped()
+            ->actionsColumnLabel('Actions')
             ->columns([
                 TextColumn::make('ip_addr')
                     ->label('IP Address')
@@ -117,28 +121,26 @@ class IpAddressesRelationManager extends RelationManager
                     ->searchable()
                     ->sortable(),
 
-                TextInputColumn::make('hostname')
+                TextColumn::make('hostname')
                     ->label('Hostname')
-                    ->rules(['nullable', 'max:255'])
-                    ->inline()
-                    ->searchable(),
+                    ->searchable()
+                    ->wrap(),
 
-                TextInputColumn::make('description')
+                TextColumn::make('description')
                     ->label('Description')
-                    ->rules(['nullable', 'max:255'])
-                    ->inline()
-                    ->searchable(),
+                    ->limit(50)
+                    ->wrap()
+                    ->toggleable(),
 
-                SelectColumn::make('type')
+                TextColumn::make('type')
                     ->label('Type')
-                    ->options(fn () => collect(IpAddressType::cases())->mapWithKeys(fn ($c) => [$c->value => $c->getLabel()])->toArray())
-                    ->inline()
+                    ->badge()
+                    ->color(fn ($state) => ($state instanceof IpAddressType ? $state : IpAddressType::from((string) $state))->getColor())
+                    ->icon(fn ($state) => ($state instanceof IpAddressType ? $state : IpAddressType::from((string) $state))->getIcon())
                     ->sortable(),
 
-                TextInputColumn::make('mac_address')
+                TextColumn::make('mac_address')
                     ->label('MAC Address')
-                    ->rules(['nullable', 'regex:/^([0-9A-Fa-f]{2}(:|-)){5}[0-9A-Fa-f]{2}$/'])
-                    ->inline()
                     ->searchable(),
 
                 TextColumn::make('last_seen')
@@ -150,32 +152,36 @@ class IpAddressesRelationManager extends RelationManager
                     })
                     ->sortable(),
 
-                TextInputColumn::make('owner')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->rules(['nullable', 'max:255'])
-                    ->inline(),
-
-                TextInputColumn::make('switch_id')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->rules(['nullable', 'max:255'])
-                    ->inline(),
-
-                TextInputColumn::make('port')
-                    ->toggleable(isToggledHiddenByDefault: true)
-                    ->rules(['nullable', 'max:255'])
-                    ->inline(),
-
                 TextColumn::make('state')
                     ->label('Status')
                     ->badge()
-                    ->color(fn ($state) => match ($state) {
-                        1 => 'danger',
+                    ->formatStateUsing(function ($state) {
+                        return match ((int) $state) {
+                            1 => 'Down',
+                            2 => 'Up',
+                            3 => 'Planned',
+                            4 => 'Reserved',
+                            default => 'Unknown',
+                        };
+                    })
+                    ->color(fn ($state) => match ((int) $state) {
                         2 => 'success',
+                        1 => 'danger',
+                        4 => 'warning',
                         3 => 'primary',
-                        4 => 'gray',
-                        default => 'secondary',
+                        default => 'gray',
                     })
                     ->sortable(),
+
+                TextColumn::make('port')
+                    ->label('Port')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('owner')
+                    ->label('Owner')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('switch_id')
+                    ->label('Switch')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('type')->options([
@@ -189,7 +195,7 @@ class IpAddressesRelationManager extends RelationManager
             ->emptyStateDescription('No IPs have been discovered or created for this subnet yet. Click the + button to create an IP manually, or run a discovery scan from your agents.')
             ->headerActions([
                 \Filament\Actions\CreateAction::make('create_ip_header')
-                    ->label('')
+                    ->label('Add IP')
                     ->icon('heroicon-o-plus')
                     ->button()
                     ->color('primary')
@@ -199,10 +205,9 @@ class IpAddressesRelationManager extends RelationManager
                     ->relationship(fn () => $this->getRelationship())
                     ->visible(fn () => true),
             ])
-            ->toolbarActions([])
             ->recordActions([
-            EditAction::make()->slideOver(),
-            // DeleteAction removed from relation manager record actions per CRUD UX policy
-        ]);
+                EditAction::make()->slideOver(),
+                // DeleteAction removed from relation manager record actions per CRUD UX policy
+            ]);
     }
 }

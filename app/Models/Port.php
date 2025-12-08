@@ -13,8 +13,25 @@ class Port extends Model
         'name',
         'type',
         'mac_address',
+        'last_seen',
+        'discovered_by_scan_agent_id',
+        'exclude_from_discovery',
         'status',
+        'vlan_mode',
+        'pvid',
+        'tagged_vlans',
+        'mtu',
+        'speed',
+        'duplex',
+        'external_type',
+        'description',
         'connected_to_port_id',
+    ];
+
+    protected $casts = [
+        'last_seen' => 'datetime',
+        'exclude_from_discovery' => 'boolean',
+        'tagged_vlans' => 'array',
     ];
 
     public function device()

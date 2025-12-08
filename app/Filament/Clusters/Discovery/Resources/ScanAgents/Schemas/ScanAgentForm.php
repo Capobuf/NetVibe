@@ -39,22 +39,60 @@ class ScanAgentForm
                         ->helperText('Leave empty if this is a Global/Shared agent (e.g. Localhost)')
                         ->default(fn () => session('tenant_id'))
                         ->hidden(fn () => ! blank(session('tenant_id')))
-                        ->dehydratedWhenHidden(),
+                        ->dehydratedWhenHidden()
+                        ->rules([
+                            function ($get) {
+                                return function (string $attribute, $value, callable $fail) use ($get) {
+                                    $active = $get('active') ?? true;
+                                    if (! $active || blank($value)) {
+                                        return;
+                                    }
+
+                                    $exists = \App\Models\ScanAgent::query()
+                                        ->where('active', true)
+                                        ->where('customer_id', $value)
+                                        ->when(request()->route('record'), fn ($q, $id) => $q->where('id', '!=', $id))
+                                        ->exists();
+
+                                    if ($exists) {
+                                        $fail('Esiste già un agent attivo per questo cliente. Disattiva l’altro agent o imposta questo come globale.');
+                                    }
+                                };
+                            },
+                        ]),
 
                     Select::make('log_level')
                         ->label('Log Level')
                         ->options([
+                            'DEBUG' => 'Debug',
                             'INFO' => 'Info',
+                            'WARNING' => 'Warning',
                             'ERROR' => 'Error',
                             'CRITICAL' => 'Critical',
                         ])
-                        ->default('ERROR')
+                        ->default('INFO')
                         ->required()
-                        ->helperText('Minimum log level to send from this agent'),
+                        ->helperText('Minimum log level to ship and apply at runtime'),
                     
                     Placeholder::make('api_key_guide')
                         ->label('API Key')
                         ->content('The API Key can be generated in the "Edit" page after creating the agent.')
+                        ->columnSpanFull(),
+                ])
+            ,
+            // Tuning tab for agent-specific settings
+            Section::make('Tuning')
+                ->schema([
+                    TextInput::make('polling_interval_minutes')
+                        ->label('Polling interval')
+                        ->numeric()
+                        ->suffix('mins')
+                        ->helperText('Override global agent polling interval for this agent'),
+
+                    Textarea::make('settings')
+                        ->label('Raw settings (JSON)')
+                        ->rows(8)
+                        ->helperText('Advanced: free-form JSON settings inherited by this agent')
                         ->columnSpanFull(),
                 ])
         ]);

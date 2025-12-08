@@ -16,17 +16,17 @@ class StatsOverview extends BaseWidget
         return [
             Stat::make('Customers', Customer::count())
                 ->description('Total Customers')
-                ->descriptionIcon('heroicon-m-users')
+                ->descriptionIcon('heroicon-o-users')
                 ->color('primary'),
             
             Stat::make('Subnets', Subnet::count())
                 ->description('Total Network Subnets')
-                ->descriptionIcon('heroicon-m-server-stack')
+                ->descriptionIcon('heroicon-o-server-stack')
                 ->color('success'),
             
             Stat::make('IP Addresses', IpAddress::count())
                 ->description('Total Assigned IPs')
-                ->descriptionIcon('heroicon-m-globe-alt')
+                ->descriptionIcon('heroicon-o-globe-alt')
                 ->color('info'),
 
             Stat::make('Devices', Device::count())

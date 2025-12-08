@@ -8,6 +8,29 @@ use Filament\Schemas\Schema;
 
 class DeviceForm
 {
+    private static function agentOptions(?int $customerId): array
+    {
+        $query = \App\Models\ScanAgent::query()->where('active', true);
+        if ($customerId) {
+            $query->where(function ($q) use ($customerId) {
+                $q->where('customer_id', $customerId)->orWhereNull('customer_id');
+            });
+        }
+
+        return $query->orderBy('customer_id')->orderBy('name')->pluck('name', 'id')->toArray();
+    }
+
+    private static function hasMultipleAgents(?int $customerId): bool
+    {
+        if (! $customerId) {
+            return false;
+        }
+
+        return \App\Models\ScanAgent::where('active', true)
+            ->where('customer_id', $customerId)
+            ->count() > 1;
+    }
+
     /**
      * Return the canonical components array used by this schema.
      * This allows other code (CreateAction forms, tests) to reuse the same
@@ -117,7 +140,15 @@ class DeviceForm
                     ->options(fn () => \App\Models\DeviceModel::query()->orderBy('brand')->orderBy('model')->get()->mapWithKeys(fn($r) => [$r->id => trim(sprintf('%s %s', $r->brand ?? '', $r->model ?? ''))])->toArray())
                     ->searchable()
                     ->preload()
-                    ->required()
+                    ->required(fn ($get) => ! ($get('is_monitored') && (
+                        $get('auth_driver') === 'mikrotik_rest'
+                        && (filled($get('credential_profile_id')) || filled($get('auth_username')) || filled($get('auth_password')) || filled($get('auth_extra')))
+                    )))
+                    ->disabled(fn ($get, $record) => $record && $record->exists || (
+                        $get('auth_driver') === 'mikrotik_rest'
+                        && (filled($get('credential_profile_id')) || filled($get('auth_username')) || filled($get('auth_password')) || filled($get('auth_extra')))
+                    ))
+                    ->helperText('Locked when Mikrotik API credentials are provided — inventory will be pulled from the device. Required only if not auto-discovered. ')
                     ->createOptionForm([
                         TextInput::make('brand')->required(),
                         TextInput::make('model')->required(),
@@ -142,12 +173,60 @@ class DeviceForm
                     ->createOptionModalHeading('Create Hardware Model')
                     ->live(),
 
+                // Monitoring / auth
+                \Filament\Forms\Components\Toggle::make('is_monitored')
+                    ->label('Is Monitored')
+                    ->default(true)
+                    ->helperText('If disabled, the device will not be polled by agents.'),
+
+                Select::make('scan_agent_id')
+                    ->label('Remote Agent')
+                    ->helperText('L’unico agent attivo del Cliente riceverà i jobs; scegli un agent globale se necessario.')
+                    ->options(fn ($get) => self::agentOptions($get('customer_id') ?? null))
+                    ->required(fn ($get) => self::hasMultipleAgents($get('customer_id') ?? null))
+                    ->hint(fn ($get) => self::hasMultipleAgents($get('customer_id') ?? null)
+                        ? 'Più agent attivi per questo cliente: seleziona quello corretto.'
+                        : null)
+                    ->hintColor('warning')
+                    ->searchable()
+                    ->preload()
+                    ->nullable(),
+
+                Select::make('credential_profile_id')
+                    ->relationship('credentialProfile', 'name')
+                    ->label('Credential Profile')
+                    ->searchable()
+                    ->preload()
+                    ->nullable()
+                    ->helperText('Prefer shared credentials; leave empty to use manual auth fields.'),
+
+                Select::make('auth_driver')
+                    ->label('Auth Driver')
+                    ->options(['mikrotik_rest' => 'MikroTik REST', 'ssh' => 'SSH'])
+                    ->default('mikrotik_rest'),
+
+                TextInput::make('auth_username')
+                    ->label('Username')
+                    ->visible(fn ($get) => empty($get('credential_profile_id'))),
+
+                TextInput::make('auth_password')
+                    ->label('Password')
+                    ->password()
+                    ->visible(fn ($get) => empty($get('credential_profile_id'))),
+
+                TextInput::make('auth_extra')
+                    ->label('Auth JSON')
+                    ->visible(fn ($get) => empty($get('credential_profile_id')))
+                    ->helperText('Optional extra auth JSON for manual mode.'),
+
                 TextInput::make('hostname')
-                    ->required(),
+                    ->required(fn ($get) => ! $get('is_monitored'))
+                    ->disabled(fn ($get, $record) => $record && $record->exists && $get('is_monitored'))
+                    ->helperText('When monitoring is enabled, hostname will be fetched from the device identity.'),
 
                 TextInput::make('ip_addr')
                     ->label('IP Address')
-                    ->helperText('Optional — IPv4 format')
+                    ->helperText('IPv4 address used by the agent to reach the device (recommended when monitoring)')
                     ->default(null)
                     ->nullable()
                     ->rules(['ipv4']),

@@ -16,6 +16,7 @@ use Filament\Actions\Action;
 class AgentLogController extends Controller
 {
     private const SEVERITY_LEVELS = [
+        'DEBUG' => 0,
         'INFO' => 1,
         'WARNING' => 2,
         'ERROR' => 3,
@@ -44,7 +45,12 @@ class AgentLogController extends Controller
         ]);
 
         // Alert trigger logic
-        $this->triggerAlertIfNeeded($agent, $validated['level'], $validated['message']);
+        try {
+            $this->triggerAlertIfNeeded($agent, $validated['level'], $validated['message']);
+        } catch (\Throwable $e) {
+            // Do not fail the API call if notification delivery fails
+            \Log::warning('AgentLogController alert dispatch failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Log received',

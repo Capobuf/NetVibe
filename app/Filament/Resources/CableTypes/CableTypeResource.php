@@ -21,11 +21,16 @@ class CableTypeResource extends Resource
 {
     protected static ?string $model = CableType::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    // Remove resource-level icon so group icon is used instead
+    protected static string|BackedEnum|null $navigationIcon = null;
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static ?string $cluster = InfrastructureCluster::class;
+    // Detached from cluster to be shown under the 'Infrastructure' navigation group
+    // protected static ?string $cluster = InfrastructureCluster::class;
+
+    // Ensure this resource appears under the Infrastructure dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Infrastructure';
 
     public static function form(Schema $schema): Schema
     {

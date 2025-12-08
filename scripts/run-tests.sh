@@ -13,6 +13,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_SERVICE="netvibe-web"
 TEST_DB_NAME="netvibe-test"
+# Credenziali di test forzate (coerenti con tests/Pest.php)
+TEST_DB_HOST="netvibe-db"
+TEST_DB_USER="root"
+TEST_DB_PASS="secret"
 
 usage() {
   cat <<EOF
@@ -60,11 +64,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-check_env_db() {
-  # If .env exists, try to parse DB_DATABASE, otherwise check env from compose
-  local db_from_env=""
-}
-
 confirm_or_abort() {
   local msg="$1"
   if [[ "$YES" == "true" ]]; then
@@ -78,17 +77,26 @@ confirm_or_abort() {
   fi
 }
 
-# 1) Verify DB name
-# 1) We're not going to inspect the environment — always force the test DB.
-echo "[run-tests] Forcing DB_DATABASE=${TEST_DB_NAME} for the test run inside ${COMPOSE_SERVICE}"
+# 1) Force DB env
+echo "[run-tests] Forcing DB settings: DB_DATABASE=${TEST_DB_NAME}, DB_HOST=${TEST_DB_HOST}"
 
-# 2) Ensure the test DB exists (best-effort)
-echo "[run-tests] Ensuring test database '${TEST_DB_NAME}' exists (best-effort)..."
-docker compose exec ${COMPOSE_SERVICE} php scripts/create_test_db.php || {
-  echo "[run-tests] Warning: could not run create_test_db.php - continuing anyway." >&2
-}
+export DB_CONNECTION="mysql"
+export DB_DATABASE="${TEST_DB_NAME}"
+export DB_HOST="${TEST_DB_HOST}"
+export DB_USERNAME="${TEST_DB_USER}"
+export DB_PASSWORD="${TEST_DB_PASS}"
 
-# 3) Run tests inside container with DB override to ensure safety
+# 2) Ensure the test DB exists (best-effort inside docker if available)
+if command -v docker >/dev/null 2>&1; then
+  echo "[run-tests] Ensuring test database '${TEST_DB_NAME}' exists (best-effort)..."
+  docker compose exec ${COMPOSE_SERVICE} php scripts/create_test_db.php || {
+    echo "[run-tests] Warning: could not run create_test_db.php - continuing anyway." >&2
+  }
+else
+  echo "[run-tests] docker not available; skipping create_test_db.php (DB must already be reachable at ${TEST_DB_HOST})."
+fi
+
+# 3) Build pest command
 PEST_CMD="./vendor/bin/pest"
 if [[ -n "$PATTERN" ]]; then
   # If user passed a path-like pattern (e.g. tests/Unit/SomeTest.php) pass it as
@@ -100,9 +108,13 @@ if [[ -n "$PATTERN" ]]; then
   fi
 fi
 
-echo "[run-tests] Running tests inside ${COMPOSE_SERVICE} (DB_DATABASE=${TEST_DB_NAME})"
-# Use 'sh -c' to ensure DB_DATABASE is set for the pest process
-docker compose exec ${COMPOSE_SERVICE} sh -lc "DB_DATABASE=${TEST_DB_NAME} ${PEST_CMD}"
+if command -v docker >/dev/null 2>&1; then
+  echo "[run-tests] Running tests inside ${COMPOSE_SERVICE} (DB_DATABASE=${TEST_DB_NAME})"
+  docker compose exec ${COMPOSE_SERVICE} sh -lc "DB_CONNECTION=${DB_CONNECTION} DB_HOST=${DB_HOST} DB_DATABASE=${DB_DATABASE} DB_USERNAME=${DB_USERNAME} DB_PASSWORD=${DB_PASSWORD} ${PEST_CMD}"
+else
+  echo "[run-tests] Running tests locally with enforced DB env (DB_HOST=${DB_HOST}, DB_DATABASE=${DB_DATABASE})"
+  DB_CONNECTION=${DB_CONNECTION} DB_HOST=${DB_HOST} DB_DATABASE=${DB_DATABASE} DB_USERNAME=${DB_USERNAME} DB_PASSWORD=${DB_PASSWORD} ${PEST_CMD}
+fi
 
 EXIT_CODE=$?
 if [[ $EXIT_CODE -eq 0 ]]; then

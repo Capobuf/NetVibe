@@ -37,3 +37,32 @@ it('mounts edit scan agent page and ensures agent logs relation manager loads', 
     livewire(\App\Filament\Clusters\Discovery\Resources\ScanAgents\Pages\EditScanAgent::class, ['record' => $agent->id])
         ->assertOk();
 });
+
+it('generates an agent API key from the Edit page', function () {
+    $this->actingAs(\App\Models\User::factory()->create());
+
+    $agent = \App\Models\ScanAgent::create([
+        'name' => 'Smoke Agent Key',
+        'active' => true,
+    ]);
+
+    $component = livewire(\App\Filament\Clusters\Discovery\Resources\ScanAgents\Pages\EditScanAgent::class, ['record' => $agent->id])
+        ->assertOk();
+
+    // initially there should be no tokens
+    $agent->refresh();
+    expect($agent->tokens()->count())->toBe(0);
+
+    // call page action that generates an agent key
+    $component->call('generateAgentKey');
+
+    $agent->refresh();
+
+    // expect at least one token now exists
+    expect($agent->tokens()->count())->toBeGreaterThan(0);
+
+    // the page should have the tempNewKey available immediately (visible in modal)
+    $component->assertSet('tempNewKey', fn ($val) => ! empty($val));
+});
+
+// test for the setup UI was removed; this UI is now covered by more focused tests and visual checks

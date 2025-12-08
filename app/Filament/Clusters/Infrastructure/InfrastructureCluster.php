@@ -10,6 +10,8 @@ use BackedEnum;
 
 class InfrastructureCluster extends Cluster
 {
+    // Hide cluster navigation, show resources under the 'Infrastructure' group instead
+    protected static bool $shouldRegisterNavigation = false;
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
     protected static ?string $navigationLabel = 'Infrastructure';

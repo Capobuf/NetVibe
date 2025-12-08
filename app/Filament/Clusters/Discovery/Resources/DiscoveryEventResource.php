@@ -19,12 +19,18 @@ use BackedEnum;
 class DiscoveryEventResource extends Resource
 {
     protected static ?string $model = DiscoveryEvent::class;
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-exclamation-triangle';
+    // Removed resource-level icon to avoid duplication with its containing group
+    protected static string|BackedEnum|null $navigationIcon = null;
     protected static ?string $slug = 'discovery-events';
-    protected static ?string $cluster = DiscoveryCluster::class;
+    // Detached from cluster; will appear under the 'Discovery' navigation group
+    // protected static ?string $cluster = DiscoveryCluster::class;
     protected static ?string $label = 'Discovery Event';
     protected static ?string $pluralLabel = 'Discovery Events';
+    // Ensure this resource registers itself in navigation (appears under Discovery)
     protected static bool $shouldRegisterNavigation = true;
+
+    // Ensure the resource appears under the Discovery dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Discovery';
 
     public static function table(Table $table): Table
     {

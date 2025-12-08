@@ -21,10 +21,14 @@ class DeviceResource extends Resource
 {
     protected static ?string $model = Device::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedComputerDesktop;
+    // Navigation icon removed to avoid conflict with group icon in topbar
+    protected static string|BackedEnum|null $navigationIcon = null;
     
-    // Nest this resource under the Racks cluster
-    protected static ?string $cluster = RacksCluster::class;
+    // Detached from cluster to allow grouped navigation under 'Racks & Devices'
+    // protected static ?string $cluster = RacksCluster::class;
+
+    // Ensure the resource appears under Racks & Devices dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Racks & Devices';
     
     protected static ?int $navigationSort = 10;
 
@@ -42,6 +46,7 @@ class DeviceResource extends Resource
     {
         return [
             PortsRelationManager::class,
+            \App\Filament\RelationManagers\AgentJobsRelationManager::class,
         ];
     }
 

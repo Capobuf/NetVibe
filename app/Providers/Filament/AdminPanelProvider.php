@@ -24,7 +24,7 @@ class AdminPanelProvider extends PanelProvider
     public function panel(Panel $panel): Panel
     {
         \Filament\Support\Facades\FilamentView::registerRenderHook(
-            \Filament\View\PanelsRenderHook::SIDEBAR_NAV_START,
+            \Filament\View\PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
             function () {
                 // Render the Livewire TenantSwitcher safely; if Livewire mount fails fall back to view
                     // Render the livewire component via Blade so the Livewire lifecycle (mount)
@@ -40,6 +40,8 @@ class AdminPanelProvider extends PanelProvider
         );
 
         return $panel
+            // Use top navigation for the admin panel (Filament v4)
+            ->topNavigation()
             ->default()
             ->id('admin')
             ->path('/')
@@ -48,6 +50,29 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
+            // Also discover resources stored inside clusters (e.g. app/Filament/Clusters/Ipam/Resources)
+            ->discoverResources(in: app_path('Filament/Clusters/Ipam/Resources'), for: 'App\\Filament\\Clusters\\Ipam\\Resources')
+            // Explicitly define icons/labels for the top nav groups so the topbar shows meaningful icons
+            ->navigationGroups([
+                \Filament\Navigation\NavigationGroup::make()
+                    ->label('Racks & Devices')
+                    ->icon('heroicon-o-server'),
+                \Filament\Navigation\NavigationGroup::make()
+                    ->label('Discovery')
+                    ->icon('heroicon-o-magnifying-glass-circle'),
+                \Filament\Navigation\NavigationGroup::make()
+                    ->label('Organization')
+                    ->icon('heroicon-o-building-office-2'),
+                \Filament\Navigation\NavigationGroup::make()
+                    ->label('IPAM')
+                    ->icon('heroicon-o-rectangle-stack'),
+                \Filament\Navigation\NavigationGroup::make()
+                    ->label('Infrastructure')
+                    ->icon('heroicon-o-wrench-screwdriver'),
+            ])
+            ->discoverResources(in: app_path('Filament/Clusters/Discovery/Resources'), for: 'App\\Filament\\Clusters\\Discovery\\Resources')
+            ->discoverResources(in: app_path('Filament/Clusters/Organization/Resources'), for: 'App\\Filament\\Clusters\\Organization\\Resources')
+            ->discoverResources(in: app_path('Filament/Clusters/Racks/Resources'), for: 'App\\Filament\\Clusters\\Racks\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->discoverClusters(in: app_path('Filament/Clusters'), for: 'App\\Filament\\Clusters')
             ->pages([

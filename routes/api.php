@@ -30,6 +30,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Agent logs ingestion endpoint (protected by sanctum)
     Route::post('/v1/agent/logs', [App\Http\Controllers\Api\AgentLogController::class, 'store']);
+
+    // Agent jobs endpoints (polling and result submission)
+    Route::get('/v1/agent/jobs', [App\Http\Controllers\Api\AgentJobController::class, 'index']);
+    Route::post('/v1/agent/jobs/{job}/result', [App\Http\Controllers\Api\AgentJobController::class, 'storeResult']);
 });
 
 // Public health/ping endpoint (optional)

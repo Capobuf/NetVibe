@@ -21,9 +21,14 @@ class ScanAgentResource extends Resource
 {
     protected static ?string $model = ScanAgent::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSignal;
+    // Navigation icon removed to avoid conflict with group icon in topbar
+    protected static string|BackedEnum|null $navigationIcon = null;
 
-    protected static ?string $cluster = DiscoveryCluster::class;
+    // Detached from cluster; will appear under the 'Discovery' navigation group
+    // protected static ?string $cluster = DiscoveryCluster::class;
+
+    // Ensure the resource appears under the Discovery dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Discovery';
 
     protected static ?int $navigationSort = 5;
 
@@ -41,6 +46,7 @@ class ScanAgentResource extends Resource
     {
         return [
             RelationManagers\AgentLogsRelationManager::class,
+            \App\Filament\RelationManagers\AgentJobsRelationManager::class,
         ];
     }
 

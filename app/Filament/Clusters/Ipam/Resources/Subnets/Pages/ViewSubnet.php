@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Clusters\Ipam\Resources\Subnets\Pages;
 
 use App\Filament\Clusters\Ipam\Resources\Subnets\SubnetResource;
+use App\Filament\Clusters\Ipam\Resources\Subnets\Widgets\SubnetStatsOverview;
+use App\Filament\Clusters\Ipam\Resources\Subnets\Widgets\SubnetIpCompositionChart;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewSubnet extends ViewRecord
@@ -16,12 +18,28 @@ class ViewSubnet extends ViewRecord
         return [
             \Filament\Actions\EditAction::make()
                 ->slideOver()
-                ->icon('heroicon-m-pencil-square')
+                ->icon('heroicon-o-pencil-square')
                 ->label('Edit Subnet'),
         ];
     }
 
-    // intentionally removed footer widgets (IpAddressVisualGrid) because the visual map
-    // widget was unreliable and caused rendering issues. The Subnet view now focuses
-    // on the relation manager 'IP Table' for IP address operations.
+    protected function getHeaderWidgets(): array
+    {
+        // Only show the stats cards in the header (top of page)
+        return [
+            SubnetStatsOverview::make([
+                'record' => $this->record,
+            ]),
+        ];
+    }
+
+    protected function getFooterWidgets(): array
+    {
+        // Ensure the IP Composition chart renders after relation managers (table)
+        return [
+            SubnetIpCompositionChart::make([
+                'record' => $this->record,
+            ]),
+        ];
+    }
 }

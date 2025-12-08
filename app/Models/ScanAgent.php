@@ -9,6 +9,7 @@ use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Validation\ValidationException;
 
 class ScanAgent extends Model implements Authenticatable
 {
@@ -19,11 +20,14 @@ class ScanAgent extends Model implements Authenticatable
 
     protected $fillable = [
         'name', 'description', 'ip_address', 'active', 'last_seen', 'customer_id',
+        'settings', 'polling_interval_minutes', 'log_level',
     ];
 
     protected $casts = [
         'active' => 'boolean',
         'last_seen' => 'datetime',
+        'settings' => 'array',
+        'polling_interval_minutes' => 'integer',
     ];
 
     // Relationships
@@ -40,6 +44,11 @@ class ScanAgent extends Model implements Authenticatable
     public function agentLogs()
     {
         return $this->hasMany(AgentLog::class, 'scan_agent_id');
+    }
+
+    public function agentJobs()
+    {
+        return $this->hasMany(AgentJob::class);
     }
 
     // Authenticatable interface methods
@@ -76,5 +85,30 @@ class ScanAgent extends Model implements Authenticatable
     public function getAuthPasswordName()
     {
         return null;
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (ScanAgent $agent) {
+            if (! $agent->active) {
+                return;
+            }
+
+            if (blank($agent->customer_id)) {
+                return; // Allow multiple global agents for now
+            }
+
+            $exists = static::query()
+                ->where('active', true)
+                ->where('customer_id', $agent->customer_id)
+                ->when($agent->exists, fn ($q) => $q->where('id', '!=', $agent->id))
+                ->exists();
+
+            if ($exists) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Esiste già un agent attivo per questo cliente.',
+                ]);
+            }
+        });
     }
 }

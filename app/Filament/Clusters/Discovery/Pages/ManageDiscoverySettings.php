@@ -15,13 +15,17 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
 {
     use Forms\Concerns\InteractsWithForms;
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-cog-6-tooth';
+    // Remove page-level icon so the Discovery group icon is used in the topbar
+    protected static BackedEnum|string|null $navigationIcon = null;
     protected static ?string $navigationLabel = 'Settings';
     protected static ?string $title = 'Discovery Settings';
     protected static ?int $navigationSort = 10;
 
-    // Register this page under the Discovery cluster
-    protected static ?string $cluster = \App\Filament\Clusters\Discovery\DiscoveryCluster::class;
+    // Detached from cluster so it appears in the Discovery top-nav group
+    // protected static ?string $cluster = \App\Filament\Clusters\Discovery\DiscoveryCluster::class;
+
+    // Ensure the page appears under the Discovery dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Discovery';
 
     protected string $view = 'filament.pages.discovery-settings';
 
@@ -43,7 +47,8 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
                 ->label('Default scan interval')
                 ->numeric()
                 ->suffix('mins')
-                ->required(),
+                ->required()
+                ->helperText('Intervallo usato per le nuove subnet se non specificato.'),
 
             TextInput::make('icmp_timeout_ms')
                 ->label('ICMP timeout')
@@ -64,6 +69,13 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
                 ->default(3)
                 ->required()
                 ->helperText('Automatically delete agent logs older than this many days'),
+            TextInput::make('agent_polling_interval_minutes')
+                ->label('Agent polling interval')
+                ->numeric()
+                ->suffix('mins')
+                ->default(5)
+                ->required()
+                ->helperText('Frequenza (minuti) con cui l’agent interroga /api/v1/agent/jobs; usato anche per il config poll.'),
         ];
     }
 
@@ -76,6 +88,8 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
             'default_scan_interval_minutes' => $settings->default_scan_interval_minutes,
             'icmp_timeout_ms' => $settings->icmp_timeout_ms,
             'icmp_retries' => $settings->icmp_retries,
+            'prune_logs_days' => $settings->prune_logs_days ?? 3,
+            'agent_polling_interval_minutes' => $settings->agent_polling_interval_minutes ?? 5,
         ]);
     }
 
@@ -88,6 +102,8 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
         $settings->default_scan_interval_minutes = (int) ($state['default_scan_interval_minutes'] ?? $settings->default_scan_interval_minutes);
         $settings->icmp_timeout_ms = (int) ($state['icmp_timeout_ms'] ?? $settings->icmp_timeout_ms);
         $settings->icmp_retries = (int) ($state['icmp_retries'] ?? $settings->icmp_retries);
+        $settings->prune_logs_days = (int) ($state['prune_logs_days'] ?? $settings->prune_logs_days ?? 3);
+        $settings->agent_polling_interval_minutes = (int) ($state['agent_polling_interval_minutes'] ?? $settings->agent_polling_interval_minutes ?? 5);
 
         $settings->save();
 

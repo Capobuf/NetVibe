@@ -14,6 +14,11 @@ class DiscoverySettings extends Settings
     public int $default_scan_interval_minutes = 60;
 
     /**
+     * How often agents should poll the server for new tasks/config (in minutes)
+     */
+    public int $agent_polling_interval_minutes = 5;
+
+    /**
      * Enable auto-discovery globally (can be overridden per subnet)
      */
     public bool $auto_discovery_enabled = true;

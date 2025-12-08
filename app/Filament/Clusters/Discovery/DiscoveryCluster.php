@@ -10,6 +10,8 @@ use BackedEnum;
 
 class DiscoveryCluster extends Cluster
 {
+    // Do not register the cluster itself in navigation — resources will show inside the Discovery dropdown
+    protected static bool $shouldRegisterNavigation = false;
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSignal;
 
     protected static ?string $navigationLabel = 'Discovery';

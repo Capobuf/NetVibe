@@ -3,7 +3,6 @@
 namespace App\Filament\Clusters\Racks\Resources\Racks;
 
 use App\Filament\Clusters\Racks\RacksCluster;
-use App\Filament\Clusters\Racks\Resources\Devices\DeviceResource;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\CreateRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\EditRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Pages\ListRacks;
@@ -11,502 +10,48 @@ use App\Filament\Clusters\Racks\Resources\Racks\Pages\ViewRack;
 use App\Filament\Clusters\Racks\Resources\Racks\Schemas\RackForm;
 use App\Filament\Clusters\Racks\Resources\Racks\Tables\RacksTable;
 use App\Models\Device;
-use App\Models\Link;
-use App\Models\Port;
 use App\Models\Rack;
 use BackedEnum;
 use Closure;
 use Filament\Actions\Action;
-use Filament\Forms\Components\ColorPicker;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\ToggleButtons;
-// Use schema layout components for both infolist and form layouts
 use Filament\Forms\Get as FormGet;
 use Filament\Schemas\Components\Utilities\Get as SchemaGet;
-use Filament\Infolists\Components\TextEntry;
-use Filament\Schemas\Components\Flex;
-use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Actions as SchemaActions;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Flex;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Support\Enums\Alignment;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use Filament\Notifications\Notification;
 
 class RackResource extends Resource
 {
     protected static ?string $model = Rack::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServer;
-    
-    protected static ?string $cluster = RacksCluster::class;
-    
+    protected static string|BackedEnum|null $navigationIcon = null; // cluster provides icon
+
+    // Detached from cluster to allow grouped navigation under 'Racks & Devices'
+    // protected static ?string $cluster = RacksCluster::class;
+
+    // Ensure the resource appears under Racks & Devices dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Racks & Devices';
+
     protected static ?int $navigationSort = 5;
 
     private const TOTAL_UNITS = 42;
 
-    public static function form(Schema $schema): Schema
-    {
-        return RackForm::configure($schema);
-    }
-
-    public static function table(Table $table): Table
-    {
-        return RacksTable::configure($table);
-    }
-
-    public static function infolist(Schema $schema): Schema
-    {
-        return $schema->schema([
-            Section::make('Rack Visualization')
-                ->description(fn (Rack $record): string => $record->name ? "{$record->name} · Rack View" : 'Rack View')
-                ->schema([
-                    Grid::make(1)
-                        ->schema(fn (Rack $record): array => self::buildRackUnitComponents($record))
-                        ->extraAttributes(['style' => 'gap: 0;']), 
-                ])
-                ->compact(),
-        ]);
-    }
-
-    public static function buildRackUnitComponents(Rack $rack): array
-    {
-        $units = self::buildUnits($rack);
-        $components = [];
-
-        // Header
-        $components[] = self::makeHeaderRow();
-
-        foreach ($units as $unit => $slot) {
-            if ($slot['type'] === 'spanned') {
-                continue;
-            }
-
-            if ($slot['type'] === 'device') {
-                $components[] = self::makeDeviceRow($rack, $unit, $slot['device'], $slot['span'] ?? 1);
-                continue;
-            }
-
-            if ($slot['type'] === 'ghost') {
-                $components[] = self::makeGhostRow($rack, $unit, $slot['device']);
-                continue;
-            }
-
-            $components[] = self::makeEmptySlotRow($rack, $unit);
-        }
-
-        return $components;
-    }
-
-    private static function makeHeaderRow(): Flex
-    {
-        return Flex::make([
-            Group::make()
-                ->schema([
-                    TextEntry::make('header_u')
-                        ->state('U')
-                        ->weight('bold')
-                        ->alignCenter()
-                        ->hiddenLabel(),
-                ])
-                ->grow(false)
-                ->extraAttributes([
-                    'style' => 'width: 50px; min-width: 50px; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255,255,255,0.1); padding: 0.25rem;',
-                ]),
-
-            Group::make()
-                ->schema([
-                    TextEntry::make('header_content')
-                        ->state('Device Configuration')
-                        ->weight('bold')
-                        ->hiddenLabel(),
-                ])
-                ->grow(true)
-                ->extraAttributes([
-                    'style' => 'padding: 0.25rem 0.5rem; display: flex; align-items: center;',
-                ]),
-        ])
-        ->extraAttributes([
-            'class' => 'border-b border-gray-700',
-            'style' => 'align-items: stretch; background-color: rgba(255,255,255,0.05);',
-        ]);
-    }
-
-    private static function makeUnitLabelEntry(Rack $rack, int $unit, bool $badge = true, ?string $size = null, array $extraAttributes = []): TextEntry
-    {
-        $entry = TextEntry::make("rack_{$rack->id}_u{$unit}_label")
-            ->state($unit)
-            ->color('gray')
-            ->alignCenter()
-            ->hiddenLabel();
-
-        if ($badge) {
-            $entry = $entry->badge();
-        }
-
-        if ($size) {
-            $entry = $entry->size($size);
-        }
-
-        if (! empty($extraAttributes)) {
-            $entry = $entry->extraAttributes($extraAttributes);
-        }
-
-        return $entry;
-    }
-
-    private static function makeUnitLeftColumn(Rack $rack, int $unit, TextEntry $entry): Group
-    {
-        // NOTE: layout container for visual representation (Schemas\Components\Group)
-        return Group::make()
-            ->schema([$entry])
-            ->grow(false)
-            ->extraAttributes([
-                'style' => 'width: 50px; min-width: 50px; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255,255,255,0.1); padding: 0;',
-            ]);
-    }
-
-    private static function makeDeviceRow(Rack $rack, int $unit, Device $device, int $span = 1): Flex
-    {
-        $editUrl = DeviceResource::getUrl('edit', ['record' => $device->id]);
-        $hostname = $device->hostname ?? $device->name;
-        $model = $device->deviceModel?->name ?? 'Unknown';
-
-        // Group ports by physical media
-        $portGroups = $device->ports->groupBy('physical_media');
-        $portSections = [];
-
-        foreach ($portGroups as $media => $ports) {
-            $actions = $ports->map(function (Port $port) use ($rack, $unit, $device) {
-                $isActive = $port->status === 'active';
-                $color = $isActive ? 'success' : 'gray';
-                
-                return SchemaActions\Action::make("port-{$port->id}")
-                    ->label((string) $port->number)
-                    ->color($color)
-                    ->size('xs')
-                    ->button()
-                    ->tooltip($port->name . ($isActive ? " (Linked)" : ""))
-                    ->extraAttributes([
-                        'style' => 'min-width: 24px; padding: 2px 4px; font-size: 0.7rem;',
-                    ])
-                    ->action(fn () => Notification::make()->title('Port ' . $port->number . ' clicked')->info()->send());
-            })->all();
-
-            $portSections[] = Section::make(ucfirst($media ?? 'Ports'))
-                ->compact()
-                ->schema([
-                    Grid::make(12) // Default to 12 columns, can be adjusted
-                        ->schema(fn() => $actions)
-                        ->extraAttributes(['style' => 'gap: 4px;']),
-                ])
-                ->extraAttributes(['class' => 'mb-2'])
-                ->collapsible();
-        }
-
-        return Flex::make([
-            self::makeUnitLeftColumn($rack, $unit, self::makeUnitLabelEntry($rack, $unit, badge: true)),
-
-            Group::make()
-                ->schema([
-                    SchemaActions::make([
-                        Action::make("info-device-{$unit}-{$device->id}")
-                            ->icon(Heroicon::InformationCircle)
-                            ->iconButton()
-                            ->color('gray')
-                            ->size('xs')
-                            ->tooltip("{$hostname} ({$model})")
-                            ->modalHeading("Device: {$hostname}")
-                            ->form([
-                                Placeholder::make('overview')
-                                    ->label('Overview')
-                                    ->content("Model: {$model} | Size: {$span}U"),
-                            ])
-                            ->extraModalFooterActions([
-                                Action::make('edit')
-                                    ->label('Edit Device')
-                                    ->url($editUrl)
-                                    ->button()
-                                    ->color('primary'),
-                            ]),
-                    ])->alignment(Alignment::End)->extraAttributes(['style' => 'position: absolute; top: 2px; right: 2px; z-index: 10; opacity: 0.5;']),
-
-                    // Render Port Sections
-                    Group::make()
-                        ->schema($portSections)
-                        ->extraAttributes(['style' => 'width: 100%;']),
-                ])
-                ->grow(true)
-                ->extraAttributes([
-                    'style' => 'padding: 0.5rem; position: relative; display: flex; flex-direction: column; justify-content: center;', 
-                ]),
-        ])
-        ->extraAttributes([
-            'class' => 'border-b border-gray-700',
-            'style' => 'align-items: stretch; background-color: rgba(255,255,255,0.02);', 
-        ]);
-    }
-
-    private static function makeEmptySlotRow(Rack $rack, int $unit): Flex
-    {
-        $createAction = Action::make("create-device-{$rack->id}-{$unit}")
-            ->label('Add Device')
-            ->icon('heroicon-m-plus')
-            ->iconButton()
-            ->size('sm')
-            ->tooltip("Install Device in U{$unit}")
-            ->color('success')
-            ->slideOver()
-            ->modalHeading("Install Device (U{$unit})")
-            ->modalWidth('md')
-            ->form([
-                // 1. SELETTORE MODALITÀ
-                ToggleButtons::make('action_type')
-                    ->options([
-                        'create' => 'Create New',
-                        'mount' => 'Mount Existing',
-                    ])
-                    ->default('create')
-                    ->live() // Fondamentale per switchare i gruppi
-                    ->columnSpanFull(),
-
-                // 2. CREATE group (layout uses Schemas\Components\Group)
-                Group::make()
-                    ->visible(fn (FormGet|SchemaGet $get) => $get('action_type') === 'create')
-                    ->schema(array_merge(
-                        \App\Filament\Clusters\Racks\Resources\Devices\Schemas\DeviceForm::schema(),
-                        [
-                            Hidden::make('rack_id')->default($rack->id),
-                            Hidden::make('rack_position')->default($unit),
-                            Hidden::make('status')->default('active'),
-                        ]
-                    )),
-
-                // 3. MOUNT group (layout uses Schemas\Components\Group)
-                Group::make()
-                    ->visible(fn (FormGet|SchemaGet $get) => $get('action_type') === 'mount')
-                    ->schema([
-                        Select::make('device_id')
-                            ->label('Select Orphan Device')
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->options(function () use ($rack) {
-                                // Logica Context-Aware: Filtra per Customer del Rack
-                                $query = Device::query()->whereNull('rack_id');
-                                
-                                // Resolve customer id from the rack itself or its location
-                                $customerId = $rack->customer_id ?? $rack->location?->customer_id ?? null;
-                                if (! empty($customerId)) {
-                                    $query->where('customer_id', $customerId);
-                                }
-
-                                return $query->with('deviceModel')
-                                    ->orderBy('hostname')
-                                    ->get()
-                                    ->mapWithKeys(function ($d) {
-                                        $model = $d->deviceModel?->model ? " ({$d->deviceModel?->model})" : '';
-                                        return [$d->id => $d->hostname . $model];
-                                    })
-                                    ->toArray();
-                            }),
-                    ]),
-            ])
-            ->action(function (array $data) use ($rack, $unit) {
-                $actionType = $data['action_type'] ?? 'create';
-
-                // --- LOGICA CREATE ---
-                if ($actionType === 'create') {
-                    if (empty($data['customer_id'])) {
-                        $data['customer_id'] = session('tenant_id') ?: ($rack->customer_id ?? null);
-                    }
-
-                    $data['rack_id'] = $rack->id;
-                    $data['rack_position'] = $unit;
-                    
-                    Device::create($data);
-
-                    Notification::make()->title('Device installed successfully')->success()->send();
-                    return;
-                }
-
-                // --- LOGICA MOUNT ---
-                if ($actionType === 'mount') {
-                    $deviceId = $data['device_id'] ?? null;
-                    $device = Device::with('deviceModel')->find($deviceId);
-                    
-                    if (! $device) {
-                        Notification::make()->title('Device not found')->danger()->send();
-                        return;
-                    }
-
-                    // Verifica Spazio (Overlap Check)
-                    $size = (int) ($device->deviceModel?->u_size ?? 1);
-                    $desiredStart = (int) $unit;
-                    $desiredEnd = $desiredStart + $size - 1;
-
-                    $existing = Device::where('rack_id', $rack->id)->with('deviceModel')->get();
-                    foreach ($existing as $ex) {
-                        $exStart = (int) ($ex->rack_position ?? 0);
-                        $exSize = (int) ($ex->deviceModel?->u_size ?? 1);
-                        if ($exStart < 1) continue;
-                        $exEnd = $exStart + $exSize - 1;
-
-                        if (! ($desiredEnd < $exStart || $desiredStart > $exEnd)) {
-                            Notification::make()
-                                ->title('Space conflict')
-                                ->body("Cannot mount: overlaps with device at U{$exStart}")
-                                ->danger()
-                                ->send();
-                            return;
-                        }
-                    }
-
-                    $device->update(['rack_id' => $rack->id, 'rack_position' => $unit]);
-                    Notification::make()->title('Device mounted')->success()->send();
-                    return;
-                }
-            });
-
-        return Flex::make([
-            self::makeUnitLeftColumn($rack, $unit, self::makeUnitLabelEntry($rack, $unit, badge: true, size: 'xs', extraAttributes: ['class' => 'opacity-50'])),
-
-            Group::make()
-                ->schema([
-                    SchemaActions::make([$createAction])
-                        ->key(fn () => "slot_actions_{$rack->id}_{$unit}")
-                        ->alignment(Alignment::Center),
-                ])
-                ->grow(true)
-                ->extraAttributes([
-                    'style' => 'padding: 0; display: flex; align-items: center; justify-content: center;',
-                ]),
-        ])
-        ->extraAttributes([
-            'class' => 'border-b border-gray-800',
-            'style' => 'align-items: stretch; min-height: 32px;',
-        ]);
-    }
-
-    private static function makeGhostRow(Rack $rack, int $unit, Device $device): Flex
-    {
-        return Flex::make([
-            self::makeUnitLeftColumn($rack, $unit, self::makeUnitLabelEntry($rack, $unit, badge: true)),
-
-            Group::make()
-                ->schema([])
-                ->grow(true)
-                ->extraAttributes([
-                    'style' => 'background-color: rgba(255,255,255,0.02);',
-                ]),
-        ])
-        ->extraAttributes([
-            'class' => 'border-b border-gray-700',
-            'style' => 'align-items: stretch;',
-        ]);
-    }
-
-    private static function makePortActionEntry(Rack $rack, int $unit, Device $device, Port $port): TextEntry
-    {
-        $isActive = $port->status === 'active';
-        $link = null;
-        $connectedPort = null;
-
-        if ($isActive) {
-            $link = Link::with(['cableType', 'portA.device', 'portB.device'])
-                ->where(fn ($query) => $query
-                    ->where('port_a_id', $port->id)
-                    ->orWhere('port_b_id', $port->id))
-                ->first();
-
-            if ($link) {
-                $connectedPort = $link->portA_id === $port->id ? $link->portB : $link->portA;
-            }
-        }
-
-        // Action definition skipped for brevity as requested by cleanup focus, 
-        // but logic remains identical to provided code.
-        // Assuming Standard Action logic here...
-        
-        // Placeholder for Port Logic to keep file concise for copy-paste
-        // (You can keep your existing makePortActionEntry logic here, 
-        //  just ensure it uses valid imports)
-        
-        $action = Action::make('dummy'); // Placeholder
-
-        // ... Ripristina la logica originale della porta se necessario, 
-        // l'importante qui erano gli alias dei gruppi ...
-        
-        // PER SICUREZZA RIPORTO LA LOGICA DELLA PORTA ORIGINALE QUI SOTTO:
-        
-        $connectAction = Action::make("connect-port-{$port->id}")
-            ->label($port->name ?? 'Port')
-            ->color(self::portStatusColor($port->status))
-            ->modalHeading('Connect port')
-            ->modalWidth('lg')
-            ->form([
-                Select::make('target_device_id')
-                    ->label('Target device')
-                    ->searchable()
-                    ->options(fn () => Device::query()
-                        ->where('id', '!=', $device->id)
-                        ->orderBy('hostname')
-                        ->pluck('hostname', 'id'))
-                    ->reactive()
-                    ->afterStateUpdated(fn (callable $set) => $set('target_port_id', null))
-                    ->required(),
-                Select::make('target_port_id')
-                    ->label('Target port')
-                    ->options(fn (FormGet|SchemaGet $get) => Port::query()
-                        ->where('device_id', $get('target_device_id'))
-                        ->where('status', '!=', 'active')
-                        ->pluck('name', 'id'))
-                    ->required(),
-                Select::make('cable_type_id')
-                    ->label('Cable type')
-                    ->relationship('cableType', 'name')
-                    ->required(),
-                ColorPicker::make('color')->nullable(),
-            ])
-            ->action(function (array $data) use ($port) {
-                Link::create([
-                    'port_a_id' => $port->id,
-                    'port_b_id' => $data['target_port_id'],
-                    'cable_type_id' => $data['cable_type_id'],
-                    'color' => $data['color'],
-                ]);
-                $port->update(['status' => 'active']);
-                Port::find($data['target_port_id'])?->update(['status' => 'active']);
-            });
-
-        $disconnectAction = Action::make("disconnect-port-{$port->id}")
-            ->label($port->name ?? 'Port')
-            ->icon(Heroicon::Link)
-            ->color('danger')
-            ->action(function () use ($link, $port, $connectedPort) {
-                $link?->delete();
-                $port->update(['status' => 'free']);
-                $connectedPort?->update(['status' => 'free']);
-            });
-
-        $realAction = $isActive ? $disconnectAction : $connectAction;
-
-        $baseStyle = "border: 1px solid #4b5563; background-color: #1f2937; border-radius: 2px; font-size: 0.65rem; font-family: monospace; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: all 0.15s ease-in-out; overflow: hidden;";
-        $activeStyle = $isActive ? 'background-color: rgba(6, 78, 59, 0.9); border-color: #10b981; color: #dcfce7; box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);' : 'color: #9ca3af; hover:border-gray-400 hover:bg-gray-700';
-
-        return TextEntry::make("rack_{$rack->id}_u{$unit}_port_{$port->id}")
-            ->hiddenLabel()
-            ->state($port->name ?? null)
-            ->tooltip($port->name . ($isActive ? " (Linked)" : ""))
-            ->extraAttributes(['style' => $baseStyle . ' ' . $activeStyle])
-            ->action($realAction);
-    }
-
+    /**
+     * Backwards-compatible static helper used in tests / other places that
+     * relied on RackResource::buildUnits(). Compute the layout for a given
+     * Rack without instantiating Livewire/Widget classes.
+     *
+     * @return array<int, array>
+     */
     public static function buildUnits(Rack $rack): array
     {
         $devices = Device::query()
@@ -554,23 +99,26 @@ class RackResource extends Resource
         return $units;
     }
 
-    private static function portStatusLabel(?string $status): string
+    public static function form(Schema $schema): Schema
     {
-        return match ($status) {
-            'active' => 'Connected',
-            'error' => 'Error',
-            default => 'Available',
-        };
+        return RackForm::configure($schema);
     }
 
-    private static function portStatusColor(?string $status): string
+    public static function table(Table $table): Table
     {
-        return match ($status) {
-            'active' => 'success',
-            'error' => 'danger',
-            default => 'gray',
-        };
+        return RacksTable::configure($table);
     }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        // The visual rack UI is provided by a Filament widget on the
+        // View page. We keep the infolist configuration on the resource
+        // minimal to avoid mounting Livewire/Blade artifacts here.
+        return $schema->schema([]);
+    }
+
+    // buildUnits moved to RackVisualizer widget so the visual and actions are
+    // co-located. Keep the resource focused on configuration and relations.
 
     public static function getRelations(): array
     {
@@ -578,6 +126,18 @@ class RackResource extends Resource
             \App\Filament\Clusters\Racks\Resources\Racks\RelationManagers\DevicesRelationManager::class,
         ];
     }
+
+    /**
+     * Register per-slot action schemas (create/mount) for the Rack page.
+     * This is kept on the Resource for discoverability by the tests.
+     * Note: the schema generation is a pure factory and does not run the
+     * Livewire lifecycle.
+     */
+    // All rendering logic moved to the Filament widget. Per-slot action
+    // registration for tests is handled via the widget's static helper
+    // (`RackVisualizerWidget::buildSlotActionSchemasFor`).
+
+    // Slot actions are now encapsulated in the RackVisualizer widget.
 
     public static function getPages(): array
     {

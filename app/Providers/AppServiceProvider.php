@@ -60,6 +60,9 @@ class AppServiceProvider extends ServiceProvider
             // ignore; this allows migrations and early bootstrap to succeed
         }
 
+        // (no-op) removed boot-time debugging for render callbacks — kept
+        // exception handling logic free of noisy debug logs.
+
         // Explicitly register Livewire components for Filament widgets so component
         // discovery is reliable across deployments and environments that use
         // cached manifests / opcache. Register both the new panel name and the

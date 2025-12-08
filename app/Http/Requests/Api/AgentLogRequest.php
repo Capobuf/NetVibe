@@ -16,7 +16,7 @@ class AgentLogRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'level' => ['required', 'string', 'in:INFO,WARNING,ERROR,CRITICAL'],
+            'level' => ['required', 'string', 'in:DEBUG,INFO,WARNING,ERROR,CRITICAL'],
             'message' => ['required', 'string', 'max:1000'],
             'context' => ['nullable', 'array'],
         ];

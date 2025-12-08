@@ -30,7 +30,8 @@ class IpAddressResource extends Resource
     // We do NOT want another top-level navigation entry for IPs inside the IPAM cluster
     protected static bool $shouldRegisterNavigation = false;
 
-    protected static ?string $cluster = IpamCluster::class;
+    // Detached from cluster so it won't be forced into a cluster navigation context
+    // protected static ?string $cluster = IpamCluster::class;
 
     public static function form(Schema $schema): Schema
     {

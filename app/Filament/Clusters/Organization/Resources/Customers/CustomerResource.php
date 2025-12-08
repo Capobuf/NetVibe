@@ -21,7 +21,11 @@ class CustomerResource extends Resource
 {
     protected static ?string $model = Customer::class;
 
-    protected static ?string $cluster = Organization::class;
+    // Detached from cluster to allow grouped navigation under 'Organization'
+    // protected static ?string $cluster = Organization::class;
+
+    // Ensure the resource appears under Organization dropdown
+    protected static string | \UnitEnum | null $navigationGroup = 'Organization';
 
     protected static string|BackedEnum|null $navigationIcon = null;
 

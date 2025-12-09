@@ -1,5 +1,7 @@
 UI / UX (Filament v4 & Livewire)
 
+NetVibe utilizza esclusivamente **Filament v4** come framework UI. Tutti i componenti, le risorse e i pattern UX devono rispettare le convenzioni di Filament v4; qualsiasi sintassi o componente Filament v3 è proibito.
+
 Panel & navigazione
 - Admin panel top-nav con gruppi icone; hook inserisce TenantSwitcher prima della global search (AdminPanelProvider, TenantSwitcher Livewire).
 - Risorse scoperte nei cluster: Racks & Devices, Discovery, Organization, IPAM, Infrastructure.

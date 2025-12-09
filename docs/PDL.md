@@ -116,11 +116,56 @@ Il sistema deve essere utilizzabile:
 - **Settings & Notifications**  
   - Settings globali via Spatie Settings, organizzati in gruppi:
     - `GeneralSettings` (`app/Settings/GeneralSettings.php`) esposto via `GeneralSettingsPage` (Filament).  
-    - `DiscoverySettings` (`app/Settings/DiscoverySettings.php`) esposto via `DiscoverySettingsPage`.  
-    - `NotificationSettings` (`app/Settings/NotificationSettings.php`) esposto via `NotificationSettingsPage` (Fase 1: webhook/logica semplice).  
+    - `DiscoverySettings` (`app/Settings/DiscoverySettings.php`) esposto via `DiscoverySettingsPage`.
+      - Campi aggiuntivi richiesti (Fase 1):
+        - `queue_backlog_warning_threshold` (int)
+        - `queue_backlog_critical_threshold` (int)
+    - `NotificationSettings` (`app/Settings/NotificationSettings.php`) esposto via `NotificationSettingsPage` (Fase 1: webhook/logica semplice).
+      - Schema di `NotificationSettings` (Fase 1 + predisposizione Fase 2 Telegram):
+
+        ```php
+        [
+          'webhook_enabled' => bool,
+          'webhook_url' => string|null,
+
+          'telegram_enabled' => bool, // Fase 2: solo predisposizione
+          'telegram_bot_token' => string|null,
+          'telegram_chat_id' => string|null,
+
+          'notify_on' => [
+             'agent_offline' => bool,
+             'agent_online' => bool,
+             'discovery_error' => bool,
+             'discovery_conflict' => bool,
+             'backup_completed' => bool,
+             'backup_failed' => bool,
+          ],
+
+          'rate_limit_seconds' => int, // default 300
+        ]
+        ```
+
+      - Webhook payload (Fase 1): inviare POST JSON con schema vincolante:
+
+        ```json
+        {
+          "event_type": "agent_offline|agent_online|discovery_error|discovery_conflict|backup_completed|backup_failed",
+          "tenant_id": 12,
+          "device_id": 33,
+          "agent_id": 2,
+          "job_id": "uuid",
+          "timestamp": "ISO8601",
+          "severity": "info|warning|error|critical",
+          "payload": { }
+        }
+        ```
+
+      - Rate-limiting (Fase 1): memorizzare per tenant + `event_type` l'ultimo invio; non inviare nuovamente lo stesso evento per lo stesso tenant finché non sono passati `rate_limit_seconds`.
     - `SecuritySettings` (`app/Settings/SecuritySettings.php`) esposto via `SecuritySettingsPage`.  
     - `FeatureFlagSettings` (`app/Settings/FeatureFlagSettings.php`) esposto via `FeatureFlagSettingsPage` (minimal in Fase 1).  
     - `SystemStateSettings` (`app/Settings/SystemStateSettings.php`) senza pagina UI (read-only, usato per health/install state).
+      - Campi aggiuntivi richiesti (Fase 1):
+        - `agent_offline_threshold_seconds` (int, default 120)
   - Integrazione Telegram per notifiche operative.
 - **Export/Import & PDF**
   - Export CSV/XLSX via Filament.  
@@ -1257,6 +1302,69 @@ Fase 1: solo elenco VLAN (senza tagging/untagging per-port).
   - `is_static`: boolean (MAC statico o dinamico).
 - `partial`: come sopra.
 
+#### 7.6.8 Modellazione VLAN ↔ Bridge ↔ Porte (Mikrotik)
+
+Questa sezione definisce il contratto definitivo per la modellazione dei bridge e la fonte dati autorizzata per dispositivi Mikrotik RouterOS 7.
+
+1) API RouterOS 7 da utilizzare (solo queste)
+
+- Usare esclusivamente le API REST ufficiali e questi endpoint come fonte autorevole per la topologia bridge/VLAN/porte:
+
+  - `/rest/interface/bridge`
+  - `/rest/interface/bridge/vlan`
+  - `/rest/interface/bridge/ports`
+  - `/rest/interface`
+
+- Non fare assunzioni su endpoint diversi; SNMP può solo arricchire, non contraddire i dati provenienti dalle API REST.
+
+2) Struttura obbligatoria in `device_result`
+
+Il `device_result` deve includere una sezione `bridges` con la seguente struttura obbligatoria (esempio):
+
+```json
+"bridges": {
+  "items": [
+    {
+      "name": "bridge",
+      "vlan_mode": "802.1q",
+      "ports": [
+        { "name": "ether1", "pvid": 10, "tagged": [], "untagged": true },
+        { "name": "ether2", "pvid": 20, "tagged": [20,30], "untagged": false }
+      ],
+      "vlans": [
+        {
+          "vlan_id": 10,
+          "tagged_ports": ["ether2"],
+          "untagged_ports": ["ether1"]
+        }
+      ]
+    }
+  ],
+  "partial": false
+}
+```
+
+- Regole aggiuntive:
+  - un device può avere 0, 1 o più bridge;
+  - ogni bridge elenca le porte associate, il PVID di ciascuna porta, le porte `tagged`/`untagged` e l'elenco delle VLAN mappate su quel bridge;
+  - questa sezione è separata dalla sezione `vlans` già esistente in `device_result` (che rimane un elenco "flat" di VLAN);
+  - evitare duplicazioni, cicli o strutture ridondanti tra `bridges` e le altre sezioni di `device_result`.
+
+3) Ingest lato server — contratto definitivo
+
+- `IngestMikrotikTopologyAction` deve consumare la sezione `bridges` (quando disponibile) e:
+  - aggiornare le porte (PVID, tagging, stato amministrativo/operativo, nome/descriptions);
+  - aggiornare le relazioni VLAN ↔ porta ↔ bridge nel modello DCIM/IPAM;
+  - registrare `DiscoveryEvent` quando vengono rilevati conflitti o configurazioni incoerenti (es. stessa porta in più bridge in conflitto, VLAN mappata in modo inconsistente rispetto alle porte);
+
+- Regole di priorità e fonte autorevole:
+  - i dati REST RouterOS 7 sono la fonte autorevole per bridges/ports/vlan mapping;
+  - SNMP può integrare o arricchire i dati ma non deve contraddire i dati REST; in caso di contraddizione, il server genera un `DiscoveryEvent` e registra il conflitto per review;
+  - `MergePolicyService` applica regole di merging/precedenza (es. `LOCKED beats remote`, `REST beats SNMP`, `Newest wins`) e deve essere il punto unico per la logica di merge;
+  - qualsiasi conflitto o incoerenza deve tradursi in `DiscoveryEvent` strutturato e non in aggiornamenti silenti.
+
+Nota: queste specifiche sono definitive e prevalgono su frammenti precedenti del PDL; l'implementazione server deve rimuovere code paths e mapping legacy incompatibili con questo contratto.
+
 #### 7.6.8 Sezione `errors[]`
 
 ```json
@@ -1374,6 +1482,26 @@ Categorie:
 - payload diff old/new strutturato per campo.  
 
 La UI usa queste informazioni per filtrare e presentare correttamente gli eventi.
+
+Schema definitivo DiscoveryEvent (estensione Fase 1):
+
+```php
+[
+  'agent_job_id' => UUID|null, // FK → agent_jobs.id
+  'device_id' => int|null,
+  'ip_address_id' => int|null,
+  'port_id' => int|null,
+  'event_type' => string, // uno degli enum di tipo
+  'field' => string|null, // es. "hostname", "mac_address", "pvid"
+  'old_value' => mixed,
+  'new_value' => mixed,
+  'source' => "REST|SNMP|Manual",
+  'severity' => "info|warning|error",
+]
+```
+
+Regole di correlazione:
+- Ogni `DiscoveryEvent` generato durante l’ingest DEVE avere `agent_job_id = $job->id` quando l'evento è creato contestualmente ad un job di discovery. Se l’evento è globale (non associato a job device-specifico) `agent_job_id` sarà `null`.
 
 ### 7.7 Discovery & Merge Pipeline
 
@@ -1499,6 +1627,38 @@ La responsabilità di creare DiscoveryEvent è del servizio di merge; le azioni 
 - applicare il risultato (`updated_fields`) e salvare;  
 - non generare eventi in modo ad‑hoc.
 
+Mapping MergeResult → DiscoveryEvent (contratto finale)
+
+Quando `MergePolicyService` produce un `MergeResult` con `events`, il server deve tradurre questi eventi nella tabella `discovery_events` usando la seguente mappatura di tipo (Fase 1):
+
+- Tipi evento generati dal MergeResult → DiscoveryEvent:
+  - `field_updated` — campo aggiornato automaticamente
+  - `field_conflict` — conflitto tra locale/remoto che necessita visibilità (log)
+  - `field_locked_skipped` — valore remoto ignorato per campo locked
+  - `entity_created` — creazione di entità (IP, Port, Subnet, VLAN)
+  - `entity_deleted` — cancellazione di entità (raramente automatico; generalmente log)
+
+Schema definitivo di mappatura DiscoveryEvent (Fase 1):
+
+```php
+[
+  'agent_job_id' => UUID|null,
+  'device_id' => int|null,
+  'ip_address_id' => int|null,
+  'port_id' => int|null,
+  'event_type' => string, // field_updated|field_conflict|field_locked_skipped|entity_created|entity_deleted
+  'field' => string|null,
+  'old_value' => mixed,
+  'new_value' => mixed,
+  'source' => "REST|SNMP|Manual",
+  'severity' => "info|warning|error",
+]
+```
+
+Approval flow (Fase 1 — lettura sola)
+
+- In Fase 1 i `DiscoveryEvent` vengono creati come log/info per la UI. Non esiste un workflow di approvazione o applicazione automatica: gli eventi sono SOLO read-only e servono per audit/diagnosi. La Fase 2 potrà introdurre approval/rollback.
+
 ### 7.9 IP change lato UI (management_ip autorevole)
 
 Regola vincolante:
@@ -1527,6 +1687,55 @@ SNMP Discovery Fase 1 affianca la pipeline Mikrotik REST solo per i device che h
 Ognuno è opzionale; l’agent restituisce **un unico `device_result`** che contiene tutti i dataset raccolti. Il server poi separa/elabora i dati per modulo (IPAM, DCIM, SNMP, Mikrotik).
 
 Scope SNMP Fase 1:
+
+OID obbligatori (Fase 1):
+
+- `1.3.6.1.2.1.1.5.0` → `sysName`
+- `1.3.6.1.2.1.1.1.0` → `sysDescr`
+- `1.3.6.1.2.1.1.2.0` → `sysObjectID`
+
+Interfacce (ifTable obbligatorie - OID):
+
+- `ifIndex` — `1.3.6.1.2.1.2.2.1.1`
+- `ifDescr` — `1.3.6.1.2.1.2.2.1.2`
+- `ifName` — `1.3.6.1.2.1.31.1.1.1.1`
+- `ifType` — `1.3.6.1.2.1.2.2.1.3`
+- `ifSpeed` — `1.3.6.1.2.1.2.2.1.5`
+- `ifOperStatus` — `1.3.6.1.2.1.2.2.1.8`
+- `ifAdminStatus` — `1.3.6.1.2.1.2.2.1.7`
+
+OID opzionali Fase 1 (se disponibili):
+
+- temperatura dispositivo (vendor specific)
+- `1.3.6.1.2.1.1.3.0` → uptime SNMP
+
+Struttura obbligatoria `device_result.snmp` (Fase 1):
+
+```json
+"snmp": {
+  "device": {
+    "sys_name": "switch01",
+    "sys_descr": "HP ...",
+    "sys_object_id": "1.3.6.1.4.1....",
+    "uptime_seconds": 12345
+  },
+  "interfaces": {
+    "items": [
+      {
+        "if_index": 1,
+        "name": "1",
+        "descr": "uplink",
+        "type": "ethernet-csmacd",
+        "speed_bps": 1000000000,
+        "admin_status": "up",
+        "oper_status": "up"
+      }
+    ],
+    "partial": false
+  },
+  "errors": []
+}
+```
 
 - Versione supportata:
   - **SNMPv2c** in Fase 1.  
@@ -2116,8 +2325,24 @@ Health & System Health page:
     - WARNING se tra 3 e 10 min.  
     - CRITICAL se > 10 min.
 - Worker:
-  - Il worker esegue periodicamente (es. ogni minuto) un `WorkerHeartbeatJob` che aggiorna `system_state.last_worker_heartbeat_at`.  
+  - Il worker esegue periodicamente (es. ogni minuto) un `WorkerHeartbeatJob` che aggiorna `system_state.last_worker_heartbeat_at`.
   - La System Health page applica soglie analoghe a quelle del scheduler per determinare lo stato del worker.
+
+  - Heartbeat jobs & HealthCheckService (contratto):
+
+    - `WorkerHeartbeatJob`:
+      - queue: `low`
+      - frequency: every 60s
+      - updates `system_state.last_worker_heartbeat_at`
+
+    - `SchedulerHeartbeatJob`:
+      - queue: `default`
+      - frequency: every 60s
+      - updates `system_state.last_scheduler_run_at`
+
+    - `HealthCheckService`:
+      - aggregates: worker heartbeat last_seen, scheduler last_seen, agent online/offline (using `agent_offline_threshold_seconds`), queue backlog (using `DiscoverySettings` thresholds)
+      - exposes `public function getSystemHealthSummary(): array` for UI and `/health` API consumption
 
 Agent health:
 

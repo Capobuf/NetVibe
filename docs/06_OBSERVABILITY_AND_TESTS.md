@@ -13,14 +13,24 @@ Logging e health
 - Heartbeat agent: last_seen aggiornato su config poll, job poll, log ingest, discovery ingest.
 - Manutenzione: prune agent logs daily via console scheduler → PruneAgentLogsJob (usa DiscoverySettings::prune_logs_days).
 
+Notifications testing:
+- Webhook endpoint: tests must assert that POST JSON payloads follow the notification contract: `event_type`, `tenant_id`, `device_id`, `agent_id`, `job_id`, `timestamp`, `severity`, `payload`.
+- Rate-limit tests: ensure rate-limiting per tenant + event_type via `rate_limit_seconds` is honoured.
+
 Job Center
 - Il Job Center (Resource `AgentJobResource`) è lo strumento principale per osservare lo stato dei job:
   - tabella `agent_jobs` con colonne type/scope/status/device/agent/customer/timestamps;  
   - filtri per `type`, `status`, `tenant_id`;  
-  - azione `view` che apre uno slide-over read-only con `payload`, `result`, `result_metadata`, `error_message`;  
+  - azione `view` che apre uno slide-over read-only con `payload`, `result`, `result_metadata`, `error_message`;
+  - il dettaglio job include anche i DiscoveryEvent correlati (`agent_job_id = job.id`) ordinati `created_at ASC`.
   - export CSV/XLSX tramite ExportAction/ExportBulkAction (per analisi esterne).
 
 Test (Pest)
 - Sicurezza: test rifiutati se `DB_DATABASE` ≠ `netvibe-test`; script `scripts/run-tests.sh` forza DB di test.
 - Coperture chiave: IP math, Fping wrapper, device/model flows, link constraints, tenancy scope, IPAM UI (Subnets/IP relation manager), discovery ingest (API/full cycle), Mikrotik ingest actions, Filament v4 compliance/arch guard, remote agent stub.
 - Gap noti: nessun e2e topologia UI, IngestMikrotikInventoryAction poco testata, sezione/migration mancante non coperta.
+
+Health / Heartbeat tests:
+- `WorkerHeartbeatJob`: test that it updates `system_state.last_worker_heartbeat_at` and runs on `low` queue.
+- `SchedulerHeartbeatJob`: test that it updates `system_state.last_scheduler_run_at` and runs on `default` queue.
+- `HealthCheckService`: unit tests for `getSystemHealthSummary()` covering worker/scheduler last_seen logic, agent online/offline using `agent_offline_threshold_seconds`, and queue backlog thresholds from `DiscoverySettings`.

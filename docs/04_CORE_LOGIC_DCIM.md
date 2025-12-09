@@ -16,4 +16,5 @@ Job agent (device-centric)
 Ingestion risultati/topologia
 - ProcessAgentJobResultAction: aggiorna device auth_status/last_seen per connectivity; `discovery_deep` ingesta prima topologia poi ARP/DHCP; `discovery_fast` solo ARP.
 - IngestMikrotikTopologyAction: crea/aggiorna porte da interface list, mappa VLAN da bridge vlan, collega porte per MAC, aggiorna IP→port o crea DiscoveryEvent orfano.
+ - IngestMikrotikTopologyAction: crea/aggiorna porte da `device_result.interfaces` e `device_result.bridges` (quando presenti), mappa VLAN ↔ porta ↔ bridge, aggiorna tagging/PVID/stato delle porte e crea/aggiorna relazioni VLAN↔Port↔Bridge nel modello DCIM/IPAM; registra `DiscoveryEvent` in caso di conflitti o configurazioni incoerenti.
 - IngestMikrotikInventoryAction: placeholder che mappa identity/serial/model e memorizza OS/uptime in `auth_extra`.

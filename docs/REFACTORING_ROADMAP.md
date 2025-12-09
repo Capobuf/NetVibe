@@ -916,7 +916,53 @@ Questa sezione raccoglie i punti in cui il PDL o il codice non forniscono ancora
     - elenco preciso dei campi (nomi, tipi, default, struttura dei template);  
     - eventuale separazione per tipo di notifica (discovery, backup, agent alert, ecc.);  
     - definizione del group Spatie (`group(): string`) e mapping UI (sezione/esatto layout Filament).  
-  - Finché questi punti non sono definiti nel PDL principale, non si procede con l’implementazione di `NotificationSettings`/`NotificationSettingsPage`.
+  - Implementare i seguenti campi esatti dentro `App\Settings\NotificationSettings` (Fase 1 + predisposizione Fase 2 Telegram):
+
+```php
+[ // Webhook Fase 1
+  'webhook_enabled' => bool,
+  'webhook_url' => string|null,
+
+  // Telegram (Fase 2 - solo predisposizione)
+  'telegram_enabled' => bool,
+  'telegram_bot_token' => string|null,
+  'telegram_chat_id' => string|null,
+
+  // Filtering & routing
+  'notify_on' => [
+     'agent_offline' => bool,
+     'agent_online' => bool,
+     'discovery_error' => bool,
+     'discovery_conflict' => bool,
+     'backup_completed' => bool,
+     'backup_failed' => bool,
+  ],
+
+  // Rate limiting
+  'rate_limit_seconds' => int, // default 300
+]
+```
+
+Evento di notifica — contratto vincolante (schema JSON inviato via webhook):
+
+```json
+{
+  "event_type": "agent_offline|agent_online|discovery_error|discovery_conflict|backup_completed|backup_failed",
+  "tenant_id": 12,
+  "device_id": 33,
+  "agent_id": 2,
+  "job_id": "uuid",
+  "timestamp": "ISO8601",
+  "severity": "info|warning|error|critical",
+  "payload": { }
+}
+```
+
+Webhook (Fase 1): inviare POST JSON esattamente con lo schema sopra.
+
+Telegram (Fase 2): solo predisposizione dei campi in `NotificationSettings`, driver Telegram verrà implementato in una fase successiva.
+
+Rate-limit: memorizzare per evento (`event_type`) l'ultimo invio per tenant; non ricapitare lo stesso evento finché non sono passati `rate_limit_seconds`.
 
 - **10.2 DiscoveryEvent ↔ AgentJob (Job Center conflict events)**
   - Il PDL (PDL_UX_UI §6.5 Job Center) prevede che, nel dettaglio di un job, siano mostrati i “conflict events” generati dal merge (lista `DiscoveryEvent` correlati al job, con link diretto).  
@@ -924,32 +970,173 @@ Questa sezione raccoglie i punti in cui il PDL o il codice non forniscono ancora
   - Il PDL non specifica ancora:
     - il contratto dati tra `MergePolicyService`/`MergeResult` e `DiscoveryEvent`;  
     - la chiave di correlazione definitiva (`agent_job_id`, `device_id`+timestamp, altro).  
-  - Prima di collegare UI Job Center → DiscoveryEvent è necessario definire nel PDL lo schema dati e la relazione esatta.
+  - Schema dati definitivo — modifiche al modello `discovery_events`:
+
+    - aggiungere `agent_job_id UUID nullable` // FK → `agent_jobs.id`
+
+  - Regole:
+    - ogni `DiscoveryEvent` generato durante l’ingest DEVE avere `agent_job_id = $job->id`;
+    - se l’evento è generato da job non associati a un device esplicito (eventi globali), `agent_job_id = null`.
+
+  - UI Job Center:
+    - quando si apre un job mostrare tutti i `DiscoveryEvent` dove `agent_job_id = job.id` ordinati `created_at ASC`;
+    - ogni evento deve mostrare `badge severity`, `descrizione` e `link alla risorsa` (device, ip, port, subnet …).
 
 - **10.3 Auto‑creazione subnet `/24` in IngestMikrotikArpAction**
-  - Nota aperta già presente in B.2: l’implementazione corrente può auto‑creare subnet `/24` in `IngestMikrotikArpAction` basandosi sulla PVID della porta.  
-  - Il PDL aggiornato non esplicita se questo comportamento:
-    - debba essere mantenuto così com’è;  
-    - debba essere reso configurabile (es. per tenant);  
-    - debba essere sostituito da una logica guidata dalla Subnet view / Discovery status.  
-  - Serve una decisione nel PDL prima di modificare o rimuovere questa auto‑creazione.
+  - Queste specifiche sono definitive e devono essere integrate immediatamente nella PDL e nella roadmap.
+  - Implementa quanto segue:
+
+    1. La subnet /24 deve essere creata automaticamente.
+
+    - Quando durante l’ingest (ARP/DHCP) compare un IP `A.B.C.X` che non ricade in alcuna subnet esistente del tenant, il sistema deve creare automaticamente la subnet:
+
+      `A.B.C.0/24`
+
+    2. Proprietà della nuova subnet
+
+    - La subnet generata deve avere le seguenti proprietà:
+      - `customer_id` → lo stesso del device / `scan_agent` che ha eseguito la discovery
+      - `discover_subnet = true`
+      - `scan_agent_id` → lo stesso agent che ha eseguito la discovery
+      - `created_by_discovery = true`
+
+    3. Coesistenza con blacklist
+
+    - Se la subnet viene inserita in `SubnetBlacklist`, allora:
+      - non deve più essere ricreata automaticamente
+      - non deve più essere popolata dalla discovery
+      - non deve generare IP o aggiornamenti
+
+    - Questo comportamento è intenzionale, coerente e già allineato al PDL precedente.
 
 - **10.4 Modellazione VLAN↔bridge/interfacce (Mikrotik / multi‑bridge)**
-  - Nota aperta in C.2: `DeviceResultBuilder::buildVlansSection()` oggi legge `vlan-ids` da `/rest/interface/bridge/vlan` senza distinzione chiara tra bridge fisici/logici; il PDL Fase 1 chiede solo un elenco VLAN “flat”.  
-  - Il PDL non ha ancora definito:
-    - come gestire device con più bridge o nomi non standard;  
-    - se e come modellare la relazione VLAN↔bridge↔porta in Fase 2.  
-  - Fino a quando il PDL non fornirà un modello preciso, l’implementazione VLAN rimane volutamente “flat” e non si procede con arricchimenti.
+  - Queste specifiche sono definitive e devono essere integrate immediatamente nella PDL e nella roadmap. Non esistono più "Fase 1" o "Fase 2": implementare direttamente quanto segue.
+
+  1. API RouterOS 7 da utilizzare (solo queste, nessuna assunzione)
+
+  - Usare esclusivamente le API REST ufficiali:
+
+    - `/rest/interface/bridge`
+    - `/rest/interface/bridge/vlan`
+    - `/rest/interface/bridge/ports`
+    - `/rest/interface`
+
+  - Se servono esempi reali, chiedere un comando curl e verrà fornito.
+
+  2. Struttura finale obbligatoria in `device_result`
+
+  Aggiungere una nuova sezione nel `device_result`:
+
+  ```json
+  "bridges": {
+    "items": [
+      {
+        "name": "bridge",
+        "vlan_mode": "802.1q",
+        "ports": [
+          { "name": "ether1", "pvid": 10, "tagged": [], "untagged": true },
+          { "name": "ether2", "pvid": 20, "tagged": [20,30], "untagged": false }
+        ],
+        "vlans": [
+          {
+            "vlan_id": 10,
+            "tagged_ports": ["ether2"],
+            "untagged_ports": ["ether1"]
+          }
+        ]
+      }
+    ],
+    "partial": false
+  }
+  ```
+
+  - Regole aggiuntive:
+    - un device può avere 0, 1 o più bridge
+    - ogni bridge elenca: porte associate, PVID, VLAN tag/untag
+    - elenco VLAN mappate su quel bridge
+    - questa sezione è separata dalla sezione `vlans` già esistente nel `device_result`
+    - nessuna duplicazione, nessun ciclo o struttura ridondante
+
+  3. Ingest lato server (contratto definitivo)
+
+  - `IngestMikrotikTopologyAction` deve:
+    - aggiornare: porte (tagging, pvid, stato)
+    - aggiornare: relazioni VLAN ↔ porta ↔ bridge
+    - registrare `DiscoveryEvent` quando rileva conflitti o configurazioni incoerenti
+  - `REST` è fonte autorevole
+  - `SNMP` può solo arricchire, non contraddire
+  - `MergePolicyService`: applicare regole definite
+  - conflitti → generare `DiscoveryEvent`
+  - nessuna logica duplicata altrove
+
+  📌 Nota finale per l’agent
+
+  - Queste specifiche sono definitive e prevalgono su ogni frammento precedente del codice o della PDL.
+  - L’implementazione deve essere pulita, senza debito tecnico, con rimozione delle vecchie parti incompatibili.
 
 - **10.5 SNMP Fase 1 – dettagli driver/pipeline**
-  - PDL e roadmap (C.3) definiscono gli obiettivi di SNMP Fase 1 (sysName/sysDescr/sysObjectID, ifTable base, 1–2 OID globali), ma non sono ancora dettagliati:
-    - l’elenco definitivo degli OID obbligatori e opzionali;  
-    - il formato esatto della sezione `device_result.snmp` (chiavi, tipi, eventuali flag `partial`);  
-    - il contratto preciso tra `SnmpService` (server), `SnmpDriver` (agent) e `SnmpEnrichmentJob`.  
-  - Finché questi elementi non saranno descritti in modo esplicito nel PDL, l’implementazione SNMP Fase 1 rimane sospesa (solo schema UI `SnmpSettings` e Feature Flag `snmp_fase1` sono pronti).
+  - OID obbligatori (Fase 1)
+
+    - 1.3.6.1.2.1.1.5.0 → sysName
+    - 1.3.6.1.2.1.1.1.0 → sysDescr
+    - 1.3.6.1.2.1.1.2.0 → sysObjectID
+
+  - Interfacce (ifTable obbligatorie):
+
+    - ifIndex — 1.3.6.1.2.1.2.2.1.1
+    - ifDescr — 1.3.6.1.2.1.2.2.1.2
+    - ifName — 1.3.6.1.2.1.31.1.1.1.1
+    - ifType — 1.3.6.1.2.1.2.2.1.3
+    - ifSpeed — 1.3.6.1.2.1.2.2.1.5
+    - ifOperStatus — 1.3.6.1.2.1.2.2.1.8
+    - ifAdminStatus — 1.3.6.1.2.1.2.2.1.7
+
+  - OID opzionali Fase 1 (se disponibili):
+
+    - temperatura dispositivo (vendor specific)
+    - uptime SNMP — 1.3.6.1.2.1.1.3.0
+
+  - Struttura obbligatoria `device_result.snmp` (Fase 1):
+
+```json
+"snmp": {
+  "device": {
+    "sys_name": "switch01",
+    "sys_descr": "HP ...",
+    "sys_object_id": "1.3.6.1.4.1....",
+    "uptime_seconds": 12345
+  },
+  "interfaces": {
+    "items": [
+      {
+        "if_index": 1,
+        "name": "1",
+        "descr": "uplink",
+        "type": "ethernet-csmacd",
+        "speed_bps": 1000000000,
+        "admin_status": "up",
+        "oper_status": "up"
+      }
+    ],
+    "partial": false
+  },
+  "errors": []
+}
+```
+
+  - Nota: OID opzionali non obbligano a fallback complessi; se informazioni non disponibili, lasciare campi `null` o vuoti.  
 
 - **10.6 Agent System Health – queue backlog & soglia offline/online**
-  - PDL System Health (§13 e PDL_UX_UI §6.9) menziona:
+  - Soglia online/offline (definizione):
+    - aggiungere in SystemSettings: `agent_offline_threshold_seconds = 120` (default 120s)
+    - regola: se now - last_seen <= threshold → ONLINE; altrimenti → OFFLINE
+
+  - Queue backlog (DB queue):
+    - backlog = jobs where status in ('pending','queued') AND tenant_id = X
+    - thresholds: usare DiscoverySettings:
+      - `queue_backlog_warning_threshold` (numero)
+      - `queue_backlog_critical_threshold` (numero)
+    - UI: se backlog > warning → WARNING; if > critical → CRITICAL
     - metriche di queue backlog;  
     - badge “Agent online/offline” basato su soglia configurabile.  
   - Attualmente:
@@ -960,14 +1147,21 @@ Questa sezione raccoglie i punti in cui il PDL o il codice non forniscono ancora
     - serve chiarire se il backlog è calcolato su una coda specifica (`discovery`) o globalmente, e come viene esposto in UI.
 
 - **10.7 HealthCheckService & job scheduler/worker heartbeat**
-  - PDL menziona un `HealthCheckService` e job di heartbeat/scheduler che aggiornano `SystemStateSettings.last_scheduler_run_at` e `last_worker_heartbeat_at`.  
-  - Nel codice:
-    - non esistono ancora `HealthCheckService`, `WorkerHeartbeatJob` o job analoghi;  
-    - il wiring concreto (quali comandi/artisan, quali schedule) non è ancora normato.  
-  - Prima di aggiungere questi componenti è necessario che il PDL definisca:
-    - il nome e la frequenza del job;  
-    - a quali code appartiene;  
-    - se deve fare solo update timestamp o ulteriori controlli (es. queue length).
+  - Nuovi job richiesti e contratto:
+
+  - `WorkerHeartbeatJob`
+    - queue: `low`
+    - frequenza: ogni `60s`
+    - azione: aggiorna `SystemStateSettings.last_worker_heartbeat_at`
+
+  - `SchedulerHeartbeatJob`
+    - queue: `default`
+    - frequenza: ogni `60s`
+    - azione: aggiorna `SystemStateSettings.last_scheduler_run_at`
+
+  - `HealthCheckService` (server)
+    - calcola: worker heartbeat last_seen, scheduler heartbeat last_seen, agent online/offline (#10.4), queue backlog (#10.4)
+    - espone metodo: `public function getSystemHealthSummary(): array` per uso UI e endpoint `/health`
 
 - **10.8 Notification pipeline completa (webhook/Telegram)**
   - Oltre a `NotificationSettings`, il PDL menziona integrazione Telegram e webhook ma non dettaglia:

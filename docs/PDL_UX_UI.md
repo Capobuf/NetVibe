@@ -540,8 +540,9 @@ La `ScanAgentResource` espone dettagli e gestione degli agent remoti.
     - se `result.device_result` è presente, visualizza la struttura `device_result` prettamente come nel tab Device → Discovery.  
     - rende immediatamente visibili `schema_version`, `errors[]` e dimensione dei dataset (counts per sezione).  
   - mostra eventuali **conflict events** generati dal merge:
-    - elenco di `DiscoveryEvent` correlati a quel job (es. MAC_MISMATCH, ORPHAN_IP).  
-    - link diretto alla pagina di merge/approvazione degli eventi.
+    - elenco di `DiscoveryEvent` correlati a quel job (es. MAC_MISMATCH, ORPHAN_IP) dove `agent_job_id = job.id` (ordinati `created_at ASC`);
+    - ogni evento mostra badge di `severity`, descrizione sintetica e link alla risorsa correlata (device, ip, port, subnet);
+    - link diretto alla pagina di merge/approvazione degli eventi (Fase 1: read-only / log only).
 - Azioni Fase 1:
   - view details (nessuna modifica diretta allo stato del job).  
   - export CSV/XLSX tramite ExportAction/ExportBulkAction (per audit esterno).  
@@ -554,6 +555,13 @@ La `ScanAgentResource` espone dettagli e gestione degli agent remoti.
 - Filtri per type/category.  
 - Diff viewer.  
 - Batch actions per resolve conflict.
+  
+Dettagli UX (Fase 1):
+
+- Gli eventi mostrati nel dettaglio job sono i `DiscoveryEvent` che hanno `agent_job_id = job.id`.
+- L’elenco è ordinato `created_at ASC` per ricostruire la sequenza di rilevamento.
+- In Fase 1 i DiscoveryEvent sono read-only: la UI li mostra come log/diagnostica (no approval workflow ancora).
+- Ogni evento mostra: `badge severity`, `short description` e `resource links` (device, ip, port, subnet). 
 
 ### 6.7 Rack View
 
@@ -582,7 +590,16 @@ Cards:
 - Scheduler status  
 - Queue backlog  
 - Agent online/offline  
+  - uses `agent_offline_threshold_seconds` (SystemSettings, default 120s) to classify online/degraded/offline
 - Bottone “Run Health Check Now”.
+
+Queue backlog:
+- Show backlog count per tenant (DB queue) and apply thresholds from `DiscoverySettings`:
+  - if > `queue_backlog_warning_threshold` → show WARNING
+  - if > `queue_backlog_critical_threshold` → show CRITICAL
+
+Health Check action:
+- 'Run Health Check Now' calls server HealthCheckService → presents a summary with worker/scheduler last_seen, agent online counts, backlog status, and any recent critical DiscoveryEvents.
 
 ## 7. Settings UX
 
@@ -595,8 +612,9 @@ Suddivisione:
   - max records;  
   - timeout override.  
 - Notifications:
-  - webhook URL (se presente in Fase 1);  
-  - telegram templates (Fase 2).  
+  - webhook configuration (Fase 1): `webhook_enabled` (toggle), `webhook_url` (input), `notify_on` toggles (agent_offline/agent_online/discovery_error/discovery_conflict/backup_completed/backup_failed), `rate_limit_seconds` (int, default 300);
+  - Telegram (Fase 2): `telegram_enabled`, `telegram_bot_token`, `telegram_chat_id` (UI provided but driver not active until Fase 2);
+  - Webhook UX: validate URL + sample test send button; show last 10 webhook failures in a diagnostic panel (status codes / payload preview).
 - Security:
   - min agent version;  
   - tls verify;  

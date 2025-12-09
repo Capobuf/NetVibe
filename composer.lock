@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "dd2a2b7231ba46bbdd64e99b2e38ff08",
+    "content-hash": "6625f72d909c8bbebb31c0bdc07f8427",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -8832,6 +8832,65 @@
                 "source": "https://github.com/tijsverkoyen/CssToInlineStyles/tree/v2.3.0"
             },
             "time": "2024-12-21T16:25:41+00:00"
+        },
+        {
+            "name": "torgodly/html2media",
+            "version": "v2.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/torgodly/Html2Media.git",
+                "reference": "b652176c1a2ad5ed906ced09e9e15b6898ff776b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/torgodly/Html2Media/zipball/b652176c1a2ad5ed906ced09e9e15b6898ff776b",
+                "reference": "b652176c1a2ad5ed906ced09e9e15b6898ff776b",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^4.0",
+                "php": "^8.1"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Torgodly\\Html2Media\\Html2MediaServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Torgodly\\Html2Media\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Abdullah Alhaj",
+                    "email": "torgodly@gmail.com"
+                }
+            ],
+            "description": "Html2Media is a versatile Laravel package that allows users to convert HTML content into high-quality PDFs with options for either downloading or triggering a print dialog. Ideal for generating documents, invoices, and reports, this package includes configurable settings for file name, page orientation, format, margins, and scale. Html2Media also provides seamless integration with Filament actions, enabling dynamic content rendering in modals and customizable output previews. Whether you need to save a PDF or send it directly to the printer, Html2Media simplifies the process with robust, flexible features.",
+            "keywords": [
+                "documents",
+                "filament",
+                "html-to-pdf",
+                "invoice",
+                "laravel",
+                "pdf",
+                "pdf-generation",
+                "printing",
+                "reporting"
+            ],
+            "support": {
+                "issues": "https://github.com/torgodly/Html2Media/issues",
+                "source": "https://github.com/torgodly/Html2Media/tree/v2.1.1"
+            },
+            "time": "2025-10-12T20:04:52+00:00"
         },
         {
             "name": "ueberdosis/tiptap-php",

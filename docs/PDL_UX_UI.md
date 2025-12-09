@@ -396,33 +396,111 @@ Cosa mostra:
 
 ### 6.2 Device Resource
 
-Tabs:
+La `DeviceResource` Filament è la vista canonica per ogni device DCIM. La UI è organizzata in tab obbligatori, mappati su pagine/sezioni Filament, con la seguente struttura:
 
-- Overview:
-  - hostname, mgmt IP, vendor, serial, uptime, badges.  
-- Interfaces:
-  - tabella responsiva con name, MAC, oper/admin status, speed, azione slide-over per dettagli.  
-- VLANs:
-  - VLAN membership matrix.  
-- Discovery:
-  - Run discovery (actions);  
-  - Last results;  
-  - Partial data viewer.  
-- SNMP Settings (minimal Fase 1):
-  - enable SNMP;  
-  - community masked;  
-  - timeout;  
-  - retries.  
-- Logs / Jobs:
-  - relation managers.
+```text
+Device
+ ├── Overview        (Infolist read‑only)
+ ├── Discovery       (Infolist + JSON viewer)
+ ├── Networking      (Form + RelationManager Ports)
+ └── SNMP Settings   (Form strutturato)
+```
+
+#### 6.2.1 Tab “Overview” (Infolist read‑only)
+
+- Implementata come Infolist Filament, non come form (solo lettura).  
+- Contenuti minimi:
+  - `hostname` (device.name), `management_ip` (campo autorevole in modello Device).  
+  - Vendor / modello / serial (derivati da `device_result.device` o merge policy).  
+  - Uptime, OS version, piattaforma (`mikrotik`, `unifi`, `generic`).  
+  - Badges di stato:
+    - Health (Healthy / Partial / Stale / Unknown).  
+    - Auth status (valid / invalid / unreachable).  
+    - Ultimo canale visto (REST / SNMP / subnet scan).  
+- Mostra anche un riepilogo discovery:
+  - ultimo job completato, tipo job, timestamp, esito (badge).  
+  - link rapido al Job Center per quel device.
+
+#### 6.2.2 Tab “Discovery”
+
+- Sezione centrale per la pipeline agent → server per il singolo device.  
+- Blocchi principali:
+  - **Last scan**: timestamp ultima discovery completa (REST/SNMP), tipo job (`check_connectivity`, `discovery_deep`, `snmp_discovery`), agent usato.  
+  - **Health summary**: stato aggregato (REST/SNMP/subnet), con indicatori `ok/partial/error`.  
+  - **REST status**:
+    - ultimo esito `check_connectivity` (HTTP/REST Mikrotik).  
+    - errori recenti (`AUTH_ERROR`, `NET_TIMEOUT`, ecc.) da `device_result.errors[]` o dal job.  
+  - **SNMP status**:
+    - ultimo esito `snmp_discovery` (se abilitato).  
+    - errori recenti SNMP (timeout, community invalid, `SCHEMA_MISMATCH`, ecc.).  
+  - **Device Result viewer**:
+    - JSON viewer (pretty‑print, font monospace) del `device_result` più recente associato a quel device.  
+    - Deve evidenziare almeno:
+      - `schema_version`.  
+      - chiavi principali `device`, `interfaces.items`, `vlans.items`, `arp.items`, `dhcp_leases.items`, `neighbors.items`, `bridge_hosts.items`, eventuale sezione `snmp`.  
+      - `errors[]` con codice, source, message.  
+    - La viewer è read‑only; supporta collapse/expand per sezioni e copia in clipboard.  
+  - **Actions (async)**:
+    - “Check connectivity” → dispatch job `check_connectivity`.  
+    - “Full discovery” → dispatch job `discovery_deep` (Mikrotik REST + subnet/ARP/DHCP, consolidato in `device_result`).  
+    - “Test SNMP” → dispatch job `snmp_discovery` (solo se SNMP abilitato).
+
+#### 6.2.3 Tab “Networking”
+
+- Scopo: concentrare tutti gli aspetti di connettività e topologia L2/L3 del device.  
+- Sezioni minime:
+  - **Management IP & access**:
+    - Campo `management_ip` (autorevole per discovery, vedi PDL principale §7.9).  
+    - Eventuale alias per IP secondari o note operative.  
+  - **Ports / Interfaces**:
+    - RelationManager `PortsRelationManager` come tabella principale della sezione.  
+    - Colonne minime:
+      - `name`, `mac`, `status` (badge), `speed`, `duplex`.  
+      - `vlan_mode`, `pvid`, `tagged_vlans`.  
+      - `last_seen` (da discovery) e `discovered_by_scan_agent_id` (se disponibile).  
+    - Slide‑over per dettagli porta (descrizione, note, link fisico).  
+    - Azioni di collegamento/disconnessione link (già coperte nel PDL principale per DCIM).
+
+#### 6.2.4 Tab “SNMP Settings”
+
+- Implementa la UI SNMP minimale Fase 1 (vedi anche §6.8), ma strutturata come tab dedicato.  
+- Sottosezioni:
+  - **Connection**:
+    - `Enable SNMP` (toggle, `snmp_settings.enabled`).  
+    - `Host/IP`, `Port` (default 161), `Version` (`v1`/`v2c`).  
+    - `Community` (password, masked, cifrata).  
+    - `Timeout` (ms) e `Retries`.  
+  - **Port naming priority**:
+    - Repeater riordinabile per definire l’ordine fra `ifAlias`, `ifDescr`, `ifName`.  
+  - **Custom OIDs (globali)**:
+    - Repeater per definire OID globali a livello device (non per‑port) con:
+      - `oid`, `field_name`, `expected_type`.  
+  - **Azioni**:
+    - Bottone “Test SNMP” (stessa azione del tab Discovery), che in Fase 1 è job async e non blocca la UI.
 
 ### 6.3 ScanAgent
 
-- Token management (one-time reveal).  
-- Last seen.  
-- Config preview.  
-- Logs.  
-- Jobs.
+La `ScanAgentResource` espone dettagli e gestione degli agent remoti.
+
+- **Tab principale (Details)**:
+  - Token management (one‑time reveal PAT, gestione rotate/revoke).  
+  - Campi base agent (nome, customer, stato `active`).  
+  - `last_seen` con badge di stato (online / degraded / offline / outdated).  
+  - Config preview (estratto da `ScanAgent.settings` e da `/api/v1/agent/config`).
+- **Tab “Logs” (AgentLogsRelationManager)**:
+  - Tab dedicato che mostra i log ricevuti da `/api/v1/agent/logs`.  
+  - Filtri:
+    - `level` (DEBUG/INFO/WARNING/ERROR/CRITICAL).  
+    - `date range` (da/a, basato su `created_at`).  
+    - testo libero su `message` e, se possibile, su `context` (full‑text semplice).  
+  - Colonne:
+    - timestamp, level (badge), message, agente/tenant (se non impliciti).  
+  - Azioni:
+    - “View JSON context” → slide‑over/modal che mostra il campo `context` formattato JSON (read‑only).  
+  - La tab Logs deve aggiornare implicitamente `last_seen` quando arrivano nuovi log (la logica server aggiorna `scan_agents.last_seen` su ogni ingest).
+- **Tab “Jobs” (AgentJobsRelationManager)**:
+  - Storico job associati all’agent (riuso di Job Center filtrato per agent).  
+  - Link rapidi a Device e Job Center globale.
 
 ### 6.4 IPAM
 
@@ -432,13 +510,44 @@ Tabs:
   - free / used / conflicted / locked.  
 - IP Editing:
   - campi editabili: comment, type (static/dhcp static), category (printer/pc/custom).
+- **Subnet view (dettaglio)**:
+  - Deve mostrare esplicitamente:
+    - `last_scan` (timestamp ultima scansione subnet).  
+    - `last_discovery` (timestamp ultima discovery/ingest associata).  
+  - Filtri aggiuntivi:
+    - filtro per `scan_agent` associato alla subnet.  
+  - Sezione “Discovery status”:
+    - stato corrente discovery (never run / scheduled / running / completed / partial / failed).  
+    - indicatori per partial dataset (es. ARP troncato) coerenti con `device_result.arp.partial`.  
+    - link alle ultime discovery per quella subnet (Job Center filtrato).
+- **Ports (DCIM) allineate a discovery**:
+  - La Ports UI (sia in Device che in Rack) deve esporre:
+    - `last_seen` (da discovery) per ogni porta.  
+    - `discovered_by_scan_agent_id` (agent responsabile dell’ultimo aggiornamento).  
+  - Questi campi sono mostrati come colonne toggleable ma disponibili by default nelle viste tecniche.
 
 ### 6.5 Job Center
 
-- Tabella `agent_jobs`.  
-- Filters (type/status/tenant).  
-- Slide-over → payload/result/errors.  
-- Azioni: rerun, jump to device.
+- Tabella `agent_jobs` come vista centrale di tutti i job agent.  
+- Filtri:
+  - `type`, `status`, `tenant` (già previsti).  
+  - `device` (lookup su hostname/device_id).  
+  - `agent` (ScanAgent).  
+  - `scope` (`device|agent|system`).  
+- Slide‑over (dettaglio job):
+  - mostra `payload`, `result`, `result_metadata`, `error_message` (read‑only).  
+  - include un **DeviceResult viewer**:
+    - se `result.device_result` è presente, visualizza la struttura `device_result` prettamente come nel tab Device → Discovery.  
+    - rende immediatamente visibili `schema_version`, `errors[]` e dimensione dei dataset (counts per sezione).  
+  - mostra eventuali **conflict events** generati dal merge:
+    - elenco di `DiscoveryEvent` correlati a quel job (es. MAC_MISMATCH, ORPHAN_IP).  
+    - link diretto alla pagina di merge/approvazione degli eventi.
+- Azioni Fase 1:
+  - view details (nessuna modifica diretta allo stato del job).  
+  - export CSV/XLSX tramite ExportAction/ExportBulkAction (per audit esterno).  
+- Azioni Fase 2 (non ancora implementate, ma previste a livello PDL):
+  - rerun job (solo per job idempotenti, es. discovery).  
+  - jump to device / jump to agent (shortcut verso le rispettive Resource).  
 
 ### 6.6 DiscoveryEvent
 
@@ -455,11 +564,15 @@ Tabs:
 
 ### 6.8 SNMP Minimal UI
 
-- enable;  
-- community;  
-- timeout;  
-- custom global OIDs;  
-- test SNMP.
+La UI minima Fase 1 per SNMP, allineata al PDL principale, comprende:
+
+- abilitazione SNMP per device (`enabled`);  
+- host/IP, port, version (v1/v2c);  
+- community masked (salvata in forma cifrata);  
+- timeout (ms) e retries;  
+- port name priority configurabile tramite lista riordinabile (ifAlias / ifDescr / ifName);  
+- custom global OIDs, definiti a livello device (non per-port) tramite repeater;  
+- azione “Test SNMP” (job async), la cui implementazione effettiva è prevista nella Milestone C (SNMP Fase 1 pipeline).
 
 ### 6.9 System Health
 
@@ -540,11 +653,18 @@ Lo stato viene salvato in `system_state` (vedi PDL principale).
 
 ### 11.3 Script locale
 
-- `./dev/test.sh`:
-  - avvia docker-compose-test;  
-  - prepara DB;  
-  - lancia Pest;  
-  - mostra report.
+- Script ufficiali:
+  - `./dev/test` — esegue l'intera suite (lint + Pest + Dusk) in ambiente Docker di test.  
+  - `./dev/test-fast` — solo test rapidi (unit + feature base).  
+  - `./dev/test-ui` — test Filament + snapshot.  
+  - `./dev/test-agent` — test per agent-protocol + compatibilità schema `device_result`.  
+  - `./dev/test-ci` — entrypoint usato in CI.
+
+Ogni script:
+
+- usa l'ambiente Docker di test;  
+- resetta i database di test prima del run;  
+- esegue le suite in ordine chiaro (lint → unit/integration → UI/snapshot).
 
 ## 12. Anti-patterns
 

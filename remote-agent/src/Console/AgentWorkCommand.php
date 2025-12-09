@@ -9,6 +9,7 @@ use RemoteAgent\Drivers\MikrotikApiDriver;
 use RemoteAgent\Logging\Logger;
 use GuzzleHttp\Exception\RequestException;
 use RemoteAgent\Handlers\JobHandler;
+use RemoteAgent\Support\DeviceResultBuilder;
 
 class AgentWorkCommand
 {
@@ -19,6 +20,9 @@ class AgentWorkCommand
     private MikrotikApiDriver $mikrotikDriver;
     private JobHandler $handler;
     private string $remoteLogLevel;
+    private DeviceResultBuilder $deviceResultBuilder;
+    private ?string $minSupportedSchemaVersion = null;
+    private bool $schemaCompatible = true;
 
     public function __construct()
     {
@@ -111,13 +115,15 @@ class AgentWorkCommand
         // 2. MikrotikApiDriver: For device-specific REST calls
         $this->netVibeClient = new NetVibeHttpClient($this->serverUrl, $this->token);
         $this->mikrotikDriver = new MikrotikApiDriver();
+        $this->deviceResultBuilder = new DeviceResultBuilder();
 
         // Attach remote sink so logs are shipped back to control plane when enabled
-        $this->logger->setRemoteSink(function (string $level, string $message): void {
+        $this->logger->setRemoteSink(function (string $level, array $record): void {
             try {
                 $this->netVibeClient->postAgentLogs([
                     'level' => strtoupper($level),
-                    'message' => $message,
+                    'message' => $record['message'] ?? '',
+                    'context' => $record,
                 ]);
             } catch (\Throwable $e) {
                 // Swallow errors to avoid recursion / noisy output
@@ -132,7 +138,7 @@ class AgentWorkCommand
             $this->logger->warning('No API token found (AGENT_API_TOKEN or IPAM_AGENT_API_KEY) — requests will be unauthenticated');
         }
 
-        $this->handler = new JobHandler($this->mikrotikDriver, $this->netVibeClient, $this->logger);
+        $this->handler = new JobHandler($this->mikrotikDriver, $this->netVibeClient, $this->logger, $this->deviceResultBuilder);
         $this->logger->info('Initialization complete, ready to process jobs');
     }
 
@@ -199,6 +205,14 @@ class AgentWorkCommand
                     $this->logger->warning('Failed to fetch agent config: ' . $e->getMessage());
                 }
                 $lastConfigCheckAt = $now;
+            }
+
+            // Se lo schema locale non è compatibile con il min_supported_schema_version del server,
+            // l'agent continua a fare solo heartbeat/logs, ma non esegue discovery jobs.
+            if (! $this->schemaCompatible) {
+                $this->logger->warning('Schema_version not compatible with server min_supported_schema_version; skipping job polling');
+                sleep(30);
+                continue;
             }
 
             // Jobs: high-frequency polling (every 5s)
@@ -296,18 +310,48 @@ class AgentWorkCommand
      */
     protected function applyRuntimeConfig(array $cfg = null): void
     {
-        if (!$cfg) {
+        if (! $cfg) {
             return;
         }
 
         // Example: respect agent_config.log_level from server if provided
-        if (!empty($cfg['log_level'])) {
+        if (! empty($cfg['log_level'])) {
             $this->logger->debug('Server provided log_level: ' . $cfg['log_level']);
             $this->logger->setLevel($cfg['log_level']);
             $this->logger->setRemoteThreshold($cfg['log_level']);
         }
 
-        if (!empty($cfg)) {
+        if (! empty($cfg['max_records_per_dataset']) && $this->handler) {
+            $max = (int) $cfg['max_records_per_dataset'];
+            $this->logger->debug('Server provided max_records_per_dataset=' . $max);
+            $this->handler->setMaxRecordsPerDataset($max);
+        }
+
+        // Version negotiation: confronta schema_version locale con min_supported_schema_version del server.
+        if (! empty($cfg['min_supported_schema_version'])) {
+            $this->minSupportedSchemaVersion = (string) $cfg['min_supported_schema_version'];
+
+            // DeviceResultBuilder Fase 1 usa schema_version fisso 1.0.0
+            $localSchemaVersion = '1.0.0';
+            $localMajor = (int) explode('.', $localSchemaVersion)[0];
+            $minMajor = (int) explode('.', $this->minSupportedSchemaVersion)[0];
+
+            if ($localMajor < $minMajor) {
+                $this->schemaCompatible = false;
+                $this->logger->error(
+                    'Local device_result.schema_version ' . $localSchemaVersion .
+                    ' is lower than server min_supported_schema_version ' . $this->minSupportedSchemaVersion .
+                    ' — discovery jobs will be skipped until upgraded'
+                );
+            } else {
+                if (! $this->schemaCompatible) {
+                    $this->logger->info('Schema_version is now compatible with server; re-enabling discovery jobs');
+                }
+                $this->schemaCompatible = true;
+            }
+        }
+
+        if (! empty($cfg)) {
             $this->logger->debug('Applied runtime config from server');
         }
     }

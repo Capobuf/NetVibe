@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use App\Models\User;
+use App\Settings\SystemStateSettings;
 use Throwable;
 
 class CheckSystemInstalled
@@ -40,6 +41,15 @@ class CheckSystemInstalled
     protected function isInstalled(): bool
     {
         try {
+            // Fonte autorevole: stato di sistema persistito
+            if (class_exists(SystemStateSettings::class)) {
+                /** @var \App\Settings\SystemStateSettings $state */
+                $state = app(SystemStateSettings::class);
+
+                return $state->installed && $state->configured;
+            }
+
+            // Fallback legacy solo quando SystemStateSettings non è disponibile
             return Schema::hasTable('users') && User::exists();
         } catch (Throwable $e) {
             return false;

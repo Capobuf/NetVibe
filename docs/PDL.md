@@ -162,7 +162,8 @@ Come da `docs/01_INFRASTRUCTURE.md`:
   - MariaDB 11.x, volume persistente `db-data`.  
   - Script `docker/db-init.sh` può eseguire seed/test DB.
 - **`netvibe-redis` (Redis)**  
-  - Redis 8 (AOF) per code, cache e (opzionalmente) sessioni.  
+  - Redis 8.4 (immagine `redis:8.4`) per code, cache e (opzionalmente) sessioni.  
+  - In configurazione standard viene usato senza AOF (`--appendonly no`) per semplicità operativa.  
   - Può essere assente in ambienti shared hosting; in quel caso si usano driver file/sync (vedi Setup Wizard).
 - **Storage**  
   - Volume Docker nominato (es. `app-storage`) montato su `/var/www/html/storage`.  
@@ -225,6 +226,245 @@ TLS e reverse proxy non sono responsabilità dell’app: terminazione TLS e rout
   - File generati su volume storage con retention configurabile.
 - **Setup Wizard**  
   - Entry-point iniziale per nuove installazioni, con controlli di health, migrazioni e bootstrap entità base.
+
+### 2.6 Struttura cartelle Laravel (server)
+
+La struttura del progetto Laravel è standardizzata e funge da riferimento per il codice e per gli agent che contribuiscono:
+
+```text
+/
+├── app/                         # Codice applicativo Laravel (core della domain logic)
+│   ├── Actions/                 # Azioni atomiche, orchestrano singole operazioni (SOLID)
+│   │   ├── Agent/               # Azioni specifiche per ingest, polling agent
+│   │   ├── Discovery/           # Pipeline discovery (REST, SNMP, UniFi, ICMP)
+│   │   ├── Ingest/              # Normalizzazione e upsert dati nel DB
+│   │   ├── Merge/               # MergePolicyService + gestione campi locked (TODO: da consolidare)
+│   │   ├── Snmp/                # SNMP parsing/normalizzazione (Fase 1, TODO: struttura da completare)
+│   │   └── Health/              # Health check scheduler/worker (TODO: entrypoint centrale)
+│   ├── Console/                 # Comandi artisan, scheduler Kernel
+│   ├── Domain/                  # Moduli di dominio (DDD-lite; TODO: progressivo spostamento logica)
+│   │   ├── Device/              # Logica DCIM, porte, layout rack
+│   │   ├── IPAM/                # Subnet, IP, MAC, DHCP, ARP
+│   │   ├── Discovery/           # Eventi, capability profiles, conflitti
+│   │   ├── Snmp/                # Entità SNMP, preset, mappature MIB2
+│   │   └── Wan/                 # Modello WAN, IP pubblici, NAT, provider
+│   ├── Enums/                   # Enum PHP 8.2 (type safety per stati/capabilities)
+│   ├── Exceptions/              # Eccezioni custom strutturate
+│   ├── Filament/                # UI Filament v4 (unico framework UI supportato)
+│   │   ├── Clusters/            # Aree funzionali: Discovery, IPAM, DCIM, Settings…
+│   │   ├── Pages/               # Pagine non collegate a risorsa (System Health, Settings, ecc.)
+│   │   ├── Resources/           # CRUD e viste entità (Device, IP, VLAN…)
+│   │   └── Widgets/             # Dashboard, metriche, grafici
+│   ├── Http/
+│   │   ├── Controllers/         # Controller API e Web
+│   │   │   ├── Api/Agent/       # Endpoint agent protocol (config, jobs, results)
+│   │   │   └── Api/User/        # API per azioni asincrone lato UI
+│   │   └── Middleware/          # Middleware: tenancy, auth token agent, wizard-lock, ecc.
+│   ├── Jobs/                    # Tutti i job in queue
+│   │   ├── Discovery/           # Job per Mikrotik/SNMP/UniFi/fping
+│   │   ├── Export/              # CSV/XLSX/PDF export
+│   │   ├── Backup/              # Backup DB (se implementato)
+│   │   └── Notification/        # Telegram/email/webhook (Fase 2)
+│   ├── Models/                  # Modelli Eloquent
+│   ├── Observers/               # Listeners per eventi Eloquent
+│   ├── Policies/                # RBAC / permessi
+│   ├── Services/                # Servizi applicativi orizzontali
+│   │   ├── DiscoveryJobService.php
+│   │   ├── MergePolicyService.php
+│   │   ├── SnmpService.php
+│   │   ├── UnifiControllerService.php
+│   │   └── HealthCheckService.php
+│   ├── Settings/                # Spatie settings (General/Discovery/Notification/Security/Features/SystemState)
+│   ├── Support/                 # Helpers, transformer, validazioni comuni
+│   └── ViewModels/              # DTO per UI (pattern ViewModel; opzionale)
+│
+├── bootstrap/                   # Boot Laravel
+├── config/                      # Config applicazione
+├── database/
+│   ├── migrations/              # Migrazioni SQL
+│   ├── seeders/                 # Seeding dati
+│   └── factories/               # Factory test
+│
+├── docs/
+│   ├── docs-pdl/                # (TODO) Eventuale consolidamento PDL in sotto-cartella dedicata
+│   ├── docs-laravelv12/         # Guide specifiche per Laravel 12
+│   ├── docs-filamentv4/         # Guide per Filament v4
+│   ├── docs-agent-protocol/     # Documentazione schema `device_result` e agent protocol
+│   └── internal-diagrams/       # UML, architetture, diagrammi mermaid
+│
+├── docker/                      # Artefatti Docker (app, worker, agent)
+├── resources/                   # Blade, asset, traduzioni
+├── routes/                      # Web/API/console routes
+├── storage/
+│   ├── logs/                    # Log JSON strutturati
+│   ├── app/exports/             # File export temporanei
+│   └── app/backups/             # Backup DB (se abilitato)
+│
+├── tests/
+│   ├── Feature/
+│   ├── Unit/
+│   ├── Integration/             # Test integration DB/queue (TODO: da consolidare)
+│   ├── UI/                      # Laravel Dusk (wizard, flow UI) (TODO)
+│   ├── AgentProtocol/           # Test schema `device_result` + chunking (TODO)
+│   └── Snapshots/               # Snapshot testing (spatie/pest-plugin-snapshots)
+│
+├── .env.example
+├── compose.yml                  # Docker Compose V2 (server stack)
+└── README.md
+```
+
+Per il codice esistente che non rispecchia ancora questa struttura, il PDL impone un refactoring graduale: nuovi moduli devono rispettare il layout, quelli legacy devono essere migrati quando toccati.
+
+### 2.7 Struttura progetto remote-agent
+
+Il remote-agent vive in una directory dedicata (`remote-agent/` o `/agent/` a seconda del layout definitivo) con una struttura pensata per separare driver, job e support:
+
+```text
+/agent/
+├── Drivers/                     # Ogni “sorgente” separata
+│   ├── MikrotikRestDriver.php   # REST RouterOS 7+
+│   ├── SnmpDriver.php           # SNMP Fase 1 (MIB-II)
+│   └── UnifiDriver.php          # UniFi Controller API
+├── Jobs/
+│   ├── DiscoveryJob.php         # Discovery principale (Mikrotik/UniFi)
+│   ├── SnmpEnrichmentJob.php    # Fase 1 SNMP (enrichment interfacce)
+│   └── ConnectivityJob.php      # Ping/check agent → device
+├── Http/
+│   └── AgentApiClient.php       # HTTP client verso server (retry + backoff)
+├── Support/
+│   ├── DeviceResultBuilder.php  # Costruzione schema `device_result`
+│   ├── ChunkEncoder.php         # Encoder chunking
+│   ├── ChunkDecoder.php         # Decoder chunks
+│   └── Logger.php               # Log JSON formattato (stderr + mirror server)
+├── config/                      # Config locale agent (env, preset)
+├── bin/
+│   └── netvibe-agent            # CLI principale (entrypoint)
+├── tests/                       # Test specifici agent (unit + integrazione protocol)
+└── docs/                        # Documentazione agent
+```
+
+Lo stato attuale del `remote-agent/` è più semplice; il PDL definisce la struttura target. Nuove funzionalità (es. SNMP Fase 1, `device_result` completo, chunking) devono seguire questa organizzazione; il codice legacy deve essere migrato progressivamente.  
+In aggiunta, il PDL fissa come **contratto vincolante**:
+
+- un file `.env.example` per l’agent, nella root `remote-agent/`, con almeno:
+
+  ```env
+  SERVER_URL=http://ipam:9693
+  AGENT_API_TOKEN=
+  LOG_LEVEL=info
+  AGENT_POLL_INTERVAL_SECONDS=5
+  AGENT_CONFIG_REFRESH_SECONDS=60
+  ```
+
+- un `docker-compose.yml` (o `compose.yml`) dedicato all’agent, non incluso nello stack server principale, con servizio:
+
+  ```yaml
+  services:
+    agent:
+      build: .
+      container_name: netvibe-agent
+      restart: unless-stopped
+      environment:
+        SERVER_URL: ${SERVER_URL}
+        AGENT_API_TOKEN: ${AGENT_API_TOKEN}
+        LOG_LEVEL: ${LOG_LEVEL:-info}
+      volumes:
+        - ./:/app
+      command: php /app/agent.php
+  ```
+
+Qualsiasi compose legacy che utilizzi variabili o nomi diversi per `SERVER_URL`/token va considerato debito tecnico e migrato a questo contratto.
+
+### 2.8 Docker Compose V2 (compose.yml) e profili
+
+Il deployment standard usa un singolo file `compose.yml` (Docker Compose V2) con servizi e profili:
+
+```yaml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    env_file: .env
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - storage:/var/www/html/storage
+    depends_on:
+      - db
+      - redis
+    profiles: ["dev", "prod"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    env_file: .env
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - app
+      - redis
+    profiles: ["prod", "dev", "worker"]
+
+  db:
+    image: mariadb:11
+    environment:
+      MYSQL_DATABASE: netvibe
+      MYSQL_USER: netvibe
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - dbdata:/var/lib/mysql
+    profiles: ["dev", "prod", "test"]
+
+  redis:
+    image: redis:8.4
+    command: ["redis-server", "--appendonly", "no"]
+    volumes:
+      - redisdata:/data
+    profiles: ["dev", "prod"]
+
+  test-db:
+    image: mariadb:11
+    environment:
+      MYSQL_DATABASE: netvibe_test
+      MYSQL_USER: netvibe
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    tmpfs:
+      - /var/lib/mysql
+    profiles: ["test"]
+
+volumes:
+  storage:
+  dbdata:
+  redisdata:
+```
+
+Note:
+
+- Non esiste più un `docker-compose.yml` legacy: il file canonico è `compose.yml`.  
+- Il remote-agent può avere un proprio `compose.yml` separato o essere gestito con `docker run` dedicato; la sua definizione non è inclusa nello stack server principale.
+
+### 2.9 Bootstrap e comandi di sviluppo
+
+Per uniformare l’esperienza degli sviluppatori e degli agent:
+
+- **Ambiente dev**
+  - `docker compose --profile dev up -d`
+  - `docker compose exec app composer install`
+  - `docker compose exec app php artisan migrate`
+  - `docker compose exec app npm run dev`
+- **Ambiente test**
+  - `docker compose --profile test up -d`
+  - `docker compose exec app php artisan test` (oppure gli script `./dev/test*` descritti nel capitolo Testing/QA)
+- **Build/Deploy produzione**
+  - `docker compose --profile prod up -d --build`
+  - `docker compose exec app php artisan migrate --force`
+
+Qualsiasi documentazione, script o guida che faccia riferimento a `docker-compose.yml` o a comandi `docker-compose` è da considerarsi legacy e va aggiornata a `compose.yml` / `docker compose`.
 
 ---
 
@@ -573,6 +813,27 @@ L’integrazione SNMP si riflette nella UI DCIM (Ports e vista rack):
 
 Tutti questi elementi sono realizzati esclusivamente con componenti Filament (Badge, Icon, Infolist, Table), senza CSS custom.
 
+### 6.6 DeviceResource — layout tabs e viste collegate
+
+La `DeviceResource` unica (cluster “Racks & Devices”) espone una vista per‑device organizzata come segue (coerente con `docs/PDL_UX_UI.md §6.2`):
+
+- Tab **Overview** (Infolist read‑only):  
+  - mostra campi chiave del modello `Device` (`hostname`, `management_ip`, vendor/model/serial, stato health/auth, uptime);  
+  - riflette lo stato dell’ultimo ingest/merge (ultimo job, canale, timestamp) senza consentire editing diretto.
+- Tab **Discovery**:  
+  - mostra lo storico discovery sintetico (Last scan, Health summary, REST status, SNMP status);  
+  - include un viewer JSON del `device_result` più recente (pretty‑print, con enfasi su `schema_version` ed `errors[]`);  
+  - espone azioni async obbligatorie: `Check connectivity`, `Full discovery`, `Test SNMP`.
+- Tab **Networking**:  
+  - espone i campi connessi a `management_ip` e alla topologia interfacce;  
+  - ospita il `PortsRelationManager` come tabella principale per le porte del device, includendo `last_seen` e `discovered_by_scan_agent_id` come colonne dati;  
+  - funge da punto di ingresso alla vista rack e ai link fisici.
+- Tab **SNMP Settings**:  
+  - ospita lo schema `snmp_settings` (connection, port name priority, custom OIDs) come descritto in §7.10;  
+  - offre un entrypoint coerente per il job `snmp_discovery` e per la validazione config SNMP.
+
+Questa struttura è vincolante: eventuali varianti di DeviceResource devono convergere su questo layout, e qualsiasi campo aggiuntivo va modellato come estensione di uno dei tab sopra (non come nuove resource parallele).
+
 ---
 
 ## 7. Agent, Discovery & Mikrotik REST
@@ -582,10 +843,12 @@ Tutti questi elementi sono realizzati esclusivamente con componenti Filament (Ba
 Riferimento di dettaglio: `docs/01_INFRASTRUCTURE.md`.
 
 - Ogni agent è legato a un customer (no agent globali non scopiati) e opzionalmente a una location.  
-- Config minima via env:
-  - `SERVER_URL` / `AGENT_SERVER_URL` / `IPAM_AGENT_API_URL` (base URL, `/api/v1` escluso).  
-  - `AGENT_API_TOKEN` / `IPAM_AGENT_API_KEY` (PAT generata da UI).  
-  - Opzionale `LOG_LEVEL`.
+- Config minima via env (contratto definitivo):
+  - `SERVER_URL` (base URL dell’app, **senza** `/api` o `/api/v1`; l’agent aggiunge sempre `/api/v1/...` in modo autonomo).  
+  - `AGENT_API_TOKEN` (PAT generata da UI).  
+  - `LOG_LEVEL` opzionale.  
+  - `AGENT_POLL_INTERVAL_SECONDS` (frequenza polling jobs, default 5s se non impostato).  
+  - `AGENT_CONFIG_REFRESH_SECONDS` (frequenza polling `/api/v1/agent/config`, default 60s se non impostato).
 - Tutte le altre impostazioni (polling, timeout, TLS verify toggle, limiti di dataset) sono spinte dal server e persistite lato agent (config file/cache) — dove non ancora implementato, usare `TODO`.
 - Stati operativi agent:
   - Disconnesso a lungo: `last_seen` oltre soglia → badge rosso, possibile alert Telegram.  
@@ -603,7 +866,7 @@ Endpoint di configurazione:
   - L’agent lo chiama circa ogni 60 secondi.  
   - Supporta header `If-None-Match` per usare ETag ed evitare di trasferire sempre la config completa.
 
-Payload Fase 1:
+Payload Fase 1 (contratto IMPLEMENTATO lato server):
 
 ```json
 {
@@ -632,13 +895,19 @@ Payload Fase 1:
 
 Regole:
 
-- `min_agent_version` e `min_supported_schema_version` sono usati lato agent per decidere se la versione è compatibile col server.  
-- Impostazioni globali (settings) definiscono i default; override per singolo agent (campo `settings` di ScanAgent) sovrascrivono i globali.  
+- `min_agent_version` e `min_supported_schema_version` sono letti da `SecuritySettings` e sono usati lato agent per decidere se la versione è compatibile col server.  
+- `timeout_rest_ms`, `timeout_snmp_ms` e `max_records_per_dataset` provengono da `DiscoverySettings` e possono essere sovrascritti via `ScanAgent.settings` (chiavi `timeout_rest_ms`, `timeout_snmp_ms`, `max_records_per_dataset`).  
+- `tls_verify` proviene da `SecuritySettings->agent_tls_verify` ed è sovrascrivibile via `ScanAgent.settings["tls_verify"]`.  
+- `log_level` utilizza la priorità:
+  - `ScanAgent.log_level`  
+  - altrimenti `ScanAgent.settings["log_level"]`  
+  - altrimenti default `"info"`.  
+- `features` è costruito da `FeatureFlagSettings` (chiavi `snmp_fase1`, `chunking`, `gzip`).  
 - In caso di conflitto tra global e agent:
-  - vince l’impostazione specifica per agent.  
+  - vince l’impostazione specifica per agent (`ScanAgent.settings`).  
 - L’agent:
   - ignora campi sconosciuti (forward compatibility).  
-  - può usare ETag/If-None-Match per ridurre traffico: se la config non cambia, il server risponde `304 Not Modified`.
+  - può usare ETag/If-None-Match per ridurre traffico: se la config non cambia, il server risponde `304 Not Modified` con solo header `ETag` aggiornato.
 
 ### 7.2 Timeouts Mikrotik REST
 
@@ -796,6 +1065,7 @@ Contratto Fase 1 (tutte le sezioni presenti, anche se vuote):
   "dhcp_leases": { "items": [], "partial": false, "limit": null },
   "neighbors": { "items": [], "partial": false },
   "bridge_hosts": { "items": [], "partial": false },
+  "snmp": { "device": {}, "interfaces": { "items": [], "partial": false }, "errors": [] },
   "errors": []
 }
 ```
@@ -803,7 +1073,8 @@ Contratto Fase 1 (tutte le sezioni presenti, anche se vuote):
 - `schema_version`: stringa **semver** (`"1.0.0"` nella Fase 1).
   - Ogni **major** può introdurre breaking changes.  
   - Il server mantiene un `min_supported_schema_version` e rifiuta payload con major inferiore (HTTP `426` + body descrittivo).  
-  - Minor/patch devono essere gestite in modalità forward‑compatible (il server ignora campi sconosciuti).
+  - Minor/patch devono essere gestite in modalità forward‑compatible (il server ignora campi sconosciuti).  
+  - L’agent legge `min_supported_schema_version` da `/api/v1/agent/config` e, se non compatibile, smette di inviare discovery (solo log/health) finché non viene aggiornato.
 
 #### 7.6.1 Sezione `device` (OBBLIGATORIA)
 
@@ -1002,7 +1273,8 @@ Il server:
 
 - ignora campi sconosciuti (forward compatibility);  
 - non fallisce se una sezione ha `items: []` ma rispetta le indicazioni `partial/limit`;  
-- logga e visualizza in UI gli errori significativi.
+- logga e visualizza in UI gli errori significativi;  
+- **non accetta più** payload legacy alternativi (es. `arp_table`, `dhcp_leases` fuori da `device_result`): tali formati sono considerati debito e vanno gestiti solo attraverso layer di compatibilità temporaneo, da rimuovere una volta migrati tutti gli agent.
 
 #### 7.6.1 Trasporto, gzip e limiti di dimensione
 
@@ -1453,7 +1725,7 @@ Schema dati previsto per SNMP (da implementare/validare con migrazioni reali):
   - `port_name_priority` (JSON array, es. `["ifAlias", "ifDescr", "ifName"]`).  
   - `custom_oids` (JSON array di oggetti `{oid, field_name, expected_type}`).
 
-  Fino a conferma delle migrazioni, questi campi devono essere marcati `TODO` a livello di implementazione.
+  La struttura è implementata nella migrazione `2025_12_20_000103_create_snmp_settings_table.php` e nel modello `App\Models\SnmpSettings`. La colonna `community` utilizza lo stesso cast `encrypted` già usato da `CredentialProfile`.
 
 - **Estensioni alla tabella `ports` (`device_ports`)**
 
@@ -1625,6 +1897,7 @@ Possibile struttura (orientativa, dipendente dall’API Filament v4 effettiva):
   - Configurate direttamente sulle Table delle rispettive Resource.  
   - Permettono export CSV/XLSX con filtri e ordinamenti attuali.  
   - I file generati sono salvati in `storage/app/exports` con nome strutturato (es. `TYPE_TIMESTAMP_USERID.ext`).
+  - Fase 1: export implementati per Subnets, IP Addresses, Devices, Ports, DiscoveryEvents; Settings seguirà in una fase successiva mantenendo lo stesso pattern.
 
 ### 10.2 Export PDF (torgodly/html2media)
 
@@ -1640,6 +1913,9 @@ Possibile struttura (orientativa, dipendente dall’API Filament v4 effettiva):
   - Orientamento (portrait/landscape).  
   - Scelta colonne (checkbox via UI prima del render).  
   - Box firma opzionale (checkbox).
+ - Fase 1:
+   - implementato almeno un template PDF IPAM per le Subnet (vista `exports/subnets`), invocato da un’azione Html2Media sulla tabella Subnets;  
+   - ulteriori template (rack, labels) e opzioni avanzate (logo MSP, firma, header/footer custom per area) restano vincolanti a livello di design ma verranno implementati in step successivi, riutilizzando sempre Html2Media.
 
 ### 10.3 UI Export
 

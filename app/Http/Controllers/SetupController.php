@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
+use App\Models\Location;
 use App\Models\User;
+use App\Settings\GeneralSettings;
+use App\Settings\SystemStateSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rules\Password;
+use Spatie\LaravelSettings\Exceptions\MissingSettings;
 use Throwable;
 
 class SetupController extends Controller
@@ -19,6 +26,35 @@ class SetupController extends Controller
      */
     public function index()
     {
+        // DB connectivity check
+        try {
+            DB::connection()->getPdo();
+            $dbPassed = true;
+            $dbMessage = 'Connected';
+        } catch (Throwable $e) {
+            $dbPassed = false;
+            $dbMessage = $e->getMessage();
+        }
+
+        // Redis connectivity check (only if effectively used)
+        $redisRequired = in_array(config('session.driver'), ['redis'], true)
+            || config('queue.default') === 'redis'
+            || config('cache.default') === 'redis';
+
+        if ($redisRequired) {
+            try {
+                Redis::connection()->ping();
+                $redisPassed = true;
+                $redisMessage = 'Connected';
+            } catch (Throwable $e) {
+                $redisPassed = false;
+                $redisMessage = $e->getMessage();
+            }
+        } else {
+            $redisPassed = true;
+            $redisMessage = 'Not required (file/array drivers)';
+        }
+
         $checks = [
             'php_version' => [
                 'label' => 'PHP Version >= 8.2',
@@ -65,6 +101,16 @@ class SetupController extends Controller
                 'passed' => is_writable(base_path('bootstrap/cache')),
                 'message' => is_writable(base_path('bootstrap/cache')) ? 'Writable' : 'Not writable',
             ],
+            'db_connection' => [
+                'label' => 'Database Connection',
+                'passed' => $dbPassed,
+                'message' => $dbMessage,
+            ],
+            'redis_connection' => [
+                'label' => 'Redis Connection',
+                'passed' => $redisPassed,
+                'message' => $redisMessage,
+            ],
         ];
 
         $allPassed = collect($checks)->every(fn($check) => $check['passed']);
@@ -88,6 +134,39 @@ class SetupController extends Controller
         try {
             Artisan::call('migrate', ['--force' => true]);
             $output = Artisan::output();
+
+            // Segna l'istanza come "installed" dal punto di vista delle migrazioni
+            if (class_exists(SystemStateSettings::class)) {
+                try {
+                    /** @var \App\Settings\SystemStateSettings $state */
+                    $state = app(SystemStateSettings::class);
+                    $state->installed = true;
+
+                    // Non toccare configured/last_* in questo step: verranno aggiornati
+                    // quando il wizard sarà completato (storeApp, heartbeat, health page).
+                    $state->save();
+                } catch (MissingSettings $e) {
+                    // Se esistono già record parziali in `settings` per il group system_state`
+                    // (ad esempio da versioni precedenti), forziamo un payload completo
+                    // coerente con la definizione attuale della classe Settings.
+                    DB::table('settings')->updateOrInsert(
+                        ['group' => SystemStateSettings::group(), 'name' => 'installed'],
+                        ['payload' => json_encode(true), 'locked' => false]
+                    );
+
+                    DB::table('settings')->updateOrInsert(
+                        ['group' => SystemStateSettings::group(), 'name' => 'configured'],
+                        ['payload' => json_encode(false), 'locked' => false]
+                    );
+
+                    foreach (['last_scheduler_run_at', 'last_worker_heartbeat_at', 'last_health_check_at'] as $name) {
+                        DB::table('settings')->updateOrInsert(
+                            ['group' => SystemStateSettings::group(), 'name' => $name],
+                            ['payload' => json_encode(null), 'locked' => false]
+                        );
+                    }
+                }
+            }
 
             return redirect()
                 ->route('setup.user')
@@ -133,13 +212,152 @@ class SetupController extends Controller
 
             // Auto-login the newly created user
             auth()->login($user);
+            
+            // Dopo la creazione dell'admin si prosegue con la creazione del primo customer/location
+            return redirect()
+                ->route('setup.customer')
+                ->with('success', 'Admin account created. Let\'s configure your first customer.');
+        } catch (Throwable $e) {
+            return back()
+                ->withErrors(['user' => 'User creation failed: ' . $e->getMessage()])
+                ->withInput($request->except('password', 'password_confirmation'));
+        }
+    }
+
+    /**
+     * Step 4: Show first Customer & Location form.
+     */
+    public function showCustomer()
+    {
+        // Se esiste già almeno un customer, salta questo step
+        if (Customer::query()->exists()) {
+            return redirect()->route('setup.app');
+        }
+
+        return view('setup.customer');
+    }
+
+    /**
+     * Step 4: Store first Customer & default Location.
+     */
+    public function storeCustomer(Request $request)
+    {
+        $validated = $request->validate([
+            'customer_name' => ['required', 'string', 'max:255'],
+            'location_name' => ['nullable', 'string', 'max:255'],
+            'location_address' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        try {
+            $customer = Customer::create([
+                'name' => $validated['customer_name'],
+            ]);
+
+            Location::create([
+                'customer_id' => $customer->id,
+                'name' => $validated['location_name'] ?: 'Default',
+                'address' => $validated['location_address'] ?? null,
+            ]);
+
+            return redirect()
+                ->route('setup.app')
+                ->with('success', 'Customer and default location created.');
+        } catch (Throwable $e) {
+            return back()
+                ->withErrors(['customer' => 'Customer creation failed: ' . $e->getMessage()])
+                ->withInput();
+        }
+    }
+
+    /**
+     * Step 5: App URL & basic app config.
+     */
+    public function showApp()
+    {
+        // In caso di re-accesso, se già configurato si va alla home
+        if (class_exists(SystemStateSettings::class)) {
+            /** @var \App\Settings\SystemStateSettings $state */
+            $state = app(SystemStateSettings::class);
+            if ($state->configured) {
+                return redirect('/');
+            }
+        }
+
+        $general = app(GeneralSettings::class);
+
+        $appUrl = old('app_url', $general->app_url ?: config('app.url'));
+        $locale = old('locale', config('app.locale', 'en'));
+        $queueDriver = config('queue.default');
+
+        return view('setup.app', compact('appUrl', 'locale', 'queueDriver'));
+    }
+
+    /**
+     * Step 5: Store app config (app_url, locale) and finish wizard.
+     */
+    public function storeApp(Request $request)
+    {
+        $validated = $request->validate([
+            'app_url' => ['required', 'string', 'max:255'],
+            'locale' => ['required', 'in:en,it'],
+        ]);
+
+        try {
+            // Aggiorna GeneralSettings (app_url)
+            /** @var \App\Settings\GeneralSettings $general */
+            $general = app(GeneralSettings::class);
+            $general->app_url = $validated['app_url'];
+            try {
+                $general->save();
+            } catch (MissingSettings $e) {
+                // Se il gruppo "general" è parzialmente popolato (es. nuove proprietà
+                // aggiunte rispetto a install precedenti), forziamo un payload completo
+                // coerente con la definizione attuale della classe Settings.
+                $group = GeneralSettings::group();
+
+                $payloads = [
+                    'site_name' => $general->site_name,
+                    'site_color' => $general->site_color,
+                    'app_url' => $general->app_url,
+                    'force_https' => $general->force_https,
+                    'agent_alert_level' => $general->agent_alert_level,
+                    'time_display_format' => $general->time_display_format,
+                ];
+
+                foreach ($payloads as $name => $value) {
+                    DB::table('settings')->updateOrInsert(
+                        ['group' => $group, 'name' => $name],
+                        ['payload' => json_encode($value), 'locked' => false]
+                    );
+                }
+            }
+
+            // Aggiorna locale in .env se possibile
+            $envPath = base_path('.env');
+            if (is_writable($envPath)) {
+                $env = file_get_contents($envPath) ?: '';
+                if (str_contains($env, 'APP_LOCALE=')) {
+                    $env = preg_replace('/^APP_LOCALE=.*$/m', 'APP_LOCALE='.$validated['locale'], $env);
+                } else {
+                    $env .= PHP_EOL.'APP_LOCALE='.$validated['locale'];
+                }
+                file_put_contents($envPath, $env);
+            }
+
+            // Segna l'istanza come configurata
+            if (class_exists(SystemStateSettings::class)) {
+                /** @var \App\Settings\SystemStateSettings $state */
+                $state = app(SystemStateSettings::class);
+                $state->configured = true;
+                $state->save();
+            }
 
             return redirect('/')
                 ->with('success', 'Setup completed! Welcome to NetVibe.');
         } catch (Throwable $e) {
             return back()
-                ->withErrors(['user' => 'User creation failed: ' . $e->getMessage()])
-                ->withInput($request->except('password', 'password_confirmation'));
+                ->withErrors(['app' => 'App configuration failed: ' . $e->getMessage()])
+                ->withInput();
         }
     }
 }

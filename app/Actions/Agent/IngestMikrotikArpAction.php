@@ -13,7 +13,8 @@ use App\Services\MacAddressService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
+use App\Services\MergePolicyService;
+use App\Enums\DiscoverySource;
 
 final class IngestMikrotikArpAction
 {
@@ -31,8 +32,16 @@ final class IngestMikrotikArpAction
         $subnets = Subnet::withoutTenantScope(fn () => Subnet::where('customer_id', $device->customer_id)->get());
         $now = Carbon::now();
 
+        // Normalizza sorgenti in base al PDL: preferiamo device_result (dhcp_leases.items / arp.items)
+        $dhcpSection = $data['dhcp_leases'] ?? null;
+        if (is_array($dhcpSection) && isset($dhcpSection['items']) && is_array($dhcpSection['items'])) {
+            $dhcp = $dhcpSection['items'];
+        } else {
+            // Fallback legacy
+            $dhcp = $data['dhcp_leases'] ?? $data['dhcp'] ?? [];
+        }
+
         // DHCP leases handling
-        $dhcp = $data['dhcp_leases'] ?? $data['dhcp'] ?? [];
         if (is_array($dhcp)) {
             DB::transaction(function() use ($dhcp, $device, $converter, $subnets, $now) {
                 foreach ($dhcp as $lease) {
@@ -59,7 +68,13 @@ final class IngestMikrotikArpAction
         }
 
         // ARP table handling
-        $arp = $data['arp_table'] ?? $data['arp'] ?? [];
+        $arpSection = $data['arp'] ?? null;
+        if (is_array($arpSection) && isset($arpSection['items']) && is_array($arpSection['items'])) {
+            $arp = $arpSection['items'];
+        } else {
+            // Fallback legacy
+            $arp = $data['arp_table'] ?? $data['arp'] ?? [];
+        }
 
         if (is_array($arp)) {
             DB::transaction(function() use ($arp, $device, $converter, $subnets, $now) {
@@ -126,11 +141,26 @@ final class IngestMikrotikArpAction
             ->first();
 
         if ($ip) {
-            $ip->mac_address = $mac;
-            $ip->hostname = $hostname ?? $ip->hostname;
+            // Applica MergePolicyService per campi mac_address / hostname
+            /** @var MergePolicyService $merge */
+            $merge = app(MergePolicyService::class);
+
+            $local = [
+                'mac_address' => $ip->mac_address,
+                'hostname' => $ip->hostname,
+            ];
+
+            $remote = [
+                'mac_address' => $mac,
+                'hostname' => $hostname,
+            ];
+
+            $merge->mergeIpAddress($ip, $local, $remote, DiscoverySource::Rest);
+
             $ip->last_seen = $now;
             $ip->type = $type;
             $ip->save();
+
             return;
         }
 
@@ -167,21 +197,11 @@ final class IngestMikrotikArpAction
                         'cidr' => $network . '/' . $mask,
                         'vlan_id' => $vlan->id,
                         'customer_id' => $device->customer_id,
+                        'scan_agent_id' => $device->scan_agent_id,
+                        'discover_subnet' => true,
+                        'ping_subnet' => false,
+                        'resolve_dns' => false,
                     ];
-
-                    if (Schema::hasColumn('subnets', 'scan_agent_id')) {
-                        $values['scan_agent_id'] = $device->scan_agent_id;
-                    }
-
-                    if (Schema::hasColumn('subnets', 'discover_subnet')) {
-                        $values['discover_subnet'] = true;
-                    }
-                    if (Schema::hasColumn('subnets', 'ping_subnet')) {
-                        $values['ping_subnet'] = false;
-                    }
-                    if (Schema::hasColumn('subnets', 'resolve_dns')) {
-                        $values['resolve_dns'] = false;
-                    }
 
                     $mappedSubnet = \App\Models\Subnet::withoutTenantScope(fn () => \App\Models\Subnet::firstOrCreate($attributes, $values));
                 } catch (\Throwable $e) {
@@ -198,23 +218,12 @@ final class IngestMikrotikArpAction
                 'hostname' => $hostname,
                 'description' => $description,
                 'customer_id' => $mappedSubnet->customer_id,
+                'type' => $type,
+                'state' => 2,
+                'last_seen' => $now,
+                'device_id' => $device->id,
+                'port' => $portName,
             ];
-
-            if (Schema::hasColumn('ip_addresses', 'type')) {
-                $payload['type'] = $type;
-            }
-            if (Schema::hasColumn('ip_addresses', 'state')) {
-                $payload['state'] = 2;
-            }
-            if (Schema::hasColumn('ip_addresses', 'last_seen')) {
-                $payload['last_seen'] = $now;
-            }
-            if (Schema::hasColumn('ip_addresses', 'device_id')) {
-                $payload['device_id'] = $device->id;
-            }
-            if (Schema::hasColumn('ip_addresses', 'port')) {
-                $payload['port'] = $portName;
-            }
 
             try {
                 IpAddress::create($payload);

@@ -15,6 +15,9 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
+use Filament\Actions\ExportAction;
+use Filament\Actions\ExportBulkAction;
+use App\Filament\Exports\PortExporter;
 
 class PortsRelationManager extends RelationManager
 {
@@ -51,6 +54,10 @@ class PortsRelationManager extends RelationManager
             // Note: Filament documentation does not document "contentGrid" for table()
             // Use standard columns and actions; layout can be done using ViewColumn or
             // a custom column view if a card-like representation is required.
+            ->headerActions([
+                ExportAction::make()
+                    ->exporter(PortExporter::class),
+            ])
             ->columns([
                 TextColumn::make('name')
                     ->weight('bold')
@@ -64,6 +71,10 @@ class PortsRelationManager extends RelationManager
                         'down' => 'danger',
                         default => 'gray',
                     }),
+                TextColumn::make('last_seen')
+                    ->label('Last Seen')
+                    ->dateTime()
+                    ->toggleable(),
                 TextColumn::make('vlan_mode')->label('VLAN Mode')->toggleable(),
                 TextColumn::make('pvid')->label('PVID')->toggleable(),
                 TextColumn::make('tagged_vlans')->label('Tagged VLANs')->formatStateUsing(fn ($state) => is_array($state) ? implode(',', $state) : (string) $state ?? '')->toggleable(),
@@ -71,6 +82,9 @@ class PortsRelationManager extends RelationManager
                 TextColumn::make('speed')->label('Speed')->toggleable(),
                 TextColumn::make('duplex')->label('Duplex')->toggleable(),
                 TextColumn::make('external_type')->label('Ext Type')->toggleable(),
+                TextColumn::make('discovered_by_scan_agent_id')
+                    ->label('Agent ID')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('description')->label('Description')->limit(40)->toggleable(),
             ])
             ;
@@ -168,6 +182,10 @@ class PortsRelationManager extends RelationManager
                             Notification::make()->title($e->getMessage())->danger()->send();
                         }
                     }),
+            ])
+            ->bulkActions([
+                ExportBulkAction::make()
+                    ->exporter(PortExporter::class),
             ]);
     }
 }

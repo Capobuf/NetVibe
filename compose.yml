@@ -1,0 +1,157 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: netvibe-app
+    container_name: netvibe-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: .env
+    environment:
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
+      - PHP_OPCACHE_ENABLE=1
+      - PHP_DATE_TIMEZONE=${TZ:-UTC}
+      - AUTORUN_ENABLED=false
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-netvibe}
+      - DB_USERNAME=${DB_USERNAME:-netvibe}
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      # Sorgente bind-mount per ambiente dev; in prod può essere rimosso
+      - ./:/var/www/html
+      # Storage e uploads espliciti (per durabilità e chiarezza)
+      - ./storage:/var/www/html/storage
+      - ./public/uploads:/var/www/html/public/uploads
+    ports:
+      - "9693:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - netvibe-network
+      - proxy
+    profiles:
+      - dev
+      - prod
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: netvibe-app
+    container_name: netvibe-worker
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: .env
+    environment:
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-netvibe}
+      - DB_USERNAME=${DB_USERNAME:-netvibe}
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      - ./:/var/www/html
+      - ./storage:/var/www/html/storage
+      - ./public/uploads:/var/www/html/public/uploads
+    command: ["php", "artisan", "queue:work", "--queue=discovery,default,low", "--sleep=1", "--tries=3"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+       - netvibe-network
+    profiles:
+      - dev
+      - prod
+      - worker
+
+  db:
+    image: mariadb:11
+    container_name: netvibe-db
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-UTC}
+      - MARIADB_ROOT_PASSWORD=${DB_PASSWORD:-secret}
+      - MARIADB_DATABASE=${DB_DATABASE:-netvibe}
+      - MARIADB_USER=${DB_USERNAME:-netvibe}
+      - MARIADB_PASSWORD=${DB_PASSWORD:-secret}
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - netvibe-network
+    profiles:
+      - dev
+      - prod
+      - test
+    
+
+  redis:
+    image: redis:8.4
+    container_name: netvibe-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - netvibe-network
+    profiles:
+      - dev
+      - prod
+    
+  test-db:
+    image: mariadb:11
+    container_name: netvibe-test-db
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-UTC}
+      - MARIADB_ROOT_PASSWORD=${DB_PASSWORD:-secret}
+      - MARIADB_DATABASE=netvibe_test
+      - MARIADB_USER=${DB_USERNAME:-netvibe}
+      - MARIADB_PASSWORD=${DB_PASSWORD:-secret}
+    tmpfs:
+      - /var/lib/mysql
+    networks:
+      - netvibe-network
+    profiles:
+      - test
+
+volumes:
+  dbdata:
+  redisdata:
+
+networks:
+  netvibe-network:
+  proxy:
+    external: true

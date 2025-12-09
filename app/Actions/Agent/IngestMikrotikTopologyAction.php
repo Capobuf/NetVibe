@@ -22,7 +22,13 @@ class IngestMikrotikTopologyAction
         $now = \Illuminate\Support\Carbon::now();
 
         // Interfaces
-        $interfaces = $data['interfaces'] ?? $data['interface'] ?? $data['result']['interfaces'] ?? [];
+        // Prefer device_result.interfaces.items; fallback ai payload legacy storici.
+        $interfacesSection = $data['interfaces'] ?? null;
+        if (is_array($interfacesSection) && isset($interfacesSection['items']) && is_array($interfacesSection['items'])) {
+            $interfaces = $interfacesSection['items'];
+        } else {
+            $interfaces = $data['interfaces'] ?? $data['interface'] ?? $data['result']['interfaces'] ?? [];
+        }
         if (is_array($interfaces)) {
             foreach ($interfaces as $iface) {
                 $name = $iface['name'] ?? $iface['interface'] ?? null;
@@ -36,15 +42,15 @@ class IngestMikrotikTopologyAction
                     $port->mac_address = $macRaw;
                 }
 
-                // Map physical / link attributes
+                // Map physical / link attributes (best-effort; device_result for Fase 1 espone speed_bps/description)
                 if (! empty($iface['mtu'])) {
-                    // store in status (best-effort) if MTU field isn't available elsewhere. Keep type intact.
                     $port->mtu = $iface['mtu'] ?? null;
                 }
 
                 if (! empty($iface['speed'])) {
-                    // speed may be string like "1000Mbps" or numeric; store as-is
                     $port->speed = $iface['speed'];
+                } elseif (isset($iface['speed_bps'])) {
+                    $port->speed = $iface['speed_bps'];
                 }
 
                 if (! empty($iface['duplex'])) {
@@ -89,7 +95,7 @@ class IngestMikrotikTopologyAction
                     }
                 }
 
-                $status = $iface['running'] ?? $iface['status'] ?? null;
+                $status = $iface['running'] ?? $iface['status'] ?? ($iface['oper_status'] ?? null);
                 if ($status !== null) {
                     // map truthy/boolean to active/down
                     $running = filter_var($status, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
@@ -108,6 +114,7 @@ class IngestMikrotikTopologyAction
         }
 
         // VLAN table: create VLANs and map ports
+        // Per-port VLAN membership tramite bridge_vlan è rimandata; qui usiamo solo payload legacy se presente.
         $vlans = $data['bridge_vlan'] ?? $data['bridge']['vlan'] ?? $data['result']['bridge_vlan'] ?? [];
         if (is_array($vlans)) {
             foreach ($vlans as $entry) {
@@ -152,7 +159,12 @@ class IngestMikrotikTopologyAction
         }
 
         // Bridge hosts (/rest/interface/bridge/host) — map MAC -> IPs/ports
-        $bridgeHosts = $data['bridge_hosts'] ?? $data['bridge_host'] ?? $data['bridge']['host'] ?? $data['result']['bridge_hosts'] ?? [];
+        $bridgeSection = $data['bridge_hosts'] ?? null;
+        if (is_array($bridgeSection) && isset($bridgeSection['items']) && is_array($bridgeSection['items'])) {
+            $bridgeHosts = $bridgeSection['items'];
+        } else {
+            $bridgeHosts = $data['bridge_hosts'] ?? $data['bridge_host'] ?? $data['bridge']['host'] ?? $data['result']['bridge_hosts'] ?? [];
+        }
         $converter = app(\App\Services\IpConversionService::class);
         $connectionEntries = [];
         $addConnection = function (?string $mac, ?string $iface, ?string $addr, ?string $hostname, array $payload = []) use (&$connectionEntries) {
@@ -184,14 +196,21 @@ class IngestMikrotikTopologyAction
         }
 
         // IP neighbor table — try to link neighbors to existing ports/devices
-        $neighbors = $data['ip_neighbors'] ?? $data['ip_neighbor'] ?? $data['ip']['neighbor'] ?? $data['result']['ip_neighbors'] ?? [];
+        $neighborsSection = $data['neighbors'] ?? null;
+        if (is_array($neighborsSection) && isset($neighborsSection['items']) && is_array($neighborsSection['items'])) {
+            $neighbors = $neighborsSection['items'];
+        } else {
+            $neighbors = $data['ip_neighbors'] ?? $data['ip_neighbor'] ?? $data['ip']['neighbor'] ?? $data['result']['ip_neighbors'] ?? [];
+        }
         if (is_array($neighbors)) {
             foreach ($neighbors as $n) {
-                $mac = MacAddressService::normalize($n['mac-address'] ?? $n['mac'] ?? null);
-                $iface = $n['interface'] ?? $n['ifname'] ?? null;
-                $addr = $n['address'] ?? $n['ip'] ?? null;
+                $mac = MacAddressService::normalize($n['mac-address'] ?? $n['mac'] ?? $n['remote_mac'] ?? null);
+                $iface = $n['interface'] ?? $n['ifname'] ?? $n['local_interface'] ?? null;
+                $addr = $n['address'] ?? $n['ip'] ?? $n['remote_ip'] ?? null;
 
-                $addConnection($mac, $iface, $addr, $n['hostname'] ?? null, $n);
+                $hostname = $n['hostname'] ?? $n['remote_name'] ?? null;
+
+                $addConnection($mac, $iface, $addr, $hostname, $n);
             }
         }
 

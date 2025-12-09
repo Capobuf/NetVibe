@@ -138,8 +138,8 @@ class Logger
     /**
      * Configure a remote sink callback that will receive log entries that pass the given threshold.
      *
-     * @param callable $sink function (string $level, string $message): void
-     * @param string $minLevel minimum level to send remotely (defaults to current level)
+     * @param callable $sink function (string $level, array $record): void
+     * @param string|null $minLevel minimum level to send remotely (defaults to current level)
      */
     public function setRemoteSink(callable $sink, string $minLevel = null): void
     {
@@ -163,20 +163,27 @@ class Logger
      */
     private function log(string $level, string $message): void
     {
-        if (!$this->shouldLog($level)) {
+        if (! $this->shouldLog($level)) {
             return;
         }
 
-        $timestamp = date('Y-m-d H:i:s');
-        $formatted = sprintf('[%s] [%s] %s', $timestamp, $level, $message);
-        
-        // Output to stderr for all logs (consistent with Docker container logs)
-        fwrite(STDERR, $formatted . "\n");
+        $timestamp = gmdate('c');
+
+        $record = [
+            'timestamp' => $timestamp,
+            'level' => strtoupper($level),
+            'component' => 'AGENT_CORE',
+            'message' => $message,
+            'context' => [],
+        ];
+
+        // Output JSON strutturato su STDERR (formato PDL)
+        fwrite(STDERR, json_encode($record, JSON_UNESCAPED_SLASHES) . "\n");
 
         // Forward to remote sink if configured and passes threshold
         if ($this->remoteSink && (self::LEVEL_MAP[$level] ?? 99) >= $this->remoteMinLevelNumeric) {
             try {
-                ($this->remoteSink)($level, $message);
+                ($this->remoteSink)($level, $record);
             } catch (\Throwable $e) {
                 // Never let remote sink failures break local logging
             }

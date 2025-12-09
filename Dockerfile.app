@@ -42,3 +42,4 @@ RUN php artisan package:discover --ansi
 
 # Return to root for S6 Overlay entrypoint
 USER root
+

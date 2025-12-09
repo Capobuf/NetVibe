@@ -18,7 +18,8 @@
         "spatie/laravel-activitylog": "^4.10",
         "spatie/laravel-data": "^4.18",
         "spatie/laravel-settings": "^3.5",
-        "symfony/process": "^7.4"
+        "symfony/process": "^7.4",
+        "torgodly/html2media": "^2.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

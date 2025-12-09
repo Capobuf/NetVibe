@@ -11,6 +11,7 @@ class AgentLog extends Model
 {
     protected $fillable = [
         'scan_agent_id',
+        'tenant_id',
         'level',
         'message',
         'context',
@@ -25,5 +26,11 @@ class AgentLog extends Model
     public function scanAgent(): BelongsTo
     {
         return $this->belongsTo(ScanAgent::class);
+    }
+
+    public function tenant(): BelongsTo
+    {
+        // In questo dominio il tenant coincide con il Customer.
+        return $this->belongsTo(Customer::class, 'tenant_id');
     }
 }

@@ -19,6 +19,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Actions\ExportAction;
+use Filament\Actions\ExportBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Actions\DeleteAction;
@@ -34,6 +36,8 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use App\Jobs\ScanSubnetJob;
 use BackedEnum;
+use App\Filament\Exports\SubnetExporter;
+use Torgodly\Html2Media\Tables\Actions\Html2MediaAction;
 
 class SubnetResource extends Resource
 {
@@ -153,6 +157,21 @@ class SubnetResource extends Resource
                     ->getTitleFromRecordUsing(fn ($record) => ($record->vlan ? (string) ($record->vlan->number . ' - ' . $record->vlan->name) : 'Global / No VLAN')),
             ])
                 ->defaultGroup('vlan.name')
+            ->headerActions([
+                CreateAction::make()->slideOver(),
+                ExportAction::make()
+                    ->exporter(SubnetExporter::class),
+                Html2MediaAction::make('export_pdf')
+                    ->label('Generate PDF')
+                    ->savePdf()
+                    ->preview()
+                    ->filename('subnets')
+                    ->orientation('portrait')
+                    ->format('a4', 'mm')
+                    ->content(fn () => view('exports.subnets', [
+                        'records' => \App\Models\Subnet::with(['vlan', 'customer', 'location'])->orderBy('cidr')->get(),
+                    ])),
+            ])
             ->columns([
             Tables\Columns\TextColumn::make('cidr')
                 ->searchable()
@@ -161,6 +180,19 @@ class SubnetResource extends Resource
             Tables\Columns\TextColumn::make('vlan.name')->label('VLAN')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('location.name')->label('Location')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('description')->limit(50),
+                Tables\Columns\TextColumn::make('last_scan')
+                    ->label('Last Scan')
+                    ->dateTime()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('last_discovery')
+                    ->label('Last Discovery')
+                    ->dateTime()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('is_blacklisted')
+                    ->label('Blacklisted')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state) => $state ? 'Yes' : 'No')
+                    ->color(fn (bool $state) => $state ? 'danger' : 'gray'),
                 // Utilization summary: uses ip_addresses_count (withCount in query) and IpConversionService
                 Tables\Columns\TextColumn::make('utilization_summary')
                     ->label('Utilization')
@@ -181,17 +213,43 @@ class SubnetResource extends Resource
                         if ($pct < 90) return 'warning';
                         return 'danger';
                     })
+        ])->filters([
+            \Filament\Tables\Filters\SelectFilter::make('scan_agent_id')
+                ->label('Remote Agent')
+                ->relationship('scanAgent', 'name'),
         ])->recordActions([
             ViewAction::make(),
             EditAction::make()->slideOver(),
-            // DeleteAction removed from table record actions per CRUD UX policy
+            \Filament\Actions\Action::make('blacklist_subnet')
+                ->label(fn (Subnet $record) => $record->is_blacklisted ? 'Remove from blacklist' : 'Blacklist')
+                ->color(fn (Subnet $record) => $record->is_blacklisted ? 'secondary' : 'danger')
+                ->requiresConfirmation()
+                ->action(function (Subnet $record): void {
+                    if (! $record->cidr || ! $record->customer_id) {
+                        return;
+                    }
+
+                    if ($record->is_blacklisted) {
+                        $record->subnetBlacklists()->delete();
+                    } else {
+                        \App\Models\SubnetBlacklist::firstOrCreate([
+                            'customer_id' => $record->customer_id,
+                            'subnet_cidr' => $record->cidr,
+                        ]);
+                    }
+                }),
+            // DeleteAction removed da record actions per policy CRUD
+        ])
+        ->bulkActions([
+            ExportBulkAction::make()
+                ->exporter(SubnetExporter::class),
         ]);
     }
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
         return parent::getEloquentQuery()
-            ->with(['vlan', 'customer', 'location'])
+            ->with(['vlan', 'customer', 'location', 'subnetBlacklists'])
             ->withCount('ipAddresses');
     }
 

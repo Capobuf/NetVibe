@@ -16,7 +16,7 @@ class Subnet extends Model
     use SoftDeletes;
     use TenantAware;
     protected $fillable = [
-        'subnet', 'mask', 'cidr', 'name', 'section_id', 'description', 'linked_subnet_id',
+        'subnet', 'mask', 'cidr', 'name', 'description', 'linked_subnet_id',
         'firewall_address_object', 'master_subnet_id', 'allow_requests',
         'vlan_id', 'show_name', 'device_id', 'permissions', 'ping_subnet',
         'discover_subnet', 'resolve_dns', 'dns_recursive', 'dns_records',
@@ -66,13 +66,6 @@ class Subnet extends Model
     }
 
     // Relationships
-    public function section()
-    {
-        return $this->belongsTo(Section::class);
-    }
-
-    // vrf tenancy removed — tenant ownership is managed by Customer
-
     public function vlan()
     {
         return $this->belongsTo(Vlan::class);
@@ -111,5 +104,26 @@ class Subnet extends Model
     public function device()
     {
         return $this->belongsTo(Device::class);
+    }
+
+    public function subnetBlacklists()
+    {
+        return $this->hasMany(SubnetBlacklist::class, 'subnet_cidr', 'cidr')
+            ->whereColumn('customer_id', 'subnets.customer_id');
+    }
+
+    public function getIsBlacklistedAttribute(): bool
+    {
+        if (! $this->cidr || ! $this->customer_id) {
+            return false;
+        }
+
+        if ($this->relationLoaded('subnetBlacklists')) {
+            return $this->subnetBlacklists->isNotEmpty();
+        }
+
+        return SubnetBlacklist::where('customer_id', $this->customer_id)
+            ->where('subnet_cidr', $this->cidr)
+            ->exists();
     }
 }

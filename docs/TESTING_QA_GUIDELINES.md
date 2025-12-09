@@ -151,3 +151,16 @@ LOG_LEVEL=debug
   - deve aggiungere un test che fallisce con il codice vecchio e passa con il nuovo.  
 - Refactoring:
   - non deve cambiare gli observable di test (o, se li cambia, deve aggiornare gli snapshot e i test con motivazione esplicita nel commit/PR).
+
+## 7. Checklist qualità per il remote-agent
+
+Gli agent devono rispettare una serie di vincoli per evitare regressioni o accoppiamenti sbagliati con il server:
+
+- Nessun file creato fuori dalle cartelle specificate (`/agent/logs`, `/agent/cache`, ecc.); niente scritture in percorsi arbitrari.  
+- Nessun riferimento a `docker-compose.yml`: la documentazione e gli script devono usare solo `compose.yml` / `docker compose`.  
+- Nessun riferimento o dipendenza da Filament (l’agent è headless); in particolare nessun uso di componenti o snippet Filament v3.  
+- Directory e naming conformi alla struttura target descritta nel PDL (Drivers/, Jobs/, Http/, Support/, config/, bin/, tests/, docs/).  
+- `.env.example` dell’agent aggiornato e coerente con il protocollo (`SERVER_URL`, token, `LOG_LEVEL`, feature flags).  
+- Tutti i job seguono la pipeline definita nel PDL (Mikrotik REST → `device_result`, SNMP Fase 1 come enrichment, chunking/gzip sopra soglia, error taxonomy unificata).  
+- Agent e server rispettano `schema_version` e `min_supported_schema_version`; agent troppo vecchi ricevono errori 426 e non devono inviare payload legacy.  
+- Test snapshot per le risposte chiave (schema `device_result`, error payload), in modo da rilevare cambiamenti non intenzionali nel contratto.

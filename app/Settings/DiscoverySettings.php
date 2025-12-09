@@ -38,6 +38,21 @@ class DiscoverySettings extends Settings
      */
     public int $prune_logs_days = 3;
 
+    /**
+     * Default REST timeout (ms) used by agents when talking to Mikrotik/REST.
+     */
+    public int $timeout_rest_ms = 8000;
+
+    /**
+     * Default SNMP timeout (ms) for SNMP Fase 1.
+     */
+    public int $timeout_snmp_ms = 5000;
+
+    /**
+     * Max records per dataset before marking a payload as partial.
+     */
+    public int $max_records_per_dataset = 5000;
+
     public static function group(): string
     {
         return 'discovery';

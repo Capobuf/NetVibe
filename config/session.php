@@ -156,7 +156,11 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN'),
+    // Normalizza il valore "null" (stringa) usato talvolta in .env in un vero null,
+    // così Laravel può auto-determinare il dominio dal valore Host.
+    'domain' => env('SESSION_DOMAIN') === 'null'
+        ? null
+        : env('SESSION_DOMAIN'),
 
     /*
     |--------------------------------------------------------------------------

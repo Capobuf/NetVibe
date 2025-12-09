@@ -4,7 +4,10 @@ namespace App\Filament\Clusters\Racks\Resources\Devices\Schemas;
 
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Repeater;
 use Filament\Schemas\Schema;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Fieldset;
 
 class DeviceForm
 {
@@ -224,6 +227,13 @@ class DeviceForm
                     ->disabled(fn ($get, $record) => $record && $record->exists && $get('is_monitored'))
                     ->helperText('When monitoring is enabled, hostname will be fetched from the device identity.'),
 
+                TextInput::make('management_ip')
+                    ->label('Management IP')
+                    ->helperText('Authoritative management address used for discovery according to the PDL.')
+                    ->default(null)
+                    ->nullable()
+                    ->rules(['ipv4']),
+
                 TextInput::make('ip_addr')
                     ->label('IP Address')
                     ->helperText('IPv4 address used by the agent to reach the device (recommended when monitoring)')
@@ -251,6 +261,108 @@ class DeviceForm
                     ->preload()
                     ->default(null)
                     ->disabled(fn ($get) => ! ($get('customer_id') || $get('location_filter_id'))),
+
+                // ---- SNMP Settings (Fase 1, per-device) ----
+                Group::make()
+                    ->relationship('snmpSettings')
+                    ->schema([
+                        Fieldset::make('SNMP Settings')
+                            ->schema([
+                                \Filament\Forms\Components\Toggle::make('enabled')
+                                    ->label('Enable SNMP')
+                                    ->helperText('Enable SNMP polling for this device. Fase 1 uses SNMPv1/v2c only.')
+                                    ->default(false),
+                                TextInput::make('host')
+                                    ->label('SNMP Host / IP')
+                                    ->helperText('IP or hostname of the SNMP endpoint. For UniFi, this is the controller address.')
+                                    ->nullable(),
+                                TextInput::make('port')
+                                    ->label('Port')
+                                    ->numeric()
+                                    ->default(161),
+                                Select::make('version')
+                                    ->label('Version')
+                                    ->options([
+                                        'v1' => 'SNMPv1',
+                                        'v2c' => 'SNMPv2c',
+                                    ])
+                                    ->default('v2c'),
+                                TextInput::make('community')
+                                    ->label('Community')
+                                    ->password()
+                                    ->revealable()
+                                    ->helperText('Community string, stored encrypted. SNMPv3 is out of scope for Fase 1.')
+                                    ->nullable(),
+                                TextInput::make('timeout')
+                                    ->label('Timeout (ms)')
+                                    ->numeric()
+                                    ->default(3000),
+                                TextInput::make('retries')
+                                    ->label('Retries')
+                                    ->numeric()
+                                    ->default(1),
+                                Repeater::make('port_name_priority')
+                                    ->label('Port Name Priority')
+                                    ->helperText('Drag to reorder how SNMP port names are resolved (ifAlias / ifDescr / ifName).')
+                                    ->schema([
+                                        TextInput::make('value')
+                                            ->label('Field')
+                                            ->disabled()
+                                            ->dehydrated(true),
+                                    ])
+                                    ->reorderable()
+                                    ->addable(false)
+                                    ->deletable(false)
+                                    ->columnSpanFull()
+                                    ->default([
+                                        ['value' => 'ifAlias'],
+                                        ['value' => 'ifDescr'],
+                                        ['value' => 'ifName'],
+                                    ])
+                                    ->afterStateHydrated(function (Repeater $component, $state): void {
+                                        if (empty($state)) {
+                                            $component->state([
+                                                ['value' => 'ifAlias'],
+                                                ['value' => 'ifDescr'],
+                                                ['value' => 'ifName'],
+                                            ]);
+
+                                            return;
+                                        }
+
+                                        // Map plain array of strings → array of ['value' => string] for the UI
+                                        if (is_array($state) && isset($state[0]) && ! is_array($state[0])) {
+                                            $component->state(
+                                                collect($state)->map(fn ($value) => ['value' => $value])->all()
+                                            );
+                                        }
+                                    })
+                                    ->dehydrateStateUsing(fn (?array $state): array => collect($state ?? [])->pluck('value')->all()),
+                                Repeater::make('custom_oids')
+                                    ->label('Custom global OIDs')
+                                    ->schema([
+                                        TextInput::make('oid')
+                                            ->label('OID')
+                                            ->required(),
+                                        TextInput::make('name')
+                                            ->label('Field name')
+                                            ->required(),
+                                        Select::make('expected_type')
+                                            ->label('Expected type')
+                                            ->options([
+                                                'string' => 'String',
+                                                'int' => 'Integer',
+                                                'gauge' => 'Gauge',
+                                                'boolean' => 'Boolean',
+                                            ])
+                                            ->required(),
+                                    ])
+                                    ->columns(3)
+                                    ->collapsed()
+                                    ->helperText('Device-level custom OIDs. Per-port OIDs, LLDP, PoE and vendor-specific MIBs are out of scope for Fase 1.'),
+                            ]),
+                    ])
+                    ->columnSpanFull(),
                     ];
     }
 

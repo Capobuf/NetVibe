@@ -57,9 +57,11 @@ class DispatchDeviceJobAction
             : ($settings->icmp_timeout_ms ?? 200);
 
         $job = AgentJob::create([
+            'tenant_id' => $device->customer_id,
             'device_id' => $device->id,
             'scan_agent_id' => $resolvedAgentId,
             'type' => $type,
+            'scope' => 'device',
             'status' => 'pending',
             'payload' => [
                 'device_id' => $device->id,

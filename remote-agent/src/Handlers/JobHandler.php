@@ -7,18 +7,21 @@ namespace RemoteAgent\Handlers;
 use RemoteAgent\Drivers\MikrotikApiDriver;
 use RemoteAgent\Http\NetVibeHttpClient;
 use RemoteAgent\Logging\Logger;
+use RemoteAgent\Support\DeviceResultBuilder;
 
 class JobHandler
 {
     private MikrotikApiDriver $mikrotikDriver;
     private NetVibeHttpClient $netVibeClient;
     private Logger $logger;
+    private DeviceResultBuilder $deviceResultBuilder;
 
-    public function __construct(MikrotikApiDriver $mikrotikDriver, NetVibeHttpClient $netVibeClient = null, ?Logger $logger = null)
+    public function __construct(MikrotikApiDriver $mikrotikDriver, NetVibeHttpClient $netVibeClient = null, ?Logger $logger = null, ?DeviceResultBuilder $deviceResultBuilder = null)
     {
         $this->mikrotikDriver = $mikrotikDriver;
         $this->netVibeClient = $netVibeClient;
         $this->logger = $logger ?? new Logger('info');
+        $this->deviceResultBuilder = $deviceResultBuilder ?? new DeviceResultBuilder();
     }
 
     public function handleCheckConnectivity(array $payload): array
@@ -141,20 +144,34 @@ class JobHandler
 
             $this->logger->debug('DiscoveryDeep: completed fetch for ' . $host);
 
+            $deviceResult = $this->deviceResultBuilder->fromMikrotik(
+                $target,
+                $resource,
+                $identity,
+                $interfaces,
+                $vlans,
+                $arp,
+                $dhcp,
+                $lldp,
+                $fdb
+            );
+
             return [
                 'ok' => true,
-                'resource' => $resource,
-                'identity' => $identity,
-                'interfaces' => $interfaces,
-                'bridge_vlan' => $vlans,
-                'bridge_host' => $fdb,
-                'ip_neighbor' => $lldp,
-                'arp_table' => $arp,
-                'dhcp_leases' => $dhcp,
+                'device_result' => $deviceResult,
             ];
         }
 
         return ['ok' => false, 'error' => 'NET_UNREACHABLE'];
+    }
+
+    /**
+     * Permette di aggiornare il limite max_records_per_dataset a runtime
+     * sulla base della configurazione ricevuta dal server.
+     */
+    public function setMaxRecordsPerDataset(int $max): void
+    {
+        $this->deviceResultBuilder->setMaxRecordsPerDataset($max);
     }
 
     /**

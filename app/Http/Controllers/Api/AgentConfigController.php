@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Subnet;
 use App\Models\ScanAgent;
+use App\Settings\DiscoverySettings;
+use App\Settings\FeatureFlagSettings;
+use App\Settings\SecuritySettings;
+use Illuminate\Http\Request;
 
 class AgentConfigController extends Controller
 {
@@ -14,72 +16,64 @@ class AgentConfigController extends Controller
      */
     public function index(Request $request)
     {
-        try {
-            // The authenticated token is expected to be tied to a ScanAgent (Sanctum)
-            $agent = $request->user();
+        $agent = $request->user();
 
-            if (! $agent instanceof ScanAgent) {
-                return response()->json(['message' => 'Unauthenticated or invalid agent'], 401);
-            }
-
-            // Health check: Update last_seen timestamp
-            $agent->update(['last_seen' => now()]);
-
-        // Query subnets with customer inheritance logic
-        $query = Subnet::query()
-            ->where('discover_subnet', true)
-            ->where(function ($q) use ($agent) {
-                // Include subnets directly assigned to this agent
-                $q->where('scan_agent_id', $agent->id);
-                
-                // OR include subnets belonging to the agent's customer
-                if ($agent->customer_id) {
-                    $q->orWhere('customer_id', $agent->customer_id);
-                }
-            });
-        
-        $subnets = $query->get();
-
-        // Explicitly map to force accessor evaluation
-        $data = $subnets->map(function ($subnet) {
-            return [
-                'id' => $subnet->id,
-                'cidr' => $subnet->cidr, // Forces getCidrAttribute() accessor call
-                'vlan_id' => $subnet->vlan_id,
-                'description' => $subnet->description,
-            ];
-        });
-
-            $requestId = $request->header('X-Request-Id');
-
-            return response()->json([
-            'subnets' => $data,
-            'log_level' => $agent->log_level ?? 'ERROR',
-            ])->header('X-Request-Id', $requestId ?: '');
-        } catch (\Throwable $e) {
-            // Log details to help identify why the endpoint returned 500
-            try {
-                $authHeader = $request->headers->get('Authorization');
-                $tokenMask = null;
-                if ($authHeader && str_starts_with($authHeader, 'Bearer ')) {
-                    $plain = substr($authHeader, 7);
-                    $tokenMask = str_contains($plain, '|') ? explode('|', $plain, 2)[0] . '|****' : substr($plain, 0, 4) . '...' . substr($plain, -4);
-                }
-
-                \Log::error('AgentConfigController::index failed', [
-                    'exception' => (string) $e,
-                    'path' => $request->path(),
-                    'method' => $request->method(),
-                    'ip' => $request->ip(),
-                    'token_mask' => $tokenMask,
-                    'request_id' => $request->header('X-Request-Id'),
-                ]);
-            } catch (\Throwable $_) {
-                // best-effort logging
-            }
-
-            return response()->json(['message' => 'Server error while preparing config'], 500);
+        if (! $agent instanceof ScanAgent) {
+            return response()->json(['message' => 'Unauthenticated or invalid agent'], 401);
         }
+
+        // Health check: update last_seen timestamp
+        $agent->forceFill(['last_seen' => now()])->save();
+
+        $discovery = app(DiscoverySettings::class);
+        $security = app(SecuritySettings::class);
+        $features = app(FeatureFlagSettings::class);
+
+        $agentSettings = $agent->settings ?? [];
+
+        $config = [
+            'agent_id' => (string) $agent->getKey(),
+            'min_agent_version' => $security->min_agent_version,
+            'min_supported_schema_version' => $security->min_supported_schema_version,
+
+            'log_level' => $agent->log_level
+                ?? ($agentSettings['log_level'] ?? 'info'),
+
+            'timeout_rest_ms' => $agentSettings['timeout_rest_ms']
+                ?? $discovery->timeout_rest_ms,
+            'timeout_snmp_ms' => $agentSettings['timeout_snmp_ms']
+                ?? $discovery->timeout_snmp_ms,
+            'tls_verify' => $agentSettings['tls_verify']
+                ?? $security->agent_tls_verify,
+
+            'enable_rest' => $agentSettings['enable_rest'] ?? true,
+            'enable_snmp' => $agentSettings['enable_snmp'] ?? true,
+
+            'max_records_per_dataset' => $agentSettings['max_records_per_dataset']
+                ?? $discovery->max_records_per_dataset,
+
+            'features' => [
+                'snmp_fase1' => $features->snmp_fase1,
+                'chunking' => $features->chunking,
+                'gzip' => $features->gzip,
+            ],
+        ];
+
+        $json = json_encode($config, JSON_UNESCAPED_SLASHES);
+        $etag = '"' . sha1($json) . '"';
+
+        if ($request->header('If-None-Match') === $etag) {
+            return response()
+                ->noContent(304)
+                ->setEtag($etag);
+        }
+
+        $requestId = $request->header('X-Request-Id') ?: '';
+
+        return response()
+            ->json($config)
+            ->setEtag($etag)
+            ->header('X-Request-Id', $requestId);
     }
 
     /**

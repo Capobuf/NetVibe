@@ -18,13 +18,17 @@ class AgentJob extends Model
 
     protected $fillable = [
         'id',
+        'tenant_id',
         'device_id',
         'scan_agent_id',
         'type',
+        'scope',
         'status',
         'payload',
         'output',
         'result',
+        'result_metadata',
+        'error_message',
         'attempts',
         'scheduled_at',
         'started_at',
@@ -35,6 +39,7 @@ class AgentJob extends Model
     protected $casts = [
         'payload' => 'array',
         'result' => 'array',
+        'result_metadata' => 'array',
         'scheduled_at' => 'datetime',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
@@ -44,6 +49,12 @@ class AgentJob extends Model
     public function device()
     {
         return $this->belongsTo(Device::class);
+    }
+
+    public function tenant()
+    {
+        // In questo progetto, il tenant coincide con il Customer.
+        return $this->belongsTo(Customer::class, 'tenant_id');
     }
 
     public function initiator()

@@ -22,6 +22,9 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\ExportAction;
+use Filament\Actions\ExportBulkAction;
+use App\Filament\Exports\IpAddressExporter;
 
 class IpAddressResource extends Resource
 {
@@ -109,6 +112,10 @@ class IpAddressResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->headerActions([
+                ExportAction::make()
+                    ->exporter(IpAddressExporter::class),
+            ])
             ->columns([
                 Tables\Columns\TextColumn::make('ip_addr')
                     ->label('IP Address')
@@ -176,6 +183,8 @@ class IpAddressResource extends Resource
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    ExportBulkAction::make()
+                        ->exporter(IpAddressExporter::class),
                     DeleteBulkAction::make(),
                 ]),
             ]);

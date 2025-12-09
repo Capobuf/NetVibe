@@ -66,19 +66,39 @@ class VlanResource extends Resource
             ->columns([
                 TextColumn::make('number')->sortable(),
                 TextColumn::make('name')->searchable()->sortable(),
-                // L2Domain removed
                 TextColumn::make('customer.name')->label('Customer')->sortable(),
                 TextColumn::make('subnets_count')->label('Subnets')->sortable(),
+                TextColumn::make('is_blacklisted')
+                    ->label('Blacklisted')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state) => $state ? 'Yes' : 'No')
+                    ->color(fn (bool $state) => $state ? 'danger' : 'gray'),
             ])
             ->recordActions([
-                    \Filament\Actions\EditAction::make()->slideOver(),
-                    // DeleteAction removed from table record actions per CRUD UX policy
+                \Filament\Actions\EditAction::make()->slideOver(),
+                \Filament\Actions\Action::make('blacklist')
+                    ->label(fn (Vlan $record) => $record->is_blacklisted ? 'Remove from blacklist' : 'Blacklist')
+                    ->color(fn (Vlan $record) => $record->is_blacklisted ? 'secondary' : 'danger')
+                    ->requiresConfirmation()
+                    ->action(function (Vlan $record): void {
+                        if ($record->is_blacklisted) {
+                            $record->blacklist()->delete();
+                        } else {
+                            \App\Models\VlanBlacklist::firstOrCreate([
+                                'customer_id' => $record->customer_id,
+                                'vlan_id' => $record->id,
+                            ]);
+                        }
+                    }),
+                // DeleteAction removed from table record actions per CRUD UX policy
             ]);
     }
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->with(['customer'])->withCount('subnets');
+        return parent::getEloquentQuery()
+            ->with(['customer', 'blacklist'])
+            ->withCount('subnets');
     }
 
     public static function getPages(): array

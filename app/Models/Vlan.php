@@ -16,5 +16,19 @@ class Vlan extends Model
     
     public function customer() { return $this->belongsTo(Customer::class); }
     public function subnets() { return $this->hasMany(Subnet::class); }
+
+    public function blacklist()
+    {
+        return $this->hasOne(VlanBlacklist::class);
+    }
+
+    public function getIsBlacklistedAttribute(): bool
+    {
+        if ($this->relationLoaded('blacklist')) {
+            return $this->blacklist !== null;
+        }
+
+        return $this->blacklist()->exists();
+    }
     // l2_domain no longer used as tenancy; VLANs are scoped by customer
 }

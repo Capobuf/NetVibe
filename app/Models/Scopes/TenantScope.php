@@ -7,6 +7,7 @@ namespace App\Models\Scopes;
 use Illuminate\Database\Eloquent\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use App\Services\TenantResolverService;
 
 class TenantScope implements Scope
 {
@@ -25,8 +26,8 @@ class TenantScope implements Scope
             return;
         }
 
-        // Only enforce tenant filtering when a tenant is selected in session
-        $tenantId = session('tenant_id', null);
+        // Resolve tenant via central service (session/header/token, ecc.)
+        $tenantId = app(TenantResolverService::class)->currentTenantId();
 
         if ($tenantId !== null) {
             // Assume models have a customer_id column

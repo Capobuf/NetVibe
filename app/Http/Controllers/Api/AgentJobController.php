@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use App\Models\AgentJob;
 use Illuminate\Support\Facades\Log;
 use App\Settings\DiscoverySettings;
+use App\Settings\SecuritySettings;
 
 class AgentJobController extends Controller
 {
@@ -144,6 +145,35 @@ class AgentJobController extends Controller
         $status = $request->input('status', 'completed');
         $output = $request->input('output');
         $result = $request->input('result');
+
+        // Schema validation: ensure device_result.schema_version is compatible with server settings.
+        // Fase 1: se lo schema ha major version inferiore a min_supported_schema_version, rifiutiamo con 426.
+        if (is_array($result) && isset($result['device_result']) && is_array($result['device_result'])) {
+            $deviceResult = $result['device_result'];
+            $schemaVersion = $deviceResult['schema_version'] ?? null;
+
+            if (! is_string($schemaVersion) || $schemaVersion === '') {
+                return response()->json([
+                    'error' => 'INVALID_RESPONSE_FORMAT',
+                    'message' => 'Missing or invalid device_result.schema_version',
+                ], 422);
+            }
+
+            /** @var SecuritySettings $security */
+            $security = app(SecuritySettings::class);
+            $minSupported = $security->min_supported_schema_version;
+
+            $major = (int) explode('.', $schemaVersion)[0];
+            $minMajor = (int) explode('.', $minSupported)[0];
+
+            if ($major < $minMajor) {
+                return response()->json([
+                    'error' => 'API_VERSION_TOO_LOW',
+                    'message' => 'device_result.schema_version ' . $schemaVersion . ' is lower than min_supported_schema_version ' . $minSupported,
+                    'min_supported_schema_version' => $minSupported,
+                ], 426);
+            }
+        }
 
         if ($status === 'failed') {
             $job->status = 'failed';

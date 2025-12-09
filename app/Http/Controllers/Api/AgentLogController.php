@@ -39,6 +39,7 @@ class AgentLogController extends Controller
         // Save log to database
         $log = AgentLog::create([
             'scan_agent_id' => $agent->id,
+            'tenant_id' => $agent->customer_id,
             'level' => $validated['level'],
             'message' => $validated['message'],
             'context' => $validated['context'] ?? null,

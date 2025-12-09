@@ -10,6 +10,14 @@ Route::middleware('web')->group(function () {
         Route::post('/migrate', 'runMigrate')->name('migrate.run');
         Route::get('/user', 'showUser')->name('user');
         Route::post('/user', 'storeUser')->name('user.store');
+
+        // Step 4: first customer & default location
+        Route::get('/customer', 'showCustomer')->name('customer');
+        Route::post('/customer', 'storeCustomer')->name('customer.store');
+
+        // Step 5: app URL / locale and final configuration
+        Route::get('/app', 'showApp')->name('app');
+        Route::post('/app', 'storeApp')->name('app.store');
     });
 });
 
@@ -92,4 +100,3 @@ Route::get('/_debug/exception-callbacks', function () {
 
     return response()->json($dump);
 });
-

@@ -12,9 +12,12 @@ use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\ExportAction;
+use Filament\Actions\ExportBulkAction;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use BackedEnum;
+use App\Filament\Exports\DiscoveryEventExporter;
 
 class DiscoveryEventResource extends Resource
 {
@@ -35,6 +38,10 @@ class DiscoveryEventResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->headerActions([
+                ExportAction::make()
+                    ->exporter(DiscoveryEventExporter::class),
+            ])
             ->columns([
                 TextColumn::make('scanAgent.name')
                     ->label('Agent')
@@ -73,6 +80,8 @@ class DiscoveryEventResource extends Resource
                 // ...existing actions...
             ])
             ->bulkActions([
+                ExportBulkAction::make()
+                    ->exporter(DiscoveryEventExporter::class),
                 BulkAction::make('approve_merge')
                     ->label('Approva e Unisci')
                     ->action(function ($records) {

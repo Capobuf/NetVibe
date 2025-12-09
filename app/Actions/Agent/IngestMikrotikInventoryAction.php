@@ -6,6 +6,8 @@ namespace App\Actions\Agent;
 
 use App\Models\Device;
 use Illuminate\Support\Facades\Log;
+use App\Services\MergePolicyService;
+use App\Enums\DiscoverySource;
 
 class IngestMikrotikInventoryAction
 {
@@ -21,19 +23,21 @@ class IngestMikrotikInventoryAction
         $identity = $data['identity'] ?? $data['system_identity'] ?? $data['result']['identity'] ?? [];
 
         try {
-            // Router wins: overwrite device-level visible fields with data from the router
+            // Router wins: overwrite device-level visible fields con dati dal router,
+            // passando comunque dal MergePolicyService per centralizzare la logica.
+            $local = [
+                'hostname' => $device->hostname,
+                'serial_number' => $device->serial_number,
+            ];
 
-            // Hostname from /system/identity 'name'
-            if (! empty($identity['name'])) {
-                $device->hostname = $identity['name'];
-            }
+            $remote = [
+                'hostname' => $identity['name'] ?? null,
+                'serial_number' => $resource['serial-number'] ?? ($resource['serial'] ?? null),
+            ];
 
-            // Serial number mapping
-            if (! empty($resource['serial-number'])) {
-                $device->serial_number = $resource['serial-number'];
-            } elseif (! empty($resource['serial'])) {
-                $device->serial_number = $resource['serial'];
-            }
+            /** @var MergePolicyService $merge */
+            $merge = app(MergePolicyService::class);
+            $merge->mergeDevice($device, $local, $remote, DiscoverySource::Rest);
 
             // Device model mapping: board-name / platform
             $modelName = $resource['board-name'] ?? $resource['platform'] ?? $resource['model'] ?? null;

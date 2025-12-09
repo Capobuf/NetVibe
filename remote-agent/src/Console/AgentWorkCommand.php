@@ -8,7 +8,7 @@ use RemoteAgent\Http\NetVibeHttpClient;
 use RemoteAgent\Drivers\MikrotikApiDriver;
 use RemoteAgent\Logging\Logger;
 use GuzzleHttp\Exception\RequestException;
-use RemoteAgent\Handlers\JobHandler;
+use RemoteAgent\Jobs\JobHandler;
 use RemoteAgent\Support\DeviceResultBuilder;
 
 class AgentWorkCommand
@@ -23,6 +23,8 @@ class AgentWorkCommand
     private DeviceResultBuilder $deviceResultBuilder;
     private ?string $minSupportedSchemaVersion = null;
     private bool $schemaCompatible = true;
+    private int $pollIntervalSeconds = 5;
+    private int $configRefreshSeconds = 60;
 
     public function __construct()
     {
@@ -33,57 +35,19 @@ class AgentWorkCommand
 
         $this->logger->info('Initializing Remote Agent...');
 
-        // Accept several environment variable names for compatibility:
-        // Prefer SERVER_URL, then AGENT_SERVER_URL, then IPAM_AGENT_API_URL (strip /api/v1 if present)
-        $envCandidates = [
-            getenv('SERVER_URL') ?: false,
-            getenv('AGENT_SERVER_URL') ?: false,
-            getenv('IPAM_AGENT_API_URL') ?: false,
-        ];
-
-        $candidate = false;
-        foreach ($envCandidates as $c) {
-            if ($c) {
-                $candidate = $c;
-                break;
-            }
-        }
-
-        if ($candidate) {
-            // Normalize candidate: remove trailing slash and strip known API path suffixes
-            $candidate = rtrim($candidate, '/');
-            // If the value contains a REST API base path such as /api or /api/v1
-            // strip it so the client can safely append endpoints.
-            $candidate = preg_replace('#/api(/v\d+)?$#i', '', $candidate);
-        }
-
-        $this->serverUrl = $candidate ?: (getenv('SERVER_URL') ?: 'http://host.docker.internal:9693');
+        // SERVER_URL è l'unica sorgente autorevole (PDL): base URL dell'app senza /api.
+        $serverEnv = getenv('SERVER_URL') ?: 'http://host.docker.internal:9693';
+        $serverEnv = rtrim($serverEnv, '/');
+        // Se l'utente ha erroneamente incluso /api o /api/v1, rimuovilo per mantenere il contratto PDL.
+        $serverEnv = preg_replace('#/api(/v\d+)?$#i', '', $serverEnv);
+        $this->serverUrl = $serverEnv;
         $this->logger->info('Using server URL: ' . $this->serverUrl);
 
-        // Accept several token env var names for compatibility with older
-        // deployments / examples (AGENT_API_TOKEN, IPAM_AGENT_API_KEY, etc.)
-        $tokenCandidates = [
-            getenv('AGENT_API_TOKEN') ?: false,
-            getenv('IPAM_AGENT_API_KEY') ?: false,
-            getenv('IPAM_AGENT_API_TOKEN') ?: false,
-            getenv('AGENT_API_KEY') ?: false,
-        ];
+        // AGENT_API_TOKEN è l'unica sorgente autorevole per il PAT.
+        $tokenCandidate = getenv('AGENT_API_TOKEN') ?: '';
 
-        $tokenCandidate = '';
-        foreach ($tokenCandidates as $tc) {
-            if ($tc) {
-                $tokenCandidate = $tc;
-                break;
-            }
-        }
-
-        // Fallback: if no env var was set in the container, accept a
-        // .env file placed into /app (the project root inside the image). This
-        // helps when docker-compose uses env_file and variables are present in
-        // the file but not exported to the container environment for some
-        // reason. We try to read common token names from that file as a last
-        // resort.
-        if (empty($tokenCandidate)) {
+        // Fallback: se non presente in env, tenta di leggerlo da .env locale (solo AGENT_API_TOKEN).
+        if ($tokenCandidate === '') {
             $envFile = __DIR__ . '/../../.env';
             if (is_readable($envFile)) {
                 $contents = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
@@ -92,7 +56,7 @@ class AgentWorkCommand
                     if (str_starts_with(trim($line), '#')) {
                         continue;
                     }
-                    if (!str_contains($line, '=')) {
+                    if (! str_contains($line, '=')) {
                         continue;
                     }
 
@@ -100,7 +64,7 @@ class AgentWorkCommand
                     $key = trim($k);
                     $val = trim($v);
 
-                    if (in_array($key, ['AGENT_API_TOKEN', 'IPAM_AGENT_API_KEY', 'IPAM_AGENT_API_TOKEN', 'AGENT_API_KEY']) && !empty($val)) {
+                    if ($key === 'AGENT_API_TOKEN' && ! empty($val)) {
                         $tokenCandidate = $val;
                         break;
                     }
@@ -131,11 +95,11 @@ class AgentWorkCommand
         }, $this->remoteLogLevel);
 
         // Log whether a token is present but don't print the full token
-        if (!empty($this->token)) {
+        if (! empty($this->token)) {
             $masked = substr($this->token, 0, 4) . '...' . substr($this->token, -4);
-            $this->logger->info('Using API token: ' . $masked);
+            $this->logger->info('Using AGENT_API_TOKEN: ' . $masked);
         } else {
-            $this->logger->warning('No API token found (AGENT_API_TOKEN or IPAM_AGENT_API_KEY) — requests will be unauthenticated');
+            $this->logger->warning('No AGENT_API_TOKEN found — requests will be unauthenticated');
         }
 
         $this->handler = new JobHandler($this->mikrotikDriver, $this->netVibeClient, $this->logger, $this->deviceResultBuilder);
@@ -191,10 +155,21 @@ class AgentWorkCommand
 
         $lastConfigCheckAt = 0;
 
+        // Intervalli di polling configurabili via env (PDL).
+        $poll = getenv('AGENT_POLL_INTERVAL_SECONDS');
+        if ($poll !== false && ctype_digit((string) $poll) && (int) $poll > 0) {
+            $this->pollIntervalSeconds = (int) $poll;
+        }
+
+        $cfgRefresh = getenv('AGENT_CONFIG_REFRESH_SECONDS');
+        if ($cfgRefresh !== false && ctype_digit((string) $cfgRefresh) && (int) $cfgRefresh > 0) {
+            $this->configRefreshSeconds = (int) $cfgRefresh;
+        }
+
         while (true) {
-            // Heartbeat/Config: low-frequency polling (every 60s)
+            // Heartbeat/Config: low-frequency polling (configRefreshSeconds)
             $now = time();
-            if (($now - $lastConfigCheckAt) > 60) {
+            if (($now - $lastConfigCheckAt) > $this->configRefreshSeconds) {
                 try {
                     // generate a per-request id to help correlate agent <-> server logs
                     $reqId = bin2hex(random_bytes(8));
@@ -211,11 +186,11 @@ class AgentWorkCommand
             // l'agent continua a fare solo heartbeat/logs, ma non esegue discovery jobs.
             if (! $this->schemaCompatible) {
                 $this->logger->warning('Schema_version not compatible with server min_supported_schema_version; skipping job polling');
-                sleep(30);
+                sleep($this->configRefreshSeconds);
                 continue;
             }
 
-            // Jobs: high-frequency polling (every 5s)
+            // Jobs: high-frequency polling (pollIntervalSeconds)
             try {
                 $reqId = bin2hex(random_bytes(8));
                 $jobsResp = $this->netVibeClient->pollJobs(['X-Request-Id' => $reqId]);
@@ -248,7 +223,7 @@ class AgentWorkCommand
                 continue;
             }
 
-            sleep(5);
+            sleep($this->pollIntervalSeconds);
         }
     }
 

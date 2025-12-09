@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RemoteAgent\Handlers;
+namespace RemoteAgent\Jobs;
 
 use RemoteAgent\Drivers\MikrotikApiDriver;
 use RemoteAgent\Http\NetVibeHttpClient;

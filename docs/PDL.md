@@ -724,8 +724,17 @@ IPAM è responsabile di:
   - Associazione opzionale a location (vedi L2).  
   - Opzionale flag per indicare se la VLAN è globale o limitata ad una location (*TODO: definire schema esatto flag*).
 - **Regole di auto-creation & exclusions**
-  - Possibilità di auto-creare subnet /24 da PVID+VLAN se non esistono, come già fatto in IngestMikrotikArpAction.  
-  - Regole di esclusione per prefissi, IP o VLAN che non devono essere auto-creati (configurabili per customer).
+  - Auto‑creazione subnet `/24` durante ingest ARP/DHCP:
+    - quando durante l’ingest (ARP/DHCP) compare un IP `A.B.C.X` che non ricade in alcuna subnet esistente del tenant, il sistema deve creare automaticamente la subnet `A.B.C.0/24`;  
+    - la subnet generata deve avere:
+      - `customer_id` uguale a quello del device / ScanAgent che ha eseguito la discovery,  
+      - `discover_subnet = true`,  
+      - `scan_agent_id` uguale all’agent che ha eseguito la discovery,  
+      - `created_by_discovery = true` (campo boolean esplicito a schema);  
+    - se la subnet `A.B.C.0/24` è presente in `SubnetBlacklist` per quel `customer_id`:
+      - non deve essere ricreata automaticamente,  
+      - non deve più essere popolata dalla discovery (niente nuovi IP o aggiornamenti).  
+  - Regole di esclusione per prefissi, IP o VLAN che non devono essere auto-creati (blacklist configurabili per customer, vedi `SubnetBlacklist`/`VlanBlacklist`).
 
 ### 6.2 DCIM
 

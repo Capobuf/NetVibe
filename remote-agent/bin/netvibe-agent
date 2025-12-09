@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+// CLI wrapper for the Remote Agent, aligned with the PDL structure.
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use RemoteAgent\Console\AgentWorkCommand;
+
+$command = new AgentWorkCommand();
+$command->run();
+

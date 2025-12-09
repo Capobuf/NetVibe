@@ -6,15 +6,23 @@ namespace App\Filament\Clusters\Discovery\Resources\AgentJobs\Tables;
 
 use App\Models\AgentJob;
 use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\ExportAction;
+use Filament\Actions\ExportBulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use App\Filament\Exports\AgentJobExporter;
 
 class AgentJobsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->headerActions([
+                ExportAction::make()
+                    ->exporter(AgentJobExporter::class),
+            ])
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('id')
@@ -100,6 +108,19 @@ class AgentJobsTable
                 SelectFilter::make('tenant_id')
                     ->label('Customer')
                     ->relationship('tenant', 'name'),
+                SelectFilter::make('device_id')
+                    ->label('Device')
+                    ->relationship('device', 'hostname'),
+                SelectFilter::make('scan_agent_id')
+                    ->label('Agent')
+                    ->relationship('scanAgent', 'name'),
+                SelectFilter::make('scope')
+                    ->label('Scope')
+                    ->options([
+                        'device' => 'device',
+                        'agent' => 'agent',
+                        'system' => 'system',
+                    ]),
             ])
             ->recordActions([
                 Action::make('view')
@@ -129,13 +150,64 @@ class AgentJobsTable
                             ->label('Agent')
                             ->default($record->scanAgent?->name)
                             ->disabled(),
+                        \Filament\Forms\Components\TextInput::make('schema_version')
+                            ->label('Schema version')
+                            ->default(function () use ($record) {
+                                $result = $record->result ?? null;
+                                if (is_array($result) && isset($result['device_result']) && is_array($result['device_result'])) {
+                                    return $result['device_result']['schema_version'] ?? '—';
+                                }
+
+                                return '—';
+                            })
+                            ->disabled(),
+                        \Filament\Forms\Components\TextInput::make('dataset_counts')
+                            ->label('Datasets')
+                            ->default(function () use ($record) {
+                                $result = $record->result ?? null;
+                                if (! is_array($result) || ! isset($result['device_result']) || ! is_array($result['device_result'])) {
+                                    return '—';
+                                }
+
+                                $dr = $result['device_result'];
+                                $sections = [
+                                    'interfaces' => $dr['interfaces']['items'] ?? null,
+                                    'vlans' => $dr['vlans']['items'] ?? null,
+                                    'arp' => $dr['arp']['items'] ?? null,
+                                    'dhcp_leases' => $dr['dhcp_leases']['items'] ?? null,
+                                    'neighbors' => $dr['neighbors']['items'] ?? null,
+                                    'bridge_hosts' => $dr['bridge_hosts']['items'] ?? null,
+                                ];
+
+                                $parts = [];
+                                foreach ($sections as $key => $items) {
+                                    if (is_array($items)) {
+                                        $parts[] = $key . ': ' . count($items);
+                                    }
+                                }
+
+                                return empty($parts) ? '—' : implode(', ', $parts);
+                            })
+                            ->disabled(),
                         \Filament\Forms\Components\Textarea::make('payload')
                             ->label('Payload')
                             ->default(json_encode($record->payload ?? new \stdClass(), JSON_PRETTY_PRINT))
                             ->rows(8)
                             ->disabled(),
+                        \Filament\Forms\Components\Textarea::make('device_result')
+                            ->label('device_result')
+                            ->default(function () use ($record) {
+                                $result = $record->result ?? null;
+                                if (is_array($result) && isset($result['device_result'])) {
+                                    return json_encode($result['device_result'], JSON_PRETTY_PRINT);
+                                }
+
+                                return null;
+                            })
+                            ->rows(8)
+                            ->disabled(),
                         \Filament\Forms\Components\Textarea::make('result')
-                            ->label('Result')
+                            ->label('Result (raw)')
                             ->default(json_encode($record->result ?? new \stdClass(), JSON_PRETTY_PRINT))
                             ->rows(8)
                             ->disabled(),
@@ -151,7 +223,11 @@ class AgentJobsTable
                             ->disabled(),
                     ]),
             ])
-            ->toolbarActions([]);
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    ExportBulkAction::make()
+                        ->exporter(AgentJobExporter::class),
+                ]),
+            ]);
     }
 }
-

@@ -83,6 +83,49 @@ class DeviceResource extends Resource
 
                             return $job?->status ?? '—';
                         }),
+                    \Filament\Infolists\Components\TextEntry::make('last_discovery_schema_version')
+                        ->label('Schema version')
+                        ->state(function (Device $record) {
+                            $job = $record->agentJobs()->latest('created_at')->first();
+                            $result = $job?->result ?? null;
+
+                            if (is_array($result) && isset($result['device_result']) && is_array($result['device_result'])) {
+                                return $result['device_result']['schema_version'] ?? '—';
+                            }
+
+                            return '—';
+                        }),
+                    \Filament\Infolists\Components\TextEntry::make('last_discovery_dataset_counts')
+                        ->label('Datasets')
+                        ->state(function (Device $record) {
+                            $job = $record->agentJobs()->latest('created_at')->first();
+                            $result = $job?->result ?? null;
+
+                            if (! is_array($result) || ! isset($result['device_result']) || ! is_array($result['device_result'])) {
+                                return '—';
+                            }
+
+                            $dr = $result['device_result'];
+
+                            $sections = [
+                                'interfaces' => $dr['interfaces']['items'] ?? null,
+                                'vlans' => $dr['vlans']['items'] ?? null,
+                                'arp' => $dr['arp']['items'] ?? null,
+                                'dhcp_leases' => $dr['dhcp_leases']['items'] ?? null,
+                                'neighbors' => $dr['neighbors']['items'] ?? null,
+                                'bridge_hosts' => $dr['bridge_hosts']['items'] ?? null,
+                            ];
+
+                            $parts = [];
+                            foreach ($sections as $key => $items) {
+                                if (is_array($items)) {
+                                    $parts[] = $key . ': ' . count($items);
+                                }
+                            }
+
+                            return empty($parts) ? '—' : implode(', ', $parts);
+                        })
+                        ->columnSpanFull(),
                     \Filament\Infolists\Components\TextEntry::make('last_discovery_job_finished_at')
                         ->label('Last Job Finished At')
                         ->state(function (Device $record) {
@@ -91,8 +134,37 @@ class DeviceResource extends Resource
                             return $job?->finished_at;
                         })
                         ->dateTime(),
+                    \Filament\Infolists\Components\TextEntry::make('last_discovery_errors')
+                        ->label('Errors')
+                        ->state(function (Device $record) {
+                            $job = $record->agentJobs()->latest('created_at')->first();
+                            $result = $job?->result ?? null;
+
+                            if (! is_array($result) || ! isset($result['device_result']) || ! is_array($result['device_result'])) {
+                                return '—';
+                            }
+
+                            $errors = $result['device_result']['errors'] ?? [];
+                            if (! is_array($errors) || empty($errors)) {
+                                return '—';
+                            }
+
+                            $codes = [];
+                            foreach ($errors as $err) {
+                                if (! is_array($err)) {
+                                    continue;
+                                }
+                                $code = $err['code'] ?? null;
+                                if ($code) {
+                                    $codes[] = (string) $code;
+                                }
+                            }
+
+                            return empty($codes) ? '—' : implode(', ', array_unique($codes));
+                        })
+                        ->columnSpanFull(),
                     \Filament\Infolists\Components\TextEntry::make('last_discovery_job_result')
-                        ->label('Last Job Result (JSON)')
+                        ->label('device_result (JSON)')
                         ->state(function (Device $record) {
                             $job = $record->agentJobs()->latest('created_at')->first();
 
@@ -100,7 +172,12 @@ class DeviceResource extends Resource
                                 return null;
                             }
 
-                            return json_encode($job->result ?? new \stdClass(), JSON_PRETTY_PRINT);
+                            $result = $job->result ?? null;
+                            if (is_array($result) && isset($result['device_result'])) {
+                                return json_encode($result['device_result'], JSON_PRETTY_PRINT);
+                            }
+
+                            return json_encode($result ?? new \stdClass(), JSON_PRETTY_PRINT);
                         })
                         ->columnSpanFull(),
                 ])

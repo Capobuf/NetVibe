@@ -625,3 +625,355 @@ Componenti con buona base, da mantenere e rifinire:
   - modelli `Subnet`, `IpAddress`, `Vlan` e relative regole.  
 - Filament clusters/resources attuali (IPAM, Racks & Devices, Discovery) — da allineare al PDL ma non da eliminare.  
 - Trait `TenantAware`/`TenantScope` — mantenuti come meccanismo di query‑scoping UI, in coerenza con `TenantResolverService`.
+
+---
+
+## 8. Copertura PDL → Roadmap (sezioni UI/UX e dominio aggiuntive)
+
+Questa sezione esplicita il mapping tra PDL (`PDL.md`, `PDL_UX_UI.md`) e roadmap, aggiungendo TODO puntuali dove il PDL definisce requisiti non ancora tracciati come task.
+
+### 8.1 DeviceResource UI (PDL_UX_UI §6.2, PDL §6.6)
+
+- **Stato roadmap**
+  - Milestone A.5.1 copre l’introduzione dei tab concettuali (Overview, Discovery, Networking, SNMP Settings) e dell’Infolist Overview/Discovery di base.  
+  - PDL principale (§6.6) ribadisce che DeviceResource deve avere i quattro tab obbligatori e che il tab Discovery deve includere un viewer `device_result` + azioni async (`Check connectivity`, `Full discovery`, `Test SNMP`).
+- **Stato attuale (UI implementata)**
+  - Il tab Discovery di `DeviceResource` mostra ora:
+    - tipo e stato dell’ultimo job;  
+    - schema_version del `device_result` più recente (se presente);  
+    - conteggio per sezione (`interfaces`, `vlans`, `arp`, `dhcp_leases`, `neighbors`, `bridge_hosts`);  
+    - elenco codici `errors[]` se presenti;  
+    - JSON pretty‑print del `device_result` (o dell’intero `result` se la chiave non è disponibile).  
+- **TODO (da aggiungere/raffinare in Milestone A.5/C.2)**
+  - Raffinare il **DeviceResult viewer** nel tab Discovery:
+    - mantenere il pretty‑print JSON di `result.device_result` con evidenza di `schema_version` e delle sezioni principali (`device`, `interfaces.items`, `vlans.items`, `arp.items`, `dhcp_leases.items`, `neighbors.items`, `bridge_hosts.items`, `snmp`);  
+    - introdurre, se utile, un viewer più ricco (collapse/expand per sezioni e copia in clipboard) riutilizzabile anche nel Job Center.  
+  - Allineare il tab Discovery a tutti i blocchi richiesti:
+    - Last scan (tipo job, agent, timestamp);  
+    - Health summary (REST/SNMP/subnet, stato `ok/partial/error`);  
+    - REST status (ultimo `check_connectivity` + errori `device_result.errors[]` lato REST);  
+    - SNMP status (quando pipeline SNMP Fase 1 sarà implementata).  
+  - Esplicitare i tab “Networking” e “SNMP Settings” come pagine/sezioni distinte (non solo concettuali), mantenendo:
+    - `PortsRelationManager` come tabella principale nel tab Networking (con colonne richieste dal PDL);  
+    - schema `snmp_settings` completo nel tab SNMP Settings (connection, port name priority, custom OIDs) e azione “Test SNMP”.
+
+### 8.2 ScanAgent UI (PDL_UX_UI §6.3)
+
+- **Stato roadmap**
+  - A.5.2 copre il tab “Logs” (AgentLogsRelationManager con filtri + action “View JSON context”).  
+  - PDL_UX_UI richiede anche:
+    - tab “Details” con PAT management (rotate/revoke, one‑time reveal) e preview configurazione (`ScanAgent.settings` + `/api/v1/agent/config`);  
+    - tab “Jobs” come vista Job Center filtrata per agent.
+- **TODO (estensione Milestone A.5 / C.4)**
+  - Aggiungere alla ScanAgentResource:
+    - tab Details completo:
+      - gestione PAT (creazione/rotate/revoke) coerente con PDL;  
+      - visualizzazione `last_seen` con badge stato (online/degraded/offline/outdated);  
+      - pannello di anteprima config agent (estratto da `ScanAgent.settings` + ultimo `/api/v1/agent/config` ricevuto).  
+    - tab Jobs (AgentJobsRelationManager):
+      - tabella di job filtrata per `scan_agent_id`;  
+      - colonne allineate al Job Center (type, scope, status, device, timestamps);  
+      - link diretto al Job Center globale.
+
+### 8.3 IPAM/DCIM UI estese (PDL_UX_UI §6.4, §6.7; PDL §6.4–6.5)
+
+- **Stato roadmap**
+  - A.5.3 copre Subnet (`last_scan`, `last_discovery`, filtro `scan_agent`) e Ports (`last_seen`, `discovered_by_scan_agent_id`) a schema e UI.  
+  - PDL_UX_UI aggiunge:
+    - Subnet “Discovery status” con indicatori partial dataset (es. `device_result.arp.partial`) e link a job/subnet discovery;  
+    - Rack View “tipo ECCM” con schema a griglia, devices posizionati in verticale, export layout;  
+    - IP Pool / IP Editing UX (ruoli IP, stati free/used/conflicted/locked).
+- **TODO (da pianificare come estensione B.2/D.1/E)**
+  - Subnet:
+    - aggiungere sezione “Discovery status” nella Subnet view che mostri:
+      - stato discovery (never run/scheduled/running/completed/partial/failed);  
+      - indicatori per partial dataset basati su `device_result.*.partial`;  
+      - link alle ultime discovery per quella subnet (Job Center filtrato).  
+  - Rack View:
+    - implementare vista rack a griglia coerente con PDL (layout U, click device → slide‑over, export rack layout via html2media/Export).  
+  - IP Pool & IP Editing:
+    - modellare in UI gli stati IP richiesti (free/used/conflicted/locked) e i campi di editing base (comment, type, category) secondo `PDL.md §IPAM`.
+
+### 8.4 Job Center & DiscoveryEvent (PDL_UX_UI §6.5–6.6)
+
+- **Stato roadmap**
+  - C.4 descrive il Job Center basato su `AgentJob` e l’esistenza della slide‑over “View details” con JSON (payload/result/result_metadata/error_message).  
+  - PDL_UX_UI richiede:
+    - DeviceResult viewer integrato nel dettaglio job;  
+    - elenco di DiscoveryEvent correlati al job (conflict events) con link alla pagina di approval;  
+    - filtri completi (type, status, tenant, device, agent, scope).
+- **Stato attuale (UI implementata parzialmente)**
+  - Il dettaglio job (`AgentJobsTable` → action “View details”) mostra ora:
+    - `schema_version` del `device_result` (se presente);  
+    - conteggio per sezione (`interfaces`, `vlans`, `arp`, `dhcp_leases`, `neighbors`, `bridge_hosts`);  
+    - JSON pretty‑print di `device_result` in un campo dedicato, oltre al `result` raw completo.  
+- **TODO (estensione C.4 / collegamento con C.2)**
+  - Estendere `AgentJobResource` per:
+    - integrare un DeviceResult viewer più ricco e riutilizzabile anche lato DeviceResource (collapse/expand, focus su errori);  
+    - mostrare elenco di `DiscoveryEvent` collegati al job (conflict events come MAC_MISMATCH, ORPHAN_IP, merge_conflict) con link alla Resource DiscoveryEvent per l’approval.  
+  - Estendere DiscoveryEvent UI (nuova Resource o estensione esistente) per:
+    - filtri su type/category;  
+    - diff viewer per i cambi (old/new);  
+    - batch actions per risolvere i conflitti (resolve/ignore, ecc.), in linea con PDL.  
+
+### 8.5 System Health & Dashboard (PDL_UX_UI §6.1, §6.9)
+
+- **Stato roadmap**
+  - Sezioni A.2/A.3 coprono parzialmente il wizard e SystemState; non esisteva ancora una milestone dedicata alle cards System Health e alla dashboard principale.  
+- **Stato attuale (dopo questo ciclo)**
+  - SystemState:
+    - `SystemStateSettings` (`app/Settings/SystemStateSettings.php`) contiene `installed`, `configured`, `last_scheduler_run_at`, `last_worker_heartbeat_at`, `last_health_check_at`.  
+    - `last_scheduler_run_at` / `last_worker_heartbeat_at` vengono inizializzati dalle migrazioni/wizard ma non sono ancora aggiornati da job schedulati dedicati (scheduler/worker heartbeat).  
+  - System Health page:
+    - Aggiunta pagina Filament `SystemHealthPage` (`app/Filament/Pages/SystemHealthPage.php`) con view `resources/views/filament/pages/system-health.blade.php`, sotto il gruppo `Administration`.  
+    - La pagina mostra cards per:
+      - Scheduler: stato calcolato da `last_scheduler_run_at` secondo le soglie del PDL (<3 min OK, 3–10 min WARNING, >10 min CRITICAL).  
+      - Worker: stato calcolato da `last_worker_heartbeat_at` con le stesse soglie.  
+      - Database: check `DB::connection()->getPdo()` (UP/DOWN).  
+      - Redis: se `database.redis.default` è configurato, usa `Redis::connection()->ping()` (UP/DOWN), altrimenti mostra `N/A` (“Redis not configured (not required)”).  
+      - Storage: prova scrittura/lettura su `Storage::disk('local')` (UP/DOWN).  
+      - Agents: riepilogo `ScanAgent` (`total`, `with_last_seen`, `last_seen_max`), senza introdurre logica di online/offline oltre quanto definito nel PDL.  
+    - Il bottone “Run Health Check Now” (`runHealthCheck()`) aggiorna solo `SystemStateSettings::last_health_check_at` e mostra una notifica; non viene introdotto alcun `HealthCheckService` o job aggiuntivo rispetto a quanto già definito.  
+    - La card Agents include esplicitamente una nota che Queue backlog e classificazione offline/online dettagliata verranno aggiunte in una fase successiva, per evitare assunzioni non descritte dal PDL.
+- **TODO (nuova sotto‑milestone, es. A.6 / D.x)**
+  - Dashboard:
+    - implementare dashboard iniziale con KPI (devices, IPs, VLANs), agent status, recent discovery events, System Health summary.  
+  - System Health:
+    - completare wiring backend per:
+      - aggiornare `last_scheduler_run_at` ad ogni `php artisan schedule:run`;  
+      - aggiornare `last_worker_heartbeat_at` da un `WorkerHeartbeatJob` schedulato come da PDL;  
+      - introdurre eventualmente un `HealthCheckService`/job dedicato se e quando verrà definito nei dettagli nel PDL (oggi la pagina calcola gli stati on‑the‑fly).  
+    - aggiungere metrica `Queue backlog` coerente con il driver di coda effettivamente in uso, senza assumere un backend specifico (DB / Redis) finché non viene normato nel PDL;  
+    - estendere la card Agents per mostrare conteggi online/offline basati su una soglia configurabile esplicita (non ancora modellata in Settings) e, se richiesto, propagare lo stato in un banner persistente di sistema.
+
+### 8.6 Settings UX & Wizard Fase 2 (PDL_UX_UI §7–§8)
+
+- **Stato roadmap**
+  - A.2/A.3 descrivono Wizard Fase 1; D.3 introduce Notifications & Telegram Fase 1 lato backend.  
+  - PDL_UX_UI definisce:
+    - raggruppamento Settings (General, Discovery, Notifications, Security, Feature Flags);  
+    - wizard Fase 2 (email/telegram/redis test) con test espliciti.
+- **Stato attuale (dopo questo ciclo)**
+  - GeneralSettings:
+    - `GeneralSettings` (`app/Settings/GeneralSettings.php`) esposta tramite `GeneralSettingsPage` (`app/Filament/Pages/GeneralSettingsPage.php`) con:
+      - `site_name`, `site_color`, `time_display_format`, `agent_alert_level`, `app_url`, `force_https`;  
+      - layout condiviso `resources/views/filament/pages/general-settings.blade.php`.  
+  - DiscoverySettings:
+    - `DiscoverySettings` (`app/Settings/DiscoverySettings.php`) esposta tramite `ManageDiscoverySettings` (`app/Filament/Clusters/Discovery/Pages/ManageDiscoverySettings.php`) con i campi:
+      - `auto_discovery_enabled`, `default_scan_interval_minutes`, `icmp_timeout_ms`, `icmp_retries`, `prune_logs_days`,  
+      - `agent_polling_interval_minutes`, `timeout_rest_ms`, `timeout_snmp_ms`, `max_records_per_dataset`;  
+    - la pagina utilizza la view `resources/views/filament/pages/discovery-settings.blade.php` e rispetta il PDL UX (max records + timeout override).  
+  - SecuritySettings:
+    - `SecuritySettings` (`app/Settings/SecuritySettings.php`) esposta tramite `SecuritySettingsPage` (`app/Filament/Pages/SecuritySettingsPage.php`) con:
+      - `min_agent_version`, `min_supported_schema_version`, `agent_tls_verify`, `max_agent_payload_bytes`;  
+    - la pagina ora riusa il layout generico `filament.pages.general-settings` per evitare la view mancante `security-settings.blade.php`.  
+  - FeatureFlagSettings:
+    - `FeatureFlagSettings` (`app/Settings/FeatureFlagSettings.php`) esposta tramite `FeatureFlagSettingsPage` (`app/Filament/Pages/FeatureFlagSettingsPage.php`) con:
+      - `snmp_fase1`, `chunking`, `gzip`;  
+    - tutti i flag sono rappresentati come toggle read‑only rispetto alla semantica del PDL (nessun comportamento aggiuntivo implementato qui).  
+  - SystemStateSettings:
+    - `SystemStateSettings` rimane senza pagina di editing (come da PDL); viene usata da middleware/wizard e da System Health, non modificabile da UI.  
+- **TODO (estensione A.2/D.3)**
+  - Settings UX:
+    - introdurre pagina Filament per `NotificationSettings` (`NotificationSettingsPage`) quando la classe sarà disponibile, con i soli campi descritti nel PDL (webhook URL Fase 1, template Telegram Fase 2);  
+    - mantenere allineati i form Discovery/Security/Feature Flags se il PDL introducesse nuovi campi (es. token rotation lato Security);  
+    - collegare questi settings alle funzionalità già pianificate (Discovery pipeline, Notifications & Telegram, Security min_agent_version/tls_verify), senza introdurre logica aggiuntiva non prevista dal PDL.  
+  - Wizard Fase 2:
+    - aggiungere step opzionali al wizard per:
+      - test email (SMTP) con feedback success/fail;  
+      - test Telegram;  
+      - test Redis, con messaggistica chiara su cosa succede se non è disponibile in produzione.
+
+### 8.7 Agent ENV & struttura progetto (PDL §2.7, §7.1.1, §7.7)
+
+- **Stato roadmap**
+  - A.1/C.1 coprono Compose V2 per il server e `/api/v1/agent/config`; il PDL specifica anche:
+    - env contract semplificato per l’agent (`SERVER_URL`, `AGENT_API_TOKEN`, `LOG_LEVEL`, `AGENT_POLL_INTERVAL_SECONDS`, `AGENT_CONFIG_REFRESH_SECONDS`);  
+    - presenza esplicita di `remote-agent/.env.example` e `remote-agent/docker-compose.yml`;  
+    - struttura target del progetto remote-agent (Drivers/Jobs/Http/Support/...).
+- **Stato attuale (dopo questo ciclo)**
+  - `remote-agent/.env.example` esiste e contiene:
+    - `SERVER_URL`, `AGENT_API_TOKEN`, `LOG_LEVEL`, `AGENT_POLL_INTERVAL_SECONDS`, `AGENT_CONFIG_REFRESH_SECONDS` secondo PDL.  
+  - `remote-agent/docker-compose.yml`:
+    - espone un servizio `agent` con:
+      - `SERVER_URL: ${SERVER_URL}`  
+      - `AGENT_API_TOKEN: ${AGENT_API_TOKEN}`  
+      - `LOG_LEVEL: ${LOG_LEVEL:-info}`  
+      - `AGENT_POLL_INTERVAL_SECONDS: ${AGENT_POLL_INTERVAL_SECONDS:-5}`  
+      - `AGENT_CONFIG_REFRESH_SECONDS: ${AGENT_CONFIG_REFRESH_SECONDS:-60}`  
+    - monta `./` in `/app` e usa `php /app/agent.php` come comando, coerente con PDL.  
+  - `AgentWorkCommand`:
+    - legge solo `SERVER_URL` come sorgente autorevole per la base URL e rimuove eventuali suffissi `/api` o `/api/vX` se presenti per errore, in linea con il contratto “SERVER_URL senza /api”;  
+    - legge solo `AGENT_API_TOKEN` (da env o da `.env` locale) come PAT;  
+    - usa `AGENT_POLL_INTERVAL_SECONDS` e `AGENT_CONFIG_REFRESH_SECONDS` (se presenti e >0) per configurare le frequenze di polling jobs e config, con default 5s / 60s come nel PDL;  
+    - mantiene il logging coerente con queste variabili (`Using AGENT_API_TOKEN: ****`).
+- **TODO (estensione C.1 / struttura progetto agent)**
+  - La struttura del progetto `remote-agent/` è ora allineata a grandi linee al layout target descritto in PDL (§2.7 / §7.7):
+    - `src/Console/AgentWorkCommand.php`,  
+    - `src/Drivers/MikrotikApiDriver.php`,  
+    - `src/Jobs/JobHandler.php` (ex Handlers\JobHandler),  
+    - `src/Http/NetVibeHttpClient.php`,  
+    - `src/Support/DeviceResultBuilder.php`,  
+    - `src/Logging/Logger.php`,  
+    - `bin/netvibe-agent` come wrapper CLI che richiama `AgentWorkCommand::run()`,  
+    - directory `config/`, `tests/`, `docs/` predisposte con README per futuri estensioni (preset, test agent, documentazione specifica).  
+  - Nelle iterazioni successive si potranno:
+    - aggiungere effettivi job SNMP/Connectivity/Discovery dentro `src/Jobs/` (SnmpEnrichmentJob, DiscoveryJob) e nuovi driver SNMP/UniFi in `src/Drivers/`,  
+    - popolare `config/`, `tests/`, `docs/` con il contenuto descritto dal PDL, senza modificare ulteriormente il contratto env (`SERVER_URL`/`AGENT_API_TOKEN`/`LOG_LEVEL`/`AGENT_POLL_INTERVAL_SECONDS`/`AGENT_CONFIG_REFRESH_SECONDS`), ormai unico e privo di env legacy.
+
+---
+
+## 9. Vista Epics / Task / Sotto‑task (per agenti più basici)
+
+Questa sezione riorganizza le milestone in **epic** e task/sotto‑task atomici, mantenendo invariato il contenuto precedente, per facilitare l’esecuzione da parte di agent meno sofisticati.
+
+### Epic A — Infra, Setup & UI di base
+
+- **A1. Compose & infra server**
+  - A1.1 Garantire unico `compose.yml` per app/worker/db/redis/test-db (già implementato, verificare allineamento `.env.example`).  
+  - A1.2 Rimuovere definitivamente `docker-compose.yml` legacy e riferimenti nei docs.  
+- **A2. Setup Wizard Fase 1**
+  - A2.1 Completare controlli preflight (PHP/ext, storage, DB, Redis opzionale).  
+  - A2.2 Hardening `SystemStateSettings` + middleware `CheckSystemInstalled`.  
+  - A2.3 Flusso completo wizard (preflight → migrate → admin → customer/location → app).  
+- **A3. UI Filament base**
+  - A3.1 Allineare DeviceResource ai tab concettuali (Overview, Discovery, Networking, SNMP).  
+  - A3.2 Esporre campi discovery chiave in IPAM/DCIM (Subnets last_scan/last_discovery; Ports last_seen/discovered_by_scan_agent_id).  
+  - A3.3 Implementare tab Logs per ScanAgent (filtri + view JSON context).  
+- **A4. Dashboard & System Health (TODO Epic A esteso)**
+  - A4.1 Implementare dashboard con KPI e System Health summary.  
+  - A4.2 Implementare pagina System Health con cards Worker/Scheduler/Queue/Agent + “Run Health Check Now”.
+
+### Epic B — Tenancy & Domain Core
+
+- **B1. Tenancy esplicita**
+  - B1.1 Usare `TenantResolverService` in `TenantScope` (completato).  
+  - B1.2 Rimuovere inferenze `session('tenant_id')` dai model hooks (completato).  
+  - B1.3 Validare i flussi di UI (Tenant Switcher) rispetto al nuovo resolver (test da aggiungere in milestone test).  
+- **B2. Pulizia schema IPAM/DCIM**
+  - B2.1 Rimuovere definitivamente VRF/L2Domain/Sections via migrazioni (completato).  
+  - B2.2 Introdurre `last_seen_*` + `last_seen_overall` per i device (parzialmente completato).  
+  - B2.3 Introdurre e usare tabelle blacklist VLAN/Subnet (completato).  
+  - B2.4 TODO: completare rimozione chiavi legacy nel dominio (es. sections, residui schema) seguendo `docs/99_DEBT_AND_INCONSISTENCIES.md`.  
+- **B3. SNMP Settings Fase 1 (modello + UI)**
+  - B3.1 Migrazione `snmp_settings` + model `SnmpSettings` (completato).  
+  - B3.2 Integrazione `snmp_settings` in DeviceForm/DeviceResource (completato).  
+  - B3.3 TODO: preset vendor SNMP e future colonne SNMP su `ports` (`snmp_if_index`, `snmp_*`), come da PDL §6.4/6.5.
+
+### Epic C — Discovery & Agent Pipeline
+
+- **C1. Contratto agent config & device_result**
+  - C1.1 `/api/v1/agent/config` conforme al PDL (completato).  
+  - C1.2 `DeviceResultBuilder` per Mikrotik (device, interfaces, vlans, arp, dhcp, neighbors, bridge_hosts, errors) (completato).  
+  - C1.3 Validazione `device_result.schema_version` sul server (`AgentJobController@storeResult`) e negoziazione lato agent (`AgentWorkCommand`) (completato parzialmente).  
+- **C2. Ingest & Merge basato su device_result**
+  - C2.1 Usare `MergePolicyService` per Device (hostname/serial) e IP (mac/hostname) (parzialmente completato).  
+  - C2.2 Rifattorizzare ingest Mikrotik (Inventory/Topology/ARP) per usare direttamente `device_result` (parzialmente completato, con fallback legacy espliciti).  
+  - C2.3 TODO: eliminare completamente i percorsi legacy (`bridge_vlan`, `ip_neighbors`, `arp_table`, `dhcp`) quando i test saranno allineati, e collegare `MergeResult->events` a `DiscoveryEvent`.  
+- **C3. SNMP Fase 1 pipeline (TODO)**
+  - C3.1 Implementare `SnmpService` server-side.  
+  - C3.2 Implementare `SnmpDriver` + `SnmpEnrichmentJob` nel remote agent.  
+  - C3.3 Estendere `device_result` con sezione `snmp` (device+interfaces) e integrare in ingest/merge.  
+- **C4. Job Center & Logging/Audit**
+  - C4.1 Completare Job Center (AgentJobResource) con filtri completi e slide‑over dettagli payload/result (completato base).  
+  - C4.2 Integrare DeviceResult viewer e DiscoveryEvents correlati nel dettaglio job (TODO).  
+  - C4.3 Hardening ActivityLog/AgentLog per tenancy e retention (parzialmente completato).
+
+### Epic D — Export, Backup, Notifications
+
+- **D1. Export & PDF**
+  - D1.1 Export CSV/XLSX per Subnets, IP, Devices, Ports, DiscoveryEvents (completato).  
+  - D1.2 PDF base per Subnets via html2media (completato).  
+  - D1.3 TODO: estendere PDF/Exports a DCIM, Discovery, Settings con template avanzati.  
+- **D2. Backup DB**
+  - D2.1 Implementare job backup DB con retention configurabile (TODO).  
+- **D3. Notifications & Telegram Fase 1**
+  - D3.1 Implementare NotificationSettings + integrazione Telegram minima (TODO backend+UI).  
+
+### Epic E — UI avanzata & Observability (Nice‑to‑have / Fase 2)
+
+- **E1. SNMP avanzato**
+  - SNMP avanzato (vendor specifici, PoE, temperature, SNMPv3) — vedi Milestone E.  
+- **E2. Telegram avanzato**
+  - Bot commands (`/health`, `/last_event`, `/agent_status`, inline keyboard) — Milestone E.  
+- **E3. Visual regression & UI testing**
+  - Playwright/Chromatic per viste critiche, script `./dev/test-ui`/`./dev/test-agent` allineati al PDL UI/Testing.  
+
+Questa vista Epics/Task non sostituisce le sezioni A–D, ma le rende navigabili per agent meno sofisticati mantenendo tutto il contesto, le note aperte e i TODO già presenti.  
+
+---
+
+## 10. Informazioni Necessarie Mancanti
+
+Questa sezione raccoglie i punti in cui il PDL o il codice non forniscono ancora dettagli sufficienti per procedere senza introdurre assunzioni.
+
+- **10.1 NotificationSettings & NotificationSettingsPage**
+  - Il PDL (`docs/PDL.md`, `docs/PDL_UX_UI.md §7`) menziona `NotificationSettings` e una `NotificationSettingsPage` con:
+    - webhook URL (Fase 1);  
+    - template Telegram (Fase 2).  
+  - Nel codice non esiste ancora `app/Settings/NotificationSettings.php`.  
+  - Mancano:
+    - elenco preciso dei campi (nomi, tipi, default, struttura dei template);  
+    - eventuale separazione per tipo di notifica (discovery, backup, agent alert, ecc.);  
+    - definizione del group Spatie (`group(): string`) e mapping UI (sezione/esatto layout Filament).  
+  - Finché questi punti non sono definiti nel PDL principale, non si procede con l’implementazione di `NotificationSettings`/`NotificationSettingsPage`.
+
+- **10.2 DiscoveryEvent ↔ AgentJob (Job Center conflict events)**
+  - Il PDL (PDL_UX_UI §6.5 Job Center) prevede che, nel dettaglio di un job, siano mostrati i “conflict events” generati dal merge (lista `DiscoveryEvent` correlati al job, con link diretto).  
+  - L’attuale modello `DiscoveryEvent` (`app/Models/DiscoveryEvent.php`) non contiene alcun riferimento a `AgentJob` (nessun `agent_job_id` o relazione analoga).  
+  - Il PDL non specifica ancora:
+    - il contratto dati tra `MergePolicyService`/`MergeResult` e `DiscoveryEvent`;  
+    - la chiave di correlazione definitiva (`agent_job_id`, `device_id`+timestamp, altro).  
+  - Prima di collegare UI Job Center → DiscoveryEvent è necessario definire nel PDL lo schema dati e la relazione esatta.
+
+- **10.3 Auto‑creazione subnet `/24` in IngestMikrotikArpAction**
+  - Nota aperta già presente in B.2: l’implementazione corrente può auto‑creare subnet `/24` in `IngestMikrotikArpAction` basandosi sulla PVID della porta.  
+  - Il PDL aggiornato non esplicita se questo comportamento:
+    - debba essere mantenuto così com’è;  
+    - debba essere reso configurabile (es. per tenant);  
+    - debba essere sostituito da una logica guidata dalla Subnet view / Discovery status.  
+  - Serve una decisione nel PDL prima di modificare o rimuovere questa auto‑creazione.
+
+- **10.4 Modellazione VLAN↔bridge/interfacce (Mikrotik / multi‑bridge)**
+  - Nota aperta in C.2: `DeviceResultBuilder::buildVlansSection()` oggi legge `vlan-ids` da `/rest/interface/bridge/vlan` senza distinzione chiara tra bridge fisici/logici; il PDL Fase 1 chiede solo un elenco VLAN “flat”.  
+  - Il PDL non ha ancora definito:
+    - come gestire device con più bridge o nomi non standard;  
+    - se e come modellare la relazione VLAN↔bridge↔porta in Fase 2.  
+  - Fino a quando il PDL non fornirà un modello preciso, l’implementazione VLAN rimane volutamente “flat” e non si procede con arricchimenti.
+
+- **10.5 SNMP Fase 1 – dettagli driver/pipeline**
+  - PDL e roadmap (C.3) definiscono gli obiettivi di SNMP Fase 1 (sysName/sysDescr/sysObjectID, ifTable base, 1–2 OID globali), ma non sono ancora dettagliati:
+    - l’elenco definitivo degli OID obbligatori e opzionali;  
+    - il formato esatto della sezione `device_result.snmp` (chiavi, tipi, eventuali flag `partial`);  
+    - il contratto preciso tra `SnmpService` (server), `SnmpDriver` (agent) e `SnmpEnrichmentJob`.  
+  - Finché questi elementi non saranno descritti in modo esplicito nel PDL, l’implementazione SNMP Fase 1 rimane sospesa (solo schema UI `SnmpSettings` e Feature Flag `snmp_fase1` sono pronti).
+
+- **10.6 Agent System Health – queue backlog & soglia offline/online**
+  - PDL System Health (§13 e PDL_UX_UI §6.9) menziona:
+    - metriche di queue backlog;  
+    - badge “Agent online/offline” basato su soglia configurabile.  
+  - Attualmente:
+    - non esiste una soglia esplicita a schema per la classificazione agent online/offline;  
+    - il PDL non specifica il meccanismo di calcolo del backlog (driver coda DB vs Redis, code multiple).  
+  - Prima di implementare queste metriche:
+    - serve definire nel PDL dove memorizzare la soglia (Settings dedicato) e la semantica esatta (es. `last_seen > N minuti` → offline);  
+    - serve chiarire se il backlog è calcolato su una coda specifica (`discovery`) o globalmente, e come viene esposto in UI.
+
+- **10.7 HealthCheckService & job scheduler/worker heartbeat**
+  - PDL menziona un `HealthCheckService` e job di heartbeat/scheduler che aggiornano `SystemStateSettings.last_scheduler_run_at` e `last_worker_heartbeat_at`.  
+  - Nel codice:
+    - non esistono ancora `HealthCheckService`, `WorkerHeartbeatJob` o job analoghi;  
+    - il wiring concreto (quali comandi/artisan, quali schedule) non è ancora normato.  
+  - Prima di aggiungere questi componenti è necessario che il PDL definisca:
+    - il nome e la frequenza del job;  
+    - a quali code appartiene;  
+    - se deve fare solo update timestamp o ulteriori controlli (es. queue length).
+
+- **10.8 Notification pipeline completa (webhook/Telegram)**
+  - Oltre a `NotificationSettings`, il PDL menziona integrazione Telegram e webhook ma non dettaglia:
+    - le tipologie di eventi che devono generare notifiche (discovery_conflict, backup_failed, agent_offline, ecc.);  
+    - la struttura del payload da inviare ai webhook o ai bot Telegram;  
+    - la strategia di deduplicazione/ratelimit (se prevista).  
+  - Per ora è implementata solo la logica di alert sugli AgentLog (`AgentLogController::triggerAlertIfNeeded`) basata su `GeneralSettings.agent_alert_level`; tutto il resto della pipeline notifiche resta in attesa di specifiche più precise.
+
+Questi punti devono essere chiariti nei PDL (tecnico e UX) prima di procedere con ulteriori modifiche strutturali, per rispettare il vincolo “nessuna assunzione non documentata” richiesto dal progetto.  

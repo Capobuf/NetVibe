@@ -30,10 +30,14 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
     protected string $view = 'filament.pages.discovery-settings';
 
     public int $default_scan_interval_minutes = 60;
+    public int $agent_polling_interval_minutes = 5;
     public bool $auto_discovery_enabled = true;
     public int $icmp_timeout_ms = 200;
     public int $icmp_retries = 1;
     public int $prune_logs_days = 3;
+    public int $timeout_rest_ms = 8000;
+    public int $timeout_snmp_ms = 5000;
+    public int $max_records_per_dataset = 5000;
 
     protected function getFormSchema(): array
     {
@@ -76,6 +80,24 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
                 ->default(5)
                 ->required()
                 ->helperText('Frequenza (minuti) con cui l’agent interroga /api/v1/agent/jobs; usato anche per il config poll.'),
+            TextInput::make('timeout_rest_ms')
+                ->label('REST timeout (agent → device)')
+                ->numeric()
+                ->suffix('ms')
+                ->required()
+                ->helperText('Timeout predefinito usato dagli agent per chiamate REST (vedi PDL Discovery Settings).'),
+            TextInput::make('timeout_snmp_ms')
+                ->label('SNMP timeout (agent → device)')
+                ->numeric()
+                ->suffix('ms')
+                ->required()
+                ->helperText('Timeout predefinito per SNMP Fase 1.'),
+            TextInput::make('max_records_per_dataset')
+                ->label('Max records per dataset')
+                ->numeric()
+                ->minValue(1)
+                ->required()
+                ->helperText('Oltre questo limite i payload vengono marcati come parziali (device_result.*.items).'),
         ];
     }
 
@@ -90,6 +112,9 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
             'icmp_retries' => $settings->icmp_retries,
             'prune_logs_days' => $settings->prune_logs_days ?? 3,
             'agent_polling_interval_minutes' => $settings->agent_polling_interval_minutes ?? 5,
+            'timeout_rest_ms' => $settings->timeout_rest_ms,
+            'timeout_snmp_ms' => $settings->timeout_snmp_ms,
+            'max_records_per_dataset' => $settings->max_records_per_dataset,
         ]);
     }
 
@@ -104,6 +129,9 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
         $settings->icmp_retries = (int) ($state['icmp_retries'] ?? $settings->icmp_retries);
         $settings->prune_logs_days = (int) ($state['prune_logs_days'] ?? $settings->prune_logs_days ?? 3);
         $settings->agent_polling_interval_minutes = (int) ($state['agent_polling_interval_minutes'] ?? $settings->agent_polling_interval_minutes ?? 5);
+        $settings->timeout_rest_ms = (int) ($state['timeout_rest_ms'] ?? $settings->timeout_rest_ms);
+        $settings->timeout_snmp_ms = (int) ($state['timeout_snmp_ms'] ?? $settings->timeout_snmp_ms);
+        $settings->max_records_per_dataset = (int) ($state['max_records_per_dataset'] ?? $settings->max_records_per_dataset);
 
         $settings->save();
 

@@ -1,0 +1,232 @@
+📄 Osservazioni e Problemi Riscontrati nel Codice – Analisi Tecnica (Dicembre 2025)
+
+Queste osservazioni derivano dall’analisi completa del repository aggiornato di NetVibe.
+Il tono è descrittivo e non prescrittivo: il documento fotografa lo stato attuale senza indicare interventi.
+
+1. Setup e Configurazione Iniziale
+1.1 Livewire SetupPage come unico entrypoint
+
+L’intero processo di installazione e configurazione iniziale dell’applicazione risiede all’interno di una singola classe Livewire:
+
+app/Livewire/SetupPage.php
+
+~439 righe di codice
+
+include health-check, gestione del database, scrittura dell’ambiente, migrazioni, creazione admin, configurazioni generali e opzionali di seeding.
+
+Questa classe condensa tutte le responsabilità principali del setup applicativo.
+
+1.2 Manipolazione del file .env
+
+L’aggiornamento del file .env avviene tramite:
+
+app/Services/EnvEditor.php
+
+Il servizio effettua:
+
+lettura e riscrittura del file .env
+
+sostituzioni regex
+
+scrittura diretta su file
+
+Non vengono rilevati meccanismi di backup, atomizzazione o gestione di concorrenza.
+
+1.3 Assenza di test sul flusso di setup
+
+Il documento TEST_GAP_REPORT.md indica l’assenza completa di test sui componenti legati al setup:
+
+SetupPage
+
+EnvEditor
+
+Entrambi sono marcati come CRITICO.
+
+2. Discovery e Pipeline di Ingest
+2.1 Presenza di un’unica Action dominante
+
+La logica di ingest dello scan risulta concentrata in:
+
+app/Actions/Discovery/IngestScanResultsAction.php
+
+~446 righe
+
+La classe contiene:
+
+parsing dei risultati dello scan
+
+gestione della logica di merge
+
+applicazioni su IpAddress, Subnet, Device
+
+generazione di DiscoveryEvent
+
+logging estensivo
+
+operazioni transazionali
+
+La pipeline risulta molto densa e poco suddivisa in componenti distinti.
+
+2.2 Ruolo minimale del Job
+
+Il Job ProcessDiscoveryIngestJob:
+
+effettua una semplice iniezione dell’Action
+
+delega completamente la logica a IngestScanResultsAction
+
+Il job è quindi molto sottile rispetto alla complessità della pipeline.
+
+2.3 Struttura dati del payload di ingest
+
+I risultati dello scan gestiti da IngestScanResultsAction sono array annidati privi di typed object o DTO, e la logica di interpretazione è completamente contenuta nella Action stessa.
+
+3. Remote Agent
+3.1 Implementazione in PHP con comandi di sistema
+
+Il remote agent risiede in:
+
+docker/remote-agent/remote_scanner.php
+
+Le scansioni sono effettuate tramite comandi shell:
+
+exec("fping -aAqg -r 1 -t 500 " . escapeshellarg($cidr), $output, $returnVar);
+
+
+L’agent implementa un ciclo continuo di polling e invia i risultati tramite HTTP.
+
+3.2 Assenza di gestione avanzata degli errori
+
+L’agente registra gli errori su stderr e continua il ciclo di polling.
+La verifica del valore di ritorno di fping è basilare.
+
+3.3 Complessità di business residua lato agente
+
+La responsabilità dell’agent comprende sia l’esecuzione tecnica (exec) sia la costruzione manuale del payload dello scan.
+
+4. Multi-Tenancy
+4.1 Soft tenancy basata su customer_id
+
+Non sono presenti:
+
+scope globali per il tenant
+
+TenantResolver
+
+TenantScope
+
+meccanismi di tenant context
+
+La separazione dei dati avviene tramite campi espliciti customer_id sui modelli principali, utilizzati nelle query dove necessario.
+
+4.2 Job non legati a un contesto tenant
+
+I Job presenti (ScanSubnetJob, ProcessDiscoveryIngestJob, PruneAgentLogsJob):
+
+non impostano né ricevono un contesto di tenant
+
+non attivano alcun filtro automatico
+
+accedono ai modelli senza differenziazione implicita tra tenant
+
+Il comportamento è coerente con la filosofia indicata in _DOCS/STATUS.md ("soft multi-tenancy").
+
+4.3 Assenza di enforcement centralizzato
+
+Il rispetto del tenant è affidato a:
+
+filtri nelle API dell’agente
+
+filtri nelle pagine Filament
+
+filtri presenti nelle singole query
+
+Non esiste un guardrail tecnico a livello di global scope.
+
+5. Struttura Filament 4
+5.1 Dimensioni contenute delle Resource
+
+Le Filament Resource e i componenti associati risultano relativamente compatti.
+Nessuno dei file risulta particolarmente grande o strutturalmente problematico.
+
+5.2 Presenza di logica UI e business leggera
+
+In alcuni componenti la logica di filtraggio e selezione per customer_id è inclusa nelle classi Form/Table.
+
+Questo approccio è coerente con l’attuale modello soft-tenant.
+
+6. Modello Dati e Migrazioni
+6.1 Tabella settings con campo JSON
+
+All’interno di database/migrations è presente una sola definizione per la tabella:
+
+settings con colonna payload JSON
+
+Non risultano migrazioni multiple o conflittuali come nei report legacy inclusi nella repo.
+
+6.2 Utilizzo di Spatie Settings
+
+Le classi sotto app/Settings/ definiscono correttamente gli schemi per:
+
+GeneralSettings
+
+DiscoverySettings
+
+SecuritySettings
+
+NotificationSettings
+
+Il sistema dei settings è allineato a Spatie v3 (laravel-settings).
+
+7. Test e Copertura
+7.1 Presenza di test unitari e feature per alcune aree
+
+Sono presenti test significativi per:
+
+IpConversionService
+
+parti della pipeline discovery
+
+API agent (validazione, behavior base)
+
+7.2 Aree non coperte
+
+Le seguenti parti risultano prive di test secondo TEST_GAP_REPORT.md:
+
+SetupPage
+
+EnvEditor
+
+ScanSubnetJob
+
+SystemHealthCheckService
+
+Queste aree coinvolgono funzionalità critiche o potenzialmente instabili.
+
+8. Coerenza con PDL e Roadmap
+8.1 Refactoring parzialmente applicato
+
+Dalla comparazione tra codice attuale e PDL/roadmap:
+
+alcune parti sono già state aggiornate (setup via Livewire, soft-tenancy, agent integrato)
+
+altre componenti indicate nel PDL risultano non ancora implementate
+
+8.2 Componenti legacy rimossi
+
+Le Actions Mikrotik e il vecchio SetupController presenti nello zip precedente non risultano più nel repository attuale.
+
+📌 Conclusione
+
+Il repository analizzato mostra una base solida e coerente con Laravel 12 e Filament 4, con una progressione evidente nel refactoring.
+Si riscontrano principalmente:
+
+concentrazione della logica di setup e ingest in classi molto estese
+
+assenza di test in alcuni componenti centrali
+
+presenza di un agente remoto essenziale ma poco strutturato
+
+soft-tenancy senza enforcement automatico
+
+Le osservazioni riguardano lo stato del codice e non rappresentano indicazioni operative.

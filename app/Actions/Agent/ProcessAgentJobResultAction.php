@@ -31,6 +31,7 @@ class ProcessAgentJobResultAction
                         $device->last_seen_at = $now;
                         $device->last_seen_rest = $now;
                         $device->auth_status = 'valid';
+                        $device->markSeen($now);
                     } else {
                         // Failed: interpret known error codes
                         $err = $result['error'] ?? $result['error_code'] ?? null;
@@ -56,6 +57,15 @@ class ProcessAgentJobResultAction
                 break;
 
             case 'discovery_fast':
+                // Successful discovery jobs imply REST reachability
+                if ($device && $job->status === 'completed') {
+                    $now = now();
+                    $device->last_seen_at = $now;
+                    $device->last_seen_rest = $now;
+                    $device->markSeen($now);
+                    $device->save();
+                }
+
                 try {
                     $this->ingestArpDhcp($device, $result);
                 } catch (\Throwable $e) {
@@ -65,6 +75,15 @@ class ProcessAgentJobResultAction
                 break;
 
             case 'discovery_deep':
+                // Successful discovery jobs imply REST reachability
+                if ($device && $job->status === 'completed') {
+                    $now = now();
+                    $device->last_seen_at = $now;
+                    $device->last_seen_rest = $now;
+                    $device->markSeen($now);
+                    $device->save();
+                }
+
                 // Deep discovery: ingest topology first so ports/VLANs exist before ARP/IP enrichment
                 try {
                     $this->ingestTopology($device, $result);

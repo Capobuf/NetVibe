@@ -4,24 +4,39 @@ use App\Actions\Discovery\IngestScanResultsAction;
 use App\Models\IpAddress;
 use App\Models\DiscoveryEvent;
 use App\Models\ScanAgent;
+use App\Models\Customer;
 use App\Services\IpConversionService;
+use App\Tenancy\TenantContext;
+use App\Tenancy\TenantContextStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
+afterEach(function () {
+    app(TenantContextStore::class)->clear();
+});
+
+function setTenant(Customer $customer): void
+{
+    app(TenantContextStore::class)->set(new TenantContext((int) $customer->id, null, 'test', 'phpunit'));
+}
+
 it('creates a discovery event with MAC_MISMATCH when incoming MAC differs', function () {
-    $agent = ScanAgent::factory()->create();
+    $customer = Customer::factory()->create();
+    setTenant($customer);
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
 
     $converter = app(IpConversionService::class);
     $ip = '192.168.0.10';
     $ipDecimal = $converter->toDecimal($ip);
 
     // create a subnet and existing ip address with MAC A
-    $subnet = \App\Models\Subnet::factory()->create();
+    $subnet = \App\Models\Subnet::factory()->create(['customer_id' => $customer->id, 'cidr' => '192.168.0.0/24']);
     $existing = IpAddress::create([
         'subnet_id' => $subnet->id,
         'ip_addr' => $ipDecimal,
         'mac_address' => 'aa:aa:aa:aa:aa:aa',
+        'customer_id' => $customer->id,
         'last_seen' => now()->subDay(),
     ]);
 
@@ -46,7 +61,9 @@ it('creates a discovery event with MAC_MISMATCH when incoming MAC differs', func
 });
 
 it('updates last_seen and does not create discovery event when MAC matches', function () {
-    $agent = ScanAgent::factory()->create();
+    $customer = Customer::factory()->create();
+    setTenant($customer);
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
 
     $converter = app(IpConversionService::class);
     $ip = '192.168.0.20';
@@ -54,11 +71,12 @@ it('updates last_seen and does not create discovery event when MAC matches', fun
 
     $initial = now()->subHours(5);
 
-    $subnet = \App\Models\Subnet::factory()->create();
+    $subnet = \App\Models\Subnet::factory()->create(['customer_id' => $customer->id, 'cidr' => '192.168.0.0/24']);
     $existing = IpAddress::create([
         'subnet_id' => $subnet->id,
         'ip_addr' => $ipDecimal,
         'mac_address' => 'cc:cc:cc:cc:cc:cc',
+        'customer_id' => $customer->id,
         'last_seen' => $initial,
     ]);
 
@@ -81,18 +99,21 @@ it('updates last_seen and does not create discovery event when MAC matches', fun
 });
 
 it('does not create duplicate pending events for repeated ingests and updates existing', function () {
-    $agent = ScanAgent::factory()->create();
+    $customer = Customer::factory()->create();
+    setTenant($customer);
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
 
     $converter = app(IpConversionService::class);
     $ip = '192.168.0.30';
     $ipDecimal = $converter->toDecimal($ip);
 
     // Create a subnet and an existing ip so the ingest produces a pending event
-    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24']);
+    $subnet = \App\Models\Subnet::factory()->create(['customer_id' => $customer->id, 'cidr' => '192.168.0.0/24']);
     $existing = IpAddress::create([
         'subnet_id' => $subnet->id,
         'ip_addr' => $ipDecimal,
         'mac_address' => '11:22:33:44:55:66',
+        'customer_id' => $customer->id,
         'last_seen' => now()->subDay(),
     ]);
 
@@ -128,7 +149,9 @@ it('does not create duplicate pending events for repeated ingests and updates ex
 });
 
 it('auto-imports a new IP into ip_addresses and records an APPROVED discovery event', function () {
-    $agent = ScanAgent::factory()->create();
+    $customer = Customer::factory()->create();
+    setTenant($customer);
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
 
     $converter = app(IpConversionService::class);
     $ip = '192.168.0.40';
@@ -136,7 +159,7 @@ it('auto-imports a new IP into ip_addresses and records an APPROVED discovery ev
 
     // create a subnet covering our IP so it inherits subnet_id/customer
     // assign this subnet to the agent to ensure it is within the agent's scope
-    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'customer_id' => null, 'scan_agent_id' => $agent->id]);
+    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'customer_id' => $customer->id, 'scan_agent_id' => $agent->id]);
 
     $action = new IngestScanResultsAction();
 
@@ -160,7 +183,9 @@ it('auto-imports a new IP into ip_addresses and records an APPROVED discovery ev
 });
 
 it('does not auto-import when subnet discovery is disabled (creates PENDING event)', function () {
-    $agent = ScanAgent::factory()->create();
+    $customer = Customer::factory()->create();
+    setTenant($customer);
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
 
     $converter = app(IpConversionService::class);
     $ip = '192.168.0.50';
@@ -168,7 +193,7 @@ it('does not auto-import when subnet discovery is disabled (creates PENDING even
 
     // Ensure no other subnets are discoverable, then create a subnet covering our IP but discovery disabled
     \App\Models\Subnet::query()->update(['discover_subnet' => false]);
-    $subnet = \App\Models\Subnet::factory()->create(['cidr' => '192.168.0.0/24', 'discover_subnet' => false]);
+    $subnet = \App\Models\Subnet::factory()->create(['customer_id' => $customer->id, 'cidr' => '192.168.0.0/24', 'discover_subnet' => false]);
 
     $action = new IngestScanResultsAction();
 

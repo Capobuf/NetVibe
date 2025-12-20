@@ -8,13 +8,17 @@ use App\Services\IpConversionService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Concerns\TenantAware;
+use App\Models\Concerns\HasLifecycle;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Enums\IpAddressType;
+use App\Enums\LifecycleStatus;
+use Illuminate\Validation\ValidationException;
 
 class IpAddress extends Model
 {
     use SoftDeletes, HasFactory;
     use TenantAware;
+    use HasLifecycle;
     protected $fillable = [
         'subnet_id', 'ip_addr', 'description', 'hostname',
         'mac_address', 'owner', 'state', 'switch_id', 'location_id', 'port',
@@ -29,7 +33,40 @@ class IpAddress extends Model
         'exclude_ping' => 'boolean',
         'ptr_ignore' => 'boolean',
         'last_seen' => 'datetime',
+        'lifecycle_status' => LifecycleStatus::class,
+        'stale_at' => 'datetime',
+        'retired_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (IpAddress $ip): void {
+            // Enforce tenancy invariants at the model layer (fast-fail).
+            // ip_addresses.customer_id MUST be present and MUST match subnets.customer_id.
+            if (blank($ip->subnet_id)) {
+                return;
+            }
+
+            $subnetCustomerId = Subnet::query()->whereKey($ip->subnet_id)->value('customer_id');
+
+            if (blank($subnetCustomerId)) {
+                throw ValidationException::withMessages([
+                    'subnet_id' => 'La Subnet selezionata deve essere associata a un Cliente.',
+                ]);
+            }
+
+            if (blank($ip->customer_id)) {
+                $ip->customer_id = (int) $subnetCustomerId;
+                return;
+            }
+
+            if ((int) $ip->customer_id !== (int) $subnetCustomerId) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'customer_id deve coincidere con il Cliente della Subnet.',
+                ]);
+            }
+        });
+    }
 
     // Relationships
     public function subnet()

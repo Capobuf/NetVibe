@@ -25,22 +25,50 @@ class NetVibeHttpClient
     private string $serverUrl;
     private string $token;
     private ?GuzzleClient $http;
+    /**
+     * Guzzle/stream TLS verification option.
+     * - bool: enable/disable system CA verification
+     * - string: path to CA bundle
+     */
+    private bool|string $tlsVerify;
 
     public function __construct(string $serverUrl, string $token)
     {
         $this->serverUrl = rtrim($serverUrl, '/');
         $this->token = $token;
+        $this->tlsVerify = $this->resolveTlsVerify();
 
         if (class_exists(GuzzleClient::class)) {
             // Initialize Guzzle client for server communication
             // Server should be responsive, so standard timeout is acceptable
             $this->http = new GuzzleClient([
                 'timeout' => 10,
-                'verify' => false,  // TODO: Remove after SSL certificate setup
+                'verify' => $this->tlsVerify,
             ]);
         } else {
             $this->http = null;
         }
+    }
+
+    private function resolveTlsVerify(): bool|string
+    {
+        // Default: verify TLS certificates for the NetVibe server.
+        $raw = getenv('NETVIBE_TLS_VERIFY');
+        if ($raw === false || $raw === '') {
+            $raw = 'true';
+        }
+
+        $bool = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($bool === null) {
+            $bool = true;
+        }
+
+        $caBundle = getenv('NETVIBE_TLS_CA_BUNDLE');
+        if ($bool === true && is_string($caBundle) && trim($caBundle) !== '') {
+            return trim($caBundle);
+        }
+
+        return $bool;
     }
 
     /**
@@ -106,7 +134,22 @@ class NetVibeHttpClient
             foreach ($hdrs as $key => $value) {
                 $headerLines[] = $key . ': ' . $value;
             }
-            $context = stream_context_create(['http' => ['method' => 'GET', 'header' => implode("\r\n", $headerLines)]]);
+            $opts = ['http' => ['method' => 'GET', 'header' => implode("\r\n", $headerLines)]];
+
+            $scheme = parse_url($url, PHP_URL_SCHEME);
+            if ($scheme === 'https') {
+                $opts['ssl'] = [
+                    'verify_peer' => $this->tlsVerify !== false,
+                    'verify_peer_name' => $this->tlsVerify !== false,
+                    'allow_self_signed' => $this->tlsVerify === false,
+                ];
+
+                if (is_string($this->tlsVerify)) {
+                    $opts['ssl']['cafile'] = $this->tlsVerify;
+                }
+            }
+
+            $context = stream_context_create($opts);
             $body = @file_get_contents($url, false, $context);
             return $body ? json_decode($body, true) ?? [] : [];
         } catch (RequestException $e) {
@@ -139,7 +182,22 @@ class NetVibeHttpClient
             foreach ($hdrs as $key => $value) {
                 $headerLines[] = $key . ': ' . $value;
             }
-            $context = stream_context_create(['http' => ['method' => 'POST', 'header' => implode("\r\n", $headerLines), 'content' => $payload]]);
+            $opts = ['http' => ['method' => 'POST', 'header' => implode("\r\n", $headerLines), 'content' => $payload]];
+
+            $scheme = parse_url($url, PHP_URL_SCHEME);
+            if ($scheme === 'https') {
+                $opts['ssl'] = [
+                    'verify_peer' => $this->tlsVerify !== false,
+                    'verify_peer_name' => $this->tlsVerify !== false,
+                    'allow_self_signed' => $this->tlsVerify === false,
+                ];
+
+                if (is_string($this->tlsVerify)) {
+                    $opts['ssl']['cafile'] = $this->tlsVerify;
+                }
+            }
+
+            $context = stream_context_create($opts);
             $body = @file_get_contents($url, false, $context);
             return $body ? json_decode($body, true) ?? [] : [];
         } catch (RequestException $e) {

@@ -13,25 +13,22 @@ class SubnetScanAgentScopeTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_subnet_can_use_global_scan_agent_even_with_customer()
+    public function test_subnet_cannot_assign_agent_from_another_customer()
     {
         $ipService = new IpConversionService();
 
-        $customer = Customer::create(['name' => 'Client']);
+        $customerA = Customer::create(['name' => 'Client A']);
+        $customerB = Customer::create(['name' => 'Client B']);
 
-        // Global agent (customer_id null)
-        $globalAgent = ScanAgent::create(['name' => 'Global', 'type' => 'direct']);
+        $agentA = ScanAgent::create(['name' => 'Agent A', 'active' => true, 'customer_id' => $customerA->id]);
 
-        $subnet = Subnet::create([
-            'customer_id' => $customer->id,
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        Subnet::create([
+            'customer_id' => $customerB->id,
             'subnet' => $ipService->toDecimal('192.168.10.0'),
             'mask' => 24,
-            'customer_id' => $customer->id,
-            'scan_agent_id' => $globalAgent->id,
+            'scan_agent_id' => $agentA->id,
         ]);
-
-        $this->assertEquals($globalAgent->id, $subnet->scanAgent->id);
-        $this->assertEquals($customer->id, $subnet->customer->id);
     }
 
     public function test_subnet_can_use_customer_scoped_scan_agent()
@@ -40,13 +37,12 @@ class SubnetScanAgentScopeTest extends TestCase
 
         $customer = Customer::create(['name' => 'ClientB']);
 
-        $agent = ScanAgent::create(['name' => 'AgentB', 'type' => 'direct', 'customer_id' => $customer->id]);
+        $agent = ScanAgent::create(['name' => 'AgentB', 'active' => true, 'customer_id' => $customer->id]);
 
         $subnet = Subnet::create([
             'customer_id' => $customer->id,
             'subnet' => $ipService->toDecimal('10.2.0.0'),
             'mask' => 24,
-            'customer_id' => $customer->id,
             'scan_agent_id' => $agent->id,
         ]);
 

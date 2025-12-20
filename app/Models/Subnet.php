@@ -9,6 +9,7 @@ use App\Models\Concerns\TenantAware;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 class Subnet extends Model
 {
@@ -41,6 +42,31 @@ class Subnet extends Model
         'last_scan' => 'datetime',
         'last_discovery' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (Subnet $subnet) {
+            // If a subnet is bound to a scan agent, it must be the agent for the same customer.
+            if (! blank($subnet->scan_agent_id) && ! blank($subnet->customer_id)) {
+                $agentCustomerId = ScanAgent::query()
+                    ->whereKey($subnet->scan_agent_id)
+                    ->value('customer_id');
+
+                if (blank($agentCustomerId)) {
+                    // NetVibe does not support global agents.
+                    throw ValidationException::withMessages([
+                        'scan_agent_id' => 'Il Remote Agent deve essere associato a un Cliente.',
+                    ]);
+                }
+
+                if ((int) $agentCustomerId !== (int) $subnet->customer_id) {
+                    throw ValidationException::withMessages([
+                        'scan_agent_id' => 'Il Remote Agent selezionato non appartiene a questo Cliente.',
+                    ]);
+                }
+            }
+        });
+    }
 
     // Allow setting via CIDR string (e.g. 192.168.1.0/24)
     public function setCidrAttribute(string $cidr): void

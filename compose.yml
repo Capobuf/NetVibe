@@ -1,10 +1,10 @@
 services:
-  app:
+  netvibe-web:
     build:
       context: .
       dockerfile: Dockerfile.app
     image: netvibe-app
-    container_name: netvibe-app
+    container_name: netvibe-web
     restart: unless-stopped
     working_dir: /var/www/html
     env_file: .env
@@ -18,35 +18,90 @@ services:
       - APP_DEBUG=${APP_DEBUG}
       - APP_KEY=${APP_KEY}
       - DB_CONNECTION=mysql
-      - DB_HOST=${DB_HOST:-db}
+      - DB_HOST=${DB_HOST:-netvibe-db}
       - DB_PORT=3306
       - DB_DATABASE=${DB_DATABASE:-netvibe}
       - DB_USERNAME=${DB_USERNAME:-netvibe}
       - DB_PASSWORD=${DB_PASSWORD:-secret}
-      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_PORT=6379
     volumes:
-      # Sorgente bind-mount per ambiente dev; in prod può essere rimosso
-      - ./:/var/www/html
-      # Storage e uploads espliciti (per durabilità e chiarezza)
-      - ./storage:/var/www/html/storage
-      - ./public/uploads:/var/www/html/public/uploads
+      # Storage e uploads persistenti (volume Docker)
+      - netvibe_storage:/var/www/html/storage
+      - netvibe_uploads:/var/www/html/public/uploads
     ports:
       - "9693:8080"
     depends_on:
-      db:
+      netvibe-db:
         condition: service_healthy
-      redis:
+      netvibe-redis:
+        condition: service_healthy
+    networks:
+      - netvibe-network
+      - proxy
+    profiles:
+      - prod
+
+
+  netvibe-web-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: netvibe-app
+    container_name: netvibe-web-dev
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: .env
+    environment:
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
+      - PHP_OPCACHE_ENABLE=1
+      - PHP_DATE_TIMEZONE=${TZ:-UTC}
+      - AUTORUN_ENABLED=false
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
+      - DB_HOST=${DB_HOST:-netvibe-db}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-netvibe}
+      - DB_USERNAME=${DB_USERNAME:-netvibe}
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      # Bind selettivo: monta solo il codice, non vendor/node_modules (usano quelli baked nell'immagine)
+      - ./app:/var/www/html/app
+      - ./bootstrap:/var/www/html/bootstrap
+      - ./config:/var/www/html/config
+      - ./database:/var/www/html/database
+      - ./resources:/var/www/html/resources
+      - ./routes:/var/www/html/routes
+      - ./storage:/var/www/html/storage
+      - ./public:/var/www/html/public
+      - ./composer.json:/var/www/html/composer.json:ro
+      - ./composer.lock:/var/www/html/composer.lock:ro
+      - ./package.json:/var/www/html/package.json:ro
+      - ./package-lock.json:/var/www/html/package-lock.json:ro
+      - ./vite.config.js:/var/www/html/vite.config.js:ro
+      - ./artisan:/var/www/html/artisan:ro
+    ports:
+      - "9693:8080"
+    depends_on:
+      netvibe-db:
+        condition: service_healthy
+      netvibe-redis:
         condition: service_healthy
     networks:
       - netvibe-network
       - proxy
     profiles:
       - dev
-      - prod
 
-  worker:
+
+  netvibe-worker:
     build:
       context: .
       dockerfile: Dockerfile.app
@@ -62,32 +117,97 @@ services:
       - APP_DEBUG=${APP_DEBUG}
       - APP_KEY=${APP_KEY}
       - DB_CONNECTION=mysql
-      - DB_HOST=${DB_HOST:-db}
+      - DB_HOST=${DB_HOST:-netvibe-db}
       - DB_PORT=3306
       - DB_DATABASE=${DB_DATABASE:-netvibe}
       - DB_USERNAME=${DB_USERNAME:-netvibe}
       - DB_PASSWORD=${DB_PASSWORD:-secret}
-      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_PORT=6379
     volumes:
-      - ./:/var/www/html
-      - ./storage:/var/www/html/storage
-      - ./public/uploads:/var/www/html/public/uploads
+      - netvibe_storage:/var/www/html/storage
+      - netvibe_uploads:/var/www/html/public/uploads
+    # Stato attuale: singolo processo che ascolta discovery,default,low.
+    # (Split in due processi nello stesso container è una possibile evoluzione.)
     command: ["php", "artisan", "queue:work", "--queue=discovery,default,low", "--sleep=1", "--tries=3"]
     depends_on:
-      db:
+      netvibe-db:
         condition: service_healthy
-      redis:
+      netvibe-redis:
         condition: service_healthy
     networks:
-       - netvibe-network
+      - netvibe-network
+    healthcheck:
+      test: ["CMD", "php", "-r", "echo 'ok';"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     profiles:
-      - dev
       - prod
       - worker
 
-  db:
+
+  netvibe-worker-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    image: netvibe-app
+    container_name: netvibe-worker-dev
+    restart: unless-stopped
+    working_dir: /var/www/html
+    env_file: .env
+    environment:
+      - PUID=${WWWUSER:-1000}
+      - PGID=${WWWGROUP:-1000}
+      - APP_ENV=${APP_ENV}
+      - APP_DEBUG=${APP_DEBUG}
+      - APP_KEY=${APP_KEY}
+      - DB_CONNECTION=mysql
+      - DB_HOST=${DB_HOST:-netvibe-db}
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-netvibe}
+      - DB_USERNAME=${DB_USERNAME:-netvibe}
+      - DB_PASSWORD=${DB_PASSWORD:-secret}
+      - REDIS_HOST=${REDIS_HOST:-netvibe-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      # Bind selettivo: monta solo il codice, non vendor/node_modules (usano quelli baked nell'immagine)
+      - ./app:/var/www/html/app
+      - ./bootstrap:/var/www/html/bootstrap
+      - ./config:/var/www/html/config
+      - ./database:/var/www/html/database
+      - ./resources:/var/www/html/resources
+      - ./routes:/var/www/html/routes
+      - ./storage:/var/www/html/storage
+      - ./public:/var/www/html/public
+      - ./composer.json:/var/www/html/composer.json:ro
+      - ./composer.lock:/var/www/html/composer.lock:ro
+      - ./package.json:/var/www/html/package.json:ro
+      - ./package-lock.json:/var/www/html/package-lock.json:ro
+      - ./vite.config.js:/var/www/html/vite.config.js:ro
+      - ./artisan:/var/www/html/artisan:ro
+    # Stato attuale: singolo processo che ascolta discovery,default,low.
+    # (Split in due processi nello stesso container è una possibile evoluzione.)
+    command: ["php", "artisan", "queue:work", "--queue=discovery,default,low", "--sleep=1", "--tries=3"]
+    depends_on:
+      netvibe-db:
+        condition: service_healthy
+      netvibe-redis:
+        condition: service_healthy
+    networks:
+      - netvibe-network
+    healthcheck:
+      test: ["CMD", "php", "-r", "echo 'ok';"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - dev
+
+
+  netvibe-db:
     image: mariadb:11
     container_name: netvibe-db
     restart: unless-stopped
@@ -110,9 +230,9 @@ services:
       - dev
       - prod
       - test
-    
 
-  redis:
+
+  netvibe-redis:
     image: redis:8.4
     container_name: netvibe-redis
     restart: unless-stopped
@@ -129,8 +249,9 @@ services:
     profiles:
       - dev
       - prod
-    
-  test-db:
+
+
+  netvibe-test-db:
     image: mariadb:11
     container_name: netvibe-test-db
     restart: unless-stopped
@@ -147,9 +268,12 @@ services:
     profiles:
       - test
 
+
 volumes:
   dbdata:
   redisdata:
+  netvibe_storage:
+  netvibe_uploads:
 
 networks:
   netvibe-network:

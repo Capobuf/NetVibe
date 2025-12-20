@@ -33,6 +33,7 @@ it('reprocesses pending discovery events into ip_addresses when subnet discovery
 
     // Create a pending discovery event for this agent/ip
     $event = DiscoveryEvent::create([
+        'customer_id' => $customer->id,
         'scan_agent_id' => $agent->id,
         'ip_addr' => $ipDecimal,
         'mac_address_current' => null,
@@ -71,6 +72,7 @@ it('keeps pending events pending when subnet discovery is disabled', function ()
     $ipDecimal = app(\App\Services\IpConversionService::class)->toDecimal($ip);
 
     $event = DiscoveryEvent::create([
+        'customer_id' => $customer->id,
         'scan_agent_id' => $agent->id,
         'ip_addr' => $ipDecimal,
         'mac_address_current' => null,

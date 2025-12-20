@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\ScanAgent;
+use App\Models\Customer;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ScanAgentFactory extends Factory
@@ -17,7 +18,8 @@ class ScanAgentFactory extends Factory
             'ip_address' => $this->faker->optional()->ipv4(),
             'active' => true,
             'last_seen' => now(),
-            'customer_id' => null,
+            // NetVibe uses 1 ScanAgent per customer.
+            'customer_id' => Customer::factory(),
         ];
     }
 }

@@ -29,9 +29,12 @@ it('mounts rack view page with devices relation manager present', function () {
 it('mounts edit scan agent page and ensures agent logs relation manager loads', function () {
     $this->actingAs(\App\Models\User::factory()->create());
 
+    $customer = \App\Models\Customer::create(['name' => 'Smoke Cust']);
+
     $agent = \App\Models\ScanAgent::create([
         'name' => 'Smoke Agent',
         'active' => true,
+        'customer_id' => $customer->id,
     ]);
 
     livewire(\App\Filament\Clusters\Discovery\Resources\ScanAgents\Pages\EditScanAgent::class, ['record' => $agent->id])
@@ -41,9 +44,12 @@ it('mounts edit scan agent page and ensures agent logs relation manager loads', 
 it('generates an agent API key from the Edit page', function () {
     $this->actingAs(\App\Models\User::factory()->create());
 
+    $customer = \App\Models\Customer::create(['name' => 'Smoke Cust Key']);
+
     $agent = \App\Models\ScanAgent::create([
         'name' => 'Smoke Agent Key',
         'active' => true,
+        'customer_id' => $customer->id,
     ]);
 
     $component = livewire(\App\Filament\Clusters\Discovery\Resources\ScanAgents\Pages\EditScanAgent::class, ['record' => $agent->id])

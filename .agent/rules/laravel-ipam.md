@@ -1,122 +1,49 @@
-Assolutamente sì. Queste sono le regole d'oro per evitare che l'agente "rompa" l'ambiente o scriva codice che funziona solo nella sua "immaginazione" (allucinazioni).
+# Regole progetto — Laravel 12 + Filament v4 (NetVibe)
 
-Ecco la versione Finale e Corazzata del file instructions.md. Ho integrato specificamente i tuoi punti:
+Queste regole servono a mantenere **coerenza con il PDL** (`docs/PDL.md`) e con la struttura reale del repository.
 
-Obbligo di lettura Docs: Prima di scrivere una riga, deve cercare nella documentazione fornita.
+## Principi
 
-Docker Strictness: Tutti i comandi devono essere prefissati per girare nel container.
+- Il **PDL è la Source of Truth**.
+- Niente assunzioni: ogni campo/API/feature deve essere supportata da codice o documentazione del repo.
+- Evitare “workaround”: preferire soluzioni pulite, mantenibili e documentate.
 
-Anti-Allucinazione: Divieto di inventare sintassi (spesso accade con Filament v3 vs v4).
+## Struttura Laravel
 
-Copia e sostituisci il file attuale con questo.
+- Logica di dominio e trasformazioni: `app/Actions/`
+- Servizi/integrazioni: `app/Services/`
+- Data objects/DTO: `app/Data/`
+- Scanner/parsing: `app/Scanners/`
+- Policy e autorizzazioni: `app/Policies/` (o dove previsto dal framework)
 
-🤖 AGENT BEHAVIORAL INSTRUCTIONS (v3.0 - Docker & Docs Strict)
-ROLE: Senior Laravel 12 & Filament v4 Architect. CONTEXT: Greenfield Development (Clean Slate DB) in a Dockerized Environment.
+## Filament v4
 
-1. 📚 KNOWLEDGE BASE & ANTI-HALLUCINATION PROTOCOL
-RULE #1: Do NOT guess syntax. Do NOT rely on your pre-training data for Laravel/Filament specific implementation details, as versions have changed.
+- Le risorse Filament stanno in `app/Filament/Resources/` (come previsto dal PDL).
+- UI: seguire le linee guida in `docs/05_UI_UX_FILAMENT.md`.
+- Evitare CSS custom.
 
-MANDATORY: Before writing code for Resources, Clusters, or Actions, you MUST reference the provided documentation folders:
+## Livewire
 
-docs-filamentv4/
+- In generale: **evitare Livewire custom** fuori dal perimetro Filament.
+- Eccezioni: ammesse solo se **documentate** (es. `Tenant Switcher` montato via hook Filament) e con controlli di autorizzazione/tenancy chiari.
 
-docs-laravelv12/
+## TODO / FIXME
 
-VERIFICATION: If you are unsure about a method (e.g., ->slideOver() vs ->modalWidth()), search the docs folder first.
+- Ammessi solo quando necessari, con contesto e riferimento tracciabile:
+  - preferibile: `TODO[#123]: ...`
+  - oppure: `TODO(PDL): ...` con riferimento al capitolo/paragrafo
 
-FACT-BASED: Base your decisions strictly on the file structure you see (ls -R) and the docs provided.
+## Database & Tenancy
 
-2. 🐳 CONTAINERIZED EXECUTION PROTOCOL
-You are working inside a Docker environment. You do not have direct access to the host machine's PHP or Composer.
+- Tabelle e naming coerenti con `docs/02_DATABASE_SCHEMA.md`.
+- Migrazioni sempre deterministiche (niente dipendenze da stato locale).
+- Qualsiasi dato tenant-scoped deve essere protetto da:
+  - filtro tenant nel modello/query
+  - policy/autorizzazione in Filament e API
 
-COMMAND EXECUTION:
+## Qualità codice
 
-❌ WRONG: php artisan migrate
-
-❌ WRONG: composer require filament/filament
-
-✅ RIGHT: docker-compose exec app php artisan migrate
-
-✅ RIGHT: docker-compose exec app composer require ...
-
-FILE PERMISSIONS: Be aware that files created by root inside Docker might need permission fixes. If you encounter permission errors, advise running chown.
-
-3. 🛡️ "ZERO-DEBT" & CLEAN CODE STANDARD
-We are building a production-grade MSP tool, not a prototype.
-
-STRICT TYPING: All new PHP files must start with declare(strict_types=1);.
-
-NO "TODOs": Do not leave commented out code or "TODO" markers. Finish the task or don't start it.
-
-STOP & FIX: If a command fails (Migration error, Test failure):
-
-HALT immediately.
-
-ANALYZE the error output.
-
-FIX the root cause.
-
-RETRY.
-
-Never proceed to the next step if the previous one failed.
-
-REFACTORING: If you see legacy code (e.g., old phpIPAM columns) that contradicts the new architecture, remove/refactor it immediately. Do not build on top of garbage.
-
-4. 🏗️ ARCHITECTURAL GUIDELINES (Filament v4)
-CLUSTERS ONLY: All Resources MUST reside in a Cluster (Organization, Racks, Ipam, Discovery). Do not populate the root Resources directory.
-
-UX FLOW:
-
-Edit/Create: Use ->slideOver() for complex forms, ->modal() for simple ones. Avoid full-page redirects.
-
-Navigation: Use logical Groups inside Clusters.
-
-MODEL SAFETY:
-
-Use SoftDeletes on all primary entities.
-
-Protect data integrity with Database-level Foreign Keys (constrained()->onDelete('restrict')).
-
-5. 🚀 WORKFLOW FOR NEW TASKS
-READ: Review the User Prompt + MASTER_CONTEXT.md + Relevant Docs.
-
-CHECK STATE: Run ls or grep to verify if files/tables already exist.
-
-PLAN: Briefly state: "I will read docs X, create Migration Y, then Resource Z."
-
-EXECUTE (DOCKER): Run commands via docker-compose exec app ....
-
-TEST: Run docker-compose exec app php artisan test --filter [FeatureName].
-
-REMINDER: You are the Architect. If the user asks for something that breaks the pattern (e.g., "Add a controller"), correct them and propose the Filament/Laravel way (e.g., "Use a Livewire Component or Action instead").
-
-## 6. FILAMENT GENERATION PROTOCOL (NON-INTERACTIVE)
-**CRITICAL:** You are working in a non-interactive Docker environment. CLI wizards that ask questions will cause the process to hang or fail.
-
-### A. BANNED CLI FLAGS 🚫
-Do **NOT** use the following flags when running `make:filament-resource`:
-* ❌ `--generate` (Tries to read the DB and ask questions -> FAILS).
-* ❌ `--title-attribute` (Not supported in all versions/contexts).
-* ❌ `--soft-deletes` (Often requires interaction).
-* ❌ `--view` (Unless you are 100% sure you need a View page).
-
-### B. THE "SCAFFOLD & CODE" WORKFLOW ✅
-Instead of trying to configure the Resource via CLI arguments, follow this strict 2-step process:
-
-1.  **SCAFFOLD:** Generate the raw file using the simplest command possible.
-    * *Command:* `docker-compose exec app php artisan make:filament-resource Name --simple --no-interaction`
-    * *(Note: Use `--simple` if the resource should use Modals/SlideOvers management, otherwise omit it).*
-
-2.  **CODE INJECTION:** Immediately after generation, open the new PHP file and **manually write**:
-    * `protected static ?string $recordTitleAttribute = 'name';`
-    * The `form(Form $form)` schema configuration.
-    * The `table(Table $table)` columns and actions.
-    * The `getPages()` method configuration.
-
-**RULE:** It is faster and safer to write the PHP code yourself than to debug failed CLI wizard flags.
-
-### ⚠️ LIVEWIRE/BLADE RULE (CRITICAL)
-* **SINGLE ROOT ELEMENT:** Every Livewire Blade view (`.blade.php`) MUST have exactly **ONE** root HTML element.
-    * ❌ **NEVER** output multiple divs at the top level.
-    * ❌ **NEVER** place HTML comments `` outside the root div.
-    * ✅ **ALWAYS** wrap your code in `<div>...</div>` or `<x-filament::section>...</x-filament::section>`.
+- Niente logica applicativa “pesante” nei controller.
+- Preferire metodi piccoli e testabili.
+- Evitare duplicazioni: estrarre in Action/Service quando ricorre.
+- Log significativo e non verboso (seguire `docs/06_OBSERVABILITY_AND_TESTS.md`).

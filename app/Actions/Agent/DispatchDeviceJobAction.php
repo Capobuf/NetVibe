@@ -6,30 +6,42 @@ namespace App\Actions\Agent;
 
 use App\Models\AgentJob;
 use App\Models\Device;
+use App\Models\ScanAgent;
 use Illuminate\Support\Facades\Log;
 
 class DispatchDeviceJobAction
 {
     public function execute(Device $device, ?string $type = 'check_connectivity', ?int $scanAgentId = null, ?int $initiatedByUserId = null): AgentJob
     {
-        // Resolve agent: prefer explicit, then device->scan_agent_id, else first active agent for same customer, else global
-        $resolvedAgentId = $scanAgentId;
-        if (! $resolvedAgentId && $device->scan_agent_id) {
-            $resolvedAgentId = $device->scan_agent_id;
+        // Resolve agent: explicit > device->scan_agent_id > the (single) active agent for the customer.
+        // Fast-fail: there is no "global" agent fallback in NetVibe.
+        if (blank($device->customer_id)) {
+            throw new \RuntimeException('DispatchDeviceJobAction requires device.customer_id.');
         }
-        if (! $resolvedAgentId && $device->customer_id) {
-            $resolvedAgentId = \App\Models\ScanAgent::query()
-                ->where('active', true)
-                ->where('customer_id', $device->customer_id)
-                ->orderByDesc('last_seen')
-                ->value('id');
-        }
+
+        $customerId = (int) $device->customer_id;
+
+        $resolvedAgentId = $scanAgentId ?: ($device->scan_agent_id ?: null);
         if (! $resolvedAgentId) {
-            $resolvedAgentId = \App\Models\ScanAgent::query()
+            $resolvedAgentId = ScanAgent::query()
                 ->where('active', true)
-                ->whereNull('customer_id')
+                ->where('customer_id', $customerId)
                 ->orderByDesc('last_seen')
                 ->value('id');
+        }
+
+        if (! $resolvedAgentId) {
+            throw new \RuntimeException('No active Remote Agent found for this customer.');
+        }
+
+        // Safety: ensure the resolved agent belongs to the same customer.
+        $agentOk = ScanAgent::query()
+            ->whereKey($resolvedAgentId)
+            ->where('customer_id', $customerId)
+            ->exists();
+
+        if (! $agentOk) {
+            throw new \RuntimeException('Resolved Remote Agent does not belong to the device customer.');
         }
 
         // Resolve credentials: prefer credential profile, fallback to device-local

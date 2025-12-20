@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 
 it('does not reference removed Filament form components', function () {
     $forbidden = [

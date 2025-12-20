@@ -6,12 +6,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Concerns\TenantAware;
+use App\Models\Concerns\HasLifecycle;
+use App\Enums\LifecycleStatus;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Device extends Model
 {
     use SoftDeletes;
     use TenantAware;
+    use HasLifecycle;
 
     protected static function booted(): void
     {
@@ -85,6 +88,9 @@ class Device extends Model
         'last_seen_rest' => 'datetime',
         'last_seen_snmp' => 'datetime',
         'last_seen_icmp' => 'datetime',
+        'lifecycle_status' => LifecycleStatus::class,
+        'stale_at' => 'datetime',
+        'retired_at' => 'datetime',
     ];
 
     public function location()

@@ -23,19 +23,47 @@ use GuzzleHttp\Exception\ConnectException;
 class MikrotikApiDriver
 {
     private ?GuzzleClient $http;
+    /**
+     * TLS verification option for MikroTik REST API calls.
+     * - bool: enable/disable system CA verification
+     * - string: path to CA bundle
+     */
+    private bool|string $tlsVerify;
 
     public function __construct()
     {
+        $this->tlsVerify = $this->resolveTlsVerify();
         if (class_exists(GuzzleClient::class)) {
             // Initialize Guzzle client for device communication
             // Mikrotik devices may have slower response times, so we use a reasonable timeout
             $this->http = new GuzzleClient([
                 'timeout' => 10,
-                'verify' => false,  // TODO: Remove after SSL certificate setup
+                'verify' => $this->tlsVerify,
             ]);
         } else {
             $this->http = null;
         }
+    }
+
+    private function resolveTlsVerify(): bool|string
+    {
+        // Default: do NOT verify device TLS certificates (common: self-signed).
+        $raw = getenv('MIKROTIK_TLS_VERIFY');
+        if ($raw === false || $raw === '') {
+            $raw = 'false';
+        }
+
+        $bool = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($bool === null) {
+            $bool = false;
+        }
+
+        $caBundle = getenv('MIKROTIK_TLS_CA_BUNDLE');
+        if ($bool === true && is_string($caBundle) && trim($caBundle) !== '') {
+            return trim($caBundle);
+        }
+
+        return $bool;
     }
 
     /**
@@ -168,13 +196,28 @@ class MikrotikApiDriver
             $headers[] = 'Authorization: Basic ' . $auth;
         }
 
-        $context = stream_context_create([
+        $opts = [
             'http' => [
                 'method' => $method,
                 'header' => implode("\r\n", $headers),
                 'timeout' => $timeout,
             ],
-        ]);
+        ];
+
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+        if ($scheme === 'https') {
+            $opts['ssl'] = [
+                'verify_peer' => $this->tlsVerify !== false,
+                'verify_peer_name' => $this->tlsVerify !== false,
+                'allow_self_signed' => $this->tlsVerify === false,
+            ];
+
+            if (is_string($this->tlsVerify)) {
+                $opts['ssl']['cafile'] = $this->tlsVerify;
+            }
+        }
+
+        $context = stream_context_create($opts);
 
         error_log("[MikrotikDriver] Executing {$method} {$url} (file_get_contents) with timeout {$timeout}s");
 

@@ -4,13 +4,15 @@ use App\Models\IpAddress;
 use App\Models\DiscoveryEvent;
 use App\Models\ScanAgent;
 use App\Models\Subnet;
+use App\Models\Customer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
 it('approves and merges a DiscoveryEvent, updating IpAddress and status', function () {
-    $agent = ScanAgent::factory()->create();
-    $subnet = Subnet::factory()->create();
+    $customer = Customer::factory()->create();
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
+    $subnet = Subnet::factory()->create(['customer_id' => $customer->id]);
     $ip = '192.168.1.10';
     $ipDecimal = app(\App\Services\IpConversionService::class)->toDecimal($ip);
 
@@ -19,10 +21,12 @@ it('approves and merges a DiscoveryEvent, updating IpAddress and status', functi
         'ip_addr' => $ipDecimal,
         'mac_address' => 'aa:bb:cc:dd:ee:ff',
         'hostname' => 'old-host',
+        'customer_id' => $customer->id,
         'last_seen' => now()->subDay(),
     ]);
 
     $event = DiscoveryEvent::create([
+        'customer_id' => $customer->id,
         'scan_agent_id' => $agent->id,
         'ip_addr' => $ipDecimal,
         'mac_address_current' => 'ff:ee:dd:cc:bb:aa',
@@ -50,12 +54,14 @@ it('approves and merges a DiscoveryEvent, updating IpAddress and status', functi
 });
 
 it('soft deletes a DiscoveryEvent when discarded', function () {
-    $agent = ScanAgent::factory()->create();
-    $subnet = Subnet::factory()->create();
+    $customer = Customer::factory()->create();
+    $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
+    $subnet = Subnet::factory()->create(['customer_id' => $customer->id]);
     $ip = '192.168.1.20';
     $ipDecimal = app(\App\Services\IpConversionService::class)->toDecimal($ip);
 
     $event = DiscoveryEvent::create([
+        'customer_id' => $customer->id,
         'scan_agent_id' => $agent->id,
         'ip_addr' => $ipDecimal,
         'mac_address_current' => '11:22:33:44:55:66',
@@ -75,8 +81,10 @@ it('soft deletes a DiscoveryEvent when discarded', function () {
 
 it('can render the discovery events list page', function () {
     $user = \App\Models\User::factory()->create();
+    $customer = Customer::factory()->create();
 
     $this->actingAs($user)
+        ->withSession(['tenant_id' => $customer->id])
         ->get(App\Filament\Clusters\Discovery\Resources\DiscoveryEventResource::getUrl('index'))
         ->assertSuccessful();
 });

@@ -6,6 +6,7 @@ use App\Models\CableType;
 use App\Models\Device;
 use App\Models\Link;
 use App\Models\Port;
+use App\Enums\LifecycleStatus;
 use Filament\Forms;
 use Filament\Schemas\Schema;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -17,7 +18,9 @@ use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
 use Filament\Actions\ExportAction;
 use Filament\Actions\ExportBulkAction;
+use Filament\Actions\BulkAction;
 use App\Filament\Exports\PortExporter;
+use Filament\Tables\Filters\SelectFilter;
 
 class PortsRelationManager extends RelationManager
 {
@@ -71,6 +74,18 @@ class PortsRelationManager extends RelationManager
                         'down' => 'danger',
                         default => 'gray',
                     }),
+
+                TextColumn::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => ($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))->label())
+                    ->color(fn ($state) => match (($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))) {
+                        LifecycleStatus::Active => 'success',
+                        LifecycleStatus::Stale => 'warning',
+                        LifecycleStatus::Retired => 'danger',
+                    })
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('last_seen')
                     ->label('Last Seen')
                     ->dateTime()
@@ -86,6 +101,15 @@ class PortsRelationManager extends RelationManager
                     ->label('Agent ID')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('description')->label('Description')->limit(40)->toggleable(),
+            ])
+            ->filters([
+                SelectFilter::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->options([
+                        (string) LifecycleStatus::Active->value => LifecycleStatus::Active->label(),
+                        (string) LifecycleStatus::Stale->value => LifecycleStatus::Stale->label(),
+                        (string) LifecycleStatus::Retired->value => LifecycleStatus::Retired->label(),
+                    ]),
             ])
             ;
         // Defensive guard: if the Filament Action class is unavailable for
@@ -186,6 +210,17 @@ class PortsRelationManager extends RelationManager
             ->bulkActions([
                 ExportBulkAction::make()
                     ->exporter(PortExporter::class),
+                BulkAction::make('restore_lifecycle')
+                    ->label('Restore (Active)')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->action(function ($records): void {
+                        foreach ($records as $record) {
+                            $record->markSeen();
+                            $record->save();
+                        }
+                    }),
             ]);
     }
 }

@@ -33,6 +33,9 @@ Route::middleware('web')->group(function () {
 
 // TEMP TEST: intentionally throw to exercise exception handling (remove after test)
 Route::get('/_debug/throw', function () {
+    if (! (app()->isLocal() || config('app.debug'))) {
+        abort(404);
+    }
     throw new \RuntimeException('test-exception');
 });
  

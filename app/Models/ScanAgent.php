@@ -90,12 +90,16 @@ class ScanAgent extends Model implements Authenticatable
     protected static function booted(): void
     {
         static::saving(function (ScanAgent $agent) {
-            if (! $agent->active) {
-                return;
+            // Fast-fail: ScanAgents are always dedicated to a specific Customer.
+            // NetVibe runs 1 agent per customer (outbound-only).
+            if (blank($agent->customer_id)) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Il Remote Agent deve essere associato a un Cliente.',
+                ]);
             }
 
-            if (blank($agent->customer_id)) {
-                return; // Allow multiple global agents for now
+            if (! $agent->active) {
+                return;
             }
 
             $exists = static::query()

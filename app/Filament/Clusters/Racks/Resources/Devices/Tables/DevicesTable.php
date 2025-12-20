@@ -8,10 +8,13 @@ use Filament\Actions\EditAction;
 use Filament\Actions\Action;
 use Filament\Actions\ExportAction;
 use Filament\Actions\ExportBulkAction;
+use Filament\Actions\BulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Table;
 use App\Filament\Exports\DeviceExporter;
+use App\Enums\LifecycleStatus;
+use Filament\Tables\Filters\SelectFilter;
 
 class DevicesTable
 {
@@ -57,6 +60,17 @@ class DevicesTable
                         'danger' => 'Stale',
                         'gray' => 'Unknown',
                     ]),
+                TextColumn::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => ($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))->label())
+                    ->color(fn ($state) => match (($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))) {
+                        LifecycleStatus::Active => 'success',
+                        LifecycleStatus::Stale => 'warning',
+                        LifecycleStatus::Retired => 'danger',
+                    })
+                    ->sortable()
+                    ->toggleable(),
                 TextColumn::make('last_seen_overall')
                     ->label('Last Seen')
                     ->dateTime()
@@ -65,7 +79,13 @@ class DevicesTable
                 TextColumn::make('updated_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->options([
+                        (string) LifecycleStatus::Active->value => LifecycleStatus::Active->label(),
+                        (string) LifecycleStatus::Stale->value => LifecycleStatus::Stale->label(),
+                        (string) LifecycleStatus::Retired->value => LifecycleStatus::Retired->label(),
+                    ]),
             ])
             ->recordActions([
                 EditAction::make()->slideOver(),
@@ -99,6 +119,17 @@ class DevicesTable
                 BulkActionGroup::make([
                     ExportBulkAction::make()
                         ->exporter(DeviceExporter::class),
+                    BulkAction::make('restore_lifecycle')
+                        ->label('Restore (Active)')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->action(function ($records): void {
+                            foreach ($records as $record) {
+                                $record->markSeen();
+                                $record->save();
+                            }
+                        }),
                     DeleteBulkAction::make(),
                 ]),
             ]);

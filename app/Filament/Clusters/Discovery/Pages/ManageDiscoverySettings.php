@@ -9,6 +9,7 @@ use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Illuminate\Validation\ValidationException;
 use App\Settings\DiscoverySettings;
 
 class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
@@ -38,6 +39,10 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
     public int $timeout_rest_ms = 8000;
     public int $timeout_snmp_ms = 5000;
     public int $max_records_per_dataset = 5000;
+
+    public bool $inventory_soft_retire_enabled = true;
+    public int $inventory_stale_after_days = 15;
+    public int $inventory_retire_after_days = 45;
 
     protected function getFormSchema(): array
     {
@@ -98,6 +103,33 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
                 ->minValue(1)
                 ->required()
                 ->helperText('Oltre questo limite i payload vengono marcati come parziali (device_result.*.items).'),
+
+
+            Forms\Components\Section::make('Inventory lifecycle')
+                ->description('Soft-retire: mantiene gli oggetti nel DB ma li marca come Stale/Retired in base a last_seen.')
+                ->collapsible()
+                ->schema([
+                    Forms\Components\Toggle::make('inventory_soft_retire_enabled')
+                        ->label('Enable soft-retire policy')
+                        ->helperText('Se disabilitato, nessun oggetto verrà marcato come stale/retired automaticamente.')
+                        ->columnSpanFull(),
+                    TextInput::make('inventory_stale_after_days')
+                        ->label('Stale after')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(3650)
+                        ->suffix('days')
+                        ->required()
+                        ->helperText('Dopo quanti giorni senza last_seen un oggetto diventa STALE.'),
+                    TextInput::make('inventory_retire_after_days')
+                        ->label('Retire after')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(3650)
+                        ->suffix('days')
+                        ->required()
+                        ->helperText('Dopo quanti giorni senza last_seen un oggetto diventa RETIRED (deve essere >= Stale after).'),
+                ]),
         ];
     }
 
@@ -115,6 +147,9 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
             'timeout_rest_ms' => $settings->timeout_rest_ms,
             'timeout_snmp_ms' => $settings->timeout_snmp_ms,
             'max_records_per_dataset' => $settings->max_records_per_dataset,
+            'inventory_soft_retire_enabled' => $settings->inventory_soft_retire_enabled ?? true,
+            'inventory_stale_after_days' => $settings->inventory_stale_after_days ?? 15,
+            'inventory_retire_after_days' => $settings->inventory_retire_after_days ?? 45,
         ]);
     }
 
@@ -132,6 +167,16 @@ class ManageDiscoverySettings extends Page implements Forms\Contracts\HasForms
         $settings->timeout_rest_ms = (int) ($state['timeout_rest_ms'] ?? $settings->timeout_rest_ms);
         $settings->timeout_snmp_ms = (int) ($state['timeout_snmp_ms'] ?? $settings->timeout_snmp_ms);
         $settings->max_records_per_dataset = (int) ($state['max_records_per_dataset'] ?? $settings->max_records_per_dataset);
+
+        $settings->inventory_soft_retire_enabled = (bool) ($state['inventory_soft_retire_enabled'] ?? $settings->inventory_soft_retire_enabled);
+        $settings->inventory_stale_after_days = (int) ($state['inventory_stale_after_days'] ?? $settings->inventory_stale_after_days);
+        $settings->inventory_retire_after_days = (int) ($state['inventory_retire_after_days'] ?? $settings->inventory_retire_after_days);
+
+        if ($settings->inventory_soft_retire_enabled && $settings->inventory_retire_after_days < $settings->inventory_stale_after_days) {
+            throw ValidationException::withMessages([
+                "inventory_retire_after_days" => "Retire after deve essere >= Stale after.",
+            ]);
+        }
 
         $settings->save();
 

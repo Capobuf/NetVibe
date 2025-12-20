@@ -3,13 +3,15 @@
 use App\Models\AgentJob;
 use App\Models\Device;
 use App\Models\ScanAgent;
+use App\Models\Customer;
 use App\Models\CredentialProfile;
 use Illuminate\Support\Facades\Http;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('returns pending jobs for authenticated agent', function () {
-    $agent = ScanAgent::create(['name' => 'agent-a']);
+    $customer = Customer::create(['name' => 'Cust']);
+    $agent = ScanAgent::create(['name' => 'agent-a', 'customer_id' => $customer->id, 'active' => true]);
     $token = $agent->createToken('test-token');
 
     // create jobs for this agent
@@ -29,7 +31,8 @@ it('returns pending jobs for authenticated agent', function () {
 });
 
 it('decrypts credentials and resolves profile data in payload', function () {
-    $agent = ScanAgent::create(['name' => 'agent-b']);
+    $customer = Customer::create(['name' => 'Cust']);
+    $agent = ScanAgent::create(['name' => 'agent-b', 'customer_id' => $customer->id, 'active' => true]);
     $token = $agent->createToken('test-token');
 
     $deviceModel = \App\Models\DeviceModel::create(['brand'=>'Acme','model'=>'X','type'=>'switch']);
@@ -62,8 +65,10 @@ it('decrypts credentials and resolves profile data in payload', function () {
 });
 
 it('fails job on unauthorized result push', function () {
-    $agent1 = ScanAgent::create(['name' => 'agent-x']);
-    $agent2 = ScanAgent::create(['name' => 'agent-y']);
+    $customer1 = Customer::create(['name' => 'Cust 1']);
+    $customer2 = Customer::create(['name' => 'Cust 2']);
+    $agent1 = ScanAgent::create(['name' => 'agent-x', 'customer_id' => $customer1->id, 'active' => true]);
+    $agent2 = ScanAgent::create(['name' => 'agent-y', 'customer_id' => $customer2->id, 'active' => true]);
 
     $token = $agent1->createToken('t1');
 
@@ -78,7 +83,8 @@ it('fails job on unauthorized result push', function () {
 });
 
 it('updates job status on completed result push', function () {
-    $agent = ScanAgent::create(['name' => 'agent-z']);
+    $customer = Customer::create(['name' => 'Cust']);
+    $agent = ScanAgent::create(['name' => 'agent-z', 'customer_id' => $customer->id, 'active' => true]);
     $token = $agent->createToken('t3');
 
     $deviceModel = \App\Models\DeviceModel::create(['brand'=>'Acme','model'=>'X','type'=>'switch']);

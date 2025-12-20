@@ -6,6 +6,8 @@ namespace App\Jobs;
 
 use App\Models\IpAddress;
 use App\Models\Subnet;
+use App\Tenancy\TenantContext;
+use App\Tenancy\TenantContextStore;
 use App\Services\IpConversionService;
 use App\Settings\DiscoverySettings;
 use App\Services\Scanners\FpingWrapper;
@@ -29,11 +31,26 @@ final class ScanSubnetJob implements ShouldQueue
 
     public function handle(FpingWrapper $wrapper, IpConversionService $converter, DiscoverySettings $settings): void
     {
+        $store = app(TenantContextStore::class);
+
+        // Fast-fail: scanning must always be bound to a specific customer.
+        if (blank($this->subnet->customer_id)) {
+            throw new \RuntimeException('Subnet scanning requires customer_id.');
+        }
+
+        $store->set(new TenantContext(
+            customerId: (int) $this->subnet->customer_id,
+            locationId: $this->subnet->location_id ? (int) $this->subnet->location_id : null,
+            actorType: 'queue',
+            actorId: 'subnet:' . (string) $this->subnet->getKey(),
+        ));
+
         $cidr = $this->subnet->cidr;
 
         // Guard: respect per-subnet discover flag — if discovery is disabled, skip.
         if (! $this->subnet->discover_subnet) {
             Log::info('ScanSubnetJob: discovery disabled for subnet', ['subnet_id' => $this->subnet->getKey(), 'cidr' => $cidr]);
+            $store->clear();
             return;
         }
 
@@ -51,10 +68,16 @@ final class ScanSubnetJob implements ShouldQueue
                     continue;
                 }
 
-                IpAddress::updateOrCreate(
+                $seenAt = now();
+
+                $ipModel = IpAddress::updateOrCreate(
                     ['subnet_id' => $this->subnet->getKey(), 'ip_addr' => (string) $decimal],
-                    ['last_seen' => now(), 'state' => 1]
+                    ['last_seen' => $seenAt, 'state' => 1]
                 );
+
+                // Restore lifecycle to ACTIVE when seen.
+                $ipModel->markSeen($seenAt);
+                $ipModel->save();
 
                 $count++;
             }
@@ -66,6 +89,9 @@ final class ScanSubnetJob implements ShouldQueue
         } catch (\Throwable $e) {
             Log::error('ScanSubnetJob failed', ['cidr' => $cidr, 'error' => $e->getMessage()]);
             throw $e; // allow retry/failure handling
+        } finally {
+            // Important for long-running queue workers processing multiple jobs in the same process.
+            $store->clear();
         }
     }
 }

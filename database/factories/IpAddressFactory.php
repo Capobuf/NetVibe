@@ -13,6 +13,33 @@ class IpAddressFactory extends Factory
 {
     protected $model = IpAddress::class;
 
+    public function configure(): static
+    {
+        return $this
+            ->afterMaking(function (IpAddress $ip): void {
+                // Keep factories aligned with the tenancy invariants:
+                // ip_addresses.customer_id MUST match subnets.customer_id.
+                if (! blank($ip->customer_id) || blank($ip->subnet_id)) {
+                    return;
+                }
+
+                $subnetCustomerId = Subnet::query()->whereKey($ip->subnet_id)->value('customer_id');
+                if (! blank($subnetCustomerId)) {
+                    $ip->customer_id = (int) $subnetCustomerId;
+                }
+            })
+            ->afterCreating(function (IpAddress $ip): void {
+                if (! blank($ip->customer_id) || blank($ip->subnet_id)) {
+                    return;
+                }
+
+                $subnetCustomerId = Subnet::query()->whereKey($ip->subnet_id)->value('customer_id');
+                if (! blank($subnetCustomerId)) {
+                    $ip->forceFill(['customer_id' => (int) $subnetCustomerId])->save();
+                }
+            });
+    }
+
     public function definition(): array
     {
         return [

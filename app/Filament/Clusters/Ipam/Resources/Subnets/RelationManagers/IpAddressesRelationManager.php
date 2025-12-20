@@ -22,6 +22,7 @@ use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\SelectColumn;
 use App\Enums\IpAddressType;
+use App\Enums\LifecycleStatus;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\DeleteAction;
@@ -173,6 +174,18 @@ class IpAddressesRelationManager extends RelationManager
                     })
                     ->sortable(),
 
+                TextColumn::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => ($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))->label())
+                    ->color(fn ($state) => match (($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))) {
+                        LifecycleStatus::Active => 'success',
+                        LifecycleStatus::Stale => 'warning',
+                        LifecycleStatus::Retired => 'danger',
+                    })
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('port')
                     ->label('Port')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -191,6 +204,14 @@ class IpAddressesRelationManager extends RelationManager
                 'reserved' => 'Reserved',
                 'dhcp' => 'DHCP',
                 ]),
+
+                SelectFilter::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->options([
+                        (string) LifecycleStatus::Active->value => LifecycleStatus::Active->label(),
+                        (string) LifecycleStatus::Stale->value => LifecycleStatus::Stale->label(),
+                        (string) LifecycleStatus::Retired->value => LifecycleStatus::Retired->label(),
+                    ]),
             ])
             ->emptyStateDescription('No IPs have been discovered or created for this subnet yet. Click the + button to create an IP manually, or run a discovery scan from your agents.')
             ->headerActions([

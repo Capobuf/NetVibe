@@ -12,25 +12,25 @@
 */
 
 // Force test DB configuration to the known test instance so tests always run
-// against the `netvibe-db` test database. This avoids needing to export env vars
+// against the dedicated `netvibe_test` database. This avoids needing to export env vars
 // externally in CI/local environment. Be careful: this intentionally overrides
 // environment and will make tests attempt to connect to the named host.
 putenv('DB_CONNECTION=mysql');
-putenv('DB_DATABASE=netvibe-test');
-putenv('DB_HOST=netvibe-db');
+putenv('DB_DATABASE=netvibe_test');
+putenv('DB_HOST=netvibe-test-db');
 putenv('DB_USERNAME=root');
 putenv('DB_PASSWORD=secret');
 
 // Also populate superglobals so code using env('...') or $_ENV/$_SERVER sees them
 $_ENV['DB_CONNECTION'] = 'mysql';
-$_ENV['DB_DATABASE'] = 'netvibe-test';
-$_ENV['DB_HOST'] = 'netvibe-db';
+$_ENV['DB_DATABASE'] = 'netvibe_test';
+$_ENV['DB_HOST'] = 'netvibe-test-db';
 $_ENV['DB_USERNAME'] = 'root';
 $_ENV['DB_PASSWORD'] = 'secret';
 
 $_SERVER['DB_CONNECTION'] = 'mysql';
-$_SERVER['DB_DATABASE'] = 'netvibe-test';
-$_SERVER['DB_HOST'] = 'netvibe-db';
+$_SERVER['DB_DATABASE'] = 'netvibe_test';
+$_SERVER['DB_HOST'] = 'netvibe-test-db';
 $_SERVER['DB_USERNAME'] = 'root';
 $_SERVER['DB_PASSWORD'] = 'secret';
 

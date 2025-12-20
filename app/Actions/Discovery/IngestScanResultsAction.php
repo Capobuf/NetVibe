@@ -6,6 +6,7 @@ namespace App\Actions\Discovery;
 
 use App\Models\DiscoveryEvent;
 use App\Models\IpAddress;
+use App\Tenancy\TenantContextStore;
 use App\Services\IpConversionService;
 use Illuminate\Support\Facades\Log;
 use App\Models\Subnet;
@@ -31,19 +32,27 @@ final class IngestScanResultsAction
 
         $converter = app(IpConversionService::class);
 
-        // Resolve scan agent and candidate subnets once per execution so we only search within the agent scope
+        /** @var TenantContextStore $tenantStore */
+        $tenantStore = app(TenantContextStore::class);
+        $customerId = $tenantStore->requireCustomerId();
+
+        // Resolve scan agent and validate that it belongs to the active tenant (fast-fail).
         $agent = \App\Models\ScanAgent::find($scanAgentId);
 
-        $candidateSubnets = Subnet::query()
+        if (! $agent) {
+            throw new \RuntimeException('ScanAgent not found: ' . $scanAgentId);
+        }
+
+        if (! $agent->customer_id || (int) $agent->customer_id !== (int) $customerId) {
+            throw new \RuntimeException('ScanAgent customer mismatch or missing customer_id.');
+        }
+
+        // Candidate subnets are strictly tenant-scoped (1 agent per customer).
+        $candidateSubnets = Subnet::withoutTenantScope(fn () => Subnet::query()
+            ->where('customer_id', $customerId)
             ->where('discover_subnet', true)
-            ->where(function ($q) use ($agent) {
-                $q->where('scan_agent_id', $agent?->id);
-                if ($agent?->customer_id) {
-                    $q->orWhere('customer_id', $agent->customer_id);
-                }
-            })
-            // include discover_subnet so later checks can safely inspect the attribute
-            ->get(['id', 'subnet', 'mask', 'cidr', 'customer_id', 'discover_subnet']);
+            ->get(['id', 'subnet', 'mask', 'cidr', 'customer_id', 'discover_subnet'])
+        );
 
         // Debug: log candidate subnets so we can see what scope the agent has
         try {
@@ -70,6 +79,7 @@ final class IngestScanResultsAction
                 if (! $ipDecimal) {
                     // fallback: store as discovery event for manual inspection
                     DiscoveryEvent::create([
+                        'customer_id' => $customerId,
                         'scan_agent_id' => $scanAgentId,
                         'ip_addr' => $r['ip_addr'] ?? null,
                         'mac_address_current' => $r['mac_address'] ?? null,
@@ -88,7 +98,7 @@ final class IngestScanResultsAction
                     Log::warning('Ingest Debug: unable to log processing ip: ' . $e->getMessage());
                 }
 
-                $existing = IpAddress::where('ip_addr', (string) $ipDecimal)->first();
+                $existing = IpAddress::where('customer_id', $customerId)->where('ip_addr', (string) $ipDecimal)->first();
 
                 // If there is an existing ip address record, compare MACs
                 if ($existing) {
@@ -102,6 +112,7 @@ final class IngestScanResultsAction
 
                         // Idempotent: update or create a pending discovery event for this agent+IP
                         $this->upsertPendingDiscoveryEvent(
+                            $customerId,
                             $scanAgentId,
                             (string) $ipDecimal,
                             $incomingMac,
@@ -116,6 +127,7 @@ final class IngestScanResultsAction
 
                     // If MACs match (or missing), update last_seen only
                     $existing->last_seen = Carbon::now();
+                    $existing->markSeen($existing->last_seen);
                     $existing->save();
                     continue;
                 }
@@ -184,11 +196,12 @@ final class IngestScanResultsAction
                                 try {
                                     DB::transaction(function () use ($ipDecimal, $subnetId, $customerId, $r) {
                                         // Attempt to find an existing ip with a lock
-                                        $existingLocked = IpAddress::where('ip_addr', (string) $ipDecimal)->lockForUpdate()->first();
+                                        $existingLocked = IpAddress::where('customer_id', $customerId)->where('ip_addr', (string) $ipDecimal)->lockForUpdate()->first();
 
                                         if ($existingLocked) {
                                             // Another concurrent transaction already created it — update last_seen and skip
                                             $existingLocked->last_seen = Carbon::now();
+                                            $existingLocked->markSeen($existingLocked->last_seen);
                                             $existingLocked->save();
                                             return;
                                         }
@@ -202,7 +215,7 @@ final class IngestScanResultsAction
                                     $existingEvent->save();
 
                                     // Keep an approved audit record as well
-                                    $this->createApprovedDiscoveryEvent($scanAgentId, (string) $ipDecimal, $r);
+                                    $this->createApprovedDiscoveryEvent($customerId, $scanAgentId, (string) $ipDecimal, $r);
 
                                     Log::info('IngestScanResultsAction: pending event auto-imported and approved', ['scan_agent_id' => $scanAgentId, 'ip_decimal' => (string) $ipDecimal, 'event_id' => $existingEvent->id]);
                                 } catch (QueryException $qe) {
@@ -210,7 +223,8 @@ final class IngestScanResultsAction
 
                                     // Explicitly verify whether an IP record actually exists before marking event APPROVED.
                                     // A QueryException may mean a race condition OR a failed insert — do not assume success.
-                                    $ipActuallyExists = IpAddress::where('subnet_id', $subnetId)
+                                    $ipActuallyExists = IpAddress::where('customer_id', $customerId)
+                                        ->where('subnet_id', $subnetId)
                                         ->where('ip_addr', (string) $ipDecimal)
                                         ->exists();
 
@@ -220,7 +234,7 @@ final class IngestScanResultsAction
                                         $existingEvent->conflict_type = null;
                                         $existingEvent->save();
 
-                                        $this->createApprovedDiscoveryEvent($scanAgentId, (string) $ipDecimal, $r);
+                                        $this->createApprovedDiscoveryEvent($customerId, $scanAgentId, (string) $ipDecimal, $r);
                                         Log::info('IngestScanResultsAction: pending-event auto-import resolved by concurrent create', ['ip' => (string) $ipDecimal]);
                                     } else {
                                         // Insert failed and IP does not exist — keep existing event PENDING for manual review
@@ -260,6 +274,7 @@ final class IngestScanResultsAction
 
                             // Create a pending discovery event for manual review
                             $this->upsertPendingDiscoveryEvent(
+                                $customerId,
                                 $scanAgentId,
                                 (string) $ipDecimal,
                                 strtolower($r['mac_address'] ?? null),
@@ -275,11 +290,12 @@ final class IngestScanResultsAction
                         try {
                             DB::transaction(function () use ($ipDecimal, $subnetId, $customerId, $r, $scanAgentId) {
                                 // Attempt to find an existing ip with a lock
-                                $existingLocked = IpAddress::where('ip_addr', (string) $ipDecimal)->lockForUpdate()->first();
+                                $existingLocked = IpAddress::where('customer_id', $customerId)->where('ip_addr', (string) $ipDecimal)->lockForUpdate()->first();
 
                                 if ($existingLocked) {
                                     // Another concurrent transaction already created it — update last_seen and skip
                                     $existingLocked->last_seen = Carbon::now();
+                                    $existingLocked->markSeen($existingLocked->last_seen);
                                     $existingLocked->save();
                                     return;
                                 }
@@ -288,7 +304,7 @@ final class IngestScanResultsAction
                             });
 
                             // Record approved discovery event for audit/history
-                            $this->createApprovedDiscoveryEvent($scanAgentId, (string) $ipDecimal, $r);
+                            $this->createApprovedDiscoveryEvent($customerId, $scanAgentId, (string) $ipDecimal, $r);
 
                             Log::info('IngestScanResultsAction: auto-import completed', ['ip_decimal' => (string) $ipDecimal]);
                         } catch (QueryException $qe) {
@@ -296,19 +312,20 @@ final class IngestScanResultsAction
                             Log::warning('IngestScanResultsAction: QueryException during auto-import', ['error' => $qe->getMessage(), 'ip_decimal' => (string) $ipDecimal]);
 
                             // Check if IP already exists due to a concurrent transaction
-                            $ipActuallyExists = IpAddress::where('subnet_id', $subnetId)
+                            $ipActuallyExists = IpAddress::where('customer_id', $customerId)
+                                ->where('subnet_id', $subnetId)
                                 ->where('ip_addr', (string) $ipDecimal)
                                 ->exists();
 
                             if ($ipActuallyExists) {
                                 // Another process created the IP — create approved discovery event for history
-                                $this->createApprovedDiscoveryEvent($scanAgentId, (string) $ipDecimal, $r);
+                                $this->createApprovedDiscoveryEvent($customerId, $scanAgentId, (string) $ipDecimal, $r);
                                 Log::info('IngestScanResultsAction: auto-import QueryException resolved by concurrent create', ['ip_decimal' => (string) $ipDecimal]);
                             } else {
                                 // Attempt a safe fallback creation, if that fails keep a pending discovery event.
                                 try {
                                     $newIp = $this->createIpAddressFromResult((string) $ipDecimal, $subnetId, $customerId, $r);
-                                    $this->createApprovedDiscoveryEvent($scanAgentId, (string) $ipDecimal, $r);
+                                    $this->createApprovedDiscoveryEvent($customerId, $scanAgentId, (string) $ipDecimal, $r);
                                     Log::info('IngestScanResultsAction: auto-import fallback completed', ['ip_decimal' => (string) $ipDecimal]);
                                 } catch (\Throwable $e) {
                                     // Final failure — do NOT mark an APPROVED event because no ip exists.
@@ -316,6 +333,7 @@ final class IngestScanResultsAction
 
                                     // Create a pending discovery event so this IP can be investigated manually
                                     $this->upsertPendingDiscoveryEvent(
+                                        $customerId,
                                         $scanAgentId,
                                         (string) $ipDecimal,
                                         strtolower($r['mac_address'] ?? null),
@@ -335,7 +353,7 @@ final class IngestScanResultsAction
         }
     }
 
-    private function upsertPendingDiscoveryEvent(int $scanAgentId, string $ipDecimal, ?string $incomingMac, ?string $hostname, ?string $conflictType, array $payloadRaw): void
+    private function upsertPendingDiscoveryEvent(int $customerId, int $scanAgentId, string $ipDecimal, ?string $incomingMac, ?string $hostname, ?string $conflictType, array $payloadRaw): void
     {
         $existingEvent = DiscoveryEvent::where('scan_agent_id', $scanAgentId)
             ->where('ip_addr', $ipDecimal)
@@ -370,6 +388,7 @@ final class IngestScanResultsAction
         }
 
         DiscoveryEvent::create([
+            'customer_id' => $customerId,
             'scan_agent_id' => $scanAgentId,
             'ip_addr' => $ipDecimal,
             'mac_address_current' => $incomingMac,
@@ -382,6 +401,10 @@ final class IngestScanResultsAction
 
     private function createIpAddressFromResult(string $ipDecimal, ?int $subnetId, ?int $customerId, array $r): IpAddress
     {
+        if ($subnetId === null || $customerId === null) {
+            throw new \RuntimeException('Cannot create IpAddress without subnet_id and customer_id.');
+        }
+
         $ipAttrs = ['ip_addr' => $ipDecimal];
         $ipValues = [
             // ensure we use the concrete subnet id
@@ -405,8 +428,8 @@ final class IngestScanResultsAction
         try {
             // Prefer create to make errors obvious; the firstOrCreate path was used previously as a fallback,
             // but we keep firstOrCreate semantics in the caller (we may call from a transaction where caller handles concurrency)
-            if (IpAddress::where('ip_addr', $ipDecimal)->exists()) {
-                return IpAddress::where('ip_addr', $ipDecimal)->first();
+            if (IpAddress::where('customer_id', $customerId)->where('ip_addr', $ipDecimal)->exists()) {
+                return IpAddress::where('customer_id', $customerId)->where('ip_addr', $ipDecimal)->first();
             }
 
             $payload = array_merge($ipAttrs, $ipValues);
@@ -431,9 +454,10 @@ final class IngestScanResultsAction
         }
     }
 
-    private function createApprovedDiscoveryEvent(int $scanAgentId, string $ipDecimal, array $r): void
+    private function createApprovedDiscoveryEvent(int $customerId, int $scanAgentId, string $ipDecimal, array $r): void
     {
         DiscoveryEvent::create([
+            'customer_id' => $customerId,
             'scan_agent_id' => $scanAgentId,
             'ip_addr' => $ipDecimal,
             'mac_address_current' => $r['mac_address'] ?? null,

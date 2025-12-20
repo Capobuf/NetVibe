@@ -86,7 +86,9 @@ class VlanResource extends Resource
                         } else {
                             \App\Models\VlanBlacklist::firstOrCreate([
                                 'customer_id' => $record->customer_id,
-                                'vlan_id' => $record->id,
+                                'vlan_number' => (int) $record->number,
+                            ], [
+                                'vlan_name' => $record->name,
                             ]);
                         }
                     }),

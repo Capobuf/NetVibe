@@ -26,12 +26,12 @@
                the application DB. Use an explicit testing database name and defer username/password
                to environment variables (or defaults) to avoid hardcoding credentials here. -->
            <env name="DB_CONNECTION" value="mysql"/>
-           <env name="DB_HOST" value="netvibe-db"/>
+           <env name="DB_HOST" value="netvibe-test-db"/>
            <env name="DB_PORT" value="3306"/>
-        <env name="DB_DATABASE" value="netvibe-test"/>
+        <env name="DB_DATABASE" value="netvibe_test"/>
            <!-- Use placeholders so the container's environment / .env defines username and password. -->
-           <env name="DB_USERNAME" value="${DB_USERNAME}"/>
-           <env name="DB_PASSWORD" value="${DB_PASSWORD}"/>
+           <env name="DB_USERNAME" value="root"/>
+           <env name="DB_PASSWORD" value="secret"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

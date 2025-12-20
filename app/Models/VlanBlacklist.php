@@ -13,7 +13,8 @@ class VlanBlacklist extends Model
 
     protected $fillable = [
         'customer_id',
-        'vlan_id',
+        'vlan_number',
+        'vlan_name',
         'reason',
     ];
 
@@ -21,10 +22,4 @@ class VlanBlacklist extends Model
     {
         return $this->belongsTo(Customer::class);
     }
-
-    public function vlan()
-    {
-        return $this->belongsTo(Vlan::class);
-    }
 }
-

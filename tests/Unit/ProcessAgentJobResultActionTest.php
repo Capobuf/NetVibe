@@ -7,6 +7,7 @@ use App\Models\DeviceModel;
 use App\Models\AgentJob;
 use App\Models\User;
 use App\Models\Customer;
+use App\Models\ScanAgent;
 use App\Actions\Agent\ProcessAgentJobResultAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -55,13 +56,20 @@ class ProcessAgentJobResultActionTest extends TestCase
 
     public function test_discovery_fast_creates_discovery_events_for_unknown_arp()
     {
+        $customer = Customer::factory()->create();
+        $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
         // Ensure we have a device model so device creation satisfies DB requirements
         $model = \App\Models\DeviceModel::create(['brand' => 'Acme', 'model' => 'T1', 'type' => 'switch']);
-        $device = \App\Models\Device::create(['hostname' => 'arp-host', 'device_model_id' => $model->id]);
+        $device = \App\Models\Device::create([
+            'hostname' => 'arp-host',
+            'device_model_id' => $model->id,
+            'customer_id' => $customer->id,
+            'scan_agent_id' => $agent->id,
+        ]);
 
         $job = AgentJob::create([
             'device_id' => $device->id,
-            'scan_agent_id' => null,
+            'scan_agent_id' => $agent->id,
             'type' => 'discovery_fast',
                 'status' => 'completed',
             'payload' => [],
@@ -74,21 +82,37 @@ class ProcessAgentJobResultActionTest extends TestCase
         $converter = app(\App\Services\IpConversionService::class);
         $dec = $converter->toDecimal('192.168.5.10');
 
-        $this->assertDatabaseHas('discovery_events', ['ip_addr' => (string) $dec, 'mac_address_current' => 'aa:bb:cc:dd:ee:ff']);
+        $this->assertDatabaseHas('discovery_events', [
+            'customer_id' => $customer->id,
+            'ip_addr' => (string) $dec,
+            'mac_address_current' => 'aa:bb:cc:dd:ee:ff',
+        ]);
     }
 
     public function test_discovery_deep_updates_ports_and_links()
     {
+        $customer = Customer::factory()->create();
+        $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
         // Setup two devices: a remote device with a port (mac), and a local device
         $model = DeviceModel::create(['brand' => 'Acme', 'model' => 'M-remote', 'type' => 'switch']);
-        $remote = Device::create(['hostname' => 'remote', 'device_model_id' => $model->id]);
+        $remote = Device::create([
+            'hostname' => 'remote',
+            'device_model_id' => $model->id,
+            'customer_id' => $customer->id,
+            'scan_agent_id' => $agent->id,
+        ]);
         $remotePort = \App\Models\Port::create(['device_id' => $remote->id, 'name' => 'ether1', 'mac_address' => '11:22:33:44:55:66']);
 
-        $device = Device::create(['hostname' => 'local', 'device_model_id' => $model->id]);
+        $device = Device::create([
+            'hostname' => 'local',
+            'device_model_id' => $model->id,
+            'customer_id' => $customer->id,
+            'scan_agent_id' => $agent->id,
+        ]);
 
         $job = AgentJob::create([
             'device_id' => $device->id,
-            'scan_agent_id' => null,
+            'scan_agent_id' => $agent->id,
             'type' => 'discovery_deep',
                 'status' => 'completed',
             'payload' => [],
@@ -117,12 +141,13 @@ class ProcessAgentJobResultActionTest extends TestCase
     public function test_discovery_deep_ingests_topology_before_arp_to_create_vlan_and_subnet()
     {
         $customer = Customer::factory()->create();
+        $agent = ScanAgent::factory()->create(['customer_id' => $customer->id]);
         $model = DeviceModel::create(['brand' => 'Acme', 'model' => 'M-switch', 'type' => 'switch']);
-        $device = Device::create(['hostname' => 'edge', 'device_model_id' => $model->id, 'customer_id' => $customer->id]);
+        $device = Device::create(['hostname' => 'edge', 'device_model_id' => $model->id, 'customer_id' => $customer->id, 'scan_agent_id' => $agent->id]);
 
         $job = AgentJob::create([
             'device_id' => $device->id,
-            'scan_agent_id' => null,
+            'scan_agent_id' => $agent->id,
             'type' => 'discovery_deep',
             'status' => 'completed',
             'payload' => [],

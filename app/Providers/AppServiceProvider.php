@@ -13,7 +13,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Runtime tenant context store (used by model global scopes and ingestion jobs)
+        $this->app->singleton(\App\Tenancy\TenantContextStore::class, fn () => new \App\Tenancy\TenantContextStore());
     }
 
     /**

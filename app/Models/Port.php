@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\HasLifecycle;
+use App\Enums\LifecycleStatus;
 
 class Port extends Model
 {
     use SoftDeletes;
+    use HasLifecycle;
     protected $fillable = [
         'device_id',
         'name',
@@ -32,6 +35,9 @@ class Port extends Model
         'last_seen' => 'datetime',
         'exclude_from_discovery' => 'boolean',
         'tagged_vlans' => 'array',
+        'lifecycle_status' => LifecycleStatus::class,
+        'stale_at' => 'datetime',
+        'retired_at' => 'datetime',
     ];
 
     public function device()

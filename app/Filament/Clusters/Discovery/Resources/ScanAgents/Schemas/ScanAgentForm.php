@@ -35,16 +35,21 @@ class ScanAgentForm
                         ->relationship('customer', 'name')
                         ->searchable()
                         ->preload()
-                        ->label('Dedicated to Customer')
-                        ->helperText('Leave empty if this is a Global/Shared agent (e.g. Localhost)')
+                        ->label('Customer')
+                        ->helperText('Required. NetVibe uses 1 Remote Agent per Customer.')
                         ->default(fn () => session('tenant_id'))
                         ->hidden(fn () => ! blank(session('tenant_id')))
                         ->dehydratedWhenHidden()
+                        ->required(fn () => blank(session('tenant_id')))
                         ->rules([
                             function ($get) {
                                 return function (string $attribute, $value, callable $fail) use ($get) {
                                     $active = $get('active') ?? true;
-                                    if (! $active || blank($value)) {
+                                    if (blank($value)) {
+                                        $fail('Il campo Cliente è obbligatorio.');
+                                        return;
+                                    }
+                                    if (! $active) {
                                         return;
                                     }
 
@@ -55,7 +60,7 @@ class ScanAgentForm
                                         ->exists();
 
                                     if ($exists) {
-                                        $fail('Esiste già un agent attivo per questo cliente. Disattiva l’altro agent o imposta questo come globale.');
+                                        $fail('Esiste già un Remote Agent attivo per questo cliente. Disattiva l’altro agent prima di attivare questo.');
                                     }
                                 };
                             },
@@ -87,7 +92,7 @@ class ScanAgentForm
                         ->label('Polling interval')
                         ->numeric()
                         ->suffix('mins')
-                        ->helperText('Override global agent polling interval for this agent'),
+                        ->helperText('Override the default agent polling interval for this agent'),
 
                     Textarea::make('settings')
                         ->label('Raw settings (JSON)')

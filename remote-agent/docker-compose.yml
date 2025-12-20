@@ -1,7 +1,7 @@
 services:
-  agent:
+  netvibe-remote-agent:
     build: .
-    container_name: netvibe-agent
+    container_name: netvibe-remote-agent
     restart: unless-stopped
     environment:
       SERVER_URL: ${SERVER_URL}
@@ -9,6 +9,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       AGENT_POLL_INTERVAL_SECONDS: ${AGENT_POLL_INTERVAL_SECONDS:-5}
       AGENT_CONFIG_REFRESH_SECONDS: ${AGENT_CONFIG_REFRESH_SECONDS:-60}
+
+      # TLS verification (server)
+      NETVIBE_TLS_VERIFY: ${NETVIBE_TLS_VERIFY:-true}
+      NETVIBE_TLS_CA_BUNDLE: ${NETVIBE_TLS_CA_BUNDLE:-}
+
+      # TLS verification (MikroTik devices)
+      MIKROTIK_TLS_VERIFY: ${MIKROTIK_TLS_VERIFY:-false}
+      MIKROTIK_TLS_CA_BUNDLE: ${MIKROTIK_TLS_CA_BUNDLE:-}
     volumes:
       - ./:/app
     command: php /app/agent.php

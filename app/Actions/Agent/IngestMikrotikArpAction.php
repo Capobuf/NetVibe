@@ -136,7 +136,8 @@ final class IngestMikrotikArpAction
             return;
         }
 
-        $ip = IpAddress::where('ip_addr', (string) $dec)
+        $ip = IpAddress::where('customer_id', $device->customer_id)
+            ->where('ip_addr', (string) $dec)
             ->lockForUpdate()
             ->first();
 
@@ -159,6 +160,7 @@ final class IngestMikrotikArpAction
 
             $ip->last_seen = $now;
             $ip->type = $type;
+            $ip->markSeen($now);
             $ip->save();
 
             return;
@@ -180,32 +182,43 @@ final class IngestMikrotikArpAction
         }
 
         // If no subnet matches but the port has a PVID and a VLAN exists, create a /24 subnet for that VLAN
+        // (unless the VLAN/subnet is blacklisted).
         if (! $mappedSubnet && $port && $port->pvid) {
-            $vlan = \App\Models\Vlan::where('number', $port->pvid)->where('customer_id', $device->customer_id)->first();
-            $ipAddr = $converter->fromDecimal((string) $dec)?->toString();
-            if ($vlan && $ipAddr) {
-                $mask = 24;
-                $networkLong = ip2long($ipAddr) & -1 << (32 - $mask);
-                $network = long2ip($networkLong);
-                try {
-                    $attributes = [
-                        'subnet' => $converter->toDecimal($network),
-                        'mask' => $mask,
-                    ];
+            $pvid = (int) $port->pvid;
 
-                    $values = [
-                        'cidr' => $network . '/' . $mask,
-                        'vlan_id' => $vlan->id,
-                        'customer_id' => $device->customer_id,
-                        'scan_agent_id' => $device->scan_agent_id,
-                        'discover_subnet' => true,
-                        'ping_subnet' => false,
-                        'resolve_dns' => false,
-                    ];
+            $isBlacklistedVlan = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $pvid)->exists());
+            if (! $isBlacklistedVlan) {
+                $vlan = \App\Models\Vlan::where('number', $pvid)->where('customer_id', $device->customer_id)->first();
+                $ipAddr = $converter->fromDecimal((string) $dec)?->toString();
+                if ($vlan && $ipAddr) {
+                    $mask = 24;
+                    $networkLong = ip2long($ipAddr) & -1 << (32 - $mask);
+                    $network = long2ip($networkLong);
+                    $cidr = $network . '/' . $mask;
 
-                    $mappedSubnet = \App\Models\Subnet::withoutTenantScope(fn () => \App\Models\Subnet::firstOrCreate($attributes, $values));
-                } catch (\Throwable $e) {
-                    Log::warning('IngestMikrotikArpAction: subnet creation failed ' . $e->getMessage());
+                    $isBlacklistedSubnet = \App\Models\SubnetBlacklist::withoutTenantScope(fn () => \App\Models\SubnetBlacklist::where('customer_id', $device->customer_id)->where('subnet_cidr', $cidr)->exists());
+                    if (! $isBlacklistedSubnet) {
+                        try {
+                            $attributes = [
+                                'subnet' => $converter->toDecimal($network),
+                                'mask' => $mask,
+                            ];
+
+                            $values = [
+                                'cidr' => $cidr,
+                                'vlan_id' => $vlan->id,
+                                'customer_id' => $device->customer_id,
+                                'scan_agent_id' => $device->scan_agent_id,
+                                'discover_subnet' => true,
+                                'ping_subnet' => false,
+                                'resolve_dns' => false,
+                            ];
+
+                            $mappedSubnet = \App\Models\Subnet::withoutTenantScope(fn () => \App\Models\Subnet::firstOrCreate($attributes, $values));
+                        } catch (\Throwable $e) {
+                            Log::warning('IngestMikrotikArpAction: subnet creation failed ' . $e->getMessage());
+                        }
+                    }
                 }
             }
         }
@@ -226,7 +239,9 @@ final class IngestMikrotikArpAction
             ];
 
             try {
-                IpAddress::create($payload);
+                $ipCreated = IpAddress::create($payload);
+                $ipCreated->markSeen($now);
+                $ipCreated->save();
             } catch (\Throwable $e) {
                 Log::warning('IngestMikrotikArpAction: ip create failed ' . $e->getMessage(), [
                     'payload' => $payload,
@@ -235,8 +250,17 @@ final class IngestMikrotikArpAction
             return;
         }
 
+        $scanAgentId = (int) ($device->scan_agent_id ?? 0);
+        if ($scanAgentId <= 0) {
+            throw new \RuntimeException('IngestMikrotikArpAction: device is missing scan_agent_id; cannot create DiscoveryEvent safely.');
+        }
+        if (empty($device->customer_id)) {
+            throw new \RuntimeException('IngestMikrotikArpAction: device is missing customer_id; cannot create DiscoveryEvent safely.');
+        }
+
         DiscoveryEvent::create([
-            'scan_agent_id' => null,
+            'customer_id' => (int) $device->customer_id,
+            'scan_agent_id' => $scanAgentId,
             'ip_addr' => (string) $dec,
             'mac_address_current' => $mac,
             'hostname_current' => $hostname,

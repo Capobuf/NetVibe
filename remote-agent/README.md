@@ -12,18 +12,22 @@ It includes:
 
 Notes / runtime configuration
 
-- Environment variables supportate nel container agent (contratto PDL):
+- Environment variables supportate nel container netvibe-remote-agent (contratto PDL):
 	- `SERVER_URL` — base URL dell’app NetVibe (es. `http://ipam:9693`), **senza** `/api` o `/api/v1`; l’agent aggiunge sempre `/api/v1/...` autonomamente.  
 	- `AGENT_API_TOKEN` — bearer token (PAT) per autenticare l’agent verso l’API.  
 	- `LOG_LEVEL` — livello log (`debug|info|warning|error|critical`), default `info` se non impostato.  
 	- `AGENT_POLL_INTERVAL_SECONDS` — intervallo di polling jobs (default 5).  
 	- `AGENT_CONFIG_REFRESH_SECONDS` — intervallo di polling `/api/v1/agent/config` (default 60).  
+	- `NETVIBE_TLS_VERIFY` — verifica TLS quando l’agent chiama il server NetVibe (`true|false`, default `true`).
+	- `NETVIBE_TLS_CA_BUNDLE` — percorso opzionale a CA bundle (usato quando `NETVIBE_TLS_VERIFY=true`).
+	- `MIKROTIK_TLS_VERIFY` — verifica TLS quando si chiama l’API REST MikroTik (`true|false`, default `false`).
+	- `MIKROTIK_TLS_CA_BUNDLE` — percorso opzionale a CA bundle per MikroTik (usato quando `MIKROTIK_TLS_VERIFY=true`).
 
 Docker compose e .env
 
-- Il file `remote-agent/.env.example` contiene un esempio di configurazione con le variabili sopra (SERVER_URL, AGENT_API_TOKEN, LOG_LEVEL, AGENT_POLL_INTERVAL_SECONDS, AGENT_CONFIG_REFRESH_SECONDS).  
+- Il file `remote-agent/.env.example` contiene un esempio di configurazione con le variabili sopra (inclusi i flag TLS).  
 - Il file `remote-agent/docker-compose.yml` espone il servizio:
-	- `agent` con:
+	- `netvibe-remote-agent` con:
 		- `SERVER_URL: ${SERVER_URL}`
 		- `AGENT_API_TOKEN: ${AGENT_API_TOKEN}`
 		- `LOG_LEVEL: ${LOG_LEVEL:-info}`

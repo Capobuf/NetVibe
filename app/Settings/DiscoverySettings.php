@@ -53,6 +53,22 @@ class DiscoverySettings extends Settings
      */
     public int $max_records_per_dataset = 5000;
 
+    /**
+     * Enable inventory lifecycle management (soft-retire).
+     */
+    public bool $inventory_soft_retire_enabled = true;
+
+    /**
+     * Mark objects as STALE when last seen older than this many days.
+     */
+    public int $inventory_stale_after_days = 15;
+
+    /**
+     * Mark objects as RETIRED when last seen older than this many days.
+     * Must be >= inventory_stale_after_days.
+     */
+    public int $inventory_retire_after_days = 45;
+
     public static function group(): string
     {
         return 'discovery';

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ScanAgent;
+use App\Models\Customer;
 use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\CredentialProfile;
@@ -16,13 +17,14 @@ class AgentJobsApiTest extends TestCase
 
     public function test_agent_can_poll_for_jobs_and_get_credentials()
     {
-        $agent = ScanAgent::create(['name' => 'agent-a', 'type' => 'direct']);
+        $customer = Customer::create(['name' => 'Cust']);
+        $agent = ScanAgent::create(['name' => 'agent-a', 'customer_id' => $customer->id, 'active' => true]);
 
         $model = DeviceModel::create(['brand' => 'brand', 'model' => 'm1', 'type' => 'router']);
 
         $profile = CredentialProfile::create(['name' => 'p1', 'type' => 'ssh', 'username' => 'nobody', 'auth_password' => 'secret', 'auth_credentials' => json_encode(['foo' => 'bar'])]);
 
-        $device = Device::create(['hostname' => 'dev1', 'device_model_id' => $model->id, 'credential_profile_id' => $profile->id]);
+        $device = Device::create(['hostname' => 'dev1', 'device_model_id' => $model->id, 'credential_profile_id' => $profile->id, 'customer_id' => $customer->id]);
 
         $job = AgentJob::create(['device_id' => $device->id, 'scan_agent_id' => $agent->id, 'type' => 'check_connectivity', 'status' => 'pending', 'payload' => []]);
 
@@ -35,10 +37,11 @@ class AgentJobsApiTest extends TestCase
 
     public function test_agent_can_submit_job_result()
     {
-        $agent = ScanAgent::create(['name' => 'agent-a', 'type' => 'direct']);
+        $customer = Customer::create(['name' => 'Cust']);
+        $agent = ScanAgent::create(['name' => 'agent-a', 'customer_id' => $customer->id, 'active' => true]);
 
         $model = DeviceModel::create(['brand' => 'brand', 'model' => 'm1', 'type' => 'router']);
-        $device = Device::create(['hostname' => 'dev1', 'device_model_id' => $model->id]);
+        $device = Device::create(['hostname' => 'dev1', 'device_model_id' => $model->id, 'customer_id' => $customer->id]);
 
         $job = AgentJob::create(['device_id' => $device->id, 'scan_agent_id' => $agent->id, 'type' => 'check_connectivity', 'status' => 'pending', 'payload' => []]);
 

@@ -13,13 +13,16 @@ class Vlan extends Model
     protected $table = 'vlans';
 
     protected $fillable = ['name', 'number', 'description', 'customer_id'];
-    
+
     public function customer() { return $this->belongsTo(Customer::class); }
     public function subnets() { return $this->hasMany(Subnet::class); }
 
     public function blacklist()
     {
-        return $this->hasOne(VlanBlacklist::class);
+        // Match by VLAN number so blacklist entries can exist before VLAN import
+        // and survive VLAN deletion.
+        return $this->hasOne(VlanBlacklist::class, 'vlan_number', 'number')
+            ->whereColumn('customer_id', 'vlans.customer_id');
     }
 
     public function getIsBlacklistedAttribute(): bool
@@ -28,7 +31,13 @@ class Vlan extends Model
             return $this->blacklist !== null;
         }
 
-        return $this->blacklist()->exists();
+        if (! $this->customer_id) {
+            return false;
+        }
+
+        return VlanBlacklist::where('customer_id', $this->customer_id)
+            ->where('vlan_number', (int) $this->number)
+            ->exists();
     }
     // l2_domain no longer used as tenancy; VLANs are scoped by customer
 }

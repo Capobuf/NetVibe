@@ -121,13 +121,15 @@ class SubnetResource extends Resource
                 ->label('Remote Agent')
                 ->options(function ($get) {
                     $customerId = $get('customer_id') ?? null;
-                    $query = \App\Models\ScanAgent::query()->where('active', true);
-                    if ($customerId) {
-                        $query->where(function ($q) use ($customerId) {
-                            $q->where('customer_id', $customerId)->orWhereNull('customer_id');
-                        });
+                    if (! $customerId) {
+                        return [];
                     }
-                    return $query->orderBy('customer_id')->orderBy('name')->pluck('name', 'id');
+                    return \App\Models\ScanAgent::query()
+                        ->where('active', true)
+                        ->where('customer_id', $customerId)
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->toArray();
                 })
                 ->required(function ($get) {
                     $customerId = $get('customer_id') ?? null;
@@ -154,7 +156,7 @@ class SubnetResource extends Resource
                 \Filament\Tables\Grouping\Group::make('vlan.name')
                     ->label('VLAN')
                     ->collapsible()
-                    ->getTitleFromRecordUsing(fn ($record) => ($record->vlan ? (string) ($record->vlan->number . ' - ' . $record->vlan->name) : 'Global / No VLAN')),
+                    ->getTitleFromRecordUsing(fn ($record) => ($record->vlan ? (string) ($record->vlan->number . ' - ' . $record->vlan->name) : 'No VLAN')),
             ])
                 ->defaultGroup('vlan.name')
             ->headerActions([

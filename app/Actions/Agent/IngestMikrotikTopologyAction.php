@@ -32,14 +32,14 @@ class IngestMikrotikTopologyAction
         if (is_array($interfaces)) {
             foreach ($interfaces as $iface) {
                 $name = $iface['name'] ?? $iface['interface'] ?? null;
-                if (! $name) continue;
+                if (! $name) return;
 
                 $port = $device->ports()->firstOrCreate(['name' => $name], ['device_id' => $device->id]);
 
                 // Map basic properties if present
                 $macRaw = $iface['mac-address'] ?? ($iface['mac'] ?? null);
                 if (! empty($macRaw)) {
-                    $port->mac_address = $macRaw;
+                    $port->mac_address = MacAddressService::normalize($macRaw) ?? $macRaw;
                 }
 
                 // Map physical / link attributes (best-effort; device_result for Fase 1 espone speed_bps/description)
@@ -103,6 +103,7 @@ class IngestMikrotikTopologyAction
                 }
 
                 $port->last_seen = $now;
+                $port->markSeen($now);
 
                 // Persist port with casts intact
                 try {
@@ -120,7 +121,7 @@ class IngestMikrotikTopologyAction
             foreach ($vlans as $entry) {
                 $vlanIds = $this->parseList($entry['vlan-ids'] ?? $entry['vlan_ids'] ?? $entry['vlans'] ?? null);
                 if (empty($vlanIds)) {
-                    continue;
+                    return;
                 }
 
                 $taggedPorts = $this->parseList($entry['tagged'] ?? $entry['tagged-ports'] ?? $entry['tagged_ports'] ?? $entry['ports'] ?? null);
@@ -129,6 +130,13 @@ class IngestMikrotikTopologyAction
                 foreach ($vlanIds as $vid) {
                     $nameSource = $entry['comment'] ?? $untaggedPorts[0] ?? $taggedPorts[0] ?? null;
                     $vlanName = $nameSource ? (string) $nameSource : 'VLAN ' . $vid;
+
+
+                    $vid = (int) $vid;
+                    $isBlacklistedVlan = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $vid)->exists());
+                    if ($isBlacklistedVlan) {
+                        continue;
+                    }
 
                     $vlan = \App\Models\Vlan::withoutTenantScope(fn () => \App\Models\Vlan::firstOrCreate(
                         ['number' => $vid, 'customer_id' => $device->customer_id],
@@ -184,7 +192,7 @@ class IngestMikrotikTopologyAction
         if (is_array($bridgeHosts)) {
             foreach ($bridgeHosts as $h) {
                 if (! empty($h['local']) && filter_var($h['local'], FILTER_VALIDATE_BOOLEAN)) {
-                    continue;
+                    return;
                 }
 
                 $mac = MacAddressService::normalize($h['mac-address'] ?? $h['mac'] ?? null);
@@ -233,15 +241,25 @@ class IngestMikrotikTopologyAction
                         }
 
                         if ($dec) {
-                            $ip = IpAddress::where('ip_addr', (string) $dec)->first();
+                            $ip = IpAddress::where('customer_id', $device->customer_id)->where('ip_addr', (string) $dec)->first();
                             if ($ip) {
                                 $ip->port = $iface;
                                 $ip->mac_address = $mac;
                                 $ip->last_seen = $now;
+                                $ip->markSeen($now);
                                 $ip->save();
                             } else {
+                                $scanAgentId = (int) ($device->scan_agent_id ?? 0);
+                                if ($scanAgentId <= 0) {
+                                    throw new \RuntimeException('IngestMikrotikTopologyAction: device is missing scan_agent_id; cannot create DiscoveryEvent safely.');
+                                }
+                                if (empty($device->customer_id)) {
+                                    throw new \RuntimeException('IngestMikrotikTopologyAction: device is missing customer_id; cannot create DiscoveryEvent safely.');
+                                }
+
                                 DiscoveryEvent::create([
-                                    'scan_agent_id' => null,
+                                    'customer_id' => (int) $device->customer_id,
+                                    'scan_agent_id' => $scanAgentId,
                                     'ip_addr' => (string) $dec,
                                     'mac_address_current' => $mac,
                                     'hostname_current' => $hostname,
@@ -269,10 +287,17 @@ class IngestMikrotikTopologyAction
             return;
         }
 
-        $remotePort = \App\Models\Port::where('mac_address', $normalizedMac)->first();
+        $remotePort = \App\Models\Port::query()
+            ->where('mac_address', $normalizedMac)
+            ->whereHas('device', fn ($q) => $q->where('customer_id', $device->customer_id))
+            ->first();
         $localPort = $device->ports()->where('name', $iface)->first();
 
         if ($localPort && $remotePort) {
+            // avoid self-linking and cross-device loops
+            if ($localPort->id === $remotePort->id) {
+                return;
+            }
             $localPort->connected_to_port_id = $remotePort->id;
             $localPort->save();
 

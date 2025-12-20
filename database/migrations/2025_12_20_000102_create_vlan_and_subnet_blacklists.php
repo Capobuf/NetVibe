@@ -10,15 +10,18 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // VLAN blacklists are stored by VLAN *number* (not FK to vlans.id) so entries can exist
+        // before VLAN import and survive VLAN deletion.
         if (! Schema::hasTable('vlan_blacklists')) {
             Schema::create('vlan_blacklists', function (Blueprint $table): void {
                 $table->id();
                 $table->foreignId('customer_id')->constrained('customers')->cascadeOnDelete();
-                $table->foreignId('vlan_id')->constrained('vlans')->cascadeOnDelete();
+                $table->unsignedSmallInteger('vlan_number');
+                $table->string('vlan_name')->nullable();
                 $table->string('reason')->nullable();
                 $table->timestamps();
 
-                $table->unique(['customer_id', 'vlan_id']);
+                $table->unique(['customer_id', 'vlan_number']);
             });
         }
 
@@ -46,4 +49,3 @@ return new class extends Migration
         }
     }
 };
-

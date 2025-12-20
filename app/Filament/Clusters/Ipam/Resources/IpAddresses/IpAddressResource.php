@@ -25,6 +25,9 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ExportAction;
 use Filament\Actions\ExportBulkAction;
 use App\Filament\Exports\IpAddressExporter;
+use App\Enums\LifecycleStatus;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Actions\BulkAction;
 
 class IpAddressResource extends Resource
 {
@@ -165,6 +168,17 @@ class IpAddressResource extends Resource
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('port')
                     ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => ($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))->label())
+                    ->color(fn ($state) => match (($state instanceof LifecycleStatus ? $state : LifecycleStatus::from((int) $state))) {
+                        LifecycleStatus::Active => 'success',
+                        LifecycleStatus::Stale => 'warning',
+                        LifecycleStatus::Retired => 'danger',
+                    })
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('last_seen')
                     ->label('Last Seen')
                     ->dateTime()
@@ -176,7 +190,13 @@ class IpAddressResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('lifecycle_status')
+                    ->label('Lifecycle')
+                    ->options([
+                        (string) LifecycleStatus::Active->value => LifecycleStatus::Active->label(),
+                        (string) LifecycleStatus::Stale->value => LifecycleStatus::Stale->label(),
+                        (string) LifecycleStatus::Retired->value => LifecycleStatus::Retired->label(),
+                    ]),
             ])
             ->recordActions([
                 EditAction::make()->slideOver(),
@@ -185,6 +205,17 @@ class IpAddressResource extends Resource
                 BulkActionGroup::make([
                     ExportBulkAction::make()
                         ->exporter(IpAddressExporter::class),
+                    BulkAction::make('restore_lifecycle')
+                        ->label('Restore (Active)')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->action(function ($records): void {
+                            foreach ($records as $record) {
+                                $record->markSeen();
+                                $record->save();
+                            }
+                        }),
                     DeleteBulkAction::make(),
                 ]),
             ]);

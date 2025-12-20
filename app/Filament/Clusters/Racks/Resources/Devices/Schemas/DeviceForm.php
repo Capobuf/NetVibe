@@ -13,14 +13,17 @@ class DeviceForm
 {
     private static function agentOptions(?int $customerId): array
     {
-        $query = \App\Models\ScanAgent::query()->where('active', true);
-        if ($customerId) {
-            $query->where(function ($q) use ($customerId) {
-                $q->where('customer_id', $customerId)->orWhereNull('customer_id');
-            });
+        if (! $customerId) {
+            // In tenant/god mode, the device must have a customer selected before an agent can be resolved.
+            return [];
         }
 
-        return $query->orderBy('customer_id')->orderBy('name')->pluck('name', 'id')->toArray();
+        return \App\Models\ScanAgent::query()
+            ->where('active', true)
+            ->where('customer_id', $customerId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
     }
 
     private static function hasMultipleAgents(?int $customerId): bool
@@ -184,7 +187,7 @@ class DeviceForm
 
                 Select::make('scan_agent_id')
                     ->label('Remote Agent')
-                    ->helperText('L’unico agent attivo del Cliente riceverà i jobs; scegli un agent globale se necessario.')
+                    ->helperText('Se esiste un solo Remote Agent attivo per il Cliente, i job verranno assegnati automaticamente. Se ne esistono più di uno (sconsigliato), seleziona quello corretto.')
                     ->options(fn ($get) => self::agentOptions($get('customer_id') ?? null))
                     ->required(fn ($get) => self::hasMultipleAgents($get('customer_id') ?? null))
                     ->hint(fn ($get) => self::hasMultipleAgents($get('customer_id') ?? null)

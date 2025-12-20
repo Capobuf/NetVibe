@@ -86,13 +86,25 @@ class DiscoveryEventResource extends Resource
                     ->label('Approva e Unisci')
                     ->action(function ($records) {
                         foreach ($records as $event) {
-                            $ip = IpAddress::where('ip_addr', $event->ip_addr)->first();
+                            if (empty($event->customer_id)) {
+                                continue;
+                            }
+
+                            $ip = IpAddress::where('customer_id', (int) $event->customer_id)
+                                ->where('ip_addr', (string) $event->ip_addr)
+                                ->first();
+
                             if ($ip) {
-                                $ip->mac_address = $event->mac_address_current;
-                                $ip->hostname = $event->hostname_current;
+                                if (! empty($event->mac_address_current)) {
+                                    $ip->mac_address = (string) $event->mac_address_current;
+                                }
+                                if (! empty($event->hostname_current)) {
+                                    $ip->hostname = (string) $event->hostname_current;
+                                }
                                 $ip->save();
                             }
-                            $event->status = 'APPROVED';
+
+                            $event->status = DiscoveryEvent::STATUS_APPROVED;
                             $event->save();
                         }
                     })

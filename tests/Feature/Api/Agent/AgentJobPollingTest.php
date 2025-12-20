@@ -1,12 +1,13 @@
 <?php
 
 use App\Models\ScanAgent;
-use App\Models\Device;
+use App\Models\Customer;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('returns agent_config and discovery_config to the agent', function () {
-    $agent = ScanAgent::create(['name' => 'agent-poll']);
+    $customer = Customer::create(['name' => 'Cust']);
+    $agent = ScanAgent::create(['name' => 'agent-poll', 'customer_id' => $customer->id, 'active' => true]);
     $token = $agent->createToken('t-poll');
 
     $response = $this->withHeader('Authorization', 'Bearer ' . $token->plainTextToken)

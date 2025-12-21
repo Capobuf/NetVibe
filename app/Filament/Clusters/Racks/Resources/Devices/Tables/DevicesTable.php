@@ -27,8 +27,7 @@ class DevicesTable
             ])
             ->columns([
                 TextColumn::make('hostname')->searchable()->weight('bold'),
-                TextColumn::make('management_ip')->label('Mgmt IP')->searchable()->toggleable(),
-                TextColumn::make('ip_addr')->label('IP')->searchable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('ip_addr')->label('Mgmt IP')->searchable()->toggleable(),
                 TextColumn::make('deviceModel.name')->label('Model')->toggleable(),
                 TextColumn::make('auth_status')->label('Auth')->badge()->color(fn ($state) => match($state) {
                     'valid' => 'success',

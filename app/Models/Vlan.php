@@ -21,8 +21,7 @@ class Vlan extends Model
     {
         // Match by VLAN number so blacklist entries can exist before VLAN import
         // and survive VLAN deletion.
-        return $this->hasOne(VlanBlacklist::class, 'vlan_number', 'number')
-            ->whereColumn('customer_id', 'vlans.customer_id');
+        return $this->hasOne(VlanBlacklist::class, 'vlan_number', 'number');
     }
 
     public function getIsBlacklistedAttribute(): bool

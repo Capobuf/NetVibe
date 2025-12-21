@@ -52,7 +52,7 @@ class DeviceResource extends Resource
                     \Filament\Infolists\Components\TextEntry::make('hostname')
                         ->label('Hostname')
                         ->weight('bold'),
-                    \Filament\Infolists\Components\TextEntry::make('management_ip')
+                    \Filament\Infolists\Components\TextEntry::make('ip_addr')
                         ->label('Management IP'),
                     \Filament\Infolists\Components\TextEntry::make('deviceModel.model')
                         ->label('Model'),

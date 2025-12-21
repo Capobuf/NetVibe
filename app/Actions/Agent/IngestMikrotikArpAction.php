@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Models\IpAddress;
 use App\Models\DiscoveryEvent;
 use App\Models\Subnet;
+use App\Models\Vlan;
 use App\Services\IpConversionService;
 use App\Services\MacAddressService;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use App\Services\MergePolicyService;
 use App\Enums\DiscoverySource;
+use Illuminate\Support\Facades\Schema;
 
 final class IngestMikrotikArpAction
 {
@@ -31,6 +33,70 @@ final class IngestMikrotikArpAction
         $converter = app(IpConversionService::class);
         $subnets = Subnet::withoutTenantScope(fn () => Subnet::where('customer_id', $device->customer_id)->get());
         $now = Carbon::now();
+        $supportsDiscover = Schema::hasColumn('subnets', 'discover_subnet');
+        $supportsPing = Schema::hasColumn('subnets', 'ping_subnet');
+        $supportsResolveDns = Schema::hasColumn('subnets', 'resolve_dns');
+
+        // Pre-create subnets from interface addresses when provided (authoritative prefix)
+        $ipAddressesSection = $data['ip_addresses']['items'] ?? $data['ip_addresses'] ?? null;
+        if (is_array($ipAddressesSection)) {
+            foreach ($ipAddressesSection as $ifaceAddr) {
+                if (isset($ifaceAddr['disabled']) && filter_var($ifaceAddr['disabled'], FILTER_VALIDATE_BOOLEAN)) {
+                    continue;
+                }
+                $cidr = $ifaceAddr['address'] ?? null;
+                $ifaceName = $ifaceAddr['interface'] ?? null;
+                if (! $cidr || ! $ifaceName) {
+                    continue;
+                }
+                try {
+                    [$ip, $mask] = explode('/', $cidr);
+                    $mask = (int) $mask;
+                    $network = $ifaceAddr['network'] ?? null;
+                    $network = $network ?: long2ip(ip2long($ip) & -1 << (32 - $mask));
+                } catch (\Throwable $e) {
+                    continue;
+                }
+
+                $port = $device->ports()->where('name', $ifaceName)->first();
+                $vlanId = $this->resolveVlanId($device, $port?->pvid ?? null);
+                if ($vlanId === null) {
+                    $vlanId = $this->resolveVlanIdFromInterfaceName($device, $ifaceName);
+                }
+                $isBlacklistedSubnet = \App\Models\SubnetBlacklist::withoutTenantScope(fn () => \App\Models\SubnetBlacklist::where('customer_id', $device->customer_id)->where('subnet_cidr', $network . '/' . $mask)->exists());
+                if ($isBlacklistedSubnet) {
+                    continue;
+                }
+
+                try {
+                    $attributes = [
+                        'subnet' => $converter->toDecimal($network),
+                        'mask' => $mask,
+                        'customer_id' => $device->customer_id,
+                    ];
+                    $values = [
+                        'cidr' => $network . '/' . $mask,
+                        'vlan_id' => $vlanId,
+                        'customer_id' => $device->customer_id,
+                        'scan_agent_id' => $device->scan_agent_id,
+                    ];
+                    // Conditionally include discovery flags if present in schema
+                    if ($supportsDiscover) {
+                        $values['discover_subnet'] = true;
+                    }
+                    if ($supportsPing) {
+                        $values['ping_subnet'] = false;
+                    }
+                    if ($supportsResolveDns) {
+                        $values['resolve_dns'] = false;
+                    }
+                    $subnet = $this->firstOrRestoreSubnet($attributes, $values);
+                    $subnets->push($subnet);
+                } catch (\Throwable $e) {
+                    Log::warning('IngestMikrotikArpAction: subnet creation from ip_addresses failed ' . $e->getMessage());
+                }
+            }
+        }
 
         // Normalizza sorgenti in base al PDL: preferiamo device_result (dhcp_leases.items / arp.items)
         $dhcpSection = $data['dhcp_leases'] ?? null;
@@ -169,6 +235,10 @@ final class IngestMikrotikArpAction
         $mappedSubnet = null;
         $portName = $entry['interface'] ?? $entry['ifname'] ?? null;
         $port = $portName ? ($device->ports()->where('name', $portName)->first() ?? null) : null;
+        $portVlanId = $this->resolveVlanId($device, $port?->pvid ?? null);
+        if ($portVlanId === null && $portName) {
+            $portVlanId = $this->resolveVlanIdFromInterfaceName($device, $portName);
+        }
 
         foreach ($subnets as $s) {
             try {
@@ -188,7 +258,10 @@ final class IngestMikrotikArpAction
 
             $isBlacklistedVlan = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $pvid)->exists());
             if (! $isBlacklistedVlan) {
-                $vlan = \App\Models\Vlan::where('number', $pvid)->where('customer_id', $device->customer_id)->first();
+                $vlan = Vlan::withoutTenantScope(fn () => Vlan::firstOrCreate(
+                    ['number' => $pvid, 'customer_id' => $device->customer_id],
+                    ['name' => 'VLAN ' . $pvid]
+                ));
                 $ipAddr = $converter->fromDecimal((string) $dec)?->toString();
                 if ($vlan && $ipAddr) {
                     $mask = 24;
@@ -202,6 +275,7 @@ final class IngestMikrotikArpAction
                             $attributes = [
                                 'subnet' => $converter->toDecimal($network),
                                 'mask' => $mask,
+                                'customer_id' => $device->customer_id,
                             ];
 
                             $values = [
@@ -209,12 +283,18 @@ final class IngestMikrotikArpAction
                                 'vlan_id' => $vlan->id,
                                 'customer_id' => $device->customer_id,
                                 'scan_agent_id' => $device->scan_agent_id,
-                                'discover_subnet' => true,
-                                'ping_subnet' => false,
-                                'resolve_dns' => false,
                             ];
+                            if ($supportsDiscover) {
+                                $values['discover_subnet'] = true;
+                            }
+                            if ($supportsPing) {
+                                $values['ping_subnet'] = false;
+                            }
+                            if ($supportsResolveDns) {
+                                $values['resolve_dns'] = false;
+                            }
 
-                            $mappedSubnet = \App\Models\Subnet::withoutTenantScope(fn () => \App\Models\Subnet::firstOrCreate($attributes, $values));
+                            $mappedSubnet = $this->firstOrRestoreSubnet($attributes, $values);
                         } catch (\Throwable $e) {
                             Log::warning('IngestMikrotikArpAction: subnet creation failed ' . $e->getMessage());
                         }
@@ -231,6 +311,7 @@ final class IngestMikrotikArpAction
                 'hostname' => $hostname,
                 'description' => $description,
                 'customer_id' => $mappedSubnet->customer_id,
+                'vlan_id' => $portVlanId ?? $mappedSubnet->vlan_id,
                 'type' => $type,
                 'state' => 2,
                 'last_seen' => $now,
@@ -268,5 +349,57 @@ final class IngestMikrotikArpAction
             'conflict_type' => $orphanConflict,
             'payload_raw' => $entry,
         ]);
+    }
+
+    /**
+     * Resolve VLAN model id from a VLAN number and customer; create it if missing.
+     */
+    private function resolveVlanId(Device $device, ?int $vlanNumber): ?int
+    {
+        if (! $vlanNumber) {
+            return null;
+        }
+
+        $vlan = Vlan::withoutTenantScope(fn () => Vlan::firstOrCreate(
+            ['number' => (int) $vlanNumber, 'customer_id' => $device->customer_id],
+            ['name' => 'VLAN ' . $vlanNumber]
+        ));
+
+        return $vlan?->id;
+    }
+
+    /**
+     * Best-effort derivation of VLAN number from interface name (e.g. vlan60, VLAN_835).
+     */
+    private function resolveVlanIdFromInterfaceName(Device $device, string $ifaceName): ?int
+    {
+        if (preg_match('/vlan[_-]?(\d{1,4})/i', $ifaceName, $m)) {
+            $num = (int) $m[1];
+            return $this->resolveVlanId($device, $num);
+        }
+
+        return null;
+    }
+
+    /**
+     * Find or create a subnet using attributes; if a soft-deleted row exists, restore it.
+     */
+    private function firstOrRestoreSubnet(array $attributes, array $values): Subnet
+    {
+        return Subnet::withoutTenantScope(function () use ($attributes, $values) {
+            $query = Subnet::withTrashed()->where($attributes);
+            $existing = $query->first();
+            if ($existing) {
+                if ($existing->trashed()) {
+                    $existing->restore();
+                }
+                // Update mutable fields (vlan, scan_agent, flags) without touching subnet/mask/customer
+                $existing->fill($values);
+                $existing->save();
+                return $existing;
+            }
+
+            return Subnet::create(array_merge($attributes, $values));
+        });
     }
 }

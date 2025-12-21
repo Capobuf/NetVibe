@@ -8,6 +8,8 @@ It includes:
 - job handlers:
 	- `handleCheckConnectivity` — attempts to call Mikrotik REST endpoints `/rest/system/resource` and `/rest/system/identity` using provided credentials
 	- `handleDiscoveryDeep` — esegue discovery REST Mikrotik e costruisce il `device_result` completo; in presenza di `cidr` o `legacy_fping` può ancora richiamare il percorso di compatibilità `handleLegacyConfig`.
+		- Endpoints raccolti: `/rest/system/resource`, `/rest/system/identity`, `/rest/interface`, `/rest/interface/bridge`, `/rest/interface/bridge/port`, `/rest/interface/bridge/vlan`, `/rest/interface/bridge/host`, `/rest/ip/neighbor`, `/rest/ip/arp`, `/rest/ip/dhcp-server/lease`.
+		- Il `device_result` include `bridge_ports` (pvid/frame-types/bridge) e una sezione `bridges.items[]` che raggruppa per bridge: porte (pvid/frame-types/tagged/untagged) e VLAN mappate per quel bridge, oltre a `vlans`, `interfaces`, `bridge_hosts`, `neighbors`, `arp`, `dhcp_leases`.
 - Dockerfile e `remote-agent/docker-compose.yml` di esempio per eseguire l’agent.
 
 Notes / runtime configuration

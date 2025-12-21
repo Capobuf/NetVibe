@@ -32,7 +32,10 @@ class IngestMikrotikTopologyAction
         if (is_array($interfaces)) {
             foreach ($interfaces as $iface) {
                 $name = $iface['name'] ?? $iface['interface'] ?? null;
-                if (! $name) return;
+                if (! $name) {
+                    Log::warning('IngestMikrotikTopologyAction: interface without name skipped', ['device_id' => $device->id]);
+                    continue;
+                }
 
                 $port = $device->ports()->firstOrCreate(['name' => $name], ['device_id' => $device->id]);
 
@@ -72,34 +75,19 @@ class IngestMikrotikTopologyAction
                     $port->vlan_mode = $vlanMode;
                 }
 
-                if (! empty($iface['pvid'])) {
-                    // pvid might be string; cast to int
-                    $port->pvid = (int) $iface['pvid'];
-                }
-
-                $taggedRaw = $iface['tagged-vlans'] ?? ($iface['tagged_vlans'] ?? ($iface['taggedVlans'] ?? null));
-                if (! empty($taggedRaw)) {
-                    $tv = $taggedRaw;
-                    // Normalize various input shapes: CSV string, array of ints/strings
-                    if (is_string($tv)) {
-                        $arr = array_filter(array_map('trim', explode(',', $tv)), fn($v) => $v !== '');
-                        $arr = array_values(array_map(fn($v) => is_numeric($v) ? (int) $v : $v, $arr));
-                    } elseif (is_array($tv)) {
-                        $arr = array_values(array_filter(array_map(fn($v) => is_numeric($v) ? (int) $v : $v, $tv), fn($v) => $v !== null && $v !== ''));
-                    } else {
-                        $arr = null;
-                    }
-
-                    if ($arr !== null) {
-                        $port->tagged_vlans = $arr;
-                    }
-                }
-
                 $status = $iface['running'] ?? $iface['status'] ?? ($iface['oper_status'] ?? null);
                 if ($status !== null) {
-                    // map truthy/boolean to active/down
-                    $running = filter_var($status, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-                    $port->status = ($running === null) ? $port->status : ($running ? 'active' : 'down');
+                    // map common string values and booleans to active/down
+                    if (is_string($status) && strtolower($status) === 'up') {
+                        $port->status = 'active';
+                    } elseif (is_string($status) && strtolower($status) === 'down') {
+                        $port->status = 'down';
+                    } else {
+                        $running = filter_var($status, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                        if ($running !== null) {
+                            $port->status = $running ? 'active' : 'down';
+                        }
+                    }
                 }
 
                 $port->last_seen = $now;
@@ -114,24 +102,130 @@ class IngestMikrotikTopologyAction
             }
         }
 
-        // VLAN table: create VLANs and map ports
-        // Per-port VLAN membership tramite bridge_vlan è rimandata; qui usiamo solo payload legacy se presente.
-        $vlans = $data['bridge_vlan'] ?? $data['bridge']['vlan'] ?? $data['result']['bridge_vlan'] ?? [];
-        if (is_array($vlans)) {
-            foreach ($vlans as $entry) {
-                $vlanIds = $this->parseList($entry['vlan-ids'] ?? $entry['vlan_ids'] ?? $entry['vlans'] ?? null);
-                if (empty($vlanIds)) {
-                    return;
+        // VLAN list (device_result.vlans.items) — Fase 1 non include tagging per-port
+        $vlansSection = $data['vlans'] ?? null;
+        $vlanItems = [];
+        if (is_array($vlansSection) && isset($vlansSection['items']) && is_array($vlansSection['items'])) {
+            $vlanItems = $vlansSection['items'];
+        } elseif (is_array($vlansSection)) {
+            $vlanItems = $vlansSection;
+        }
+        foreach ($vlanItems as $item) {
+            $vid = $item['vlan_id'] ?? $item['vlanid'] ?? $item['id'] ?? null;
+            if ($vid === null) {
+                continue;
+            }
+            $vid = (int) $vid;
+            $name = $item['name'] ?? ('VLAN ' . $vid);
+            $isBlacklisted = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $vid)->exists());
+            if ($isBlacklisted) {
+                continue;
+            }
+            \App\Models\Vlan::withoutTenantScope(fn () => \App\Models\Vlan::firstOrCreate(
+                ['number' => $vid, 'customer_id' => $device->customer_id],
+                ['name' => $name]
+            ));
+        }
+
+        // Prefer structured bridges dataset when available
+        $bridges = [];
+        $bridgesSection = $data['bridges']['items'] ?? $data['bridges'] ?? null;
+        if (is_array($bridgesSection) && isset($bridgesSection[0]) || (isset($bridgesSection['items']) && is_array($bridgesSection['items']))) {
+            $bridges = isset($bridgesSection['items']) ? $bridgesSection['items'] : $bridgesSection;
+        }
+
+        $bridgePortsSection = $data['bridge_ports'] ?? $data['bridge']['ports'] ?? $data['bridge_port'] ?? $data['result']['bridge_ports'] ?? [];
+        $bridgeVlanSection = $data['bridge_vlan'] ?? $data['bridge']['vlan'] ?? $data['bridgeVlan'] ?? $data['result']['bridge_vlan'] ?? [];
+
+        // Map per-port PVID and frame-types
+        $portPvid = [];
+        $portFrameTypes = [];
+        if (is_array($bridgePortsSection)) {
+            $items = isset($bridgePortsSection['items']) && is_array($bridgePortsSection['items'])
+                ? $bridgePortsSection['items']
+                : $bridgePortsSection;
+            foreach ($items as $bp) {
+                $pname = $bp['interface'] ?? $bp['name'] ?? null;
+                if (! $pname) {
+                    continue;
+                }
+                if (isset($bp['pvid'])) {
+                    $portPvid[$pname] = (int) $bp['pvid'];
+                }
+                if (isset($bp['frame-types']) || isset($bp['frame_types'])) {
+                    $portFrameTypes[$pname] = $bp['frame-types'] ?? $bp['frame_types'];
+                }
+            }
+        }
+
+        // Apply PVID/native VLAN where allowed
+        if (! empty($portPvid)) {
+            foreach ($portPvid as $pname => $pvid) {
+                $port = $device->ports()->where('name', $pname)->first();
+                if (! $port) {
+                    continue;
+                }
+                $frameTypes = $portFrameTypes[$pname] ?? null;
+                if ($frameTypes === 'admit-only-vlan-tagged') {
+                    continue; // no native VLAN
+                }
+                $port->pvid = $pvid;
+                $port->save();
+            }
+        }
+
+        // Process structured bridges dataset if present (bridge-aware mapping)
+        $usedBridgesDataset = false;
+        if (! empty($bridges)) {
+            $usedBridgesDataset = true;
+            foreach ($bridges as $bridge) {
+                $bridgePorts = $bridge['ports'] ?? [];
+                $bridgeVlans = $bridge['vlans'] ?? [];
+                $bridgeName = $bridge['name'] ?? null;
+                $bridgePvid = $bridge['pvid'] ?? null;
+
+                // Ensure the bridge interface itself exists as a port and inherits its PVID (so ARP on the bridge has a PVID hint)
+                if ($bridgeName) {
+                    $bridgePort = $device->ports()->firstOrCreate(['name' => $bridgeName], ['device_id' => $device->id]);
+                    if ($bridgePvid !== null) {
+                        $bridgePort->pvid = (int) $bridgePvid;
+                        $bridgePort->save();
+                    }
                 }
 
-                $taggedPorts = $this->parseList($entry['tagged'] ?? $entry['tagged-ports'] ?? $entry['tagged_ports'] ?? $entry['ports'] ?? null);
-                $untaggedPorts = $this->parseList($entry['untagged'] ?? $entry['untagged-ports'] ?? $entry['untagged_ports'] ?? null);
+                $portFrameMap = [];
+                foreach ($bridgePorts as $bp) {
+                    $pname = $bp['name'] ?? null;
+                    if (! $pname) {
+                        continue;
+                    }
 
-                foreach ($vlanIds as $vid) {
-                    $nameSource = $entry['comment'] ?? $untaggedPorts[0] ?? $taggedPorts[0] ?? null;
-                    $vlanName = $nameSource ? (string) $nameSource : 'VLAN ' . $vid;
+                    $port = $device->ports()->firstOrCreate(['name' => $pname], ['device_id' => $device->id]);
+                    $frameTypes = $bp['frame_types'] ?? null;
+                    $portFrameMap[$pname] = $frameTypes;
 
+                    if (! empty($bp['pvid']) && $frameTypes !== 'admit-only-vlan-tagged') {
+                        $port->pvid = (int) $bp['pvid'];
+                    }
 
+                    if (! empty($bp['tagged']) && is_array($bp['tagged'])) {
+                        $tagged = $port->tagged_vlans ?? [];
+                        foreach ($bp['tagged'] as $vid) {
+                            if (! in_array((int) $vid, $tagged, true)) {
+                                $tagged[] = (int) $vid;
+                            }
+                        }
+                        $port->tagged_vlans = array_values($tagged);
+                    }
+
+                    $port->save();
+                }
+
+                foreach ($bridgeVlans as $entry) {
+                    $vid = $entry['vlan_id'] ?? ($entry['vlanid'] ?? null);
+                    if ($vid === null) {
+                        continue;
+                    }
                     $vid = (int) $vid;
                     $isBlacklistedVlan = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $vid)->exists());
                     if ($isBlacklistedVlan) {
@@ -140,17 +234,23 @@ class IngestMikrotikTopologyAction
 
                     $vlan = \App\Models\Vlan::withoutTenantScope(fn () => \App\Models\Vlan::firstOrCreate(
                         ['number' => $vid, 'customer_id' => $device->customer_id],
-                        ['name' => $vlanName]
+                        ['name' => $entry['name'] ?? ('VLAN ' . $vid)]
                     ));
 
-                    // Map PVID/tagged to ports
+                    $taggedPorts = $entry['tagged_ports'] ?? [];
+                    $untaggedPorts = $entry['untagged_ports'] ?? [];
+
                     foreach ($untaggedPorts as $pname) {
                         $port = $device->ports()->where('name', $pname)->first();
                         if ($port) {
-                            $port->pvid = $vid;
-                            $port->save();
+                            $frameTypes = $portFrameMap[$pname] ?? null;
+                            if ($frameTypes !== 'admit-only-vlan-tagged') {
+                                $port->pvid = $vid;
+                                $port->save();
+                            }
                         }
                     }
+
                     foreach ($taggedPorts as $pname) {
                         $port = $device->ports()->where('name', $pname)->first();
                         if ($port) {
@@ -159,6 +259,66 @@ class IngestMikrotikTopologyAction
                                 $tagged[] = $vid;
                                 $port->tagged_vlans = array_values($tagged);
                                 $port->save();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // VLAN table: create VLANs and map ports using bridge_vlan dataset
+        if (! $usedBridgesDataset) {
+            $vlans = $bridgeVlanSection;
+            if (is_array($vlans)) {
+                foreach ($vlans as $entry) {
+                    if (isset($entry['disabled']) && filter_var($entry['disabled'], FILTER_VALIDATE_BOOLEAN)) {
+                        continue;
+                    }
+                    $vlanIds = $this->parseList($entry['vlan-ids'] ?? $entry['vlan_ids'] ?? $entry['vlans'] ?? null);
+                    if (empty($vlanIds)) {
+                        Log::warning('IngestMikrotikTopologyAction: vlan entry without vlan-ids skipped', ['device_id' => $device->id]);
+                        continue;
+                    }
+
+                    $taggedPorts = $this->parseList($entry['tagged'] ?? $entry['tagged-ports'] ?? $entry['tagged_ports'] ?? $entry['ports'] ?? null);
+                    $untaggedPorts = $this->parseList($entry['untagged'] ?? $entry['untagged-ports'] ?? $entry['untagged_ports'] ?? null);
+
+                    foreach ($vlanIds as $vid) {
+                        $nameSource = $entry['comment'] ?? $untaggedPorts[0] ?? $taggedPorts[0] ?? null;
+                        $vlanName = $nameSource ? (string) $nameSource : 'VLAN ' . $vid;
+
+
+                        $vid = (int) $vid;
+                        $isBlacklistedVlan = \App\Models\VlanBlacklist::withoutTenantScope(fn () => \App\Models\VlanBlacklist::where('customer_id', $device->customer_id)->where('vlan_number', $vid)->exists());
+                        if ($isBlacklistedVlan) {
+                            continue;
+                        }
+
+                        $vlan = \App\Models\Vlan::withoutTenantScope(fn () => \App\Models\Vlan::firstOrCreate(
+                            ['number' => $vid, 'customer_id' => $device->customer_id],
+                            ['name' => $vlanName]
+                        ));
+
+                        // Map PVID/tagged to ports
+                        foreach ($untaggedPorts as $pname) {
+                            $port = $device->ports()->where('name', $pname)->first();
+                            if ($port) {
+                                $frameTypes = $portFrameTypes[$pname] ?? null;
+                                if ($frameTypes !== 'admit-only-vlan-tagged') {
+                                    $port->pvid = $vid;
+                                    $port->save();
+                                }
+                            }
+                        }
+                        foreach ($taggedPorts as $pname) {
+                            $port = $device->ports()->where('name', $pname)->first();
+                            if ($port) {
+                                $tagged = $port->tagged_vlans ?? [];
+                                if (! in_array($vid, $tagged, true)) {
+                                    $tagged[] = $vid;
+                                    $port->tagged_vlans = array_values($tagged);
+                                    $port->save();
+                                }
                             }
                         }
                     }
@@ -192,7 +352,8 @@ class IngestMikrotikTopologyAction
         if (is_array($bridgeHosts)) {
             foreach ($bridgeHosts as $h) {
                 if (! empty($h['local']) && filter_var($h['local'], FILTER_VALIDATE_BOOLEAN)) {
-                    return;
+                    Log::info('IngestMikrotikTopologyAction: skipping local bridge host entry', ['device_id' => $device->id]);
+                    continue;
                 }
 
                 $mac = MacAddressService::normalize($h['mac-address'] ?? $h['mac'] ?? null);
@@ -250,11 +411,14 @@ class IngestMikrotikTopologyAction
                                 $ip->save();
                             } else {
                                 $scanAgentId = (int) ($device->scan_agent_id ?? 0);
-                                if ($scanAgentId <= 0) {
-                                    throw new \RuntimeException('IngestMikrotikTopologyAction: device is missing scan_agent_id; cannot create DiscoveryEvent safely.');
-                                }
-                                if (empty($device->customer_id)) {
-                                    throw new \RuntimeException('IngestMikrotikTopologyAction: device is missing customer_id; cannot create DiscoveryEvent safely.');
+                                if ($scanAgentId <= 0 || empty($device->customer_id)) {
+                                    Log::warning('IngestMikrotikTopologyAction: skip DiscoveryEvent (missing scan_agent_id or customer_id)', [
+                                        'device_id' => $device->id,
+                                        'scan_agent_id' => $device->scan_agent_id,
+                                        'customer_id' => $device->customer_id,
+                                        'ip_addr' => $addr,
+                                    ]);
+                                    continue;
                                 }
 
                                 DiscoveryEvent::create([

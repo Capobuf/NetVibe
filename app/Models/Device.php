@@ -73,7 +73,6 @@ class Device extends Model
         'auth_password',
         'is_monitored',
         'auth_driver',
-        'management_ip',
         'brand',
         'auth_extra',
         'auth_status',

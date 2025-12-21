@@ -37,7 +37,7 @@ use Filament\Support\Icons\Heroicon;
 use App\Jobs\ScanSubnetJob;
 use BackedEnum;
 use App\Filament\Exports\SubnetExporter;
-use Torgodly\Html2Media\Tables\Actions\Html2MediaAction;
+use Torgodly\Html2Media\Actions\Html2MediaAction;
 
 class SubnetResource extends Resource
 {

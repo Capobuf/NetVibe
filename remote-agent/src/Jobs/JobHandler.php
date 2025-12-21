@@ -127,6 +127,12 @@ class JobHandler
             $this->logger->debug('DiscoveryDeep: GET interface ' . $host);
             $interfaces = $this->mikrotikDriver->deviceGet($host, '/rest/interface', $username, $password, $timeoutSec);
 
+            $this->logger->debug('DiscoveryDeep: GET interface/bridge ' . $host);
+            $bridges = $this->mikrotikDriver->deviceGet($host, '/rest/interface/bridge', $username, $password, $timeoutSec);
+
+            $this->logger->debug('DiscoveryDeep: GET interface/bridge/port ' . $host);
+            $bridgePorts = $this->mikrotikDriver->deviceGet($host, '/rest/interface/bridge/port', $username, $password, $timeoutSec);
+
             $this->logger->debug('DiscoveryDeep: GET interface/bridge/vlan ' . $host);
             $vlans = $this->mikrotikDriver->deviceGet($host, '/rest/interface/bridge/vlan', $username, $password, $timeoutSec);
 
@@ -142,6 +148,9 @@ class JobHandler
             $this->logger->debug('DiscoveryDeep: GET ip/dhcp-server/lease ' . $host);
             $dhcp = $this->mikrotikDriver->deviceGet($host, '/rest/ip/dhcp-server/lease', $username, $password, $timeoutSec);
 
+            $this->logger->debug('DiscoveryDeep: GET ip/address ' . $host);
+            $ipAddresses = $this->mikrotikDriver->deviceGet($host, '/rest/ip/address', $username, $password, $timeoutSec);
+
             $this->logger->debug('DiscoveryDeep: completed fetch for ' . $host);
 
             $deviceResult = $this->deviceResultBuilder->fromMikrotik(
@@ -149,7 +158,10 @@ class JobHandler
                 $resource,
                 $identity,
                 $interfaces,
+                $bridgePorts,
                 $vlans,
+                $bridges,
+                $ipAddresses,
                 $arp,
                 $dhcp,
                 $lldp,

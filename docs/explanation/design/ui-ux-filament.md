@@ -17,7 +17,7 @@ Discovery
 - ManageDiscoverySettings: modifica Spatie DiscoverySettings (auto discovery, ICMP, pruning, polling).
 
 Racks & Devices
-- DeviceResource principale in Racks & Devices; duplicato Infrastructure nascosto con slug `infra-devices`.
+- DeviceResource principale in Racks & Devices; il duplicato Infrastructure (`infra-devices`) è stato rimosso.
 - Device form: tenant default, filtri rack, quick-create rack/model, monitoring/auth, agent selection hint, credential profile, Mgmt IP.
 - Ports relation manager: connect/disconnect con ManageLinkService, mostra VLAN/tagging, richiede porte libere.
 - CRUD per Racks, CableTypes, Links (schema/table condivisi).

@@ -23,7 +23,7 @@ Discovery & agenti
 
 DCIM / fisico
 - `device_models`: hardware tipizzato con porte e layout; quick-create normalizza enum (DeviceModel).
-- `devices`: tenant-aware, inferisce customer da session/location/rack; genera porte on-create; campi monitor/auth (Device).
+- `devices`: tenant-aware, inferisce customer da session/location/rack; genera porte on-create; campi monitor/auth; Management IP usa il campo `ip_addr` (colonna `management_ip` presente ma non esposta in UI).
 - `ports`: metadati VLAN/topologia, `tagged_vlans` array, `connected_to_port_id` (Port).
 - `links`: connette due porte con cable_type e guardie self/duplicati; `cable_types` dictionary (Link, CableType).
 - `racks`: relazione customer/location; devices appartengono a rack.

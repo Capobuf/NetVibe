@@ -58,7 +58,8 @@ class DeviceForm
                     // When in tenant mode default and hide the field
                     ->default(fn () => session('tenant_id'))
                     ->hidden(fn () => ! blank(session('tenant_id')))
-                    ->nullable()
+                    ->nullable(false)
+                    ->required()
                     ->live()
                     ->searchable()
                     ->preload()
@@ -104,11 +105,6 @@ class DeviceForm
                                       $q2->from('locations')->select('id')->where('customer_id', $customerId);
                                   });
                             });
-                        }
-
-                        $defaultRackId = request()->query('rack_id');
-                        if (! empty($defaultRackId)) {
-                            $query->orWhere('id', $defaultRackId);
                         }
 
                         return $query->orderBy('name')->pluck('name', 'id');
@@ -182,7 +178,7 @@ class DeviceForm
                 // Monitoring / auth
                 \Filament\Forms\Components\Toggle::make('is_monitored')
                     ->label('Is Monitored')
-                    ->default(true)
+                    ->default(false)
                     ->helperText('If disabled, the device will not be polled by agents.'),
 
                 Select::make('scan_agent_id')
@@ -230,18 +226,12 @@ class DeviceForm
                     ->disabled(fn ($get, $record) => $record && $record->exists && $get('is_monitored'))
                     ->helperText('When monitoring is enabled, hostname will be fetched from the device identity.'),
 
-                TextInput::make('management_ip')
-                    ->label('Management IP')
-                    ->helperText('Authoritative management address used for discovery according to the PDL.')
-                    ->default(null)
-                    ->nullable()
-                    ->rules(['ipv4']),
-
                 TextInput::make('ip_addr')
-                    ->label('IP Address')
-                    ->helperText('IPv4 address used by the agent to reach the device (recommended when monitoring)')
+                    ->label('Management IP')
+                    ->helperText('IPv4 address used by the agent to reach the device (required when monitoring).')
                     ->default(null)
                     ->nullable()
+                    ->required(fn ($get) => (bool) $get('is_monitored'))
                     ->rules(['ipv4']),
 
                 TextInput::make('rack_position')

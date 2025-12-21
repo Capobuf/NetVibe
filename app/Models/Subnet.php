@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Schema;
 
 class Subnet extends Model
 {
@@ -134,8 +135,15 @@ class Subnet extends Model
 
     public function subnetBlacklists()
     {
-        return $this->hasMany(SubnetBlacklist::class, 'subnet_cidr', 'cidr')
-            ->whereColumn('customer_id', 'subnets.customer_id');
+        $relation = $this->hasMany(SubnetBlacklist::class, 'subnet_cidr', 'cidr');
+
+        // Apply customer scoping by value to avoid cross-table column references when the
+        // parent table is not joined (prevents "unknown column subnets.customer_id").
+        if (Schema::hasColumn('subnet_blacklists', 'customer_id') && $this->customer_id) {
+            return $relation->where('customer_id', $this->customer_id);
+        }
+
+        return $relation;
     }
 
     public function getIsBlacklistedAttribute(): bool

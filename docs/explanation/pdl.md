@@ -2413,8 +2413,7 @@ Questa sezione elenca debiti e rischi residui, da tenere allineati con `docs/99_
   - Alcuni vendor potranno non essere pienamente supportati (MIB proprietarie, mapping incompleto); questa è una limitazione nota.  
   - Discovery principale per Mikrotik resta via REST; SNMP per Mikrotik è usato solo come fallback o arricchimento controllato, nel rispetto delle regole di merge policy.
 - **DeviceResource duplicata**
-  - Esiste (o è esistita) una DeviceResource duplicata (`infra-devices`).  
-  - Il PDL sancisce che esiste una sola `DeviceResource` principale sotto il gruppo Racks & Devices; l’altra deve essere rimossa o resa chiaramente legacy.  
+  - La DeviceResource duplicata (`infra-devices`) è stata rimossa; resta solo la risorsa canonica sotto il gruppo Racks & Devices.  
   - Rif. `docs/05_UI_UX_FILAMENT.md` e `docs/99_DEBT_AND_INCONSISTENCIES.md`.
 - **Concetti legacy (sections, VRF, L2Domain, debug endpoints)**
   - `sections`, VRF, L2Domain e debug endpoints tipo `/_debug/*` sono considerati concetti non più usati e devono essere rimossi dal codice e dalla UI.  

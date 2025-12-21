@@ -34,7 +34,10 @@ class DeviceResultBuilder
         array $resource,
         array $identity,
         array $interfaces,
+        array $bridgePorts,
         array $bridgeVlan,
+        array $bridges,
+        array $ipAddresses,
         array $arp,
         array $dhcp,
         array $neighbors,
@@ -46,7 +49,10 @@ class DeviceResultBuilder
         [$resource, $errors] = $this->extractErrorAware($resource, $errors, 'mikrotik_rest', '/rest/system/resource');
         [$identity, $errors] = $this->extractErrorAware($identity, $errors, 'mikrotik_rest', '/rest/system/identity');
         [$interfaces, $errors] = $this->extractListErrorAware($interfaces, $errors, 'mikrotik_rest', '/rest/interface');
+        [$bridgePorts, $errors] = $this->extractListErrorAware($bridgePorts, $errors, 'mikrotik_rest', '/rest/interface/bridge/port');
         [$bridgeVlan, $errors] = $this->extractListErrorAware($bridgeVlan, $errors, 'mikrotik_rest', '/rest/interface/bridge/vlan');
+        [$bridges, $errors] = $this->extractListErrorAware($bridges, $errors, 'mikrotik_rest', '/rest/interface/bridge');
+        [$ipAddresses, $errors] = $this->extractListErrorAware($ipAddresses, $errors, 'mikrotik_rest', '/rest/ip/address');
         [$arp, $errors] = $this->extractListErrorAware($arp, $errors, 'mikrotik_rest', '/rest/ip/arp');
         [$dhcp, $errors] = $this->extractListErrorAware($dhcp, $errors, 'mikrotik_rest', '/rest/ip/dhcp-server/lease');
         [$neighbors, $errors] = $this->extractListErrorAware($neighbors, $errors, 'mikrotik_rest', '/rest/ip/neighbor');
@@ -55,6 +61,9 @@ class DeviceResultBuilder
         $device = $this->buildDeviceSection($targetIp, $resource, $identity);
         $interfacesSection = $this->buildInterfacesSection($interfaces);
         $vlansSection = $this->buildVlansSection($bridgeVlan);
+        $bridgePortsSection = $this->buildBridgePortsSection($bridgePorts);
+        $bridgesSection = $this->buildBridgesSection($bridges, $bridgePorts, $bridgeVlan);
+        $ipAddressesSection = $this->buildIpAddressesSection($ipAddresses);
         $arpSection = $this->buildArpSection($arp);
         $dhcpSection = $this->buildDhcpSection($dhcp);
         $neighborsSection = $this->buildNeighborsSection($neighbors);
@@ -65,6 +74,9 @@ class DeviceResultBuilder
             'device' => $device,
             'interfaces' => $interfacesSection,
             'vlans' => $vlansSection,
+            'bridge_ports' => $bridgePortsSection,
+            'bridges' => $bridgesSection,
+            'ip_addresses' => $ipAddressesSection,
             'arp' => $arpSection,
             'dhcp_leases' => $dhcpSection,
             'neighbors' => $neighborsSection,
@@ -159,6 +171,173 @@ class DeviceResultBuilder
                     'name' => null,
                 ];
             }
+        }
+
+        return [
+            'items' => $items,
+            'partial' => false,
+        ];
+    }
+
+    private function buildBridgePortsSection(array $bridgePorts): array
+    {
+        $items = [];
+        foreach ($bridgePorts as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $items[] = [
+                'interface' => $row['interface'] ?? ($row['name'] ?? ''),
+                'bridge' => $row['bridge'] ?? null,
+                'pvid' => isset($row['pvid']) ? (int) $row['pvid'] : null,
+                'frame_types' => $row['frame-types'] ?? ($row['frame_types'] ?? null),
+                'ingress_filtering' => isset($row['ingress-filtering']) ? $row['ingress-filtering'] : null,
+            ];
+        }
+
+        return [
+            'items' => $items,
+            'partial' => false,
+        ];
+    }
+
+    private function buildBridgesSection(array $bridges, array $bridgePorts, array $bridgeVlan): array
+    {
+        $bridgeMap = [];
+
+        foreach ($bridges as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $name = $row['name'] ?? 'default';
+            $bridgeMap[$name] = [
+                'name' => $name,
+                'vlan_mode' => '802.1q',
+                'vlan_filtering' => isset($row['vlan-filtering']) ? filter_var($row['vlan-filtering'], FILTER_VALIDATE_BOOLEAN) : null,
+                'pvid' => isset($row['pvid']) ? (int) $row['pvid'] : null,
+                'ports' => [],
+                'vlans' => [],
+            ];
+        }
+
+        foreach ($bridgePorts as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $bridgeName = $row['bridge'] ?? 'default';
+            $portName = $row['interface'] ?? ($row['name'] ?? null);
+            if (! $portName) {
+                continue;
+            }
+            if (! isset($bridgeMap[$bridgeName])) {
+                $bridgeMap[$bridgeName] = [
+                    'name' => $bridgeName,
+                    'vlan_mode' => '802.1q',
+                    'vlan_filtering' => null,
+                    'pvid' => null,
+                    'ports' => [],
+                    'vlans' => [],
+                ];
+            }
+
+            $bridgeMap[$bridgeName]['ports'][$portName] = [
+                'name' => $portName,
+                'pvid' => isset($row['pvid']) ? (int) $row['pvid'] : null,
+                'frame_types' => $row['frame-types'] ?? ($row['frame_types'] ?? null),
+                'tagged' => [],
+                'untagged' => false,
+            ];
+        }
+
+        foreach ($bridgeVlan as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if (isset($row['disabled']) && filter_var($row['disabled'], FILTER_VALIDATE_BOOLEAN)) {
+                continue;
+            }
+            $bridgeName = $row['bridge'] ?? 'default';
+            $vlanIds = $this->parseVlanIds((string) ($row['vlan-ids'] ?? ''));
+            $taggedPorts = $this->parseListToArray($row['tagged'] ?? ($row['tagged-ports'] ?? ($row['tagged_ports'] ?? ($row['ports'] ?? []))));
+            $untaggedPorts = $this->parseListToArray($row['untagged'] ?? ($row['untagged-ports'] ?? ($row['untagged_ports'] ?? [])));
+
+            if (! isset($bridgeMap[$bridgeName])) {
+                $bridgeMap[$bridgeName] = [
+                    'name' => $bridgeName,
+                    'vlan_mode' => '802.1q',
+                    'vlan_filtering' => null,
+                    'pvid' => null,
+                    'ports' => [],
+                    'vlans' => [],
+                ];
+            }
+
+            foreach ($vlanIds as $vid) {
+                $bridgeMap[$bridgeName]['vlans'][] = [
+                    'vlan_id' => $vid,
+                    'tagged_ports' => $taggedPorts,
+                    'untagged_ports' => $untaggedPorts,
+                ];
+
+                foreach ($taggedPorts as $p) {
+                    if (! isset($bridgeMap[$bridgeName]['ports'][$p])) {
+                        $bridgeMap[$bridgeName]['ports'][$p] = [
+                            'name' => $p,
+                            'pvid' => null,
+                            'frame_types' => null,
+                            'tagged' => [],
+                            'untagged' => false,
+                        ];
+                    }
+                    $bridgeMap[$bridgeName]['ports'][$p]['tagged'][] = $vid;
+                }
+
+                foreach ($untaggedPorts as $p) {
+                    if (! isset($bridgeMap[$bridgeName]['ports'][$p])) {
+                        $bridgeMap[$bridgeName]['ports'][$p] = [
+                            'name' => $p,
+                            'pvid' => null,
+                            'frame_types' => null,
+                            'tagged' => [],
+                            'untagged' => false,
+                        ];
+                    }
+                    $bridgeMap[$bridgeName]['ports'][$p]['untagged'] = true;
+                }
+            }
+        }
+
+        $items = [];
+        foreach ($bridgeMap as $bridge) {
+            // normalize port map to array values
+            $bridge['ports'] = array_values($bridge['ports']);
+            $items[] = $bridge;
+        }
+
+        return [
+            'items' => $items,
+            'partial' => false,
+        ];
+    }
+
+    private function buildIpAddressesSection(array $ipAddresses): array
+    {
+        $items = [];
+        foreach ($ipAddresses as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            if (isset($row['disabled']) && filter_var($row['disabled'], FILTER_VALIDATE_BOOLEAN)) {
+                continue;
+            }
+            $items[] = [
+                'address' => $row['address'] ?? null,
+                'interface' => $row['interface'] ?? ($row['actual-interface'] ?? null),
+                'network' => $row['network'] ?? null,
+                'dynamic' => isset($row['dynamic']) ? filter_var($row['dynamic'], FILTER_VALIDATE_BOOLEAN) : null,
+            ];
         }
 
         return [
@@ -350,6 +529,18 @@ class DeviceResultBuilder
         }
         $ids = array_values(array_filter($ids, fn ($v) => $v >= 1 && $v <= 4094));
         return array_unique($ids);
+    }
+
+    private function parseListToArray($value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('trim', $value), fn ($v) => $v !== '' && $v !== null));
+        }
+        if (is_string($value)) {
+            $parts = array_map('trim', preg_split('/[,; ]+/', $value));
+            return array_values(array_filter($parts, fn ($v) => $v !== ''));
+        }
+        return [];
     }
 
     private function mapInterfaceType(string $type): string

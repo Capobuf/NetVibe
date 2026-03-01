@@ -1,0 +1,6 @@
+debugpy
+django-debug-toolbar
+ipdb
+pytest
+pytest-django
+

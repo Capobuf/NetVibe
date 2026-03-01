@@ -1,0 +1,123 @@
+diff --git a/c:\Users\dot\Documents\NetVibe\llm.txt b/c:\Users\dot\Documents\NetVibe\llm.txt
+deleted file mode 100644
+--- a/c:\Users\dot\Documents\NetVibe\llm.txt
++++ /dev/null
+@@ -1,118 +0,0 @@
+-LLM_BASE_RULES.txt
+-Version: 1.0
+-Scope: This file defines non-negotiable rules for any LLM/agent working on this repository.
+-
+-0) Prime directive
+-- Do not invent.
+-- Do not assume.
+-- Do not guess file contents, commands output, or runtime behavior.
+-- If information is missing, ask targeted questions BEFORE changing code.
+-- If you cannot verify something, say “UNVERIFIED” and explain what would verify it.
+-
+-1) Goals and boundaries
+-- Optimize for: simplicity, reproducibility, maintainability.
+-- Explicitly out of scope unless the PO requests it:
+-  - Node/npm/yarn/pnpm, bundlers, asset pipelines, Tailwind builds, Vite/Webpack
+-  - extra services (redis/celery/nginx/traefik/elasticsearch/etc.)
+-  - production hardening (keep dev-first unless asked)
+-
+-2) Communication contract (PO-facing)
+-- Keep outputs actionable and copy/paste-ready.
+-- Always provide:
+-  - a short plan (max 10 bullets)
+-  - exact commands to run
+-  - list of files created/modified
+-  - verification steps (what to check in browser / logs)
+-- No filler, no generic “best practices” unless tied to a concrete change.
+-
+-3) Evidence and verification (no fake claims)
+-- Never claim you ran commands unless you actually did.
+-- When you propose a command, also state what “success” looks like.
+-- Prefer deterministic checks (exit code, specific URL, specific log line).
+-
+-4) File handling rules (anti-drift)
+-- Before editing ANY file:
+-  - read it fully
+-  - quote the exact snippets you will change (small excerpts only)
+-  - avoid “…”. If a file is long, read it in chunks and keep a “reading ledger”:
+-    - file path
+-    - chunk ranges
+-    - key findings
+-- When you modify files:
+-  - show a minimal diff-like summary (what changed, why)
+-  - do not refactor unrelated code
+-
+-5) Dependency policy (no complexity creep)
+-- “If it’s not required, it’s forbidden.”
+-- Runtime deps must stay minimal.
+-- Dev-only tooling must live in requirements-dev.txt (or equivalent), never runtime.
+-- Any new dependency requires:
+-  - why it’s needed
+-  - why built-in alternatives aren’t enough
+-  - how to remove it later
+-  - explicit PO approval if it changes scope
+-
+-6) Repository constraints (current project)
+-- Docker Compose: ONLY two services:
+-  - web (Django)
+-  - db (PostgreSQL)
+-- Postgres is always used (no SQLite fallback) unless PO changes requirement.
+-- DB must be internal-only:
+-  - no db ports mapped to host
+-- Use Compose healthchecks + depends_on service_healthy.
+-- No custom “wait-for-it” scripts unless healthchecks are insufficient and you explain why.
+-
+-7) Configuration rules (Django)
+-- Use environment variables (os.environ) for:
+-  - SECRET_KEY
+-  - DEBUG
+-  - ALLOWED_HOSTS
+-  - DATABASE settings
+-- Never commit secrets:
+-  - .env must be gitignored
+-  - provide .env.example
+-- Keep settings changes minimal (only what is required for the current milestone).
+-- Unfold:
+-  - "unfold" must be before "django.contrib.admin" in INSTALLED_APPS.
+-
+-8) Debugging rules (VS Code + Docker)
+-- Debugging must not add containers.
+-- Use debugpy for attach debugging:
+-  - expose a debug port ONLY in debug compose override
+-  - use --wait-for-client so breakpoints can be set before execution continues
+-- Provide a .vscode/launch.json with:
+-  - attach config
+-  - host localhost, debug port
+-  - pathMappings local workspace -> /app
+-- Keep debug features dev-only and easy to disable.
+-
+-9) Approved dev-only tools (optional, require PO approval before adding)
+-- debugpy (VS Code attach debugging)
+-- django-debug-toolbar (backend introspection: queries, timings)
+-- ipdb (interactive debugging)
+-- pytest + pytest-django (test-driven debugging)
+-Rules for these tools:
+-- enable only when DJANGO_DEBUG=1
+-- must not change runtime behavior when disabled
+-- must not introduce frontend build steps
+-
+-10) Output formatting requirements (to reduce ambiguity)
+-- Separate instructions from context using clear delimiters (e.g., ### sections).
+-- State assumptions explicitly in a dedicated section (prefer: “None”).
+-- Provide “Stop conditions”:
+-  - what must be true before proceeding to the next step
+-- When blocked:
+-  - ask only the minimum questions needed to unblock
+-  - propose 1–2 safe default options and why, but do not choose for the PO
+-
+-11) Security posture (dev-first, no theater)
+-- Do not add security tooling “just because”.
+-- Do not weaken security for convenience (e.g., hardcoding secrets).
+-- If a change increases risk, flag it explicitly and propose a low-cost mitigation.
+-
+-12) Versioning and change management
+-- Make small, reversible changes.
+-- Prefer small commits grouped by purpose (infra / settings / docs).
+-- Update README whenever you change how to run, debug, or verify.
+-
+-End of file.

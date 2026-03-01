@@ -31,10 +31,11 @@ Then run:
 
 ```powershell
 docker compose exec web python manage.py migrate
-docker compose exec web python manage.py createsuperuser
 ```
 
 The site is served at http://127.0.0.1:8000 and the admin is at http://127.0.0.1:8000/admin/.
+For local development, a default admin account is available with username `admin` and password `admin`.
+After migrating, the admin sidebar includes an `IPAM` group for Sections, Subnets, IP Addresses, and VLANs.
 When `DJANGO_DEBUG=1`, `django-debug-toolbar` is enabled at http://127.0.0.1:8000/__debug__/.
 
 ## Start (debug)
@@ -50,3 +51,19 @@ Then attach from VS Code using the included `Python: Attach (Docker)` launch con
 - No Node.js, npm, yarn, pnpm, or frontend build step
 - Only two containers: `web` and `db`
 - PostgreSQL is always used, with development-only dependencies kept in `requirements-dev.txt`
+
+## Translations
+
+Generate Italian message catalogs:
+
+```powershell
+docker compose exec web python manage.py makemessages -l it
+```
+
+Compile translations:
+
+```powershell
+docker compose exec web python manage.py compilemessages
+```
+
+Switch the active language with Django's standard endpoint at `/i18n/setlang/`.

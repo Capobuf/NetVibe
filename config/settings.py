@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -44,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ipam.apps.IpamConfig',
 ]
 
 if DEBUG:
@@ -53,6 +57,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'debug_toolbar.middleware.DebugToolbarMiddleware' if DEBUG else None,
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -124,7 +129,14 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
+
+LANGUAGES = [
+    ('en', _('English')),
+    ('it', _('Italian')),
+]
+
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 TIME_ZONE = 'UTC'
 
@@ -137,3 +149,122 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# A custom sidebar keeps the IPAM models one click away in the Unfold admin.
+UNFOLD = {
+    'SIDEBAR': {
+        'show_all_applications': True,
+        'navigation': [
+            {
+                'title': _('IPAM'),
+                'items': [
+                    {
+                        'title': _('Sections'),
+                        'link': reverse_lazy('admin:ipam_section_changelist'),
+                    },
+                    {
+                        'title': _('Subnets'),
+                        'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                    },
+                    {
+                        'title': _('IP Addresses'),
+                        'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
+                    },
+                    {
+                        'title': _('VLANs'),
+                        'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                    },
+                ],
+            },
+        ],
+    },
+    'TABS': [
+        {
+            'models': ['ipam.section', 'ipam.subnet', 'ipam.ipaddress', 'ipam.vlan'],
+            'items': [
+                {
+                    'title': _('Sections'),
+                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                },
+                {
+                    'title': _('Subnets'),
+                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                },
+                {
+                    'title': _('IP Addresses'),
+                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
+                },
+                {
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                },
+            ],
+        },
+        {
+            'models': [{'name': 'ipam.subnet', 'detail': True}],
+            'items': [
+                {
+                    'title': _('Sections'),
+                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                },
+                {
+                    'title': _('Subnets'),
+                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                },
+                {
+                    'title': _('IP Addresses'),
+                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
+                },
+                {
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                },
+                {
+                    'title': _('Details'),
+                    'link': '',
+                    'inline': 'general',
+                },
+                {
+                    'title': _('Child Subnets'),
+                    'link': '',
+                    'inline': 'children',
+                },
+                {
+                    'title': _('Subnet IPs'),
+                    'link': '',
+                    'inline': 'ipaddress_set',
+                },
+            ],
+        },
+        {
+            'models': [
+                {'name': 'ipam.section', 'detail': True},
+                {'name': 'ipam.ipaddress', 'detail': True},
+                {'name': 'ipam.vlan', 'detail': True},
+            ],
+            'items': [
+                {
+                    'title': _('Sections'),
+                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                },
+                {
+                    'title': _('Subnets'),
+                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                },
+                {
+                    'title': _('IP Addresses'),
+                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
+                },
+                {
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                },
+                {
+                    'title': _('Details'),
+                    'link': '',
+                    'inline': 'general',
+                },
+            ],
+        },
+    ],
+}

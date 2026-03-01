@@ -1,0 +1,232 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-01 16:14+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: config/settings.py:135
+msgid "English"
+msgstr ""
+
+#: config/settings.py:136
+msgid "Italian"
+msgstr ""
+
+#: config/settings.py:159
+msgid "IPAM"
+msgstr ""
+
+#: config/settings.py:162 config/settings.py:186 config/settings.py:207
+#: config/settings.py:247
+msgid "Sections"
+msgstr ""
+
+#: config/settings.py:166 config/settings.py:190 config/settings.py:211
+#: config/settings.py:251
+msgid "Subnets"
+msgstr ""
+
+#: config/settings.py:170 config/settings.py:194 config/settings.py:215
+#: config/settings.py:255
+msgid "IP Addresses"
+msgstr ""
+
+#: config/settings.py:174 config/settings.py:198 config/settings.py:219
+#: config/settings.py:259
+msgid "VLANs"
+msgstr ""
+
+#: config/settings.py:223 config/settings.py:263
+msgid "Details"
+msgstr ""
+
+#: config/settings.py:228
+msgid "Child Subnets"
+msgstr ""
+
+#: config/settings.py:233
+msgid "Subnet IPs"
+msgstr ""
+
+#: ipam/admin.py:13
+msgid "Child subnets"
+msgstr ""
+
+#: ipam/admin.py:19 ipam/admin.py:56
+msgid "IP addresses"
+msgstr ""
+
+#: ipam/admin.py:37
+msgid "child subnet"
+msgstr ""
+
+#: ipam/admin.py:38
+msgid "child subnets"
+msgstr ""
+
+#: ipam/admin.py:55
+msgid "IP address"
+msgstr ""
+
+#: ipam/admin.py:85 ipam/admin.py:149
+msgid "Basics"
+msgstr ""
+
+#: ipam/admin.py:97
+msgid "Routing"
+msgstr ""
+
+#: ipam/admin.py:104
+msgid "Discovery"
+msgstr ""
+
+#: ipam/admin.py:140
+msgid "Used IPs"
+msgstr ""
+
+#: ipam/admin.py:156
+msgid "Identity"
+msgstr ""
+
+#: ipam/admin.py:163
+msgid "Notes/Discovery"
+msgstr ""
+
+#: ipam/admin.py:198
+msgid "Subnet VLAN"
+msgstr ""
+
+#: ipam/models.py:17
+msgid "Enter a unique name for this section."
+msgstr ""
+
+#: ipam/models.py:21
+msgid "Prevent overlapping subnets within this section."
+msgstr ""
+
+#: ipam/models.py:35
+msgid "Enter a VLAN ID between 1 and 4094."
+msgstr ""
+
+#: ipam/models.py:40
+msgid "Add an optional display name for this VLAN."
+msgstr ""
+
+#: ipam/models.py:57
+msgid "Choose the section that owns this subnet."
+msgstr ""
+
+#: ipam/models.py:64
+msgid "Select the VLAN associated with this subnet, if any."
+msgstr ""
+
+#: ipam/models.py:72
+msgid "Select a parent subnet when this subnet is nested inside another one."
+msgstr ""
+
+#: ipam/models.py:76
+msgid "Subnet (CIDR)"
+msgstr ""
+
+#: ipam/models.py:77
+msgid "Enter an IPv4 subnet in CIDR notation, for example 10.0.0.0/24."
+msgstr ""
+
+#: ipam/models.py:81
+msgid "Add optional notes about this subnet."
+msgstr ""
+
+#: ipam/models.py:85
+msgid "Enable ICMP reachability checks for this subnet."
+msgstr ""
+
+#: ipam/models.py:89
+msgid "Enable discovery tasks for this subnet."
+msgstr ""
+
+#: ipam/models.py:114
+msgid "Enter a valid IPv4 subnet in CIDR notation, for example 10.0.0.0/24."
+msgstr ""
+
+#: ipam/models.py:125
+msgid "A subnet cannot be its own parent."
+msgstr ""
+
+#: ipam/models.py:134
+msgid "The child subnet must be contained in the parent subnet."
+msgstr ""
+
+#: ipam/models.py:147
+msgid ""
+"Overlapping subnets are not allowed in strict mode within the same section."
+msgstr ""
+
+#: ipam/models.py:155
+msgid "Active"
+msgstr ""
+
+#: ipam/models.py:156
+msgid "Reserved"
+msgstr ""
+
+#: ipam/models.py:157
+msgid "Deprecated"
+msgstr ""
+
+#: ipam/models.py:162
+msgid "Choose the subnet that contains this IP address."
+msgstr ""
+
+#: ipam/models.py:166
+msgid "Enter an IPv4 address."
+msgstr ""
+
+#: ipam/models.py:172
+msgid "Set the lifecycle state for this IP address."
+msgstr ""
+
+#: ipam/models.py:177
+msgid "Add an optional DNS name or host label."
+msgstr ""
+
+#: ipam/models.py:181
+msgid "Add optional notes about this IP address."
+msgstr ""
+
+#: ipam/models.py:185
+msgid "Store any operator note for this IP address."
+msgstr ""
+
+#: ipam/models.py:190
+msgid "Add an optional MAC address."
+msgstr ""
+
+#: ipam/models.py:195
+msgid "Record the person or system responsible for this IP address."
+msgstr ""
+
+#: ipam/models.py:200
+msgid "Record when this IP address was last observed."
+msgstr ""
+
+#: ipam/models.py:204
+msgid "Exclude this IP address from ping checks."
+msgstr ""
+
+#: ipam/models.py:229
+msgid "The IP address must belong to the selected subnet."
+msgstr ""

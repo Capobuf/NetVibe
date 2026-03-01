@@ -2,9 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# libpq-dev and gcc are required to build and link psycopg against PostgreSQL client libraries.
+# gettext provides makemessages/compilemessages and libpq-dev/gcc build psycopg.
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y gcc libpq-dev \
+    && apt-get install --no-install-recommends -y gcc gettext libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements-dev.txt ./
@@ -12,4 +12,3 @@ COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
 COPY . /app
-

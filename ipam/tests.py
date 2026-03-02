@@ -1,0 +1,267 @@
+from datetime import timedelta
+from unittest.mock import patch
+
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
+
+from .models import IPAMSettings, IPAddress, JobRun, Section, Subnet, VLAN
+from .tasks import run_subnet_scan, schedule_subnet_scan_now
+
+
+def fake_enqueue(job_run, task_ref='task-ref'):
+    if not job_run.task_ref:
+        job_run.task_ref = task_ref
+        job_run.save(update_fields=('task_ref',))
+    return job_run
+
+
+class IPAMModelTests(TestCase):
+    def setUp(self):
+        self.section = Section.objects.create(name='Production')
+        self.vlan = VLAN.objects.create(number=100, name='Users')
+
+    def test_ipam_settings_clean_rejects_invalid_thresholds(self):
+        settings_obj = IPAMSettings(
+            warning_after_seconds=60,
+            offline_after_seconds=60,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            'Offline threshold must be greater than the warning threshold.',
+        ):
+            settings_obj.full_clean()
+
+    def test_subnet_clean_rejects_invalid_effective_values(self):
+        settings_obj = IPAMSettings.objects.get()
+        settings_obj.default_scan_interval_seconds = 0
+        settings_obj.save(update_fields=('default_scan_interval_seconds',))
+
+        subnet = Subnet(
+            section=self.section,
+            vlan=self.vlan,
+            cidr='10.0.0.0/24',
+            scan_enabled=True,
+            offline_after_seconds_override=10,
+            warning_after_seconds_override=20,
+        )
+
+        with self.assertRaises(ValidationError):
+            subnet.full_clean()
+
+    def test_repeated_save_does_not_duplicate_scheduled_jobs(self):
+        with patch(
+            'ipam.tasks._enqueue_job_run',
+            side_effect=lambda job_run: fake_enqueue(job_run, 'task-one'),
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                subnet = Subnet.objects.create(
+                    section=self.section,
+                    vlan=self.vlan,
+                    cidr='10.0.1.0/24',
+                    scan_enabled=True,
+                )
+
+            subnet.description = 'Updated description'
+            with self.captureOnCommitCallbacks(execute=True):
+                subnet.save()
+
+        self.assertEqual(JobRun.objects.count(), 1)
+        self.assertEqual(JobRun.objects.get().task_ref, 'task-one')
+
+
+class SchedulingTests(TestCase):
+    def setUp(self):
+        self.section = Section.objects.create(name='Ops')
+        self.vlan = VLAN.objects.create(number=200, name='Servers')
+
+    def create_subnet(self, **overrides):
+        data = {
+            'section': self.section,
+            'vlan': self.vlan,
+            'cidr': '10.10.0.0/24',
+            'scan_enabled': True,
+            'discover_subnet': False,
+        }
+        data.update(overrides)
+        with self.captureOnCommitCallbacks(execute=False):
+            return Subnet.objects.create(**data)
+
+    def test_schedule_subnet_scan_now_creates_single_job(self):
+        subnet = self.create_subnet()
+
+        with patch(
+            'ipam.tasks._enqueue_job_run',
+            side_effect=lambda job_run: fake_enqueue(job_run, 'task-123'),
+        ):
+            job_run = schedule_subnet_scan_now(subnet.pk)
+            same_job_run = schedule_subnet_scan_now(subnet.pk)
+
+        self.assertEqual(job_run.pk, same_job_run.pk)
+        self.assertEqual(JobRun.objects.count(), 1)
+        self.assertEqual(JobRun.objects.get().task_ref, 'task-123')
+
+    def test_disabled_job_marks_skipped_disabled(self):
+        subnet = self.create_subnet(scan_enabled=False)
+        job_run = JobRun.objects.create(
+            subnet=subnet,
+            scheduled_for=timezone.now(),
+        )
+
+        run_subnet_scan.call(job_run.pk)
+
+        job_run.refresh_from_db()
+        self.assertEqual(job_run.status, JobRun.Status.SKIPPED_DISABLED)
+
+    def test_guardrail_job_skips_and_reschedules(self):
+        subnet = self.create_subnet(cidr='10.20.0.0/20')
+        job_run = JobRun.objects.create(
+            subnet=subnet,
+            scheduled_for=timezone.now(),
+        )
+
+        with patch(
+            'ipam.tasks._enqueue_job_run',
+            side_effect=lambda job_run: fake_enqueue(job_run, 'task-next'),
+        ):
+            run_subnet_scan.call(job_run.pk)
+
+        job_run.refresh_from_db()
+        self.assertEqual(job_run.status, JobRun.Status.SKIPPED_GUARDRAIL)
+        self.assertEqual(JobRun.objects.count(), 2)
+        next_job = JobRun.objects.exclude(pk=job_run.pk).get()
+        self.assertEqual(next_job.status, JobRun.Status.SCHEDULED)
+        self.assertEqual(next_job.task_ref, 'task-next')
+
+    def test_scan_updates_last_seen_creates_missing_records_and_skips_excluded(self):
+        subnet = self.create_subnet(cidr='10.30.0.0/29', discover_subnet=True)
+        excluded = IPAddress.objects.create(
+            subnet=subnet,
+            address='10.30.0.1',
+            exclude_ping=True,
+        )
+        existing = IPAddress.objects.create(
+            subnet=subnet,
+            address='10.30.0.2',
+            last_seen=timezone.now() - timedelta(days=2),
+        )
+        job_run = JobRun.objects.create(
+            subnet=subnet,
+            scheduled_for=timezone.now(),
+        )
+
+        seen_addresses = []
+
+        def ping_side_effect(address, timeout_ms):
+            seen_addresses.append(address)
+            return address in {'10.30.0.2', '10.30.0.3'}
+
+        with patch('ipam.tasks._ping_host', side_effect=ping_side_effect), patch(
+            'ipam.tasks._enqueue_job_run',
+            side_effect=lambda job_run: fake_enqueue(job_run, 'task-next'),
+        ):
+            run_subnet_scan.call(job_run.pk)
+
+        job_run.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
+        self.assertEqual(job_run.hosts_total, 6)
+        self.assertEqual(job_run.hosts_pinged, 5)
+        self.assertEqual(job_run.hosts_alive, 2)
+        self.assertEqual(job_run.ip_records_created, 1)
+        self.assertEqual(job_run.ip_records_updated, 1)
+        self.assertNotIn(excluded.address, seen_addresses)
+        self.assertGreater(existing.last_seen, timezone.now() - timedelta(minutes=1))
+        self.assertTrue(
+            IPAddress.objects.filter(subnet=subnet, address='10.30.0.3').exists()
+        )
+
+    def test_failed_ping_does_not_overwrite_last_seen(self):
+        subnet = self.create_subnet(cidr='10.40.0.0/30')
+        original_last_seen = timezone.now() - timedelta(days=1)
+        ip_record = IPAddress.objects.create(
+            subnet=subnet,
+            address='10.40.0.1',
+            last_seen=original_last_seen,
+        )
+        job_run = JobRun.objects.create(
+            subnet=subnet,
+            scheduled_for=timezone.now(),
+        )
+
+        with patch('ipam.tasks._ping_host', return_value=False), patch(
+            'ipam.tasks._enqueue_job_run',
+            side_effect=lambda job_run: fake_enqueue(job_run, 'task-next'),
+        ):
+            run_subnet_scan.call(job_run.pk)
+
+        ip_record.refresh_from_db()
+        job_run.refresh_from_db()
+        self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
+        self.assertEqual(job_run.ip_records_updated, 0)
+        self.assertEqual(ip_record.last_seen, original_last_seen)
+
+    def test_prune_jobs_removes_only_old_terminal_rows(self):
+        subnet = self.create_subnet()
+        old_finished = JobRun.objects.create(
+            subnet=subnet,
+            status=JobRun.Status.SUCCESS,
+            scheduled_for=timezone.now() - timedelta(days=40),
+            started_at=timezone.now() - timedelta(days=40, minutes=1),
+            finished_at=timezone.now() - timedelta(days=40),
+        )
+        active_job = JobRun.objects.create(
+            subnet=subnet,
+            status=JobRun.Status.SCHEDULED,
+            scheduled_for=timezone.now() - timedelta(days=40),
+        )
+
+        with patch('ipam.management.commands.prune_jobs.call_command') as call_command_mock:
+            call_command('prune_jobs', days=30)
+
+        self.assertFalse(JobRun.objects.filter(pk=old_finished.pk).exists())
+        self.assertTrue(JobRun.objects.filter(pk=active_job.pk).exists())
+        call_command_mock.assert_called_once()
+
+
+class MigrationTests(TransactionTestCase):
+    migrate_from = ('ipam', '0001_initial')
+    migrate_to = ('ipam', '0002_subnet_scan_jobs')
+
+    def setUp(self):
+        super().setUp()
+        self.executor = MigrationExecutor(connection)
+
+    def tearDown(self):
+        MigrationExecutor(connection).migrate([self.migrate_to])
+        super().tearDown()
+
+    def test_ping_subnet_is_renamed_to_scan_enabled(self):
+        self.executor.migrate([self.migrate_from])
+        old_apps = self.executor.loader.project_state([self.migrate_from]).apps
+        SectionModel = old_apps.get_model('ipam', 'Section')
+        VLANModel = old_apps.get_model('ipam', 'VLAN')
+        SubnetModel = old_apps.get_model('ipam', 'Subnet')
+
+        section = SectionModel.objects.create(name='Migration Section')
+        vlan = VLANModel.objects.create(number=300, name='Migration VLAN')
+        subnet = SubnetModel.objects.create(
+            section=section,
+            vlan=vlan,
+            cidr='10.50.0.0/24',
+            ping_subnet=True,
+        )
+
+        new_executor = MigrationExecutor(connection)
+        new_executor.migrate([self.migrate_to])
+        new_apps = new_executor.loader.project_state([self.migrate_to]).apps
+        NewSubnetModel = new_apps.get_model('ipam', 'Subnet')
+        SettingsModel = new_apps.get_model('ipam', 'IPAMSettings')
+
+        migrated_subnet = NewSubnetModel.objects.get(pk=subnet.pk)
+        self.assertTrue(migrated_subnet.scan_enabled)
+        self.assertEqual(SettingsModel.objects.count(), 1)

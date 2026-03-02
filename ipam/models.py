@@ -3,6 +3,8 @@ from ipaddress import AddressValueError, NetmaskValueError, ip_address, ip_netwo
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.utils import OperationalError, ProgrammingError
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -50,6 +52,96 @@ class VLAN(models.Model):
         return label
 
 
+class IPAMSettings(models.Model):
+    class WorkerMode(models.TextChoices):
+        SEQUENTIAL = 'sequential', _('Sequential')
+        PARALLEL = 'parallel', _('Parallel')
+
+    DEFAULT_WARNING_AFTER_SECONDS = 86400
+    DEFAULT_OFFLINE_AFTER_SECONDS = 604800
+    DEFAULT_SCAN_INTERVAL_SECONDS = 3600
+    DEFAULT_WORKER_MODE = WorkerMode.SEQUENTIAL
+    DEFAULT_WORKER_CONCURRENCY = 1
+    DEFAULT_PING_TIMEOUT_MS = 1000
+    DEFAULT_PING_CONCURRENCY = 64
+
+    warning_after_seconds = models.PositiveIntegerField(
+        default=DEFAULT_WARNING_AFTER_SECONDS,
+        help_text=_('Mark an IP as stale after this many seconds without a response.'),
+    )
+    offline_after_seconds = models.PositiveIntegerField(
+        default=DEFAULT_OFFLINE_AFTER_SECONDS,
+        help_text=_('Mark an IP as offline after this many seconds without a response.'),
+    )
+    default_scan_interval_seconds = models.PositiveIntegerField(
+        default=DEFAULT_SCAN_INTERVAL_SECONDS,
+        help_text=_('Use this interval when a subnet does not override its scan frequency.'),
+    )
+    worker_mode = models.CharField(
+        max_length=16,
+        choices=WorkerMode.choices,
+        default=DEFAULT_WORKER_MODE,
+        help_text=_('Choose whether the worker runs one scan at a time or multiple scans.'),
+    )
+    worker_concurrency = models.PositiveIntegerField(
+        default=DEFAULT_WORKER_CONCURRENCY,
+        help_text=_('Use this many worker processes when parallel mode is enabled.'),
+    )
+    ping_timeout_ms = models.PositiveIntegerField(
+        default=DEFAULT_PING_TIMEOUT_MS,
+        help_text=_('Wait this many milliseconds for each ICMP response.'),
+    )
+    ping_concurrency = models.PositiveIntegerField(
+        default=DEFAULT_PING_CONCURRENCY,
+        help_text=_('Limit how many ping subprocesses run at once inside one scan job.'),
+    )
+
+    class Meta:
+        verbose_name = _('IPAM settings')
+        verbose_name_plural = _('IPAM settings')
+
+    def __str__(self):
+        return str(_('IPAM settings'))
+
+    @classmethod
+    def load(cls):
+        # The admin enforces a single row because a dedicated singleton library
+        # would add infrastructure complexity without improving this workflow.
+        try:
+            instance = cls.objects.order_by('pk').first()
+        except (OperationalError, ProgrammingError):
+            instance = None
+
+        if instance is not None:
+            return instance
+
+        return cls(
+            warning_after_seconds=cls.DEFAULT_WARNING_AFTER_SECONDS,
+            offline_after_seconds=cls.DEFAULT_OFFLINE_AFTER_SECONDS,
+            default_scan_interval_seconds=cls.DEFAULT_SCAN_INTERVAL_SECONDS,
+            worker_mode=cls.DEFAULT_WORKER_MODE,
+            worker_concurrency=cls.DEFAULT_WORKER_CONCURRENCY,
+            ping_timeout_ms=cls.DEFAULT_PING_TIMEOUT_MS,
+            ping_concurrency=cls.DEFAULT_PING_CONCURRENCY,
+        )
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.warning_after_seconds
+            and self.offline_after_seconds
+            and self.offline_after_seconds <= self.warning_after_seconds
+        ):
+            raise ValidationError(
+                {
+                    'offline_after_seconds': _(
+                        'Offline threshold must be greater than the warning threshold.'
+                    )
+                }
+            )
+
+
 class Subnet(models.Model):
     section = models.ForeignKey(
         Section,
@@ -80,13 +172,28 @@ class Subnet(models.Model):
         blank=True,
         help_text=_('Add optional notes about this subnet.'),
     )
-    ping_subnet = models.BooleanField(
+    scan_enabled = models.BooleanField(
         default=False,
         help_text=_('Enable ICMP reachability checks for this subnet.'),
     )
     discover_subnet = models.BooleanField(
         default=False,
         help_text=_('Enable discovery tasks for this subnet.'),
+    )
+    scan_interval_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=_('Override the global scan frequency for this subnet. Leave blank to use the global default.'),
+    )
+    warning_after_seconds_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=_('Override the global warning threshold for this subnet. Leave blank to use the global default.'),
+    )
+    offline_after_seconds_override = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=_('Override the global offline threshold for this subnet. Leave blank to use the global default.'),
     )
 
     class Meta:
@@ -98,6 +205,26 @@ class Subnet(models.Model):
     @property
     def network_object(self):
         return parse_ipv4_cidr(self.cidr)
+
+    def get_ipam_settings(self):
+        return IPAMSettings.load()
+
+    def get_effective_scan_interval_seconds(self):
+        if self.scan_interval_seconds:
+            return self.scan_interval_seconds
+        return self.get_ipam_settings().default_scan_interval_seconds
+
+    def get_effective_thresholds(self):
+        settings = self.get_ipam_settings()
+        warning_after = (
+            self.warning_after_seconds_override
+            or settings.warning_after_seconds
+        )
+        offline_after = (
+            self.offline_after_seconds_override
+            or settings.offline_after_seconds
+        )
+        return warning_after, offline_after
 
     def clean(self):
         super().clean()
@@ -148,6 +275,39 @@ class Subnet(models.Model):
                             'within the same section.'
                         )
                     )
+
+        if (
+            self.warning_after_seconds_override
+            and self.offline_after_seconds_override
+            and self.offline_after_seconds_override <= self.warning_after_seconds_override
+        ):
+            raise ValidationError(
+                {
+                    'offline_after_seconds_override': _(
+                        'Offline override must be greater than the warning override.'
+                    )
+                }
+            )
+
+        if self.scan_enabled:
+            interval_seconds = self.get_effective_scan_interval_seconds()
+            if not interval_seconds or interval_seconds <= 0:
+                raise ValidationError(
+                    {
+                        'scan_interval_seconds': _(
+                            'Scanning requires a valid interval in seconds.'
+                        )
+                    }
+                )
+
+            warning_after, offline_after = self.get_effective_thresholds()
+            if offline_after <= warning_after:
+                raise ValidationError(
+                    _(
+                        'The effective offline threshold must be greater than the '
+                        'effective warning threshold.'
+                    )
+                )
 
 
 class IPAddress(models.Model):
@@ -228,3 +388,76 @@ class IPAddress(models.Model):
             raise ValidationError(
                 {'address': _('The IP address must belong to the selected subnet.')}
             )
+
+
+class JobRun(models.Model):
+    class JobType(models.TextChoices):
+        SUBNET_SCAN = 'subnet_scan', _('Subnet scan')
+
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', _('Scheduled')
+        RUNNING = 'running', _('Running')
+        SUCCESS = 'success', _('Success')
+        FAILED = 'failed', _('Failed')
+        SKIPPED_GUARDRAIL = 'skipped_guardrail', _('Skipped (guardrail)')
+        SKIPPED_DISABLED = 'skipped_disabled', _('Skipped (disabled)')
+
+    job_type = models.CharField(
+        max_length=32,
+        choices=JobType.choices,
+        default=JobType.SUBNET_SCAN,
+    )
+    subnet = models.ForeignKey(
+        Subnet,
+        on_delete=models.PROTECT,
+        related_name='job_runs',
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+    )
+    scheduled_for = models.DateTimeField()
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    hosts_total = models.PositiveIntegerField(default=0)
+    hosts_pinged = models.PositiveIntegerField(default=0)
+    hosts_alive = models.PositiveIntegerField(default=0)
+    ip_records_created = models.PositiveIntegerField(default=0)
+    ip_records_updated = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    task_ref = models.CharField(max_length=64, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ('-scheduled_for', '-pk')
+        constraints = [
+            models.UniqueConstraint(
+                fields=('job_type', 'subnet', 'scheduled_for'),
+                name='ipam_unique_jobrun_slot',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=('status', 'scheduled_for'),
+                name='ipam_jobrun_status_02a4bc_idx',
+            ),
+            models.Index(
+                fields=('subnet', 'scheduled_for'),
+                name='ipam_jobrun_subnet__7ef0a9_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return str(_('%(job_type)s for %(subnet)s at %(when)s')) % {
+            'job_type': self.get_job_type_display(),
+            'subnet': self.subnet,
+            'when': timezone.localtime(self.scheduled_for),
+        }
+
+    @property
+    def duration(self):
+        if not self.started_at:
+            return None
+
+        end_time = self.finished_at or timezone.now()
+        return end_time - self.started_at

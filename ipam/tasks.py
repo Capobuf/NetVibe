@@ -1,0 +1,285 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timedelta
+import subprocess
+
+from django.db import transaction
+from django.tasks import task
+from django.utils import timezone
+
+from .models import IPAMSettings, IPAddress, JobRun, Subnet
+
+
+ACTIVE_JOB_STATUSES = (
+    JobRun.Status.SCHEDULED,
+    JobRun.Status.RUNNING,
+)
+
+
+def _normalize_schedule_time(value):
+    return value.replace(microsecond=0)
+
+
+def _enqueue_job_run(job_run):
+    if job_run.task_ref:
+        return job_run
+
+    task_result = run_subnet_scan.using(run_after=job_run.scheduled_for).enqueue(
+        job_run_id=job_run.pk
+    )
+    job_run.task_ref = str(task_result.id)
+    job_run.save(update_fields=('task_ref',))
+    return job_run
+
+
+def schedule_subnet_scan_now(subnet):
+    subnet_id = subnet.pk if isinstance(subnet, Subnet) else int(subnet)
+    return _schedule_subnet_job_at(
+        subnet_id=subnet_id,
+        scheduled_for=_normalize_schedule_time(timezone.now()),
+    )
+
+
+def schedule_next_subnet_scan(job_run, finished_at):
+    with transaction.atomic():
+        subnet = Subnet.objects.select_for_update().get(pk=job_run.subnet_id)
+        if not subnet.scan_enabled:
+            return None
+
+        existing_job = (
+            JobRun.objects.select_for_update()
+            .filter(
+                subnet_id=subnet.pk,
+                job_type=JobRun.JobType.SUBNET_SCAN,
+                status__in=ACTIVE_JOB_STATUSES,
+            )
+            .exclude(pk=job_run.pk)
+            .order_by('scheduled_for')
+            .first()
+        )
+        if existing_job is not None:
+            return _enqueue_job_run(existing_job)
+
+        interval_seconds = subnet.get_effective_scan_interval_seconds()
+        if not interval_seconds:
+            return None
+
+        scheduled_for = _normalize_schedule_time(
+            finished_at + timedelta(seconds=interval_seconds)
+        )
+        scheduled_job, _ = JobRun.objects.get_or_create(
+            subnet=subnet,
+            job_type=JobRun.JobType.SUBNET_SCAN,
+            scheduled_for=scheduled_for,
+            defaults={
+                'status': JobRun.Status.SCHEDULED,
+            },
+        )
+        return _enqueue_job_run(scheduled_job)
+
+
+def _schedule_subnet_job_at(subnet_id, scheduled_for):
+    with transaction.atomic():
+        subnet = Subnet.objects.select_for_update().get(pk=subnet_id)
+        if not subnet.scan_enabled:
+            return None
+
+        existing_job = (
+            JobRun.objects.select_for_update()
+            .filter(
+                subnet_id=subnet.pk,
+                job_type=JobRun.JobType.SUBNET_SCAN,
+                status__in=ACTIVE_JOB_STATUSES,
+            )
+            .order_by('scheduled_for')
+            .first()
+        )
+        if existing_job is not None:
+            return _enqueue_job_run(existing_job)
+
+        scheduled_job, _ = JobRun.objects.get_or_create(
+            subnet=subnet,
+            job_type=JobRun.JobType.SUBNET_SCAN,
+            scheduled_for=scheduled_for,
+            defaults={
+                'status': JobRun.Status.SCHEDULED,
+            },
+        )
+        return _enqueue_job_run(scheduled_job)
+
+
+def _finalize_job_run(
+    job_run_id,
+    *,
+    status,
+    finished_at,
+    hosts_total=0,
+    hosts_pinged=0,
+    hosts_alive=0,
+    ip_records_created=0,
+    ip_records_updated=0,
+    error_message='',
+):
+    with transaction.atomic():
+        job_run = JobRun.objects.select_for_update().get(pk=job_run_id)
+        job_run.status = status
+        job_run.finished_at = finished_at
+        job_run.hosts_total = hosts_total
+        job_run.hosts_pinged = hosts_pinged
+        job_run.hosts_alive = hosts_alive
+        job_run.ip_records_created = ip_records_created
+        job_run.ip_records_updated = ip_records_updated
+        job_run.error_message = error_message
+        job_run.save(
+            update_fields=(
+                'status',
+                'finished_at',
+                'hosts_total',
+                'hosts_pinged',
+                'hosts_alive',
+                'ip_records_created',
+                'ip_records_updated',
+                'error_message',
+            )
+        )
+        return job_run
+
+
+def _ping_host(address, timeout_ms):
+    try:
+        completed = subprocess.run(
+            ['ping', '-n', '-c', '1', address],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=max(timeout_ms / 1000, 0.001),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+    return completed.returncode == 0
+
+
+def _scan_subnet(subnet, network, settings_obj):
+    host_addresses = [str(address) for address in network.hosts()]
+    ip_records = list(
+        IPAddress.objects.filter(subnet_id=subnet.pk).only(
+            'id',
+            'address',
+            'last_seen',
+            'exclude_ping',
+        )
+    )
+    records_by_address = {record.address: record for record in ip_records}
+    excluded_addresses = {
+        record.address for record in ip_records if record.exclude_ping
+    }
+    ping_targets = [
+        address for address in host_addresses if address not in excluded_addresses
+    ]
+
+    successful_addresses = []
+    max_workers = max(settings_obj.ping_concurrency, 1)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(_ping_host, address, settings_obj.ping_timeout_ms): address
+            for address in ping_targets
+        }
+        for future in as_completed(future_map):
+            if future.result():
+                successful_addresses.append(future_map[future])
+
+    observed_at = timezone.now()
+    existing_updates = []
+    new_records = []
+
+    for address in successful_addresses:
+        ip_record = records_by_address.get(address)
+        if ip_record is not None:
+            ip_record.last_seen = observed_at
+            existing_updates.append(ip_record)
+            continue
+
+        if subnet.discover_subnet:
+            new_records.append(
+                IPAddress(
+                    subnet=subnet,
+                    address=address,
+                    last_seen=observed_at,
+                )
+            )
+
+    if existing_updates:
+        IPAddress.objects.bulk_update(existing_updates, ('last_seen',))
+    if new_records:
+        IPAddress.objects.bulk_create(new_records)
+
+    return {
+        'hosts_total': len(host_addresses),
+        'hosts_pinged': len(ping_targets),
+        'hosts_alive': len(successful_addresses),
+        'ip_records_created': len(new_records),
+        'ip_records_updated': len(existing_updates),
+    }
+
+
+@task
+def run_subnet_scan(job_run_id: int):
+    subnet = None
+
+    with transaction.atomic():
+        job_run = JobRun.objects.select_for_update().get(pk=job_run_id)
+        if job_run.status != JobRun.Status.SCHEDULED:
+            return
+
+        job_run.status = JobRun.Status.RUNNING
+        job_run.started_at = timezone.now()
+        job_run.error_message = ''
+        job_run.save(update_fields=('status', 'started_at', 'error_message'))
+        subnet_id = job_run.subnet_id
+
+    try:
+        subnet = Subnet.objects.get(pk=subnet_id)
+        settings_obj = subnet.get_ipam_settings()
+
+        if not subnet.scan_enabled:
+            _finalize_job_run(
+                job_run_id,
+                status=JobRun.Status.SKIPPED_DISABLED,
+                finished_at=timezone.now(),
+            )
+            return
+
+        network = subnet.network_object
+        if network.prefixlen < 21:
+            completed_job = _finalize_job_run(
+                job_run_id,
+                status=JobRun.Status.SKIPPED_GUARDRAIL,
+                finished_at=timezone.now(),
+            )
+            # We keep rescheduling here so oversized subnets remain visible as
+            # intentionally skipped until an operator fixes or disables them.
+            schedule_next_subnet_scan(completed_job, completed_job.finished_at)
+            return
+
+        counters = _scan_subnet(subnet, network, settings_obj)
+        completed_job = _finalize_job_run(
+            job_run_id,
+            status=JobRun.Status.SUCCESS,
+            finished_at=timezone.now(),
+            **counters,
+        )
+        schedule_next_subnet_scan(completed_job, completed_job.finished_at)
+    except Exception as exc:
+        error_message = f'{exc.__class__.__name__}: {exc}'[:2000]
+        completed_job = _finalize_job_run(
+            job_run_id,
+            status=JobRun.Status.FAILED,
+            finished_at=timezone.now(),
+            error_message=error_message,
+        )
+        if subnet is None:
+            subnet = Subnet.objects.filter(pk=completed_job.subnet_id).first()
+        if subnet is not None and subnet.scan_enabled:
+            schedule_next_subnet_scan(completed_job, completed_job.finished_at)
+        raise

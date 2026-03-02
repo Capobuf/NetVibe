@@ -15,3 +15,20 @@
         </div>
     {% endcomponent %}
 {% endif %}
+
+{% if subnet_job_table %}
+    {% trans "Recent subnet scan jobs" as job_table_title %}
+    {% component "unfold/components/card.html" with title=job_table_title %}
+        <div class="space-y-4">
+            <p class="text-sm">
+                {% blocktrans trimmed count total=subnet_job_total %}
+                    {{ total }} recent job is shown below.
+                {% plural %}
+                    {{ total }} recent jobs are shown below.
+                {% endblocktrans %}
+            </p>
+            {% component "unfold/components/table.html" with table=subnet_job_table card_included=1 striped=1 %}
+            {% endcomponent %}
+        </div>
+    {% endcomponent %}
+{% endif %}

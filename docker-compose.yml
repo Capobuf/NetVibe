@@ -19,12 +19,24 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       db:
         condition: service_healthy
     command: python manage.py runserver 0.0.0.0:8000
 
+  worker:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    cap_add:
+      - NET_RAW
+    command: python manage.py worker_manager
+
 volumes:
   postgres_data:
-

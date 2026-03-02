@@ -35,7 +35,7 @@ docker compose exec web python manage.py migrate
 
 The site is served at http://127.0.0.1:8000 and the admin is at http://127.0.0.1:8000/admin/.
 For local development, a default admin account is available with username `admin` and password `admin`.
-After migrating, the admin sidebar includes an `IPAM` group for Sections, Subnets, IP Addresses, and VLANs.
+After migrating, the admin sidebar includes an `IPAM` group with `VLANs` and a nested `Subnets` link.
 When `DJANGO_DEBUG=1`, `django-debug-toolbar` is enabled at http://127.0.0.1:8000/__debug__/.
 
 ## Start (debug)

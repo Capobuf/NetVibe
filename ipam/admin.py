@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.db.models import Prefetch
+from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
 from unfold.admin import ModelAdmin, TabularInline
@@ -50,7 +51,7 @@ class SubnetIPAddressInline(TabularInline):
     model = IPAddress
     fk_name = 'subnet'
     extra = 0
-    show_change_link = True
+    show_change_link = False
     tab = True
     verbose_name = _('IP address')
     verbose_name_plural = _('IP addresses')
@@ -80,6 +81,12 @@ class VLANAdmin(ModelAdmin):
 
 @admin.register(Subnet)
 class SubnetAdmin(ModelAdmin):
+    change_form_outer_before_template = (
+        'admin/ipam/subnet/change_form_outer_before.html'
+    )
+    change_form_outer_after_template = (
+        'admin/ipam/subnet/change_form_outer_after.html'
+    )
     fieldsets = (
         (
             _('Basics'),
@@ -141,60 +148,135 @@ class SubnetAdmin(ModelAdmin):
     def used_count(self, obj):
         return len(obj.ipaddress_set.all())
 
+    def render_change_form(
+        self,
+        request,
+        context,
+        add=False,
+        change=False,
+        form_url='',
+        obj=None,
+    ):
+        if change and obj is not None:
+            ip_addresses = list(
+                IPAddress.objects.filter(subnet_id=obj.pk)
+                .order_by('address')
+                .only(
+                    'address',
+                    'state',
+                    'hostname',
+                    'mac_address',
+                    'owner',
+                    'last_seen',
+                    'exclude_ping',
+                )
+            )
+            context.update(self._get_overview_context(obj, ip_addresses))
 
-@admin.register(IPAddress)
-class IPAddressAdmin(ModelAdmin):
-    fieldsets = (
-        (
-            _('Basics'),
-            {
-                'classes': ('tab',),
-                'fields': ('address', 'subnet', 'state'),
-            },
-        ),
-        (
-            _('Identity'),
-            {
-                'classes': ('tab',),
-                'fields': ('hostname', 'mac_address', 'owner'),
-            },
-        ),
-        (
-            _('Notes/Discovery'),
-            {
-                'classes': ('tab',),
-                'fields': ('description', 'note', 'last_seen', 'exclude_ping'),
-            },
-        ),
-    )
-    list_display = (
-        'address',
-        'state',
-        'hostname',
-        'description',
-        'mac_address',
-        'owner',
-        'subnet',
-        'subnet_vlan',
-        'last_seen',
-        'exclude_ping',
-    )
-    list_filter = (
-        'state',
-        'exclude_ping',
-        'subnet',
-        'subnet__section',
-        'subnet__vlan',
-    )
-    search_fields = (
-        '=address',
-        'hostname',
-        'description',
-        'note',
-        'mac_address',
-        'owner',
-    )
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
 
-    @admin.display(description=_('Subnet VLAN'), ordering='subnet__vlan__number')
-    def subnet_vlan(self, obj):
-        return obj.subnet.vlan
+    def _get_overview_context(self, obj, ip_addresses):
+        state_labels = dict(IPAddress.State.choices)
+        state_counts = {state: 0 for state in state_labels}
+
+        for ip_address in ip_addresses:
+            if ip_address.state in state_counts:
+                state_counts[ip_address.state] += 1
+
+        vlan_title = _('No VLAN assigned')
+        vlan_details = [
+            {
+                'label': _('Subnet'),
+                'value': obj.cidr,
+            },
+        ]
+
+        if obj.vlan_id:
+            vlan_title = _('VLAN %(number)s') % {'number': obj.vlan.number}
+            vlan_details.append(
+                {
+                    'label': _('Name'),
+                    'value': obj.vlan.name or _('Unnamed VLAN'),
+                }
+            )
+
+        summary_cards = [
+            {
+                'title': _('VLAN'),
+                'headline': vlan_title,
+                'details': vlan_details,
+                'footer': _('Subnet routing summary'),
+            },
+            {
+                'title': _('IP records'),
+                'headline': str(len(ip_addresses)),
+                'details': [
+                    {
+                        'label': state_labels[state],
+                        'value': str(state_counts[state]),
+                    }
+                    for state in state_labels
+                ],
+                'footer': _('Total records in this subnet'),
+            },
+            {
+                'title': _('Hierarchy'),
+                'headline': obj.parent.cidr if obj.parent_id else _('No parent subnet'),
+                'details': [
+                    {
+                        'label': _('Section'),
+                        'value': str(obj.section),
+                    },
+                ],
+                'footer': _('Parent subnet relationship'),
+            },
+        ]
+
+        table = {
+            'headers': [
+                _('Address'),
+                _('State'),
+                _('Hostname'),
+                _('MAC'),
+                _('Owner'),
+                _('Last seen'),
+                _('Exclude ping'),
+            ],
+            'rows': [
+                [
+                    ip_address.address,
+                    ip_address.get_state_display(),
+                    ip_address.hostname or '-',
+                    ip_address.mac_address or '-',
+                    ip_address.owner or '-',
+                    self._format_last_seen(ip_address.last_seen),
+                    _('Yes') if ip_address.exclude_ping else _('No'),
+                ]
+                for ip_address in ip_addresses
+            ],
+        }
+
+        return {
+            'subnet_overview_cards': summary_cards,
+            'subnet_ip_table': table,
+            'subnet_ip_total': len(ip_addresses),
+        }
+
+    def _format_last_seen(self, value):
+        if value is None:
+            return '-'
+
+        if timezone.is_naive(value):
+            return formats.date_format(value, 'SHORT_DATETIME_FORMAT')
+
+        return formats.date_format(
+            timezone.localtime(value),
+            'SHORT_DATETIME_FORMAT',
+        )

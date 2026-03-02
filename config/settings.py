@@ -72,7 +72,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -153,26 +153,20 @@ STATIC_URL = 'static/'
 # A custom sidebar keeps the IPAM models one click away in the Unfold admin.
 UNFOLD = {
     'SIDEBAR': {
-        'show_all_applications': True,
+        'show_all_applications': False,
         'navigation': [
             {
                 'title': _('IPAM'),
                 'items': [
                     {
-                        'title': _('Sections'),
-                        'link': reverse_lazy('admin:ipam_section_changelist'),
-                    },
-                    {
-                        'title': _('Subnets'),
-                        'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                    },
-                    {
-                        'title': _('IP Addresses'),
-                        'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
-                    },
-                    {
                         'title': _('VLANs'),
                         'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                        'items': [
+                            {
+                                'title': _('Subnets'),
+                                'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                            },
+                        ],
                     },
                 ],
             },
@@ -180,23 +174,15 @@ UNFOLD = {
     },
     'TABS': [
         {
-            'models': ['ipam.section', 'ipam.subnet', 'ipam.ipaddress', 'ipam.vlan'],
+            'models': ['ipam.subnet', 'ipam.vlan'],
             'items': [
                 {
-                    'title': _('Sections'),
-                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
                 {
                     'title': _('Subnets'),
                     'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-                {
-                    'title': _('IP Addresses'),
-                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
-                },
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
             ],
         },
@@ -204,20 +190,12 @@ UNFOLD = {
             'models': [{'name': 'ipam.subnet', 'detail': True}],
             'items': [
                 {
-                    'title': _('Sections'),
-                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
                 {
                     'title': _('Subnets'),
                     'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-                {
-                    'title': _('IP Addresses'),
-                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
-                },
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
                 {
                     'title': _('Details'),
@@ -238,26 +216,16 @@ UNFOLD = {
         },
         {
             'models': [
-                {'name': 'ipam.section', 'detail': True},
-                {'name': 'ipam.ipaddress', 'detail': True},
                 {'name': 'ipam.vlan', 'detail': True},
             ],
             'items': [
                 {
-                    'title': _('Sections'),
-                    'link': reverse_lazy('admin:ipam_section_changelist'),
+                    'title': _('VLANs'),
+                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
                 {
                     'title': _('Subnets'),
                     'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-                {
-                    'title': _('IP Addresses'),
-                    'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
-                },
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
                 },
                 {
                     'title': _('Details'),

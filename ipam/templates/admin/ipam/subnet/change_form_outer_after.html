@@ -1,0 +1,17 @@
+{% load i18n unfold %}
+{% if subnet_ip_table %}
+    {% trans "IP addresses in this subnet" as table_title %}
+    {% component "unfold/components/card.html" with title=table_title %}
+        <div class="space-y-4">
+            <p class="text-sm">
+                {% blocktrans trimmed count total=subnet_ip_total %}
+                    {{ total }} IP record is shown below. Use the inline form above to add or edit it.
+                {% plural %}
+                    {{ total }} IP records are shown below. Use the inline form above to add or edit them.
+                {% endblocktrans %}
+            </p>
+            {% component "unfold/components/table.html" with table=subnet_ip_table card_included=1 striped=1 %}
+            {% endcomponent %}
+        </div>
+    {% endcomponent %}
+{% endif %}

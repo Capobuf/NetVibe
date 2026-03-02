@@ -40,11 +40,6 @@ msgstr ""
 msgid "Subnets"
 msgstr ""
 
-#: config/settings.py:170 config/settings.py:194 config/settings.py:215
-#: config/settings.py:255
-msgid "IP Addresses"
-msgstr ""
-
 #: config/settings.py:174 config/settings.py:198 config/settings.py:219
 #: config/settings.py:259
 msgid "VLANs"

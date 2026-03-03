@@ -112,7 +112,20 @@ class SectionAdmin(ModelAdmin):
 
 @admin.register(VLAN)
 class VLANAdmin(ModelAdmin):
+    fieldsets = (
+        (
+            _('General'),
+            {
+                'classes': ('tab',),
+                'fields': (
+                    'number',
+                    'name',
+                ),
+            },
+        ),
+    )
     list_display = ('number', 'name')
+    list_filter = ('number', 'name')
     search_fields = ('=number', 'name')
 
 

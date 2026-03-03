@@ -153,9 +153,74 @@ TASKS = {
 STATIC_URL = 'static/'
 
 UNFOLD = {
+    'SITE_TITLE': 'Netvibe Admin',
+    'SITE_HEADER': 'Netvibe',
+    'SITE_SUBHEADER': 'Network operations',
+    'SITE_SYMBOL': 'NV',
+    'COMMAND': {
+        'search_models': True,
+        'show_history': True,
+    },
     'SIDEBAR': {
+        'show_search': True,
+        'command_search': True,
         'show_all_applications': True,
-        'navigation': [],
+        'navigation': [
+            {
+                'title': 'Navigation',
+                'items': [
+                    {
+                        'title': 'Dashboard',
+                        'icon': 'dashboard',
+                        'link': reverse_lazy('admin:index'),
+                    },
+                ],
+            },
+            {
+                'title': 'IPAM',
+                'collapsible': True,
+                'items': [
+                    {
+                        'title': 'VLANs',
+                        'icon': 'tag',
+                        'link': reverse_lazy('admin:ipam_vlan_changelist'),
+                    },
+                    {
+                        'title': 'Subnets',
+                        'icon': 'lan',
+                        'link': reverse_lazy('admin:ipam_subnet_changelist'),
+                    },
+                    {
+                        'title': 'Sections',
+                        'icon': 'category',
+                        'link': reverse_lazy('admin:ipam_section_changelist'),
+                    },
+                    {
+                        'title': 'IPAM settings',
+                        'icon': 'tune',
+                        'link': reverse_lazy('admin:ipam_ipamsettings_changelist'),
+                    },
+                ],
+            },
+            {
+                'title': 'Jobs & Tasks',
+                'collapsible': True,
+                'items': [
+                    {
+                        'title': 'Job runs',
+                        'icon': 'schedule',
+                        'link': reverse_lazy('admin:ipam_jobrun_changelist'),
+                    },
+                    {
+                        'title': 'Task results',
+                        'icon': 'task_alt',
+                        'link': reverse_lazy(
+                            'admin:django_tasks_database_dbtaskresult_changelist'
+                        ),
+                    },
+                ],
+            },
+        ],
     },
     'TABS': [
         {

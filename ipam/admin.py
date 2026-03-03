@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.admin.sites import NotRegistered
+from django.contrib.auth.models import Group, User
 from django.db.models import Prefetch
 from django.shortcuts import redirect
 from django.utils import formats, timezone
@@ -8,6 +10,14 @@ from unfold.admin import ModelAdmin, TabularInline
 from unfold.sections import TableSection
 
 from .models import IPAMSettings, IPAddress, JobRun, Section, Subnet, VLAN
+
+
+# Hide built-in auth models until dedicated admin workflows are defined.
+for model in (User, Group):
+    try:
+        admin.site.unregister(model)
+    except NotRegistered:
+        pass
 
 
 class ChildSubnetSection(TableSection):

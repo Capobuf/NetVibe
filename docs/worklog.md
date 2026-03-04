@@ -17,6 +17,7 @@
 - Ripristinata la vista overview della subnet come destinazione di default al click, mantenendo l’edit separato via azione dedicata e senza reintrodurre i tab globali.
 - Chiarita la differenza UI tra scansione e discovery con label/help text admin piu espliciti.
 - Esteso il worker di scansione per recuperare e salvare i MAC address dalla neighbor table (`ip neigh`) dopo il ping, quando disponibili.
+- Esteso il worker di scansione per recuperare e salvare anche l’hostname via reverse DNS (`socket.gethostbyaddr`) per gli host raggiungibili.
 
 ## File principali toccati
 

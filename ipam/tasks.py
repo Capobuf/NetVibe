@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 import re
+import socket
 import subprocess
 
 from django.db import transaction
@@ -185,12 +186,22 @@ def _get_mac_address(address):
     return match.group(1).lower()
 
 
+def _get_hostname(address):
+    try:
+        hostname, _, _ = socket.gethostbyaddr(address)
+    except (OSError, socket.herror, socket.gaierror):
+        return ''
+
+    return hostname
+
+
 def _scan_subnet(subnet, network, settings_obj):
     host_addresses = [str(address) for address in network.hosts()]
     ip_records = list(
         IPAddress.objects.filter(subnet_id=subnet.pk).only(
             'id',
             'address',
+            'hostname',
             'last_seen',
             'mac_address',
             'exclude_ping',
@@ -222,11 +233,14 @@ def _scan_subnet(subnet, network, settings_obj):
 
     for address in successful_addresses:
         mac_address = _get_mac_address(address)
+        hostname = _get_hostname(address)
         ip_record = records_by_address.get(address)
         if ip_record is not None:
             ip_record.last_seen = observed_at
             if mac_address:
                 ip_record.mac_address = mac_address
+            if hostname:
+                ip_record.hostname = hostname
             existing_updates.append(ip_record)
             continue
 
@@ -235,13 +249,17 @@ def _scan_subnet(subnet, network, settings_obj):
                 IPAddress(
                     subnet=subnet,
                     address=address,
+                    hostname=hostname,
                     last_seen=observed_at,
                     mac_address=mac_address,
                 )
             )
 
     if existing_updates:
-        IPAddress.objects.bulk_update(existing_updates, ('last_seen', 'mac_address'))
+        IPAddress.objects.bulk_update(
+            existing_updates,
+            ('last_seen', 'mac_address', 'hostname'),
+        )
     if new_records:
         IPAddress.objects.bulk_create(new_records)
 

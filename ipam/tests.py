@@ -93,6 +93,19 @@ class IPAMModelTests(TestCase):
         self.assertIsInstance(form.base_fields['note'].widget, WysiwygWidget)
         self.assertNotIn('last_seen', form.base_fields)
 
+    def test_ip_address_lists_show_hostname_in_a_dedicated_column(self):
+        model_admin = admin.site._registry[IPAddress]
+
+        self.assertEqual(
+            model_admin.list_display[:4],
+            (
+                'status_badge',
+                'address_display',
+                'hostname_display',
+                'mac_address_display',
+            ),
+        )
+
     def test_subnet_admin_prioritizes_vlan_and_groups_scanning_fields(self):
         request = RequestFactory().get('/admin/ipam/subnet/add/')
         request.user = AnonymousUser()

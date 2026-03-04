@@ -18,6 +18,8 @@
 - Chiarita la differenza UI tra scansione e discovery con label/help text admin piu espliciti.
 - Esteso il worker di scansione per recuperare e salvare i MAC address dalla neighbor table (`ip neigh`) dopo il ping, quando disponibili.
 - Esteso il worker di scansione per recuperare e salvare anche l’hostname via reverse DNS (`socket.gethostbyaddr`) per gli host raggiungibili.
+- Aggiornato `docker-compose.yml` per eseguire il worker in `host` networking, cosi puo operare direttamente sulla LAN `10.0.0.0/24`; PostgreSQL resta esposto solo su `127.0.0.1:5432` per supportare il worker senza esporre il DB in LAN.
+- Separata la colonna `Hostname` nella tabella IP dell’overview subnet, invece di mostrarla come testo secondario sotto l’indirizzo IP.
 
 ## File principali toccati
 

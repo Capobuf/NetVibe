@@ -3,6 +3,10 @@ services:
     image: postgres:16
     env_file:
       - .env
+    # Publish PostgreSQL only on loopback so host-network services can reach it
+    # without exposing the database on the LAN.
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +33,14 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      # Host networking removes Compose DNS, so the worker must reach PostgreSQL
+      # through the loopback port published by the db service above.
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "5432"
+    # The worker must share the host network namespace to see the same L2
+    # broadcast domain as the host NIC (10.0.0.0/24 on eno1).
+    network_mode: host
     volumes:
       - .:/app
     depends_on:

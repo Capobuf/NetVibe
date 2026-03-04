@@ -30,12 +30,13 @@ for model in (User, Group):
 class IPAddressTableMixin:
     list_display = (
         'status_badge',
-        'ip_with_hostname',
+        'address_display',
+        'hostname_display',
         'mac_address_display',
         'last_seen',
         'notes_summary',
     )
-    list_display_links = ('ip_with_hostname',)
+    list_display_links = ('address_display',)
     list_per_page = 100
     ordering = ('address',)
     search_fields = ('=address', 'hostname', 'mac_address')
@@ -63,11 +64,12 @@ class IPAddressTableMixin:
         return (status, labels[status])
 
     @display(description=_('IP address'), header=True, ordering='address')
-    def ip_with_hostname(self, obj):
-        return (
-            obj.address,
-            obj.hostname or '',
-        )
+    def address_display(self, obj):
+        return (obj.address, '')
+
+    @display(description=_('Hostname'), header=True, ordering='hostname')
+    def hostname_display(self, obj):
+        return (obj.hostname or '-', '')
 
     @display(description=_('MAC'), header=True)
     def mac_address_display(self, obj):

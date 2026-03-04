@@ -51,10 +51,6 @@ msgstr "VLAN"
 msgid "Subnets"
 msgstr "Sottoreti"
 
-#: config/settings.py:195 ipam/models.py:31
-msgid "Sections"
-msgstr "Sezioni"
-
 #: config/settings.py:200 ipam/models.py:115 ipam/models.py:116
 #: ipam/models.py:119
 msgid "IPAM settings"
@@ -71,18 +67,6 @@ msgstr "Esecuzioni job"
 #: config/settings.py:216
 msgid "Task results"
 msgstr "Risultati task"
-
-#: config/settings.py:252 config/settings.py:282
-msgid "Details"
-msgstr "Dettagli"
-
-#: config/settings.py:257
-msgid "Child Subnets"
-msgstr "Sottoreti figlie"
-
-#: config/settings.py:262
-msgid "Subnet IPs"
-msgstr "IP della sottorete"
 
 #: ipam/admin.py:45 ipam/models.py:459
 msgid "Status"
@@ -128,10 +112,6 @@ msgstr "sottorete figlia"
 msgid "child subnets"
 msgstr "sottoreti figlie"
 
-#: ipam/admin.py:187
-msgid "section"
-msgstr "sezione"
-
 #: ipam/admin.py:200 ipam/admin.py:494 ipam/models.py:53 ipam/models.py:172
 msgid "VLAN"
 msgstr "VLAN"
@@ -153,85 +133,24 @@ msgid "Worker"
 msgstr "Worker"
 
 #: ipam/admin.py:307
-msgid "Basics"
+msgid "Base"
 msgstr "Base"
 
 #: ipam/admin.py:319
-msgid "Routing"
-msgstr "Routing"
-
-#: ipam/admin.py:326
-msgid "Discovery"
-msgstr "Discovery"
-
-#: ipam/admin.py:333
-msgid "Scheduling"
-msgstr "Pianificazione"
+msgid "Scanning"
+msgstr "Scansione"
 
 #: ipam/admin.py:429
 msgid "Used IPs"
 msgstr "IP usati"
 
-#: ipam/admin.py:475
-msgid "No VLAN assigned"
-msgstr "Nessuna VLAN assegnata"
-
 #: ipam/admin.py:478 ipam/models.py:225 ipam/models.py:348 ipam/models.py:453
 msgid "Subnet"
 msgstr "Sottorete"
 
-#: ipam/admin.py:484
-#, python-format
-msgid "VLAN %(number)s"
-msgstr "VLAN %(number)s"
-
 #: ipam/admin.py:487 ipam/models.py:19 ipam/models.py:47
 msgid "Name"
 msgstr "Nome"
-
-#: ipam/admin.py:488
-msgid "Unnamed VLAN"
-msgstr "VLAN senza nome"
-
-#: ipam/admin.py:497
-msgid "Subnet routing summary"
-msgstr "Riepilogo routing sottorete"
-
-#: ipam/admin.py:500
-msgid "IP records"
-msgstr "Record IP"
-
-#: ipam/admin.py:509
-msgid "Total records in this subnet"
-msgstr "Totale record nella sottorete"
-
-#: ipam/admin.py:512
-msgid "Hierarchy"
-msgstr "Gerarchia"
-
-#: ipam/admin.py:513
-msgid "No parent subnet"
-msgstr "Nessuna sottorete padre"
-
-#: ipam/admin.py:516 ipam/models.py:30 ipam/models.py:164
-msgid "Section"
-msgstr "Sezione"
-
-#: ipam/admin.py:520
-msgid "Parent subnet relationship"
-msgstr "Relazione con sottorete padre"
-
-#: ipam/admin.py:538
-msgid "Edit subnet settings"
-msgstr "Modifica impostazioni sottorete"
-
-#: ipam/admin.py:542
-msgid "Back to overview"
-msgstr "Torna alla panoramica"
-
-#: ipam/admin.py:546
-msgid "Open IP list"
-msgstr "Apri elenco IP"
 
 #: ipam/admin.py:588
 msgid "Job"
@@ -260,18 +179,6 @@ msgid ""
 "%(updated)s"
 msgstr "attivi %(alive)s / pingati %(pinged)s / creati %(created)s / aggiornati %(updated)s"
 
-#: ipam/models.py:20
-msgid "Enter a unique name for this section."
-msgstr "Inserisci un nome univoco per questa sezione."
-
-#: ipam/models.py:24
-msgid "Strict mode"
-msgstr "Modalità rigorosa"
-
-#: ipam/models.py:25
-msgid "Prevent overlapping subnets within this section."
-msgstr "Impedisci sottoreti sovrapposte all'interno di questa sezione."
-
 #: ipam/models.py:41
 msgid "Number"
 msgstr "Numero"
@@ -293,24 +200,24 @@ msgid "Parallel"
 msgstr "Parallelo"
 
 #: ipam/models.py:78
-msgid "Warning after (seconds)"
-msgstr "Avviso dopo (secondi)"
+msgid "Warning after (minutes)"
+msgstr "Avviso dopo (minuti)"
 
 #: ipam/models.py:79
-msgid "Mark an IP as stale after this many seconds without a response."
-msgstr "Segna un IP come non aggiornato dopo questo numero di secondi senza risposta."
+msgid "Mark an IP as stale after this many minutes without a response."
+msgstr "Segna un IP come non aggiornato dopo questo numero di minuti senza risposta."
 
 #: ipam/models.py:83
-msgid "Offline after (seconds)"
-msgstr "Offline dopo (secondi)"
+msgid "Offline after (minutes)"
+msgstr "Offline dopo (minuti)"
 
 #: ipam/models.py:84
-msgid "Mark an IP as offline after this many seconds without a response."
-msgstr "Segna un IP come offline dopo questo numero di secondi senza risposta."
+msgid "Mark an IP as offline after this many minutes without a response."
+msgstr "Segna un IP come offline dopo questo numero di minuti senza risposta."
 
 #: ipam/models.py:88
-msgid "Default scan interval (seconds)"
-msgstr "Intervallo di scansione predefinito (secondi)"
+msgid "Default scan interval (minutes)"
+msgstr "Intervallo di scansione predefinito (minuti)"
 
 #: ipam/models.py:89
 msgid "Use this interval when a subnet does not override its scan frequency."
@@ -351,10 +258,6 @@ msgstr "Limita quanti sottoprocessi di ping vengono eseguiti contemporaneamente 
 #: ipam/models.py:154
 msgid "Offline threshold must be greater than the warning threshold."
 msgstr "La soglia offline deve essere maggiore della soglia di avviso."
-
-#: ipam/models.py:165
-msgid "Choose the section that owns this subnet."
-msgstr "Scegli la sezione proprietaria di questa sottorete."
 
 #: ipam/models.py:173
 msgid "Select the VLAN associated with this subnet, if any."
@@ -401,8 +304,8 @@ msgid "Enable discovery tasks for this subnet."
 msgstr "Abilita task di discovery per questa sottorete."
 
 #: ipam/models.py:207
-msgid "Scan interval (seconds)"
-msgstr "Intervallo scansione (secondi)"
+msgid "Scan interval (minutes)"
+msgstr "Intervallo scansione (minuti)"
 
 #: ipam/models.py:208
 msgid ""
@@ -411,8 +314,8 @@ msgid ""
 msgstr "Sovrascrivi la frequenza di scansione globale per questa sottorete. Lascia vuoto per usare il predefinito globale."
 
 #: ipam/models.py:213
-msgid "Warning after override (seconds)"
-msgstr "Sovrascrittura avviso dopo (secondi)"
+msgid "Warning after override (minutes)"
+msgstr "Sovrascrittura avviso dopo (minuti)"
 
 #: ipam/models.py:214
 msgid ""
@@ -421,8 +324,8 @@ msgid ""
 msgstr "Sovrascrivi la soglia di avviso globale per questa sottorete. Lascia vuoto per usare il predefinito globale."
 
 #: ipam/models.py:219
-msgid "Offline after override (seconds)"
-msgstr "Sovrascrittura offline dopo (secondi)"
+msgid "Offline after override (minutes)"
+msgstr "Sovrascrittura offline dopo (minuti)"
 
 #: ipam/models.py:220
 msgid ""
@@ -442,18 +345,13 @@ msgstr "Una sottorete non può essere padre di sé stessa."
 msgid "The child subnet must be contained in the parent subnet."
 msgstr "La sottorete figlia deve essere contenuta nella sottorete padre."
 
-#: ipam/models.py:300
-msgid ""
-"Overlapping subnets are not allowed in strict mode within the same section."
-msgstr "Le sottoreti sovrapposte non sono consentite in modalità rigorosa all'interno della stessa sezione."
-
 #: ipam/models.py:313
 msgid "Offline override must be greater than the warning override."
 msgstr "La sovrascrittura offline deve essere maggiore della sovrascrittura di avviso."
 
 #: ipam/models.py:324
-msgid "Scanning requires a valid interval in seconds."
-msgstr "La scansione richiede un intervallo valido in secondi."
+msgid "Scanning requires a valid interval in minutes."
+msgstr "La scansione richiede un intervallo valido in minuti."
 
 #: ipam/models.py:333
 msgid ""

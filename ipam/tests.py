@@ -5,13 +5,11 @@ from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
-from django.test import RequestFactory, TestCase, TransactionTestCase
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from unfold.contrib.forms.widgets import WysiwygWidget
 
-from .models import IPAMSettings, IPAddress, JobRun, Section, Subnet, VLAN
+from .models import IPAMSettings, IPAddress, JobRun, Subnet, VLAN
 from .tasks import run_subnet_scan, schedule_subnet_scan_now
 
 
@@ -24,13 +22,12 @@ def fake_enqueue(job_run, task_ref='task-ref'):
 
 class IPAMModelTests(TestCase):
     def setUp(self):
-        self.section = Section.objects.create(name='Production')
         self.vlan = VLAN.objects.create(number=100, name='Users')
 
     def test_ipam_settings_clean_rejects_invalid_thresholds(self):
         settings_obj = IPAMSettings(
-            warning_after_seconds=60,
-            offline_after_seconds=60,
+            warning_after_minutes=60,
+            offline_after_minutes=60,
         )
 
         with self.assertRaisesMessage(
@@ -40,17 +37,16 @@ class IPAMModelTests(TestCase):
             settings_obj.full_clean()
 
     def test_subnet_clean_rejects_invalid_effective_values(self):
-        settings_obj = IPAMSettings.objects.get()
-        settings_obj.default_scan_interval_seconds = 0
-        settings_obj.save(update_fields=('default_scan_interval_seconds',))
+        settings_obj = IPAMSettings.objects.create()
+        settings_obj.default_scan_interval_minutes = 0
+        settings_obj.save(update_fields=('default_scan_interval_minutes',))
 
         subnet = Subnet(
-            section=self.section,
             vlan=self.vlan,
             cidr='10.0.0.0/24',
             scan_enabled=True,
-            offline_after_seconds_override=10,
-            warning_after_seconds_override=20,
+            offline_after_minutes_override=10,
+            warning_after_minutes_override=20,
         )
 
         with self.assertRaises(ValidationError):
@@ -63,7 +59,6 @@ class IPAMModelTests(TestCase):
         ):
             with self.captureOnCommitCallbacks(execute=True):
                 subnet = Subnet.objects.create(
-                    section=self.section,
                     vlan=self.vlan,
                     cidr='10.0.1.0/24',
                     scan_enabled=True,
@@ -98,15 +93,37 @@ class IPAMModelTests(TestCase):
         self.assertIsInstance(form.base_fields['note'].widget, WysiwygWidget)
         self.assertNotIn('last_seen', form.base_fields)
 
+    def test_subnet_admin_prioritizes_vlan_and_groups_scanning_fields(self):
+        request = RequestFactory().get('/admin/ipam/subnet/add/')
+        request.user = AnonymousUser()
+        model_admin = admin.site._registry[Subnet]
+
+        fieldsets = model_admin.get_fieldsets(request)
+
+        self.assertEqual(str(fieldsets[0][0]), 'Base')
+        self.assertEqual(
+            fieldsets[0][1]['fields'],
+            ('vlan', 'cidr', 'parent', 'description'),
+        )
+        self.assertEqual(str(fieldsets[1][0]), 'Scanning')
+        self.assertEqual(
+            fieldsets[1][1]['fields'],
+            (
+                'scan_enabled',
+                'discover_subnet',
+                'scan_interval_minutes',
+                'warning_after_minutes_override',
+                'offline_after_minutes_override',
+            ),
+        )
+
 
 class SchedulingTests(TestCase):
     def setUp(self):
-        self.section = Section.objects.create(name='Ops')
         self.vlan = VLAN.objects.create(number=200, name='Servers')
 
     def create_subnet(self, **overrides):
         data = {
-            'section': self.section,
             'vlan': self.vlan,
             'cidr': '10.10.0.0/24',
             'scan_enabled': True,
@@ -251,42 +268,3 @@ class SchedulingTests(TestCase):
         self.assertFalse(JobRun.objects.filter(pk=old_finished.pk).exists())
         self.assertTrue(JobRun.objects.filter(pk=active_job.pk).exists())
         call_command_mock.assert_called_once()
-
-
-class MigrationTests(TransactionTestCase):
-    migrate_from = ('ipam', '0001_initial')
-    migrate_to = ('ipam', '0002_subnet_scan_jobs')
-
-    def setUp(self):
-        super().setUp()
-        self.executor = MigrationExecutor(connection)
-
-    def tearDown(self):
-        MigrationExecutor(connection).migrate([self.migrate_to])
-        super().tearDown()
-
-    def test_ping_subnet_is_renamed_to_scan_enabled(self):
-        self.executor.migrate([self.migrate_from])
-        old_apps = self.executor.loader.project_state([self.migrate_from]).apps
-        SectionModel = old_apps.get_model('ipam', 'Section')
-        VLANModel = old_apps.get_model('ipam', 'VLAN')
-        SubnetModel = old_apps.get_model('ipam', 'Subnet')
-
-        section = SectionModel.objects.create(name='Migration Section')
-        vlan = VLANModel.objects.create(number=300, name='Migration VLAN')
-        subnet = SubnetModel.objects.create(
-            section=section,
-            vlan=vlan,
-            cidr='10.50.0.0/24',
-            ping_subnet=True,
-        )
-
-        new_executor = MigrationExecutor(connection)
-        new_executor.migrate([self.migrate_to])
-        new_apps = new_executor.loader.project_state([self.migrate_to]).apps
-        NewSubnetModel = new_apps.get_model('ipam', 'Subnet')
-        SettingsModel = new_apps.get_model('ipam', 'IPAMSettings')
-
-        migrated_subnet = NewSubnetModel.objects.get(pk=subnet.pk)
-        self.assertTrue(migrated_subnet.scan_enabled)
-        self.assertEqual(SettingsModel.objects.count(), 1)

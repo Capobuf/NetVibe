@@ -59,12 +59,12 @@ def schedule_next_subnet_scan(job_run, finished_at):
         if existing_job is not None:
             return _enqueue_job_run(existing_job)
 
-        interval_seconds = subnet.get_effective_scan_interval_seconds()
-        if not interval_seconds:
+        interval_minutes = subnet.get_effective_scan_interval_minutes()
+        if not interval_minutes:
             return None
 
         scheduled_for = _normalize_schedule_time(
-            finished_at + timedelta(seconds=interval_seconds)
+            finished_at + timedelta(minutes=interval_minutes)
         )
         scheduled_job, _ = JobRun.objects.get_or_create(
             subnet=subnet,

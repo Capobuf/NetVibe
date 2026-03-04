@@ -4,7 +4,6 @@ from django.contrib import admin
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
 from django.db import models as django_models
-from django.db.models import Prefetch
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import strip_tags
@@ -12,13 +11,12 @@ from django.utils.text import Truncator
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from unfold.admin import ModelAdmin, TabularInline
+from unfold.admin import ModelAdmin
 from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.datasets import BaseDataset
-from unfold.decorators import action, display
-from unfold.sections import TableSection
+from unfold.decorators import display
 
-from .models import IPAMSettings, IPAddress, JobRun, Section, Subnet, VLAN
+from .models import IPAMSettings, IPAddress, JobRun, Subnet, VLAN
 
 
 # Hide built-in auth models until dedicated admin workflows are defined.
@@ -87,12 +85,12 @@ class IPAddressTableMixin:
         if obj.exclude_ping or obj.last_seen is None:
             return 'unknown'
 
-        warning_after, offline_after = obj.subnet.get_effective_thresholds()
-        age_seconds = (timezone.now() - obj.last_seen).total_seconds()
+        warning_after, offline_after = obj.reachability_window
+        age = timezone.now() - obj.last_seen
 
-        if age_seconds > offline_after:
+        if age > offline_after:
             return 'offline'
-        if age_seconds > warning_after:
+        if age > warning_after:
             return 'unknown'
         return 'online'
 
@@ -128,72 +126,6 @@ class IPAddressDataset(BaseDataset):
     tab = False
 
 
-class ChildSubnetSection(TableSection):
-    related_name = 'children'
-    verbose_name = _('Child subnets')
-    fields = ('cidr', 'vlan', 'scan_enabled', 'discover_subnet')
-
-
-class SubnetIPAddressSection(TableSection):
-    related_name = 'ipaddress_set'
-    verbose_name = _('IP addresses')
-    fields = (
-        'address',
-        'status',
-        'hostname',
-        'mac_address',
-        'exclude_ping',
-    )
-
-
-class ChildSubnetInline(TabularInline):
-    model = Subnet
-    fk_name = 'parent'
-    extra = 0
-    show_change_link = True
-    tab = True
-    verbose_name = _('child subnet')
-    verbose_name_plural = _('child subnets')
-    fields = (
-        'section',
-        'cidr',
-        'vlan',
-        'scan_enabled',
-        'discover_subnet',
-        'description',
-    )
-
-
-class SubnetIPAddressInline(TabularInline):
-    model = IPAddress
-    fk_name = 'subnet'
-    extra = 0
-    show_change_link = False
-    tab = True
-    verbose_name = _('IP address')
-    verbose_name_plural = _('IP addresses')
-    fields = (
-        'address',
-        'status',
-        'hostname',
-        'mac_address',
-        'exclude_ping',
-    )
-
-
-class JobRunSectionFilter(admin.SimpleListFilter):
-    title = _('section')
-    parameter_name = 'section'
-
-    def lookups(self, request, model_admin):
-        return [(section.pk, str(section)) for section in Section.objects.order_by('name')]
-
-    def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(subnet__section_id=self.value())
-        return queryset
-
-
 class JobRunVLANFilter(admin.SimpleListFilter):
     title = _('VLAN')
     parameter_name = 'vlan'
@@ -207,19 +139,12 @@ class JobRunVLANFilter(admin.SimpleListFilter):
         return queryset
 
 
-@admin.register(Section)
-class SectionAdmin(ModelAdmin):
-    list_display = ('name', 'strict_mode')
-    search_fields = ('name',)
-
-
 @admin.register(VLAN)
 class VLANAdmin(ModelAdmin):
     fieldsets = (
         (
             _('General'),
             {
-                'classes': ('tab',),
                 'fields': (
                     'number',
                     'name',
@@ -272,15 +197,15 @@ class IPAMSettingsAdmin(ModelAdmin):
             _('Thresholds'),
             {
                 'fields': (
-                    'warning_after_seconds',
-                    'offline_after_seconds',
+                    'warning_after_minutes',
+                    'offline_after_minutes',
                 ),
             },
         ),
         (
             _('Scan defaults'),
             {
-                'fields': ('default_scan_interval_seconds',),
+                'fields': ('default_scan_interval_minutes',),
             },
         ),
         (
@@ -296,9 +221,9 @@ class IPAMSettingsAdmin(ModelAdmin):
         ),
     )
     list_display = (
-        'warning_after_seconds',
-        'offline_after_seconds',
-        'default_scan_interval_seconds',
+        'warning_after_minutes',
+        'offline_after_minutes',
+        'default_scan_interval_minutes',
         'worker_mode',
         'worker_concurrency',
     )
@@ -315,26 +240,32 @@ class IPAMSettingsAdmin(ModelAdmin):
             return redirect('admin:ipam_ipamsettings_change', instance.pk)
         return super().changelist_view(request, extra_context=extra_context)
 
+    def changeform_view(
+        self,
+        request,
+        object_id=None,
+        form_url='',
+        extra_context=None,
+    ):
+        extra_context = extra_context or {}
+        extra_context['subtitle'] = None
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
 
 @admin.register(Subnet)
 class SubnetAdmin(ModelAdmin):
-    change_form_outer_before_template = (
-        'admin/ipam/subnet/change_form_outer_before.html'
-    )
-    change_form_outer_after_template = None
-    actions_detail = (
-        'edit_subnet_settings',
-        'back_to_overview',
-        'open_ip_list',
-    )
     change_form_datasets = (IPAddressDataset,)
     fieldsets = (
         (
-            _('Basics'),
+            _('Base'),
             {
-                'classes': ('tab',),
                 'fields': (
-                    'section',
+                    'vlan',
                     'cidr',
                     'parent',
                     'description',
@@ -342,44 +273,27 @@ class SubnetAdmin(ModelAdmin):
             },
         ),
         (
-            _('Routing'),
+            _('Scanning'),
             {
-                'classes': ('tab',),
-                'fields': ('vlan',),
-            },
-        ),
-        (
-            _('Discovery'),
-            {
-                'classes': ('tab',),
-                'fields': ('discover_subnet',),
-            },
-        ),
-        (
-            _('Scheduling'),
-            {
-                'classes': ('tab',),
                 'fields': (
                     'scan_enabled',
-                    'scan_interval_seconds',
-                    'warning_after_seconds_override',
-                    'offline_after_seconds_override',
+                    'discover_subnet',
+                    'scan_interval_minutes',
+                    'warning_after_minutes_override',
+                    'offline_after_minutes_override',
                 ),
             },
         ),
     )
     list_display = (
         'cidr',
-        'section',
         'vlan',
         'parent',
         'scan_enabled',
         'discover_subnet',
         'used_count',
     )
-    list_filter = ('section', 'vlan', 'scan_enabled', 'discover_subnet')
-    list_sections = (ChildSubnetSection, SubnetIPAddressSection)
-    list_sections_classes = 'lg:grid-cols-2'
+    list_filter = ('vlan', 'scan_enabled', 'discover_subnet')
     search_fields = ('=cidr', 'description')
 
     def get_changeform_datasets(self, request):
@@ -390,191 +304,17 @@ class SubnetAdmin(ModelAdmin):
             return []
         return super().get_changeform_datasets(request)
 
-    def get_fieldsets(self, request, obj=None):
-        if obj is not None and self._is_overview_mode(request):
-            return ()
-        return super().get_fieldsets(request, obj)
-
-    def get_readonly_fields(self, request, obj=None):
-        if obj is not None and self._is_overview_mode(request):
-            return tuple(field.name for field in self.model._meta.fields)
-        return super().get_readonly_fields(request, obj)
-
-    def get_inlines(self, request, obj):
-        return ()
-
-    def changeform_view(
-        self,
-        request,
-        object_id=None,
-        form_url='',
-        extra_context=None,
-    ):
-        extra_context = extra_context or {}
-
-        if object_id is not None and self._is_overview_mode(request):
-            extra_context.update(
-                {
-                    'show_save': False,
-                    'show_save_and_continue': False,
-                    'show_save_and_add_another': False,
-                    'show_save_as_new': False,
-                    'show_delete': False,
-                }
-            )
-
-        return super().changeform_view(
-            request,
-            object_id=object_id,
-            form_url=form_url,
-            extra_context=extra_context,
-        )
-
-    def get_actions_detail(self, request, object_id):
-        action_names = [
-            'back_to_overview' if not self._is_overview_mode(request) else 'edit_subnet_settings',
-            'open_ip_list',
-        ]
-        actions = [self.get_unfold_action(name) for name in action_names]
-        return self._filter_unfold_actions_by_permissions(request, actions, object_id)
-
     def get_queryset(self, request):
         return (
             super()
             .get_queryset(request)
-            .select_related('section', 'vlan', 'parent')
-            .prefetch_related(
-                Prefetch(
-                    'children',
-                    queryset=Subnet.objects.select_related('vlan'),
-                ),
-                Prefetch('ipaddress_set', queryset=IPAddress.objects.all()),
-            )
+            .select_related('vlan', 'parent')
+            .prefetch_related('ipaddress_set')
         )
 
     @admin.display(description=_('Used IPs'))
     def used_count(self, obj):
         return len(obj.ipaddress_set.all())
-
-    def render_change_form(
-        self,
-        request,
-        context,
-        add=False,
-        change=False,
-        form_url='',
-        obj=None,
-    ):
-        if change and obj is not None:
-            ip_addresses = list(
-                IPAddress.objects.filter(subnet_id=obj.pk)
-                .order_by('address')
-                .only(
-                    'address',
-                    'status',
-                    'hostname',
-                    'mac_address',
-                )
-            )
-            context.update(self._get_overview_context(obj, ip_addresses))
-
-        return super().render_change_form(
-            request,
-            context,
-            add=add,
-            change=change,
-            form_url=form_url,
-            obj=obj,
-        )
-
-    def _get_overview_context(self, obj, ip_addresses):
-        status_labels = dict(IPAddress.Status.choices)
-        status_counts = {status: 0 for status in status_labels}
-
-        for ip_address in ip_addresses:
-            if ip_address.status in status_counts:
-                status_counts[ip_address.status] += 1
-
-        vlan_title = _('No VLAN assigned')
-        vlan_details = [
-            {
-                'label': _('Subnet'),
-                'value': obj.cidr,
-            },
-        ]
-
-        if obj.vlan_id:
-            vlan_title = _('VLAN %(number)s') % {'number': obj.vlan.number}
-            vlan_details.append(
-                {
-                    'label': _('Name'),
-                    'value': obj.vlan.name or _('Unnamed VLAN'),
-                }
-            )
-
-        summary_cards = [
-            {
-                'title': _('VLAN'),
-                'headline': vlan_title,
-                'details': vlan_details,
-                'footer': _('Subnet routing summary'),
-            },
-            {
-                'title': _('IP records'),
-                'headline': str(len(ip_addresses)),
-                'details': [
-                    {
-                        'label': status_labels[status],
-                        'value': str(status_counts[status]),
-                    }
-                    for status in status_labels
-                ],
-                'footer': _('Total records in this subnet'),
-            },
-            {
-                'title': _('Hierarchy'),
-                'headline': obj.parent.cidr if obj.parent_id else _('No parent subnet'),
-                'details': [
-                    {
-                        'label': _('Section'),
-                        'value': str(obj.section),
-                    },
-                ],
-                'footer': _('Parent subnet relationship'),
-            },
-        ]
-
-        return {
-            'subnet_overview_cards': summary_cards,
-        }
-
-    def _is_overview_mode(self, request):
-        return request.GET.get('mode') != 'edit'
-
-    def _get_change_url(self, object_id):
-        return reverse(
-            f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change',
-            args=(object_id,),
-            current_app=self.admin_site.name,
-        )
-
-    @action(description=_('Edit subnet settings'), icon='edit')
-    def edit_subnet_settings(self, request, object_id):
-        return redirect(f'{self._get_change_url(object_id)}?mode=edit')
-
-    @action(description=_('Back to overview'), icon='visibility')
-    def back_to_overview(self, request, object_id):
-        return redirect(self._get_change_url(object_id))
-
-    @action(description=_('Open IP list'), icon='table_view')
-    def open_ip_list(self, request, object_id):
-        changelist_url = reverse(
-            f'admin:{IPAddress._meta.app_label}_{IPAddress._meta.model_name}_changelist',
-            current_app=self.admin_site.name,
-        )
-        return redirect(
-            f'{changelist_url}?{urlencode({"subnet__id__exact": object_id})}'
-        )
 
 
 @admin.register(JobRun)
@@ -588,7 +328,7 @@ class JobRunAdmin(ModelAdmin):
         'duration_summary',
         'counter_summary',
     )
-    list_filter = ('status', JobRunSectionFilter, JobRunVLANFilter)
+    list_filter = ('status', JobRunVLANFilter)
     ordering = ('-scheduled_for',)
     search_fields = ('subnet__cidr', 'error_message')
     readonly_fields = (
@@ -649,11 +389,7 @@ class JobRunAdmin(ModelAdmin):
     )
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
-            'subnet',
-            'subnet__section',
-            'subnet__vlan',
-        )
+        return super().get_queryset(request).select_related('subnet', 'subnet__vlan')
 
     def has_add_permission(self, request):
         return False

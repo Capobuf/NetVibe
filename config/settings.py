@@ -193,11 +193,6 @@ UNFOLD = {
                         'link': reverse_lazy('admin:ipam_subnet_changelist'),
                     },
                     {
-                        'title': _('Sections'),
-                        'icon': 'category',
-                        'link': reverse_lazy('admin:ipam_section_changelist'),
-                    },
-                    {
                         'title': _('IPAM settings'),
                         'icon': 'tune',
                         'link': reverse_lazy('admin:ipam_ipamsettings_changelist'),
@@ -224,67 +219,5 @@ UNFOLD = {
             },
         ],
     },
-    'TABS': [
-        {
-            'models': ['ipam.subnet', 'ipam.vlan'],
-            'items': [
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
-                },
-                {
-                    'title': _('Subnets'),
-                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-            ],
-        },
-        {
-            'models': [{'name': 'ipam.subnet', 'detail': True}],
-            'items': [
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
-                },
-                {
-                    'title': _('Subnets'),
-                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-                {
-                    'title': _('Details'),
-                    'link': '',
-                    'inline': 'general',
-                },
-                {
-                    'title': _('Child Subnets'),
-                    'link': '',
-                    'inline': 'children',
-                },
-                {
-                    'title': _('Subnet IPs'),
-                    'link': '',
-                    'inline': 'ipaddress_set',
-                },
-            ],
-        },
-        {
-            'models': [
-                {'name': 'ipam.vlan', 'detail': True},
-            ],
-            'items': [
-                {
-                    'title': _('VLANs'),
-                    'link': reverse_lazy('admin:ipam_vlan_changelist'),
-                },
-                {
-                    'title': _('Subnets'),
-                    'link': reverse_lazy('admin:ipam_subnet_changelist'),
-                },
-                {
-                    'title': _('Details'),
-                    'link': '',
-                    'inline': 'general',
-                },
-            ],
-        },
-    ],
+    'TABS': [],
 }

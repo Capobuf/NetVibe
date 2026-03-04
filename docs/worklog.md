@@ -16,6 +16,7 @@
 - Resettate le migrazioni `ipam` e rigenerata una baseline pulita (`ipam/migrations/0001_initial.py`).
 - Ripristinata la vista overview della subnet come destinazione di default al click, mantenendo l’edit separato via azione dedicata e senza reintrodurre i tab globali.
 - Chiarita la differenza UI tra scansione e discovery con label/help text admin piu espliciti.
+- Esteso il worker di scansione per recuperare e salvare i MAC address dalla neighbor table (`ip neigh`) dopo il ping, quando disponibili.
 
 ## File principali toccati
 

@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
+import re
 import subprocess
 
 from django.db import transaction
@@ -159,6 +160,31 @@ def _ping_host(address, timeout_ms):
     return completed.returncode == 0
 
 
+def _get_mac_address(address):
+    try:
+        completed = subprocess.run(
+            ['ip', 'neigh', 'show', address],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except OSError:
+        return ''
+
+    if completed.returncode != 0:
+        return ''
+
+    match = re.search(
+        r'\blladdr\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\b',
+        completed.stdout or '',
+    )
+    if match is None:
+        return ''
+
+    return match.group(1).lower()
+
+
 def _scan_subnet(subnet, network, settings_obj):
     host_addresses = [str(address) for address in network.hosts()]
     ip_records = list(
@@ -166,6 +192,7 @@ def _scan_subnet(subnet, network, settings_obj):
             'id',
             'address',
             'last_seen',
+            'mac_address',
             'exclude_ping',
         )
     )
@@ -194,9 +221,12 @@ def _scan_subnet(subnet, network, settings_obj):
     new_records = []
 
     for address in successful_addresses:
+        mac_address = _get_mac_address(address)
         ip_record = records_by_address.get(address)
         if ip_record is not None:
             ip_record.last_seen = observed_at
+            if mac_address:
+                ip_record.mac_address = mac_address
             existing_updates.append(ip_record)
             continue
 
@@ -206,11 +236,12 @@ def _scan_subnet(subnet, network, settings_obj):
                     subnet=subnet,
                     address=address,
                     last_seen=observed_at,
+                    mac_address=mac_address,
                 )
             )
 
     if existing_updates:
-        IPAddress.objects.bulk_update(existing_updates, ('last_seen',))
+        IPAddress.objects.bulk_update(existing_updates, ('last_seen', 'mac_address'))
     if new_records:
         IPAddress.objects.bulk_create(new_records)
 

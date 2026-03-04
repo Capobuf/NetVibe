@@ -321,7 +321,7 @@ class SubnetAdmin(ModelAdmin):
         if 'discover_subnet' in form.base_fields:
             form.base_fields['discover_subnet'].label = _('Auto-discover IPs')
             form.base_fields['discover_subnet'].help_text = _(
-                'During scans, create IP records for responding hosts that are not already tracked. This only applies when scanning is enabled.'
+                'During scans, create IP records for responding hosts that are not already tracked and capture their MAC address when the network exposes it. This only applies when scanning is enabled.'
             )
         return form
 

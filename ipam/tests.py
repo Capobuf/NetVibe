@@ -129,6 +129,10 @@ class IPAMModelTests(TestCase):
             'only applies when scanning is enabled',
             form.fields['discover_subnet'].help_text,
         )
+        self.assertIn(
+            'capture their MAC address',
+            form.fields['discover_subnet'].help_text,
+        )
 
     def test_subnet_change_form_defaults_to_overview_and_edit_mode_restores_fields(self):
         subnet = Subnet.objects.create(vlan=self.vlan, cidr='10.0.2.0/24')
@@ -231,6 +235,12 @@ class SchedulingTests(TestCase):
             return address in {'10.30.0.2', '10.30.0.3'}
 
         with patch('ipam.tasks._ping_host', side_effect=ping_side_effect), patch(
+            'ipam.tasks._get_mac_address',
+            side_effect=lambda address: {
+                '10.30.0.2': 'aa:bb:cc:dd:ee:02',
+                '10.30.0.3': 'aa:bb:cc:dd:ee:03',
+            }.get(address, ''),
+        ), patch(
             'ipam.tasks._enqueue_job_run',
             side_effect=lambda job_run: fake_enqueue(job_run, 'task-next'),
         ):
@@ -246,8 +256,13 @@ class SchedulingTests(TestCase):
         self.assertEqual(job_run.ip_records_updated, 1)
         self.assertNotIn(excluded.address, seen_addresses)
         self.assertGreater(existing.last_seen, timezone.now() - timedelta(minutes=1))
+        self.assertEqual(existing.mac_address, 'aa:bb:cc:dd:ee:02')
         self.assertTrue(
             IPAddress.objects.filter(subnet=subnet, address='10.30.0.3').exists()
+        )
+        self.assertEqual(
+            IPAddress.objects.get(subnet=subnet, address='10.30.0.3').mac_address,
+            'aa:bb:cc:dd:ee:03',
         )
 
     def test_failed_ping_does_not_overwrite_last_seen(self):
@@ -274,6 +289,21 @@ class SchedulingTests(TestCase):
         self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
         self.assertEqual(job_run.ip_records_updated, 0)
         self.assertEqual(ip_record.last_seen, original_last_seen)
+
+    def test_get_mac_address_parses_neighbor_table_output(self):
+        completed = type(
+            'CompletedProcess',
+            (),
+            {
+                'returncode': 0,
+                'stdout': '10.0.0.2 dev eth0 lladdr AA:BB:CC:DD:EE:FF REACHABLE\n',
+            },
+        )()
+
+        with patch('ipam.tasks.subprocess.run', return_value=completed):
+            from .tasks import _get_mac_address
+
+            self.assertEqual(_get_mac_address('10.0.0.2'), 'aa:bb:cc:dd:ee:ff')
 
     def test_prune_jobs_removes_only_old_terminal_rows(self):
         subnet = self.create_subnet()

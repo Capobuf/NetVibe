@@ -14,6 +14,8 @@
   rimossa la configurazione `UNFOLD["TABS"]`, rimossa la voce sidebar `Sections`, eliminati i template custom inutilizzati della subnet.
 - Corretto il doppio header di `IPAM settings` azzerando il `subtitle` nel change form del singleton admin.
 - Resettate le migrazioni `ipam` e rigenerata una baseline pulita (`ipam/migrations/0001_initial.py`).
+- Ripristinata la vista overview della subnet come destinazione di default al click, mantenendo l’edit separato via azione dedicata e senza reintrodurre i tab globali.
+- Chiarita la differenza UI tra scansione e discovery con label/help text admin piu espliciti.
 
 ## File principali toccati
 

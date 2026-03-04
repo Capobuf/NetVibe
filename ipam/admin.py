@@ -14,7 +14,7 @@ from django.utils.translation import gettext_lazy as _
 from unfold.admin import ModelAdmin
 from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.datasets import BaseDataset
-from unfold.decorators import display
+from unfold.decorators import action, display
 
 from .models import IPAMSettings, IPAddress, JobRun, Subnet, VLAN
 
@@ -259,6 +259,14 @@ class IPAMSettingsAdmin(ModelAdmin):
 
 @admin.register(Subnet)
 class SubnetAdmin(ModelAdmin):
+    change_form_outer_before_template = (
+        'admin/ipam/subnet/change_form_outer_before.html'
+    )
+    actions_detail = (
+        'edit_subnet_settings',
+        'back_to_overview',
+        'open_ip_list',
+    )
     change_form_datasets = (IPAddressDataset,)
     fieldsets = (
         (
@@ -304,6 +312,64 @@ class SubnetAdmin(ModelAdmin):
             return []
         return super().get_changeform_datasets(request)
 
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form = super().get_form(request, obj=obj, change=change, **kwargs)
+        if 'scan_enabled' in form.base_fields:
+            form.base_fields['scan_enabled'].help_text = _(
+                'Run scheduled ICMP scans for this subnet. Disable it to stop all scans.'
+            )
+        if 'discover_subnet' in form.base_fields:
+            form.base_fields['discover_subnet'].label = _('Auto-discover IPs')
+            form.base_fields['discover_subnet'].help_text = _(
+                'During scans, create IP records for responding hosts that are not already tracked. This only applies when scanning is enabled.'
+            )
+        return form
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is not None and self._is_overview_mode(request):
+            return ()
+        return super().get_fieldsets(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and self._is_overview_mode(request):
+            return tuple(field.name for field in self.model._meta.fields)
+        return super().get_readonly_fields(request, obj)
+
+    def changeform_view(
+        self,
+        request,
+        object_id=None,
+        form_url='',
+        extra_context=None,
+    ):
+        extra_context = extra_context or {}
+
+        if object_id is not None and self._is_overview_mode(request):
+            extra_context.update(
+                {
+                    'show_save': False,
+                    'show_save_and_continue': False,
+                    'show_save_and_add_another': False,
+                    'show_save_as_new': False,
+                    'show_delete': False,
+                }
+            )
+
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def get_actions_detail(self, request, object_id):
+        action_names = [
+            'back_to_overview' if not self._is_overview_mode(request) else 'edit_subnet_settings',
+            'open_ip_list',
+        ]
+        actions = [self.get_unfold_action(name) for name in action_names]
+        return self._filter_unfold_actions_by_permissions(request, actions, object_id)
+
     def get_queryset(self, request):
         return (
             super()
@@ -315,6 +381,145 @@ class SubnetAdmin(ModelAdmin):
     @admin.display(description=_('Used IPs'))
     def used_count(self, obj):
         return len(obj.ipaddress_set.all())
+
+    def render_change_form(
+        self,
+        request,
+        context,
+        add=False,
+        change=False,
+        form_url='',
+        obj=None,
+    ):
+        if change and obj is not None:
+            ip_addresses = list(
+                IPAddress.objects.filter(subnet_id=obj.pk)
+                .order_by('address')
+                .only(
+                    'address',
+                    'status',
+                    'hostname',
+                    'mac_address',
+                )
+            )
+            context.update(self._get_overview_context(obj, ip_addresses))
+
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
+
+    def _get_overview_context(self, obj, ip_addresses):
+        status_labels = dict(IPAddress.Status.choices)
+        status_counts = {status: 0 for status in status_labels}
+
+        for ip_address in ip_addresses:
+            if ip_address.status in status_counts:
+                status_counts[ip_address.status] += 1
+
+        vlan_title = _('No VLAN assigned')
+        vlan_details = [
+            {
+                'label': _('Subnet'),
+                'value': obj.cidr,
+            },
+        ]
+
+        if obj.vlan_id:
+            vlan_title = _('VLAN %(number)s') % {'number': obj.vlan.number}
+            vlan_details.append(
+                {
+                    'label': _('Name'),
+                    'value': obj.vlan.name or _('Unnamed VLAN'),
+                }
+            )
+
+        scanning_details = [
+            {
+                'label': _('Scan enabled'),
+                'value': _('Yes') if obj.scan_enabled else _('No'),
+            },
+            {
+                'label': _('Auto-discover IPs'),
+                'value': _('Yes') if obj.discover_subnet else _('No'),
+            },
+        ]
+
+        if obj.scan_interval_minutes:
+            scanning_details.append(
+                {
+                    'label': _('Scan interval (minutes)'),
+                    'value': str(obj.scan_interval_minutes),
+                }
+            )
+
+        summary_cards = [
+            {
+                'title': _('VLAN'),
+                'headline': vlan_title,
+                'details': vlan_details,
+                'footer': _('Subnet routing summary'),
+            },
+            {
+                'title': _('IP records'),
+                'headline': str(len(ip_addresses)),
+                'details': [
+                    {
+                        'label': status_labels[status],
+                        'value': str(status_counts[status]),
+                    }
+                    for status in status_labels
+                ],
+                'footer': _('Total records in this subnet'),
+            },
+            {
+                'title': _('Scanning'),
+                'headline': _('Active') if obj.scan_enabled else _('Disabled'),
+                'details': scanning_details,
+                'footer': (
+                    _('Parent subnet: %(parent)s')
+                    % {'parent': obj.parent.cidr}
+                    if obj.parent_id
+                    else _('No parent subnet')
+                ),
+            },
+        ]
+
+        return {
+            'subnet_overview_cards': summary_cards,
+        }
+
+    def _is_overview_mode(self, request):
+        return request.GET.get('mode') != 'edit'
+
+    def _get_change_url(self, object_id):
+        return reverse(
+            f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change',
+            args=(object_id,),
+            current_app=self.admin_site.name,
+        )
+
+    @action(description=_('Edit subnet settings'), icon='edit')
+    def edit_subnet_settings(self, request, object_id):
+        return redirect(f'{self._get_change_url(object_id)}?mode=edit')
+
+    @action(description=_('Back to overview'), icon='visibility')
+    def back_to_overview(self, request, object_id):
+        return redirect(self._get_change_url(object_id))
+
+    @action(description=_('Open IP list'), icon='table_view')
+    def open_ip_list(self, request, object_id):
+        changelist_url = reverse(
+            f'admin:{IPAddress._meta.app_label}_{IPAddress._meta.model_name}_changelist',
+            current_app=self.admin_site.name,
+        )
+        return redirect(
+            f'{changelist_url}?{urlencode({"subnet__id__exact": object_id})}'
+        )
 
 
 @admin.register(JobRun)

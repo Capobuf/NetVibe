@@ -117,6 +117,34 @@ class IPAMModelTests(TestCase):
             ),
         )
 
+    def test_subnet_admin_explains_scan_vs_discovery(self):
+        request = RequestFactory().get('/admin/ipam/subnet/add/')
+        request.user = AnonymousUser()
+        model_admin = admin.site._registry[Subnet]
+        form = model_admin.get_form(request)()
+
+        self.assertEqual(form.fields['discover_subnet'].label, 'Auto-discover IPs')
+        self.assertIn('stop all scans', form.fields['scan_enabled'].help_text)
+        self.assertIn(
+            'only applies when scanning is enabled',
+            form.fields['discover_subnet'].help_text,
+        )
+
+    def test_subnet_change_form_defaults_to_overview_and_edit_mode_restores_fields(self):
+        subnet = Subnet.objects.create(vlan=self.vlan, cidr='10.0.2.0/24')
+        model_admin = admin.site._registry[Subnet]
+
+        overview_request = RequestFactory().get('/admin/ipam/subnet/1/change/')
+        overview_request.user = AnonymousUser()
+        edit_request = RequestFactory().get('/admin/ipam/subnet/1/change/?mode=edit')
+        edit_request.user = AnonymousUser()
+
+        self.assertEqual(model_admin.get_fieldsets(overview_request, subnet), ())
+        self.assertEqual(
+            model_admin.get_fieldsets(edit_request, subnet),
+            model_admin.fieldsets,
+        )
+
 
 class SchedulingTests(TestCase):
     def setUp(self):

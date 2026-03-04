@@ -140,9 +140,44 @@ msgstr "Base"
 msgid "Scanning"
 msgstr "Scansione"
 
+#: ipam/admin.py:320
+msgid "Run scheduled ICMP scans for this subnet. Disable it to stop all scans."
+msgstr "Esegui scansioni ICMP pianificate per questa sottorete. Disattivala per fermare tutte le scansioni."
+
+#: ipam/admin.py:321 ipam/admin.py:380
+msgid "Auto-discover IPs"
+msgstr "Rileva automaticamente i nuovi IP"
+
+#: ipam/admin.py:322
+msgid ""
+"During scans, create IP records for responding hosts that are not already "
+"tracked. This only applies when scanning is enabled."
+msgstr "Durante le scansioni, crea record IP per gli host che rispondono e che non sono gia tracciati. Si applica solo quando la scansione e abilitata."
+
 #: ipam/admin.py:429
 msgid "Used IPs"
 msgstr "IP usati"
+
+#: ipam/admin.py:430
+msgid "Yes"
+msgstr "Si"
+
+#: ipam/admin.py:431
+msgid "No"
+msgstr "No"
+
+#: ipam/admin.py:432
+msgid "Active"
+msgstr "Attiva"
+
+#: ipam/admin.py:433
+msgid "Disabled"
+msgstr "Disabilitata"
+
+#: ipam/admin.py:434
+#, python-format
+msgid "Parent subnet: %(parent)s"
+msgstr "Sottorete padre: %(parent)s"
 
 #: ipam/admin.py:478 ipam/models.py:225 ipam/models.py:348 ipam/models.py:453
 msgid "Subnet"

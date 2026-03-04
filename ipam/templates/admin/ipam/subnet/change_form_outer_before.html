@@ -1,0 +1,20 @@
+{% load i18n unfold %}
+{% if subnet_overview_cards %}
+<div class="mb-8 grid gap-6 xl:grid-cols-3">
+    {% for card in subnet_overview_cards %}
+        {% component "unfold/components/card.html" with title=card.title footer=card.footer %}
+            <div class="space-y-4">
+                <p class="text-2xl font-semibold">{{ card.headline }}</p>
+                <dl class="space-y-2">
+                    {% for item in card.details %}
+                        <div class="flex items-center justify-between gap-4 text-sm">
+                            <dt>{{ item.label }}</dt>
+                            <dd class="text-right">{{ item.value }}</dd>
+                        </div>
+                    {% endfor %}
+                </dl>
+            </div>
+        {% endcomponent %}
+    {% endfor %}
+</div>
+{% endif %}

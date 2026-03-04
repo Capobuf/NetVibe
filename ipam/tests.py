@@ -1,12 +1,15 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib import admin
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TestCase, TransactionTestCase
+from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.utils import timezone
+from unfold.contrib.forms.widgets import WysiwygWidget
 
 from .models import IPAMSettings, IPAddress, JobRun, Section, Subnet, VLAN
 from .tasks import run_subnet_scan, schedule_subnet_scan_now
@@ -72,6 +75,28 @@ class IPAMModelTests(TestCase):
 
         self.assertEqual(JobRun.objects.count(), 1)
         self.assertEqual(JobRun.objects.get().task_ref, 'task-one')
+
+    def test_ip_address_admin_uses_compact_edit_layout(self):
+        request = RequestFactory().get('/admin/ipam/ipaddress/add/')
+        request.user = AnonymousUser()
+        model_admin = admin.site._registry[IPAddress]
+
+        fieldsets = model_admin.get_fieldsets(request)
+        form = model_admin.get_form(request)
+
+        self.assertEqual(str(fieldsets[0][0]), 'Identity')
+        self.assertEqual(
+            fieldsets[0][1]['fields'],
+            (
+                'subnet',
+                ('address', 'mac_address', 'hostname'),
+                ('status', 'exclude_ping'),
+            ),
+        )
+        self.assertEqual(str(fieldsets[1][0]), 'Notes')
+        self.assertEqual(fieldsets[1][1]['fields'], ('note',))
+        self.assertIsInstance(form.base_fields['note'].widget, WysiwygWidget)
+        self.assertNotIn('last_seen', form.base_fields)
 
 
 class SchedulingTests(TestCase):

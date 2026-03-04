@@ -16,15 +16,19 @@ class Section(models.Model):
     name = models.CharField(
         max_length=100,
         unique=True,
+        verbose_name=_('Name'),
         help_text=_('Enter a unique name for this section.'),
     )
     strict_mode = models.BooleanField(
         default=False,
+        verbose_name=_('Strict mode'),
         help_text=_('Prevent overlapping subnets within this section.'),
     )
 
     class Meta:
         ordering = ('name',)
+        verbose_name = _('Section')
+        verbose_name_plural = _('Sections')
 
     def __str__(self):
         return self.name
@@ -34,16 +38,20 @@ class VLAN(models.Model):
     number = models.PositiveSmallIntegerField(
         unique=True,
         validators=[MinValueValidator(1), MaxValueValidator(4094)],
+        verbose_name=_('Number'),
         help_text=_('Enter a VLAN ID between 1 and 4094.'),
     )
     name = models.CharField(
         max_length=100,
         blank=True,
+        verbose_name=_('Name'),
         help_text=_('Add an optional display name for this VLAN.'),
     )
 
     class Meta:
         ordering = ('number',)
+        verbose_name = _('VLAN')
+        verbose_name_plural = _('VLANs')
 
     def __str__(self):
         label = f'VLAN {self.number}'
@@ -67,32 +75,39 @@ class IPAMSettings(models.Model):
 
     warning_after_seconds = models.PositiveIntegerField(
         default=DEFAULT_WARNING_AFTER_SECONDS,
+        verbose_name=_('Warning after (seconds)'),
         help_text=_('Mark an IP as stale after this many seconds without a response.'),
     )
     offline_after_seconds = models.PositiveIntegerField(
         default=DEFAULT_OFFLINE_AFTER_SECONDS,
+        verbose_name=_('Offline after (seconds)'),
         help_text=_('Mark an IP as offline after this many seconds without a response.'),
     )
     default_scan_interval_seconds = models.PositiveIntegerField(
         default=DEFAULT_SCAN_INTERVAL_SECONDS,
+        verbose_name=_('Default scan interval (seconds)'),
         help_text=_('Use this interval when a subnet does not override its scan frequency.'),
     )
     worker_mode = models.CharField(
         max_length=16,
         choices=WorkerMode.choices,
         default=DEFAULT_WORKER_MODE,
+        verbose_name=_('Worker mode'),
         help_text=_('Choose whether the worker runs one scan at a time or multiple scans.'),
     )
     worker_concurrency = models.PositiveIntegerField(
         default=DEFAULT_WORKER_CONCURRENCY,
+        verbose_name=_('Worker concurrency'),
         help_text=_('Use this many worker processes when parallel mode is enabled.'),
     )
     ping_timeout_ms = models.PositiveIntegerField(
         default=DEFAULT_PING_TIMEOUT_MS,
+        verbose_name=_('Ping timeout (ms)'),
         help_text=_('Wait this many milliseconds for each ICMP response.'),
     )
     ping_concurrency = models.PositiveIntegerField(
         default=DEFAULT_PING_CONCURRENCY,
+        verbose_name=_('Ping concurrency'),
         help_text=_('Limit how many ping subprocesses run at once inside one scan job.'),
     )
 
@@ -146,6 +161,7 @@ class Subnet(models.Model):
     section = models.ForeignKey(
         Section,
         on_delete=models.PROTECT,
+        verbose_name=_('Section'),
         help_text=_('Choose the section that owns this subnet.'),
     )
     vlan = models.ForeignKey(
@@ -153,6 +169,7 @@ class Subnet(models.Model):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
+        verbose_name=_('VLAN'),
         help_text=_('Select the VLAN associated with this subnet, if any.'),
     )
     parent = models.ForeignKey(
@@ -161,6 +178,7 @@ class Subnet(models.Model):
         null=True,
         blank=True,
         related_name='children',
+        verbose_name=_('Parent subnet'),
         help_text=_('Select a parent subnet when this subnet is nested inside another one.'),
     )
     cidr = models.CharField(
@@ -170,34 +188,42 @@ class Subnet(models.Model):
     )
     description = models.TextField(
         blank=True,
+        verbose_name=_('Description'),
         help_text=_('Add optional notes about this subnet.'),
     )
     scan_enabled = models.BooleanField(
         default=False,
+        verbose_name=_('Scan enabled'),
         help_text=_('Enable ICMP reachability checks for this subnet.'),
     )
     discover_subnet = models.BooleanField(
         default=False,
+        verbose_name=_('Discovery enabled'),
         help_text=_('Enable discovery tasks for this subnet.'),
     )
     scan_interval_seconds = models.PositiveIntegerField(
         null=True,
         blank=True,
+        verbose_name=_('Scan interval (seconds)'),
         help_text=_('Override the global scan frequency for this subnet. Leave blank to use the global default.'),
     )
     warning_after_seconds_override = models.PositiveIntegerField(
         null=True,
         blank=True,
+        verbose_name=_('Warning after override (seconds)'),
         help_text=_('Override the global warning threshold for this subnet. Leave blank to use the global default.'),
     )
     offline_after_seconds_override = models.PositiveIntegerField(
         null=True,
         blank=True,
+        verbose_name=_('Offline after override (seconds)'),
         help_text=_('Override the global offline threshold for this subnet. Leave blank to use the global default.'),
     )
 
     class Meta:
         ordering = ('section__name', 'cidr')
+        verbose_name = _('Subnet')
+        verbose_name_plural = _('Subnets')
 
     def __str__(self):
         return self.cidr
@@ -311,61 +337,63 @@ class Subnet(models.Model):
 
 
 class IPAddress(models.Model):
-    class State(models.TextChoices):
-        ACTIVE = 'active', _('Active')
+    class Status(models.TextChoices):
+        IN_USE = 'in_use', _('In use')
         RESERVED = 'reserved', _('Reserved')
         DEPRECATED = 'deprecated', _('Deprecated')
 
     subnet = models.ForeignKey(
         Subnet,
         on_delete=models.PROTECT,
+        verbose_name=_('Subnet'),
         help_text=_('Choose the subnet that contains this IP address.'),
     )
     address = models.GenericIPAddressField(
         protocol='IPv4',
+        verbose_name=_('IP address'),
         help_text=_('Enter an IPv4 address.'),
     )
-    state = models.CharField(
+    status = models.CharField(
         max_length=20,
-        choices=State.choices,
-        default=State.ACTIVE,
-        help_text=_('Set the lifecycle state for this IP address.'),
+        choices=Status.choices,
+        default=Status.IN_USE,
+        verbose_name=_('Status'),
+        help_text=_('Controls allocation and scan handling.'),
     )
     hostname = models.CharField(
         max_length=255,
         blank=True,
+        verbose_name=_('Hostname'),
         help_text=_('Add an optional DNS name or host label.'),
-    )
-    description = models.TextField(
-        blank=True,
-        help_text=_('Add optional notes about this IP address.'),
     )
     note = models.TextField(
         blank=True,
-        help_text=_('Store any operator note for this IP address.'),
+        verbose_name=_('Notes'),
+        help_text=_('Add optional operational notes for this IP address.'),
     )
     mac_address = models.CharField(
         max_length=32,
         blank=True,
+        verbose_name=_('MAC address'),
         help_text=_('Add an optional MAC address.'),
-    )
-    owner = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text=_('Record the person or system responsible for this IP address.'),
     )
     last_seen = models.DateTimeField(
         null=True,
         blank=True,
+        editable=False,
+        verbose_name=_('Last seen'),
         help_text=_('Record when this IP address was last observed.'),
     )
     exclude_ping = models.BooleanField(
         default=False,
+        verbose_name=_('Exclude from ping'),
         help_text=_('Exclude this IP address from ping checks.'),
     )
 
     class Meta:
         ordering = ('subnet__cidr', 'address')
+        verbose_name = _('IP address')
+        verbose_name_plural = _('IP addresses')
         constraints = [
             models.UniqueConstraint(
                 fields=('subnet', 'address'),
@@ -406,30 +434,35 @@ class JobRun(models.Model):
         max_length=32,
         choices=JobType.choices,
         default=JobType.SUBNET_SCAN,
+        verbose_name=_('Job type'),
     )
     subnet = models.ForeignKey(
         Subnet,
         on_delete=models.PROTECT,
         related_name='job_runs',
+        verbose_name=_('Subnet'),
     )
     status = models.CharField(
         max_length=32,
         choices=Status.choices,
         default=Status.SCHEDULED,
+        verbose_name=_('Status'),
     )
-    scheduled_for = models.DateTimeField()
-    started_at = models.DateTimeField(null=True, blank=True)
-    finished_at = models.DateTimeField(null=True, blank=True)
-    hosts_total = models.PositiveIntegerField(default=0)
-    hosts_pinged = models.PositiveIntegerField(default=0)
-    hosts_alive = models.PositiveIntegerField(default=0)
-    ip_records_created = models.PositiveIntegerField(default=0)
-    ip_records_updated = models.PositiveIntegerField(default=0)
-    error_message = models.TextField(blank=True)
-    task_ref = models.CharField(max_length=64, blank=True, db_index=True)
+    scheduled_for = models.DateTimeField(verbose_name=_('Scheduled for'))
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Started at'))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finished at'))
+    hosts_total = models.PositiveIntegerField(default=0, verbose_name=_('Hosts total'))
+    hosts_pinged = models.PositiveIntegerField(default=0, verbose_name=_('Hosts pinged'))
+    hosts_alive = models.PositiveIntegerField(default=0, verbose_name=_('Hosts alive'))
+    ip_records_created = models.PositiveIntegerField(default=0, verbose_name=_('IP records created'))
+    ip_records_updated = models.PositiveIntegerField(default=0, verbose_name=_('IP records updated'))
+    error_message = models.TextField(blank=True, verbose_name=_('Error message'))
+    task_ref = models.CharField(max_length=64, blank=True, db_index=True, verbose_name=_('Task reference'))
 
     class Meta:
         ordering = ('-scheduled_for', '-pk')
+        verbose_name = _('Job run')
+        verbose_name_plural = _('Job runs')
         constraints = [
             models.UniqueConstraint(
                 fields=('job_type', 'subnet', 'scheduled_for'),

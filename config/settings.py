@@ -31,6 +31,7 @@ ALLOWED_HOSTS = [
 INSTALLED_APPS = [
     # Unfold must precede django.contrib.admin to override admin templates
     'unfold',
+    'unfold.contrib.forms',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -153,7 +154,7 @@ TASKS = {
 STATIC_URL = 'static/'
 
 UNFOLD = {
-    'SITE_TITLE': 'Netvibe Admin',
+    'SITE_TITLE': _('NetVibe Admin'),
     'SITE_HEADER': 'Netvibe',
     'SITE_SUBHEADER': 'Network operations',
     'SITE_SYMBOL': 'NV',
@@ -167,52 +168,53 @@ UNFOLD = {
         'show_all_applications': True,
         'navigation': [
             {
-                'title': 'Navigation',
+                'title': _('Navigation'),
+                'separator': True,
                 'items': [
                     {
-                        'title': 'Dashboard',
+                        'title': _('Dashboard'),
                         'icon': 'dashboard',
                         'link': reverse_lazy('admin:index'),
                     },
                 ],
             },
             {
-                'title': 'IPAM',
+                'title': _('IPAM'),
                 'collapsible': True,
                 'items': [
                     {
-                        'title': 'VLANs',
+                        'title': _('VLANs'),
                         'icon': 'tag',
                         'link': reverse_lazy('admin:ipam_vlan_changelist'),
                     },
                     {
-                        'title': 'Subnets',
+                        'title': _('Subnets'),
                         'icon': 'lan',
                         'link': reverse_lazy('admin:ipam_subnet_changelist'),
                     },
                     {
-                        'title': 'Sections',
+                        'title': _('Sections'),
                         'icon': 'category',
                         'link': reverse_lazy('admin:ipam_section_changelist'),
                     },
                     {
-                        'title': 'IPAM settings',
+                        'title': _('IPAM settings'),
                         'icon': 'tune',
                         'link': reverse_lazy('admin:ipam_ipamsettings_changelist'),
                     },
                 ],
             },
             {
-                'title': 'Jobs & Tasks',
+                'title': _('Jobs & Tasks'),
                 'collapsible': True,
                 'items': [
                     {
-                        'title': 'Job runs',
+                        'title': _('Job runs'),
                         'icon': 'schedule',
                         'link': reverse_lazy('admin:ipam_jobrun_changelist'),
                     },
                     {
-                        'title': 'Task results',
+                        'title': _('Task results'),
                         'icon': 'task_alt',
                         'link': reverse_lazy(
                             'admin:django_tasks_database_dbtaskresult_changelist'

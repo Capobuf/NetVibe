@@ -9,6 +9,19 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
+class SourceKind(models.TextChoices):
+    """How an IPAM object was originally created."""
+    MANUAL = 'manual', _('Manual')
+    MIKROTIK = 'mikrotik', _('MikroTik')
+
+
+class SyncState(models.TextChoices):
+    """Lifecycle state of a synced object."""
+    LIVE = 'live', _('Live')
+    ORPHANED = 'orphaned', _('Orphaned')
+    CONFLICT = 'conflict', _('Conflict')
+
+
 def parse_cidr(value: str):
     return ip_network(value)
 
@@ -25,6 +38,66 @@ class VLAN(models.Model):
         blank=True,
         verbose_name=_('Name'),
         help_text=_('Add an optional display name for this VLAN.'),
+    )
+
+    # --- Provenance fields ---
+    source_kind = models.CharField(
+        max_length=16,
+        choices=SourceKind.choices,
+        default=SourceKind.MANUAL,
+        verbose_name=_('Source'),
+    )
+    source_device = models.ForeignKey(
+        'MikroTikDevice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='imported_vlans',
+        verbose_name=_('Source device'),
+    )
+    source_remote_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_('Source remote ID'),
+        help_text=_('Opaque key from the upstream system.'),
+    )
+    source_job_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source job ID'),
+    )
+    source_trace_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source trace ID'),
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Last synced at'),
+    )
+    sync_state = models.CharField(
+        max_length=16,
+        choices=SyncState.choices,
+        default=SyncState.LIVE,
+        blank=True,
+        verbose_name=_('Sync state'),
+    )
+    integration_sync_enabled = models.BooleanField(
+        default=True,
+        verbose_name=_('Integration sync enabled'),
+        help_text=_('Disable to stop updating this VLAN from the upstream device.'),
+    )
+    source_upstream_disabled = models.BooleanField(
+        default=False,
+        verbose_name=_('Upstream disabled'),
+        help_text=_('True when the upstream device reports this VLAN as disabled.'),
+    )
+    source_bridge_name = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name=_('Source bridge'),
+        help_text=_('Bridge name from the upstream device, if applicable.'),
     )
 
     class Meta:
@@ -202,6 +275,70 @@ class Subnet(models.Model):
         help_text=_('Override the global offline threshold for this subnet. Leave blank to use the global default.'),
     )
 
+    # --- Provenance fields ---
+    source_kind = models.CharField(
+        max_length=16,
+        choices=SourceKind.choices,
+        default=SourceKind.MANUAL,
+        verbose_name=_('Source'),
+    )
+    source_device = models.ForeignKey(
+        'MikroTikDevice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='imported_subnets',
+        verbose_name=_('Source device'),
+    )
+    source_remote_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_('Source remote ID'),
+    )
+    source_job_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source job ID'),
+    )
+    source_trace_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source trace ID'),
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Last synced at'),
+    )
+    sync_state = models.CharField(
+        max_length=16,
+        choices=SyncState.choices,
+        default=SyncState.LIVE,
+        blank=True,
+        verbose_name=_('Sync state'),
+    )
+    integration_sync_enabled = models.BooleanField(
+        default=True,
+        verbose_name=_('Integration sync enabled'),
+        help_text=_('Disable to stop updating this subnet from the upstream device.'),
+    )
+    source_upstream_disabled = models.BooleanField(
+        default=False,
+        verbose_name=_('Upstream disabled'),
+        help_text=_('True when the upstream device reports this subnet as disabled.'),
+    )
+    source_upstream_invalid = models.BooleanField(
+        default=False,
+        verbose_name=_('Upstream invalid'),
+        help_text=_('True when the upstream device reports this subnet as invalid.'),
+    )
+    source_interface_name = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name=_('Source interface'),
+        help_text=_('Interface name from the upstream device.'),
+    )
+
     class Meta:
         ordering = ('cidr',)
         verbose_name = _('Subnet')
@@ -313,6 +450,11 @@ class IPAddress(models.Model):
         RESERVED = 'reserved', _('Reserved')
         DEPRECATED = 'deprecated', _('Deprecated')
 
+    class LeaseKind(models.TextChoices):
+        NONE = 'none', _('None')
+        DHCP_DYNAMIC = 'dhcp_dynamic', _('DHCP dynamic')
+        DHCP_STATIC = 'dhcp_static', _('DHCP static')
+
     subnet = models.ForeignKey(
         Subnet,
         on_delete=models.PROTECT,
@@ -359,6 +501,73 @@ class IPAddress(models.Model):
         default=False,
         verbose_name=_('Exclude from ping'),
         help_text=_('Exclude this IP address from ping checks.'),
+    )
+
+    # --- Provenance fields ---
+    source_kind = models.CharField(
+        max_length=16,
+        choices=SourceKind.choices,
+        default=SourceKind.MANUAL,
+        verbose_name=_('Source'),
+    )
+    source_device = models.ForeignKey(
+        'MikroTikDevice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='imported_ips',
+        verbose_name=_('Source device'),
+    )
+    source_remote_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_('Source remote ID'),
+    )
+    source_job_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source job ID'),
+    )
+    source_trace_id = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Source trace ID'),
+    )
+    source_observed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Source observed at'),
+    )
+    last_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Last synced at'),
+    )
+    sync_state = models.CharField(
+        max_length=16,
+        choices=SyncState.choices,
+        default=SyncState.LIVE,
+        blank=True,
+        verbose_name=_('Sync state'),
+    )
+
+    # --- Lease fields (populated by DHCP sync) ---
+    lease_kind = models.CharField(
+        max_length=16,
+        choices=LeaseKind.choices,
+        default=LeaseKind.NONE,
+        verbose_name=_('Lease kind'),
+    )
+    lease_status = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name=_('Lease status'),
+        help_text=_('Raw lease status from the upstream DHCP server.'),
+    )
+    lease_server_name = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name=_('DHCP server'),
     )
 
     class Meta:
@@ -471,5 +680,214 @@ class JobRun(models.Model):
         if not self.started_at:
             return None
 
+        end_time = self.finished_at or timezone.now()
+        return end_time - self.started_at
+
+
+class MikroTikDevice(models.Model):
+    """One MikroTik RouterOS v7 device managed via REST API."""
+
+    class DeviceRole(models.TextChoices):
+        ROUTER = 'router', _('Router')
+        SWITCH = 'switch', _('Switch')
+        UNKNOWN = 'unknown', _('Unknown')
+
+    # --- Identity ---
+    name = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name=_('Name'),
+        help_text=_('Display name. Auto-populated from the device identity if left blank.'),
+    )
+
+    # --- Connection ---
+    host = models.CharField(
+        max_length=255,
+        verbose_name=_('Host / IP'),
+        help_text=_('Hostname or IP address of the RouterOS device.'),
+    )
+    port = models.PositiveIntegerField(
+        default=443,
+        verbose_name=_('Port'),
+    )
+    scheme = models.CharField(
+        max_length=8,
+        default='https',
+        verbose_name=_('Scheme'),
+        help_text=_('http or https.'),
+    )
+    username = models.CharField(
+        max_length=128,
+        verbose_name=_('Username'),
+    )
+    # Encrypted password stored as binary via pgcrypto.
+    password_encrypted = models.BinaryField(
+        editable=False,
+        verbose_name=_('Password (encrypted)'),
+    )
+    verify_tls = models.BooleanField(
+        default=False,
+        verbose_name=_('Verify TLS'),
+        help_text=_('Enable strict TLS certificate verification.'),
+    )
+
+    # --- Synchronization ---
+    enabled = models.BooleanField(
+        default=True,
+        verbose_name=_('Enabled'),
+    )
+    sync_enabled = models.BooleanField(
+        default=True,
+        verbose_name=_('Periodic sync'),
+        help_text=_('Enable automatic periodic synchronization.'),
+    )
+    sync_interval_minutes = models.PositiveIntegerField(
+        default=15,
+        validators=[MinValueValidator(1)],
+        verbose_name=_('Sync interval (minutes)'),
+    )
+
+    # --- Import policy ---
+    import_vlans = models.BooleanField(default=True, verbose_name=_('Import VLANs'))
+    import_subnets = models.BooleanField(default=True, verbose_name=_('Import subnets'))
+    import_dhcp_leases = models.BooleanField(default=True, verbose_name=_('Import DHCP leases'))
+    import_arp = models.BooleanField(default=True, verbose_name=_('Import ARP'))
+    import_neighbors = models.BooleanField(default=True, verbose_name=_('Import neighbors'))
+    ignore_dynamic_bridge_vlans = models.BooleanField(
+        default=True,
+        verbose_name=_('Ignore dynamic bridge VLANs'),
+        help_text=_('Skip bridge VLAN rows where dynamic=true.'),
+    )
+
+    # --- Authority ---
+    device_role = models.CharField(
+        max_length=16,
+        choices=DeviceRole.choices,
+        default=DeviceRole.UNKNOWN,
+        verbose_name=_('Device role'),
+    )
+    is_authoritative_for_l3 = models.BooleanField(
+        default=True,
+        verbose_name=_('Authoritative for L3'),
+        help_text=_('If true, sync will create/update subnets from this device.'),
+    )
+    is_authoritative_for_dhcp = models.BooleanField(
+        default=True,
+        verbose_name=_('Authoritative for DHCP'),
+        help_text=_('If true, sync will import DHCP lease data from this device.'),
+    )
+
+    # --- Status (populated by test / sync) ---
+    last_successful_sync_at = models.DateTimeField(
+        null=True, blank=True, verbose_name=_('Last successful sync'),
+    )
+    last_error = models.TextField(
+        blank=True, verbose_name=_('Last error'),
+    )
+    last_seen_identity = models.CharField(
+        max_length=128, blank=True, verbose_name=_('Identity'),
+    )
+    last_seen_version = models.CharField(
+        max_length=64, blank=True, verbose_name=_('RouterOS version'),
+    )
+    last_seen_board = models.CharField(
+        max_length=128, blank=True, verbose_name=_('Board'),
+    )
+    last_seen_platform = models.CharField(
+        max_length=128, blank=True, verbose_name=_('Platform'),
+    )
+
+    class Meta:
+        ordering = ('name', 'host')
+        verbose_name = _('MikroTik device')
+        verbose_name_plural = _('MikroTik devices')
+
+    def __str__(self):
+        return self.name or self.host
+
+    @property
+    def base_url(self) -> str:
+        return f'{self.scheme}://{self.host}:{self.port}'
+
+
+class MikroTikSyncRun(models.Model):
+    """One test or sync run against a MikroTik device."""
+
+    class Mode(models.TextChoices):
+        TEST = 'test', _('Test')
+        SYNC = 'sync', _('Sync')
+
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', _('Scheduled')
+        RUNNING = 'running', _('Running')
+        SUCCESS = 'success', _('Success')
+        FAILED = 'failed', _('Failed')
+
+    device = models.ForeignKey(
+        MikroTikDevice,
+        on_delete=models.CASCADE,
+        related_name='sync_runs',
+        verbose_name=_('Device'),
+    )
+    mode = models.CharField(
+        max_length=8,
+        choices=Mode.choices,
+        verbose_name=_('Mode'),
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+        verbose_name=_('Status'),
+    )
+    scheduled_for = models.DateTimeField(verbose_name=_('Scheduled for'))
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Started at'))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finished at'))
+    trace_id = models.CharField(max_length=64, blank=True, db_index=True, verbose_name=_('Trace ID'))
+    job_id = models.CharField(max_length=64, blank=True, verbose_name=_('Job ID'))
+
+    # --- Summary counters ---
+    vlans_created = models.PositiveIntegerField(default=0, verbose_name=_('VLANs created'))
+    vlans_updated = models.PositiveIntegerField(default=0, verbose_name=_('VLANs updated'))
+    subnets_created = models.PositiveIntegerField(default=0, verbose_name=_('Subnets created'))
+    subnets_updated = models.PositiveIntegerField(default=0, verbose_name=_('Subnets updated'))
+    ips_created = models.PositiveIntegerField(default=0, verbose_name=_('IPs created'))
+    ips_updated = models.PositiveIntegerField(default=0, verbose_name=_('IPs updated'))
+
+    # --- Diagnostics ---
+    warning_summary = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_('Warnings'),
+    )
+    observed_summary = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('Observed summary'),
+        help_text=_('Normalized neighbor/ARP summary for diagnostics.'),
+    )
+    error_message = models.TextField(
+        blank=True,
+        verbose_name=_('Error message'),
+    )
+    task_ref = models.CharField(
+        max_length=64,
+        blank=True,
+        db_index=True,
+        verbose_name=_('Task reference'),
+    )
+
+    class Meta:
+        ordering = ('-scheduled_for', '-pk')
+        verbose_name = _('MikroTik sync run')
+        verbose_name_plural = _('MikroTik sync runs')
+
+    def __str__(self):
+        return f'{self.get_mode_display()} – {self.device} @ {self.scheduled_for}'
+
+    @property
+    def duration(self):
+        if not self.started_at:
+            return None
         end_time = self.finished_at or timezone.now()
         return end_time - self.started_at

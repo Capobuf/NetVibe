@@ -2,3 +2,5 @@ Django==6.0.2
 django-unfold
 django-tasks-db==0.12.0
 psycopg[binary]
+httpx
+pydantic

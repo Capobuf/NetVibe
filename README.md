@@ -52,6 +52,52 @@ Then attach from VS Code using the included `Python: Attach (Docker)` launch con
 - Only two containers: `web` and `db`
 - PostgreSQL is always used, with development-only dependencies kept in `requirements-dev.txt`
 
+## MikroTik integration
+
+### Environment
+
+Add `NETVIBE_PGCRYPTO_KEY` to your `.env` file. This key is used to encrypt MikroTik device passwords at rest via PostgreSQL's `pgcrypto` extension. **Use a strong, unique value in production.**
+
+```env
+NETVIBE_PGCRYPTO_KEY=change-me-to-a-real-secret
+```
+
+### Setup
+
+After rebuilding the containers and running migrations:
+
+```powershell
+docker compose up --build
+docker compose exec web python manage.py migrate
+```
+
+The admin sidebar now includes an **Integrations** group with:
+- MikroTik devices
+- MikroTik sync runs
+- MikroTik VLANs (filtered view of imported VLANs)
+- MikroTik subnets (filtered view of imported subnets)
+
+### Adding a device
+
+1. Navigate to **Integrations → MikroTik devices → Add**
+2. Enter the host/IP, username, and password (minimum required fields)
+3. Click **Save and test** to verify the connection and populate device metadata
+4. Use the **Sync now** action on the device detail page to trigger a full sync
+
+### Running tests
+
+```powershell
+docker compose exec web python manage.py test ipam
+```
+
+### Verification
+
+After a successful sync, check:
+- **MikroTik VLANs**: shows imported VLANs with source device, upstream state, and sync toggle
+- **MikroTik subnets**: shows imported subnets with interface name, upstream state, and scan toggles
+- **IP addresses**: MikroTik-sourced IPs show lease kind, DHCP server, and provenance fields
+- **MikroTik sync runs**: each test/sync is logged with counters and diagnostics
+
 ## Translations
 
 Generate Italian message catalogs:

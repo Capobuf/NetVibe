@@ -217,6 +217,32 @@ UNFOLD = {
                     },
                 ],
             },
+            {
+                'title': _('Integrations'),
+                'collapsible': True,
+                'items': [
+                    {
+                        'title': _('MikroTik devices'),
+                        'icon': 'router',
+                        'link': reverse_lazy('admin:ipam_mikrotikdevice_changelist'),
+                    },
+                    {
+                        'title': _('MikroTik sync runs'),
+                        'icon': 'sync',
+                        'link': reverse_lazy('admin:ipam_mikrotiksyncrun_changelist'),
+                    },
+                    {
+                        'title': _('MikroTik VLANs'),
+                        'icon': 'tag',
+                        'link': reverse_lazy('admin:ipam_mikrotikvlan_changelist'),
+                    },
+                    {
+                        'title': _('MikroTik subnets'),
+                        'icon': 'lan',
+                        'link': reverse_lazy('admin:ipam_mikrotiksubnet_changelist'),
+                    },
+                ],
+            },
         ],
     },
     'TABS': [],

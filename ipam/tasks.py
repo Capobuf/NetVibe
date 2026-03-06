@@ -8,7 +8,7 @@ from django.db import transaction
 from django.tasks import task
 from django.utils import timezone
 
-from .models import IPAMSettings, IPAddress, JobRun, Subnet
+from .models import IPAMSettings, IPAddress, JobRun, MikroTikDevice, MikroTikSyncRun, Subnet
 
 
 ACTIVE_JOB_STATUSES = (
@@ -346,4 +346,123 @@ def run_subnet_scan(job_run_id: int):
             subnet = Subnet.objects.filter(pk=completed_job.subnet_id).first()
         if subnet is not None and subnet.scan_enabled:
             schedule_next_subnet_scan(completed_job, completed_job.finished_at)
+        raise
+
+
+# =====================================================================
+# MikroTik sync scheduling
+# =====================================================================
+
+MIKROTIK_ACTIVE_STATUSES = (
+    MikroTikSyncRun.Status.SCHEDULED,
+    MikroTikSyncRun.Status.RUNNING,
+)
+
+
+def schedule_mikrotik_sync_now(device):
+    """Schedule an immediate sync for the given device."""
+    device_id = device.pk if isinstance(device, MikroTikDevice) else int(device)
+    return _schedule_mikrotik_sync_at(
+        device_id=device_id,
+        scheduled_for=_normalize_schedule_time(timezone.now()),
+    )
+
+
+def _schedule_mikrotik_sync_at(device_id, scheduled_for):
+    """Create a MikroTikSyncRun at a specific time, guarding against duplicates."""
+    with transaction.atomic():
+        device = MikroTikDevice.objects.select_for_update().get(pk=device_id)
+        if not device.enabled:
+            return None
+
+        existing = (
+            MikroTikSyncRun.objects.select_for_update()
+            .filter(
+                device=device,
+                mode=MikroTikSyncRun.Mode.SYNC,
+                status__in=MIKROTIK_ACTIVE_STATUSES,
+            )
+            .order_by('scheduled_for')
+            .first()
+        )
+        if existing is not None:
+            return _enqueue_mikrotik_sync_run(existing)
+
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.SYNC,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=scheduled_for,
+        )
+        return _enqueue_mikrotik_sync_run(sync_run)
+
+
+def schedule_next_mikrotik_sync(device, finished_at):
+    """Schedule the next periodic sync after a completed run."""
+    with transaction.atomic():
+        device = MikroTikDevice.objects.select_for_update().get(pk=device.pk)
+        if not device.enabled or not device.sync_enabled:
+            return None
+
+        existing = (
+            MikroTikSyncRun.objects.select_for_update()
+            .filter(
+                device=device,
+                mode=MikroTikSyncRun.Mode.SYNC,
+                status__in=MIKROTIK_ACTIVE_STATUSES,
+            )
+            .order_by('scheduled_for')
+            .first()
+        )
+        if existing is not None:
+            return _enqueue_mikrotik_sync_run(existing)
+
+        scheduled_for = _normalize_schedule_time(
+            finished_at + timedelta(minutes=device.sync_interval_minutes)
+        )
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.SYNC,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=scheduled_for,
+        )
+        return _enqueue_mikrotik_sync_run(sync_run)
+
+
+def _enqueue_mikrotik_sync_run(sync_run):
+    """Attach a django-tasks task to the sync run if not already enqueued."""
+    if sync_run.task_ref:
+        return sync_run
+
+    task_result = run_mikrotik_sync.using(
+        run_after=sync_run.scheduled_for,
+    ).enqueue(sync_run_id=sync_run.pk)
+    sync_run.task_ref = str(task_result.id)
+    sync_run.save(update_fields=('task_ref',))
+    return sync_run
+
+
+@task
+def run_mikrotik_sync(sync_run_id: int):
+    """Execute a MikroTik sync run."""
+    from .integrations.mikrotik_sync import run_device_sync
+
+    with transaction.atomic():
+        sync_run = MikroTikSyncRun.objects.select_for_update().get(pk=sync_run_id)
+        if sync_run.status != MikroTikSyncRun.Status.SCHEDULED:
+            return
+
+    device = sync_run.device
+
+    try:
+        run_device_sync(device, sync_run)
+        sync_run.refresh_from_db()
+        if sync_run.status == MikroTikSyncRun.Status.SUCCESS:
+            schedule_next_mikrotik_sync(device, sync_run.finished_at)
+    except Exception:
+        sync_run.refresh_from_db()
+        if device.sync_enabled and device.enabled:
+            schedule_next_mikrotik_sync(
+                device, sync_run.finished_at or timezone.now()
+            )
         raise

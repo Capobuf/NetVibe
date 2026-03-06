@@ -1,9 +1,9 @@
 from urllib.parse import urlencode
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
-from django.db import models as django_models
+from django.db import models as django_models, transaction
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import strip_tags
@@ -16,7 +16,11 @@ from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.datasets import BaseDataset
 from unfold.decorators import action, display
 
-from .models import IPAMSettings, IPAddress, JobRun, Subnet, VLAN
+from .forms import MikroTikDeviceForm
+from .models import (
+    IPAMSettings, IPAddress, JobRun, MikroTikDevice,
+    MikroTikSyncRun, SourceKind, Subnet, VLAN,
+)
 
 
 # Hide built-in auth models until dedicated admin workflows are defined.
@@ -619,3 +623,374 @@ class JobRunAdmin(ModelAdmin):
             'created': obj.ip_records_created,
             'updated': obj.ip_records_updated,
         }
+
+
+# =====================================================================
+# MikroTik integration admin
+# =====================================================================
+
+
+@admin.register(MikroTikDevice)
+class MikroTikDeviceAdmin(ModelAdmin):
+    form = MikroTikDeviceForm
+    list_display = (
+        'name_or_host',
+        'host',
+        'enabled',
+        'sync_enabled',
+        'last_seen_version',
+        'last_successful_sync_at',
+    )
+    list_filter = ('enabled', 'sync_enabled', 'device_role')
+    search_fields = ('=host', 'name', 'last_seen_identity')
+    search_help_text = _('Search by host, name, or identity.')
+    ordering = ('name', 'host')
+
+    fieldsets = (
+        (
+            _('Identity'),
+            {
+                'fields': ('name',),
+            },
+        ),
+        (
+            _('Connection'),
+            {
+                'fields': (
+                    'host',
+                    ('scheme', 'port'),
+                    'username',
+                    'password',
+                    'verify_tls',
+                ),
+            },
+        ),
+        (
+            _('Synchronization'),
+            {
+                'fields': (
+                    'enabled',
+                    'sync_enabled',
+                    'sync_interval_minutes',
+                ),
+            },
+        ),
+        (
+            _('Import policy'),
+            {
+                'fields': (
+                    'import_vlans',
+                    'import_subnets',
+                    'import_dhcp_leases',
+                    'import_arp',
+                    'import_neighbors',
+                    'ignore_dynamic_bridge_vlans',
+                ),
+            },
+        ),
+        (
+            _('Authority'),
+            {
+                'fields': (
+                    'device_role',
+                    'is_authoritative_for_l3',
+                    'is_authoritative_for_dhcp',
+                ),
+            },
+        ),
+        (
+            _('Status'),
+            {
+                'fields': (
+                    'last_seen_identity',
+                    'last_seen_version',
+                    'last_seen_board',
+                    'last_seen_platform',
+                    'last_successful_sync_at',
+                    'last_error',
+                ),
+            },
+        ),
+    )
+    readonly_fields = (
+        'last_seen_identity',
+        'last_seen_version',
+        'last_seen_board',
+        'last_seen_platform',
+        'last_successful_sync_at',
+        'last_error',
+    )
+
+    # Submitline actions — shown as buttons next to the Save button.
+    actions_submit_line = ('save_and_test',)
+
+    # Changeform object actions — shown in the detail toolbar.
+    actions_detail = ('sync_now_action',)
+
+    @admin.display(description=_('Name'))
+    def name_or_host(self, obj):
+        return obj.name or obj.host
+
+    @action(description=_('Save and test'), attrs={'type': 'submit'})
+    def save_and_test(self, request, obj):
+        """Submit-line action: save the device and run a connection test."""
+        # The form save already happened via the standard admin flow;
+        # we trigger the test here as a post-save side-effect.
+        from .integrations.mikrotik_sync import run_device_test
+
+        sync_run = run_device_test(obj)
+        if sync_run.status == MikroTikSyncRun.Status.SUCCESS:
+            messages.success(
+                request,
+                _('Connection test succeeded: %(identity)s (RouterOS %(version)s).') % {
+                    'identity': obj.last_seen_identity or obj.host,
+                    'version': obj.last_seen_version or '?',
+                },
+            )
+        else:
+            messages.error(
+                request,
+                _('Connection test failed: %(error)s') % {
+                    'error': sync_run.error_message[:300],
+                },
+            )
+
+    @action(description=_('Sync now'), icon='sync')
+    def sync_now_action(self, request, object_id):
+        """Changeform object action: trigger an immediate full sync."""
+        from .tasks import schedule_mikrotik_sync_now
+
+        device = MikroTikDevice.objects.get(pk=object_id)
+        schedule_mikrotik_sync_now(device)
+        messages.info(request, _('Sync scheduled for %s.') % device)
+        return redirect(
+            reverse(
+                'admin:ipam_mikrotikdevice_change',
+                args=(object_id,),
+                current_app=self.admin_site.name,
+            )
+        )
+
+
+@admin.register(MikroTikSyncRun)
+class MikroTikSyncRunAdmin(ModelAdmin):
+    list_display = (
+        'device',
+        'mode',
+        'status',
+        'scheduled_for',
+        'started_at',
+        'finished_at',
+        'sync_counters',
+    )
+    list_filter = ('status', 'mode', 'device')
+    ordering = ('-scheduled_for',)
+    search_fields = ('device__name', 'device__host', 'error_message')
+    readonly_fields = (
+        'device', 'mode', 'status',
+        'scheduled_for', 'started_at', 'finished_at',
+        'trace_id', 'job_id',
+        'vlans_created', 'vlans_updated',
+        'subnets_created', 'subnets_updated',
+        'ips_created', 'ips_updated',
+        'warning_summary', 'observed_summary',
+        'error_message', 'task_ref',
+    )
+    fieldsets = (
+        (
+            _('Run'),
+            {
+                'fields': (
+                    'device', 'mode', 'status', 'task_ref',
+                    'trace_id', 'job_id',
+                ),
+            },
+        ),
+        (
+            _('Timing'),
+            {
+                'fields': ('scheduled_for', 'started_at', 'finished_at'),
+            },
+        ),
+        (
+            _('Counters'),
+            {
+                'fields': (
+                    'vlans_created', 'vlans_updated',
+                    'subnets_created', 'subnets_updated',
+                    'ips_created', 'ips_updated',
+                ),
+            },
+        ),
+        (
+            _('Diagnostics'),
+            {
+                'fields': ('warning_summary', 'observed_summary', 'error_message'),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description=_('Counters'))
+    def sync_counters(self, obj):
+        parts = []
+        if obj.vlans_created or obj.vlans_updated:
+            parts.append(f'VLANs +{obj.vlans_created}/~{obj.vlans_updated}')
+        if obj.subnets_created or obj.subnets_updated:
+            parts.append(f'Subnets +{obj.subnets_created}/~{obj.subnets_updated}')
+        if obj.ips_created or obj.ips_updated:
+            parts.append(f'IPs +{obj.ips_created}/~{obj.ips_updated}')
+        return ' | '.join(parts) if parts else '-'
+
+
+# =====================================================================
+# Proxy models for Integrations sidebar
+# =====================================================================
+
+class MikroTikVLAN(VLAN):
+    """Proxy model to show only MikroTik-sourced VLANs in the Integrations group."""
+    class Meta:
+        proxy = True
+        verbose_name = _('MikroTik VLAN')
+        verbose_name_plural = _('MikroTik VLANs')
+
+
+class MikroTikSubnet(Subnet):
+    """Proxy model to show only MikroTik-sourced subnets in the Integrations group."""
+    class Meta:
+        proxy = True
+        verbose_name = _('MikroTik subnet')
+        verbose_name_plural = _('MikroTik subnets')
+
+
+@admin.register(MikroTikVLAN)
+class MikroTikVLANAdmin(ModelAdmin):
+    """Filtered view of VLANs imported from MikroTik."""
+    list_display = (
+        'number',
+        'name',
+        'source_device',
+        'source_upstream_disabled',
+        'integration_sync_enabled',
+        'last_synced_at',
+    )
+    list_filter = (
+        'source_device',
+        'source_upstream_disabled',
+        'integration_sync_enabled',
+    )
+    search_fields = ('=number', 'name', 'source_device__name', 'source_device__host')
+    search_help_text = _('Search by VLAN number, name, or source device.')
+    list_editable = ('integration_sync_enabled',)
+    list_fullwidth = True
+
+    fieldsets = (
+        (
+            _('VLAN'),
+            {'fields': ('number', 'name')},
+        ),
+        (
+            _('Integration'),
+            {
+                'fields': (
+                    'integration_sync_enabled',
+                    'source_upstream_disabled',
+                    'source_bridge_name',
+                    'source_device',
+                    'last_synced_at',
+                    'sync_state',
+                ),
+            },
+        ),
+    )
+    readonly_fields = (
+        'source_upstream_disabled',
+        'source_bridge_name',
+        'source_device',
+        'last_synced_at',
+        'sync_state',
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(source_kind=SourceKind.MIKROTIK)
+            .select_related('source_device')
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(MikroTikSubnet)
+class MikroTikSubnetAdmin(ModelAdmin):
+    """Filtered view of subnets imported from MikroTik."""
+    list_display = (
+        'cidr',
+        'vlan',
+        'source_device',
+        'source_interface_name',
+        'source_upstream_disabled',
+        'source_upstream_invalid',
+        'integration_sync_enabled',
+        'scan_enabled',
+        'last_synced_at',
+    )
+    list_filter = (
+        'source_device',
+        'vlan',
+        'source_upstream_disabled',
+        'source_upstream_invalid',
+        'integration_sync_enabled',
+        'scan_enabled',
+    )
+    search_fields = ('=cidr', 'source_device__name', 'source_device__host')
+    search_help_text = _('Search by CIDR or source device.')
+    list_editable = ('integration_sync_enabled', 'scan_enabled')
+    list_fullwidth = True
+
+    fieldsets = (
+        (
+            _('Subnet'),
+            {'fields': ('cidr', 'vlan', 'scan_enabled', 'discover_subnet')},
+        ),
+        (
+            _('Integration'),
+            {
+                'fields': (
+                    'integration_sync_enabled',
+                    'source_upstream_disabled',
+                    'source_upstream_invalid',
+                    'source_interface_name',
+                    'source_device',
+                    'last_synced_at',
+                    'sync_state',
+                ),
+            },
+        ),
+    )
+    readonly_fields = (
+        'source_upstream_disabled',
+        'source_upstream_invalid',
+        'source_interface_name',
+        'source_device',
+        'last_synced_at',
+        'sync_state',
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(source_kind=SourceKind.MIKROTIK)
+            .select_related('vlan', 'source_device')
+        )
+
+    def has_add_permission(self, request):
+        return False

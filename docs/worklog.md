@@ -116,3 +116,26 @@ Supports: device onboarding, connection test, periodic sync, VLAN/subnet/IP impo
 - No destructive sync deletes — orphaned objects are only marked `sync_state=orphaned` in future milestones.
 - Subnet↔VLAN auto-linking from interface names is deferred — operator assigns manually for now.
 - No custom CSS or extra containers.
+
+---
+
+## MikroTik onboarding/admin UX hardening – Milestone 2
+
+### Final operator-facing rules
+
+- Add form is now onboarding-only and shows only minimum connection fields plus one gateway question (`Is this the gateway/router?`).
+- Device `name` is hidden on add and never required during onboarding.
+- Name population rule:
+  - on successful connection test/sync, if local `name` is blank, set it from RouterOS identity;
+  - if local `name` is already set (manual edit), never overwrite it automatically.
+- `scheme` is now a validated dropdown with explicit options (`HTTPS`, `HTTP`).
+- Advanced controls (sync/import/authority) are hidden until the first successful device contact.
+
+### Backend behavior changes
+
+- `Save and test` no longer performs outbound MikroTik calls in the admin HTTP request path.
+- Admin now saves first, schedules a background test job via existing `django-tasks-db`, and returns immediately with a clear message.
+- Added dedicated async execution path for test runs (`schedule_mikrotik_test_now` + `run_mikrotik_test`).
+- Device deletion no longer fails due to linked run objects:
+  - `MikroTikSyncRun.device` is nullable with `SET_NULL`;
+  - historical runs stay readable and no longer block deleting the parent device.

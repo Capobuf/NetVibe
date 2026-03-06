@@ -88,16 +88,25 @@ def _collect_snapshot(client: MikroTikClient, device: MikroTikDevice) -> MikroTi
 # Device test (Save and test)
 # ---------------------------------------------------------------------------
 
-def run_device_test(device: MikroTikDevice) -> MikroTikSyncRun:
+def run_device_test(
+    device: MikroTikDevice,
+    sync_run: MikroTikSyncRun | None = None,
+) -> MikroTikSyncRun:
     """Connection test: populate metadata fields and record a test run."""
     now = timezone.now()
-    sync_run = MikroTikSyncRun.objects.create(
-        device=device,
-        mode=MikroTikSyncRun.Mode.TEST,
-        status=MikroTikSyncRun.Status.RUNNING,
-        scheduled_for=now,
-        started_at=now,
-    )
+    if sync_run is None:
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.RUNNING,
+            scheduled_for=now,
+            started_at=now,
+        )
+    elif sync_run.status != MikroTikSyncRun.Status.RUNNING:
+        sync_run.status = MikroTikSyncRun.Status.RUNNING
+        sync_run.started_at = sync_run.started_at or now
+        sync_run.error_message = ''
+        sync_run.save(update_fields=['status', 'started_at', 'error_message'])
 
     try:
         client = _make_client(device)
@@ -664,4 +673,3 @@ def _build_observed_summary(snapshot: MikroTikSnapshotResultV1) -> dict:
         'neighbors': list(unique_neighbors.values())[:50],
         'arp_entry_count': len(snapshot.arp_entries),
     }
-

@@ -368,6 +368,15 @@ def schedule_mikrotik_sync_now(device):
     )
 
 
+def schedule_mikrotik_test_now(device):
+    """Schedule an immediate connection test for the given device."""
+    device_id = device.pk if isinstance(device, MikroTikDevice) else int(device)
+    return _schedule_mikrotik_test_at(
+        device_id=device_id,
+        scheduled_for=_normalize_schedule_time(timezone.now()),
+    )
+
+
 def _schedule_mikrotik_sync_at(device_id, scheduled_for):
     """Create a MikroTikSyncRun at a specific time, guarding against duplicates."""
     with transaction.atomic():
@@ -395,6 +404,33 @@ def _schedule_mikrotik_sync_at(device_id, scheduled_for):
             scheduled_for=scheduled_for,
         )
         return _enqueue_mikrotik_sync_run(sync_run)
+
+
+def _schedule_mikrotik_test_at(device_id, scheduled_for):
+    """Create a MikroTik test run at a specific time, guarding against duplicates."""
+    with transaction.atomic():
+        device = MikroTikDevice.objects.select_for_update().get(pk=device_id)
+
+        existing = (
+            MikroTikSyncRun.objects.select_for_update()
+            .filter(
+                device=device,
+                mode=MikroTikSyncRun.Mode.TEST,
+                status__in=MIKROTIK_ACTIVE_STATUSES,
+            )
+            .order_by('scheduled_for')
+            .first()
+        )
+        if existing is not None:
+            return _enqueue_mikrotik_test_run(existing)
+
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=scheduled_for,
+        )
+        return _enqueue_mikrotik_test_run(sync_run)
 
 
 def schedule_next_mikrotik_sync(device, finished_at):
@@ -442,6 +478,50 @@ def _enqueue_mikrotik_sync_run(sync_run):
     return sync_run
 
 
+def _enqueue_mikrotik_test_run(sync_run):
+    """Attach a django-tasks task to the test run if not already enqueued."""
+    if sync_run.task_ref:
+        return sync_run
+
+    task_result = run_mikrotik_test.using(
+        run_after=sync_run.scheduled_for,
+    ).enqueue(sync_run_id=sync_run.pk)
+    sync_run.task_ref = str(task_result.id)
+    sync_run.save(update_fields=('task_ref',))
+    return sync_run
+
+
+def _fail_mikrotik_run(sync_run, error_message):
+    sync_run.status = MikroTikSyncRun.Status.FAILED
+    sync_run.error_message = error_message[:2000]
+    sync_run.finished_at = timezone.now()
+    sync_run.save(update_fields=('status', 'error_message', 'finished_at'))
+
+
+@task
+def run_mikrotik_test(sync_run_id: int):
+    """Execute a MikroTik connection test run."""
+    from .integrations.mikrotik_sync import run_device_test
+
+    with transaction.atomic():
+        sync_run = MikroTikSyncRun.objects.select_for_update().get(pk=sync_run_id)
+        if (
+            sync_run.mode != MikroTikSyncRun.Mode.TEST
+            or sync_run.status != MikroTikSyncRun.Status.SCHEDULED
+        ):
+            return
+
+    device = sync_run.device
+    if device is None:
+        _fail_mikrotik_run(
+            sync_run,
+            'Device was deleted before the connection test started.',
+        )
+        return
+
+    run_device_test(device, sync_run=sync_run)
+
+
 @task
 def run_mikrotik_sync(sync_run_id: int):
     """Execute a MikroTik sync run."""
@@ -449,10 +529,19 @@ def run_mikrotik_sync(sync_run_id: int):
 
     with transaction.atomic():
         sync_run = MikroTikSyncRun.objects.select_for_update().get(pk=sync_run_id)
-        if sync_run.status != MikroTikSyncRun.Status.SCHEDULED:
+        if (
+            sync_run.mode != MikroTikSyncRun.Mode.SYNC
+            or sync_run.status != MikroTikSyncRun.Status.SCHEDULED
+        ):
             return
 
     device = sync_run.device
+    if device is None:
+        _fail_mikrotik_run(
+            sync_run,
+            'Device was deleted before the synchronization started.',
+        )
+        return
 
     try:
         run_device_sync(device, sync_run)

@@ -80,9 +80,11 @@ The admin sidebar now includes an **Integrations** group with:
 ### Adding a device
 
 1. Navigate to **Integrations → MikroTik devices → Add**
-2. Enter the host/IP, username, and password (minimum required fields)
-3. Click **Save and test** to verify the connection and populate device metadata
-4. Use the **Sync now** action on the device detail page to trigger a full sync
+2. Enter the minimum onboarding fields (host/IP, scheme, port, username, password, gateway flag)
+3. Click **Save and test** to save immediately and schedule a background connection test
+4. Refresh the change page to see test result, detected identity/version, and any error details
+5. After first successful contact, advanced sync/import/authority settings become available
+6. Use the **Sync now** action on the device detail page to trigger a full sync
 
 ### Running tests
 

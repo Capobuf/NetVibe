@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -91,7 +92,12 @@ class MikroTikClient:
                 auth=self._auth,
                 verify=self._verify,
                 timeout=self._timeout,
+                trust_env=False,
             )
+        except httpx.RemoteProtocolError as exc:
+            raise MikroTikConnectionError(
+                f'{exc}{self._protocol_hint()}'
+            ) from exc
         except httpx.ConnectError as exc:
             raise MikroTikConnectionError(
                 f'Cannot connect to {self._base_url}: {exc}'
@@ -118,6 +124,17 @@ class MikroTikClient:
                 f'for {path}: {response.text[:500]}'
             )
         return response.json()
+
+    def _protocol_hint(self) -> str:
+        """Return a short hint for likely scheme/port mismatches."""
+        parts = urlsplit(self._base_url)
+        scheme = (parts.scheme or '').lower()
+        port = parts.port
+        if scheme == 'http' and port == 443:
+            return ' (configured as HTTP on port 443; verify scheme/port, HTTPS is typical on 443).'
+        if scheme == 'https' and port == 80:
+            return ' (configured as HTTPS on port 80; verify scheme/port, HTTP is typical on 80).'
+        return ''
 
     # ------------------------------------------------------------------
     # Public endpoint methods

@@ -1,11 +1,16 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django import forms
 from django.contrib import admin
+from django.contrib.messages import get_messages
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from unfold.contrib.forms.widgets import WysiwygWidget
 
@@ -14,8 +19,10 @@ from .models import (
     MikroTikSyncRun, SourceKind, Subnet, VLAN,
 )
 from .tasks import (
+    run_mikrotik_test,
     run_subnet_scan, schedule_mikrotik_sync_now,
-    schedule_next_mikrotik_sync, schedule_subnet_scan_now,
+    schedule_mikrotik_test_now, schedule_next_mikrotik_sync,
+    schedule_subnet_scan_now,
 )
 
 
@@ -24,6 +31,11 @@ def fake_enqueue(job_run, task_ref='task-ref'):
         job_run.task_ref = task_ref
         job_run.save(update_fields=('task_ref',))
     return job_run
+
+
+def attach_request_messages(request):
+    request.session = {}
+    request._messages = FallbackStorage(request)
 
 
 class IPAMModelTests(TestCase):
@@ -450,6 +462,69 @@ class PgCryptoCredentialTests(TestCase):
         rendered = form.as_p()
         self.assertNotIn('secret', rendered)
 
+    def test_form_uses_scheme_default_port_when_custom_port_disabled(self):
+        from ipam.forms import MikroTikDeviceForm
+
+        form = MikroTikDeviceForm(
+            data={
+                'host': '10.0.0.8',
+                'scheme': MikroTikDevice.Scheme.HTTP,
+                'username': 'admin',
+                'password': 'secret-pass',
+                'sync_interval_minutes': 15,
+                'device_role': MikroTikDevice.DeviceRole.UNKNOWN,
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        device = form.save()
+        self.assertEqual(device.port, 80)
+
+    def test_form_preserves_manual_port_when_custom_port_enabled(self):
+        from ipam.forms import MikroTikDeviceForm
+
+        form = MikroTikDeviceForm(
+            data={
+                'host': '10.0.0.9',
+                'scheme': MikroTikDevice.Scheme.HTTPS,
+                'custom_port': 'on',
+                'port': '8443',
+                'username': 'admin',
+                'password': 'secret-pass',
+                'sync_interval_minutes': 15,
+                'device_role': MikroTikDevice.DeviceRole.UNKNOWN,
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        device = form.save()
+        self.assertEqual(device.port, 8443)
+
+    def test_edit_form_resets_port_to_scheme_default_when_custom_port_unchecked(self):
+        from ipam.forms import MikroTikDeviceForm
+        from ipam.crypto import encrypt_password
+
+        device = MikroTikDevice.objects.create(
+            host='10.0.0.10',
+            scheme=MikroTikDevice.Scheme.HTTPS,
+            port=8443,
+            username='admin',
+            password_encrypted=encrypt_password('secret-pass'),
+        )
+        form = MikroTikDeviceForm(
+            instance=device,
+            data={
+                'name': '',
+                'host': device.host,
+                'scheme': MikroTikDevice.Scheme.HTTPS,
+                'username': device.username,
+                'password': '',
+                'sync_interval_minutes': 15,
+                'device_role': MikroTikDevice.DeviceRole.UNKNOWN,
+            },
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        updated = form.save()
+        self.assertEqual(updated.port, 443)
+
 
 # =====================================================================
 # Contract tests
@@ -578,6 +653,194 @@ class MikroTikDeviceModelTests(TestCase):
         self.assertEqual(device.sync_interval_minutes, 15)
 
 
+class MikroTikDeviceAdminUXTests(TestCase):
+    def setUp(self):
+        self.model_admin = admin.site._registry[MikroTikDevice]
+        self.factory = RequestFactory()
+
+    def _make_device(self, **kwargs):
+        from ipam.crypto import encrypt_password
+
+        defaults = {
+            'host': '192.168.88.1',
+            'username': 'admin',
+            'password_encrypted': encrypt_password('secret-pass'),
+        }
+        defaults.update(kwargs)
+        return MikroTikDevice.objects.create(**defaults)
+
+    def test_add_form_is_minimal_and_hides_name(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/add/')
+        request.user = AnonymousUser()
+        form = self.model_admin.get_form(request, obj=None)()
+
+        self.assertNotIn('name', form.fields)
+        self.assertEqual(
+            set(form.fields),
+            {'host', 'scheme', 'custom_port', 'port', 'username', 'password', 'is_gateway_router'},
+        )
+        self.assertNotIn('sync_enabled', form.fields)
+        self.assertNotIn('import_vlans', form.fields)
+        self.assertNotIn('device_role', form.fields)
+
+    def test_add_form_scheme_is_dropdown(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/add/')
+        request.user = AnonymousUser()
+        form = self.model_admin.get_form(request, obj=None)()
+
+        self.assertIsInstance(form.fields['scheme'].widget, forms.Select)
+        self.assertEqual(
+            dict(form.fields['scheme'].choices),
+            {
+                MikroTikDevice.Scheme.HTTPS: 'HTTPS',
+                MikroTikDevice.Scheme.HTTP: 'HTTP',
+            },
+        )
+
+    def test_add_form_uses_gateway_question_instead_of_device_role_dropdown(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/add/')
+        request.user = AnonymousUser()
+        form = self.model_admin.get_form(request, obj=None)()
+
+        self.assertIn('is_gateway_router', form.fields)
+        self.assertNotIn('device_role', form.fields)
+
+    def test_change_form_hides_advanced_sections_before_first_success(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/1/change/')
+        request.user = AnonymousUser()
+        device = self._make_device()
+        form = self.model_admin.get_form(request, obj=device)(instance=device)
+        fieldsets = self.model_admin.get_fieldsets(request, obj=device)
+
+        self.assertIn('name', form.fields)
+        self.assertIn('verify_tls', form.fields)
+        self.assertIn('custom_port', form.fields)
+        self.assertIn('port', form.fields)
+        self.assertNotIn('sync_enabled', form.fields)
+        self.assertNotIn('import_vlans', form.fields)
+        self.assertNotIn('device_role', form.fields)
+        self.assertIn('connection_test_summary', fieldsets[2][1]['fields'])
+
+    def test_change_form_shows_advanced_sections_after_first_success(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/1/change/')
+        request.user = AnonymousUser()
+        device = self._make_device()
+        MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.SUCCESS,
+            scheduled_for=timezone.now(),
+            started_at=timezone.now(),
+            finished_at=timezone.now(),
+        )
+
+        form = self.model_admin.get_form(request, obj=device)(instance=device)
+        fieldsets = self.model_admin.get_fieldsets(request, obj=device)
+
+        self.assertIn('sync_enabled', form.fields)
+        self.assertIn('import_vlans', form.fields)
+        self.assertIn('device_role', form.fields)
+        self.assertEqual(str(fieldsets[4][0]), 'Synchronization')
+
+    def test_port_field_is_available_when_custom_port_is_checked_in_post(self):
+        request = self.factory.post(
+            '/admin/ipam/mikrotikdevice/add/',
+            data={'custom_port': 'on'},
+        )
+        request.user = AnonymousUser()
+        form = self.model_admin.get_form(request, obj=None)(data=request.POST)
+
+        self.assertIn('custom_port', form.fields)
+        self.assertIn('port', form.fields)
+
+    def test_change_form_shows_port_when_device_uses_non_default_port(self):
+        request = self.factory.get('/admin/ipam/mikrotikdevice/1/change/')
+        request.user = AnonymousUser()
+        device = self._make_device(scheme=MikroTikDevice.Scheme.HTTPS, port=8443)
+        form = self.model_admin.get_form(request, obj=device)(instance=device)
+
+        self.assertIn('custom_port', form.fields)
+        self.assertIn('port', form.fields)
+
+    def test_form_includes_live_custom_port_javascript(self):
+        from ipam.forms import MikroTikDeviceForm
+
+        form = MikroTikDeviceForm()
+        self.assertIn(
+            'ipam/admin/mikrotik_device_custom_port.js',
+            list(form.media._js),
+        )
+
+    def test_save_and_test_schedules_background_task_and_shows_message(self):
+        device = self._make_device()
+        request = self.factory.post('/admin/ipam/mikrotikdevice/1/change/')
+        request.user = AnonymousUser()
+        attach_request_messages(request)
+
+        with patch('ipam.tasks.schedule_mikrotik_test_now') as schedule_mock, patch(
+            'ipam.integrations.mikrotik_sync._make_client'
+        ) as make_client_mock:
+            schedule_mock.return_value = MikroTikSyncRun.objects.create(
+                device=device,
+                mode=MikroTikSyncRun.Mode.TEST,
+                status=MikroTikSyncRun.Status.SCHEDULED,
+                scheduled_for=timezone.now(),
+            )
+            self.model_admin.save_and_test(request, device)
+
+        schedule_mock.assert_called_once_with(device)
+        make_client_mock.assert_not_called()
+        user_messages = [message.message for message in get_messages(request)]
+        self.assertTrue(
+            any('Connection test scheduled in background' in msg for msg in user_messages)
+        )
+
+    def test_sync_now_action_schedules_background_job_and_shows_message(self):
+        device = self._make_device()
+        request = self.factory.post('/admin/ipam/mikrotikdevice/1/change/')
+        request.user = AnonymousUser()
+        attach_request_messages(request)
+
+        with patch('ipam.tasks.schedule_mikrotik_sync_now') as schedule_mock:
+            schedule_mock.return_value = MikroTikSyncRun.objects.create(
+                device=device,
+                mode=MikroTikSyncRun.Mode.SYNC,
+                status=MikroTikSyncRun.Status.SCHEDULED,
+                scheduled_for=timezone.now(),
+            )
+            response = self.model_admin.sync_now_action(request, device.pk)
+
+        self.assertEqual(response.status_code, 302)
+        user_messages = [message.message for message in get_messages(request)]
+        self.assertTrue(
+            any('Synchronization scheduled in background' in msg for msg in user_messages)
+        )
+
+    def test_status_summaries_show_failed_test_and_successful_sync(self):
+        device = self._make_device()
+        MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.FAILED,
+            scheduled_for=timezone.now(),
+            finished_at=timezone.now(),
+            error_message='auth failed',
+        )
+        MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.SYNC,
+            status=MikroTikSyncRun.Status.SUCCESS,
+            scheduled_for=timezone.now(),
+            finished_at=timezone.now(),
+        )
+
+        test_summary = self.model_admin.connection_test_summary(device)
+        sync_summary = self.model_admin.sync_summary(device)
+        self.assertIn('Failed', test_summary)
+        self.assertIn('error:', test_summary)
+        self.assertIn('Success', sync_summary)
+
+
 # =====================================================================
 # MikroTik client tests
 # =====================================================================
@@ -636,6 +899,45 @@ class MikroTikClientTests(SimpleTestCase):
         client_verify = MikroTikClient('https://x:443', 'a', 'b', verify_tls=True)
         self.assertFalse(client_no_verify._verify)
         self.assertTrue(client_verify._verify)
+
+    def test_client_disables_environment_proxy_usage(self):
+        from ipam.integrations.mikrotik_client import MikroTikClient
+        import httpx
+
+        client = MikroTikClient(
+            base_url='https://10.0.0.1:443',
+            username='admin',
+            password='pass',
+        )
+        response = httpx.Response(
+            200,
+            request=httpx.Request('GET', 'https://10.0.0.1:443/rest/system/identity'),
+            json={'name': 'router1'},
+        )
+        with patch('httpx.get', return_value=response) as get_mock:
+            client.get_identity()
+
+        self.assertEqual(get_mock.call_args.kwargs['trust_env'], False)
+
+    def test_remote_protocol_error_includes_scheme_port_hint(self):
+        from ipam.integrations.mikrotik_client import MikroTikClient, MikroTikConnectionError
+        import httpx
+
+        client = MikroTikClient(
+            base_url='http://10.0.0.1:443',
+            username='admin',
+            password='pass',
+        )
+        with patch(
+            'httpx.get',
+            side_effect=httpx.RemoteProtocolError(
+                'Server disconnected without sending a response.'
+            ),
+        ):
+            with self.assertRaises(MikroTikConnectionError) as ctx:
+                client.get_identity()
+
+        self.assertIn('HTTP on port 443', str(ctx.exception))
 
 
 # =====================================================================
@@ -718,6 +1020,24 @@ class MikroTikSyncTests(TestCase):
         self.assertEqual(device.last_seen_board, 'RB5009')
         self.assertEqual(device.last_seen_platform, 'MikroTik')
         self.assertEqual(device.name, 'MyRouter')
+
+    def test_device_test_does_not_overwrite_manual_name(self):
+        device = self._make_device(name='Manual Name')
+        mock_identity = {'name': 'Router Identity'}
+        mock_resource = {'version': '7.15.2', 'board-name': 'RB5009', 'platform': 'MikroTik'}
+
+        with patch('ipam.integrations.mikrotik_sync._make_client') as mock_client_cls:
+            mock_client = mock_client_cls.return_value
+            mock_client.get_identity.return_value = mock_identity
+            mock_client.get_system_resource.return_value = mock_resource
+
+            from ipam.integrations.mikrotik_sync import run_device_test
+
+            run_device_test(device)
+
+        device.refresh_from_db()
+        self.assertEqual(device.name, 'Manual Name')
+        self.assertEqual(device.last_seen_identity, 'Router Identity')
 
     def test_dynamic_bridge_vlans_are_ignored(self):
         device = self._make_device()
@@ -945,6 +1265,86 @@ class MikroTikSchedulingTests(TestCase):
         result = schedule_mikrotik_sync_now(device)
         self.assertIsNone(result)
 
+    def test_schedule_test_now_creates_single_run(self):
+        device = self._make_device()
+        with patch(
+            'ipam.tasks._enqueue_mikrotik_test_run',
+            side_effect=lambda sr: _fake_enqueue_mikrotik(sr, 'task-t1'),
+        ):
+            sr1 = schedule_mikrotik_test_now(device)
+            sr2 = schedule_mikrotik_test_now(device)
+
+        self.assertEqual(sr1.pk, sr2.pk)
+        self.assertEqual(
+            MikroTikSyncRun.objects.filter(device=device, mode=MikroTikSyncRun.Mode.TEST).count(),
+            1,
+        )
+
+    def test_run_mikrotik_test_success_populates_metadata_and_name(self):
+        device = self._make_device(name='')
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=timezone.now(),
+        )
+
+        with patch('ipam.integrations.mikrotik_sync._make_client') as make_client_mock:
+            client = make_client_mock.return_value
+            client.get_identity.return_value = {'name': 'CoreRouter'}
+            client.get_system_resource.return_value = {
+                'version': '7.15',
+                'board-name': 'RB5009',
+                'platform': 'MikroTik',
+            }
+            run_mikrotik_test.call(sync_run.pk)
+
+        sync_run.refresh_from_db()
+        device.refresh_from_db()
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.SUCCESS)
+        self.assertEqual(device.name, 'CoreRouter')
+        self.assertEqual(device.last_seen_identity, 'CoreRouter')
+        self.assertEqual(device.last_seen_version, '7.15')
+
+    def test_run_mikrotik_test_failure_persists_error_state(self):
+        from ipam.integrations.mikrotik_client import MikroTikConnectionError
+
+        device = self._make_device()
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=timezone.now(),
+        )
+
+        with patch(
+            'ipam.integrations.mikrotik_sync._make_client',
+            side_effect=MikroTikConnectionError('cannot connect'),
+        ):
+            run_mikrotik_test.call(sync_run.pk)
+
+        sync_run.refresh_from_db()
+        device.refresh_from_db()
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.FAILED)
+        self.assertIn('cannot connect', sync_run.error_message)
+        self.assertIn('cannot connect', device.last_error)
+
+    def test_run_mikrotik_test_marks_failed_if_device_was_deleted(self):
+        device = self._make_device()
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=timezone.now(),
+        )
+        device.delete()
+
+        run_mikrotik_test.call(sync_run.pk)
+        sync_run.refresh_from_db()
+
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.FAILED)
+        self.assertIn('deleted', sync_run.error_message.lower())
+
 
 # =====================================================================
 # Proxy / filter behavior tests
@@ -1000,6 +1400,91 @@ class MikroTikProxyAdminTests(TestCase):
         counters = _sync_vlans(device, snapshot, timezone.now(), 't', 'j', warnings)
         self.assertEqual(counters['vlans_updated'], 0)
 
+    def test_disabling_integration_sync_on_subnet_affects_future_sync(self):
+        from ipam.crypto import encrypt_password
+        from ipam.contracts import MikroTikIPAddress, MikroTikSnapshotResultV1
+        from ipam.integrations.mikrotik_sync import _sync_subnets
+
+        device = MikroTikDevice.objects.create(
+            host='10.0.0.2',
+            username='admin',
+            password_encrypted=encrypt_password('pass'),
+        )
+        subnet = Subnet.objects.create(
+            cidr='10.99.0.0/24',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=device,
+            source_interface_name='ether-old',
+            integration_sync_enabled=False,
+        )
+
+        snapshot = MikroTikSnapshotResultV1(
+            ip_addresses=[MikroTikIPAddress(address='10.99.0.1/24', interface='ether-new')],
+        )
+        counters = _sync_subnets(device, snapshot, timezone.now(), 'trace', 'job', [])
+        subnet.refresh_from_db()
+
+        self.assertEqual(counters['subnets_updated'], 0)
+        self.assertEqual(subnet.source_interface_name, 'ether-old')
+
+
+# =====================================================================
+# MikroTik delete flow tests
+# =====================================================================
+
+
+class MikroTikDeleteFlowTests(TestCase):
+    def _make_device(self, **kwargs):
+        from ipam.crypto import encrypt_password
+
+        defaults = {
+            'host': '10.0.20.1',
+            'username': 'admin',
+            'password_encrypted': encrypt_password('secret-pass'),
+        }
+        defaults.update(kwargs)
+        return MikroTikDevice.objects.create(**defaults)
+
+    def test_deleting_device_with_linked_runs_keeps_runs_and_succeeds(self):
+        device = self._make_device()
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.TEST,
+            status=MikroTikSyncRun.Status.FAILED,
+            scheduled_for=timezone.now(),
+            error_message='failure',
+        )
+
+        device.delete()
+        sync_run.refresh_from_db()
+
+        self.assertFalse(MikroTikDevice.objects.filter(pk=device.pk).exists())
+        self.assertIsNone(sync_run.device_id)
+
+    def test_admin_delete_view_no_longer_hits_related_permission_dead_end(self):
+        user = get_user_model().objects.create_superuser(
+            username='deleter',
+            email='deleter@example.com',
+            password='test-pass-123',
+        )
+        self.client.force_login(user)
+        device = self._make_device(host='10.0.20.2')
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            mode=MikroTikSyncRun.Mode.SYNC,
+            status=MikroTikSyncRun.Status.FAILED,
+            scheduled_for=timezone.now(),
+            error_message='sync failed',
+        )
+
+        delete_url = reverse('admin:ipam_mikrotikdevice_delete', args=(device.pk,))
+        response = self.client.post(delete_url, {'post': 'yes'}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MikroTikDevice.objects.filter(pk=device.pk).exists())
+        sync_run.refresh_from_db()
+        self.assertIsNone(sync_run.device_id)
+
 
 # =====================================================================
 # Regression tests
@@ -1045,5 +1530,3 @@ def _fake_enqueue_mikrotik(sync_run, task_ref='task-ref'):
         sync_run.task_ref = task_ref
         sync_run.save(update_fields=('task_ref',))
     return sync_run
-
-

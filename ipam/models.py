@@ -687,6 +687,10 @@ class JobRun(models.Model):
 class MikroTikDevice(models.Model):
     """One MikroTik RouterOS v7 device managed via REST API."""
 
+    class Scheme(models.TextChoices):
+        HTTPS = 'https', _('HTTPS')
+        HTTP = 'http', _('HTTP')
+
     class DeviceRole(models.TextChoices):
         ROUTER = 'router', _('Router')
         SWITCH = 'switch', _('Switch')
@@ -712,9 +716,10 @@ class MikroTikDevice(models.Model):
     )
     scheme = models.CharField(
         max_length=8,
-        default='https',
+        choices=Scheme.choices,
+        default=Scheme.HTTPS,
         verbose_name=_('Scheme'),
-        help_text=_('http or https.'),
+        help_text=_('Choose the protocol used by the RouterOS REST API.'),
     )
     username = models.CharField(
         max_length=128,
@@ -805,6 +810,12 @@ class MikroTikDevice(models.Model):
     def __str__(self):
         return self.name or self.host
 
+    @classmethod
+    def default_port_for_scheme(cls, scheme: str) -> int:
+        if scheme == cls.Scheme.HTTP:
+            return 80
+        return 443
+
     @property
     def base_url(self) -> str:
         return f'{self.scheme}://{self.host}:{self.port}'
@@ -825,7 +836,9 @@ class MikroTikSyncRun(models.Model):
 
     device = models.ForeignKey(
         MikroTikDevice,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='sync_runs',
         verbose_name=_('Device'),
     )
@@ -883,7 +896,8 @@ class MikroTikSyncRun(models.Model):
         verbose_name_plural = _('MikroTik sync runs')
 
     def __str__(self):
-        return f'{self.get_mode_display()} – {self.device} @ {self.scheduled_for}'
+        device_label = self.device if self.device_id else _('Deleted device')
+        return f'{self.get_mode_display()} – {device_label} @ {self.scheduled_for}'
 
     @property
     def duration(self):

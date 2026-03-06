@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-04 08:11+0100\n"
+"POT-Creation-Date: 2026-03-06 13:44+0100\n"
 "PO-Revision-Date: 2026-03-04 08:11+0100\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,551 +17,543 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: config/settings.py:128
+#: config/settings.py:129
 msgid "English"
 msgstr "Inglese"
 
-#: config/settings.py:129
+#: config/settings.py:130
 msgid "Italian"
 msgstr "Italiano"
 
-#: config/settings.py:156
+#: config/settings.py:157
 msgid "NetVibe Admin"
 msgstr "NetVibe Admin"
 
-#: config/settings.py:170
+#: config/settings.py:171
 msgid "Navigation"
 msgstr "Navigazione"
 
-#: config/settings.py:174
+#: config/settings.py:175
 msgid "Dashboard"
 msgstr "Dashboard"
 
-#: config/settings.py:181
+#: config/settings.py:182
 msgid "IPAM"
 msgstr "IPAM"
 
-#: config/settings.py:185 config/settings.py:231 config/settings.py:244
-#: config/settings.py:274 ipam/models.py:54
+#: config/settings.py:186 ipam/models.py:33
 msgid "VLANs"
 msgstr "VLAN"
 
-#: config/settings.py:190 config/settings.py:235 config/settings.py:248
-#: config/settings.py:278 ipam/models.py:226
+#: config/settings.py:191 ipam/models.py:208
 msgid "Subnets"
 msgstr "Sottoreti"
 
-#: config/settings.py:200 ipam/models.py:115 ipam/models.py:116
-#: ipam/models.py:119
+#: config/settings.py:196 ipam/models.py:100 ipam/models.py:101
+#: ipam/models.py:104
 msgid "IPAM settings"
 msgstr "Impostazioni IPAM"
 
-#: config/settings.py:207
+#: config/settings.py:203
 msgid "Jobs & Tasks"
 msgstr "Job e task"
 
-#: config/settings.py:211 ipam/models.py:475
+#: config/settings.py:207 ipam/models.py:444
 msgid "Job runs"
 msgstr "Esecuzioni job"
 
-#: config/settings.py:216
+#: config/settings.py:212
 msgid "Task results"
 msgstr "Risultati task"
 
-#: ipam/admin.py:45 ipam/models.py:459
+#: ipam/admin.py:48 ipam/models.py:331 ipam/models.py:428
 msgid "Status"
 msgstr "Stato"
 
-#: ipam/admin.py:57
+#: ipam/admin.py:60
 msgid "Online"
 msgstr "Online"
 
-#: ipam/admin.py:58
+#: ipam/admin.py:61
 msgid "Offline"
 msgstr "Offline"
 
-#: ipam/admin.py:59
+#: ipam/admin.py:62
 msgid "Unknown"
 msgstr "Sconosciuto"
 
-#: ipam/admin.py:63 ipam/admin.py:172 ipam/models.py:353 ipam/models.py:405
+#: ipam/admin.py:66 ipam/models.py:324 ipam/models.py:366
 msgid "IP address"
 msgstr "Indirizzo IP"
 
-#: ipam/admin.py:70
+#: ipam/admin.py:70 ipam/models.py:337
+msgid "Hostname"
+msgstr "Nome host"
+
+#: ipam/admin.py:74
 msgid "MAC"
 msgstr "MAC"
 
-#: ipam/admin.py:77
+#: ipam/admin.py:81 ipam/admin.py:183 ipam/models.py:342
 msgid "Notes"
 msgstr "Note"
 
-#: ipam/admin.py:130
-msgid "Child subnets"
-msgstr "Sottoreti figlie"
-
-#: ipam/admin.py:136 ipam/admin.py:173 ipam/models.py:406
-msgid "IP addresses"
-msgstr "Indirizzi IP"
-
-#: ipam/admin.py:154
-msgid "child subnet"
-msgstr "sottorete figlia"
-
-#: ipam/admin.py:155
-msgid "child subnets"
-msgstr "sottoreti figlie"
-
-#: ipam/admin.py:200 ipam/admin.py:494 ipam/models.py:53 ipam/models.py:172
+#: ipam/admin.py:132 ipam/admin.py:458 ipam/models.py:32 ipam/models.py:151
 msgid "VLAN"
 msgstr "VLAN"
 
-#: ipam/admin.py:222
+#: ipam/admin.py:148
 msgid "General"
 msgstr "Generale"
 
-#: ipam/admin.py:246
+#: ipam/admin.py:166
+msgid "Identity"
+msgstr "Identità"
+
+#: ipam/admin.py:199
 msgid "Thresholds"
 msgstr "Soglie"
 
-#: ipam/admin.py:255
+#: ipam/admin.py:208
 msgid "Scan defaults"
 msgstr "Predefiniti scansione"
 
-#: ipam/admin.py:261
+#: ipam/admin.py:214
 msgid "Worker"
 msgstr "Worker"
 
-#: ipam/admin.py:307
+#: ipam/admin.py:275
 msgid "Base"
 msgstr "Base"
 
-#: ipam/admin.py:319
+#: ipam/admin.py:286 ipam/admin.py:476
 msgid "Scanning"
 msgstr "Scansione"
 
-#: ipam/admin.py:320
+#: ipam/admin.py:321
 msgid "Run scheduled ICMP scans for this subnet. Disable it to stop all scans."
 msgstr "Esegui scansioni ICMP pianificate per questa sottorete. Disattivala per fermare tutte le scansioni."
 
-#: ipam/admin.py:321 ipam/admin.py:380
+#: ipam/admin.py:324 ipam/admin.py:443
 msgid "Auto-discover IPs"
 msgstr "Rileva automaticamente i nuovi IP"
 
-#: ipam/admin.py:322
-msgid ""
-"During scans, create IP records for responding hosts that are not already "
-"tracked and capture their MAC address and reverse DNS hostname when "
-"available. This only applies when scanning is enabled."
+#: ipam/admin.py:326
+msgid "During scans, create IP records for responding hosts that are not already tracked and capture their MAC address and reverse DNS hostname when available. This only applies when scanning is enabled."
 msgstr "Durante le scansioni, crea record IP per gli host che rispondono e che non sono gia tracciati e acquisisce il loro indirizzo MAC e hostname reverse DNS quando disponibili. Si applica solo quando la scansione e abilitata."
 
-#: ipam/admin.py:429
+#: ipam/admin.py:383
 msgid "Used IPs"
 msgstr "IP usati"
 
-#: ipam/admin.py:430
+#: ipam/admin.py:420
+msgid "No VLAN assigned"
+msgstr "Nessuna VLAN assegnata"
+
+#: ipam/admin.py:423 ipam/models.py:207 ipam/models.py:319 ipam/models.py:422
+msgid "Subnet"
+msgstr "Sottorete"
+
+#: ipam/admin.py:429
+#, python-format
+msgid "VLAN %(number)s"
+msgstr "VLAN %(number)s"
+
+#: ipam/admin.py:432 ipam/models.py:26
+msgid "Name"
+msgstr "Nome"
+
+#: ipam/admin.py:433
+msgid "Unnamed VLAN"
+msgstr "VLAN senza nome"
+
+#: ipam/admin.py:439 ipam/models.py:175
+msgid "Scan enabled"
+msgstr "Scansione abilitata"
+
+#: ipam/admin.py:440 ipam/admin.py:444
 msgid "Yes"
 msgstr "Si"
 
-#: ipam/admin.py:431
+#: ipam/admin.py:440 ipam/admin.py:444
 msgid "No"
 msgstr "No"
 
-#: ipam/admin.py:432
+#: ipam/admin.py:451 ipam/models.py:187
+msgid "Scan interval (minutes)"
+msgstr "Intervallo scansione (minuti)"
+
+#: ipam/admin.py:461
+msgid "Subnet routing summary"
+msgstr "Riepilogo routing sottorete"
+
+#: ipam/admin.py:464
+msgid "IP records"
+msgstr "Record IP"
+
+#: ipam/admin.py:473
+msgid "Total records in this subnet"
+msgstr "Record totali in questa sottorete"
+
+#: ipam/admin.py:477
 msgid "Active"
 msgstr "Attiva"
 
-#: ipam/admin.py:433
+#: ipam/admin.py:477
 msgid "Disabled"
 msgstr "Disabilitata"
 
-#: ipam/admin.py:434
+#: ipam/admin.py:480
 #, python-format
 msgid "Parent subnet: %(parent)s"
 msgstr "Sottorete padre: %(parent)s"
 
-#: ipam/admin.py:478 ipam/models.py:225 ipam/models.py:348 ipam/models.py:453
-msgid "Subnet"
-msgstr "Sottorete"
+#: ipam/admin.py:483
+msgid "No parent subnet"
+msgstr "Nessuna sottorete padre"
 
-#: ipam/admin.py:487 ipam/models.py:19 ipam/models.py:47
-msgid "Name"
-msgstr "Nome"
+#: ipam/admin.py:502
+msgid "Edit subnet settings"
+msgstr "Modifica impostazioni sottorete"
 
-#: ipam/admin.py:588
+#: ipam/admin.py:506
+msgid "Back to overview"
+msgstr "Torna alla panoramica"
+
+#: ipam/admin.py:510
+msgid "Open IP list"
+msgstr "Apri lista IP"
+
+#: ipam/admin.py:552
 msgid "Job"
 msgstr "Job"
 
-#: ipam/admin.py:599
+#: ipam/admin.py:563
 msgid "Timing"
 msgstr "Tempistiche"
 
-#: ipam/admin.py:609 ipam/admin.py:652
+#: ipam/admin.py:573 ipam/admin.py:612
 msgid "Counters"
 msgstr "Contatori"
 
-#: ipam/admin.py:621
+#: ipam/admin.py:585
 msgid "Error"
 msgstr "Errore"
 
-#: ipam/admin.py:641
+#: ipam/admin.py:601
 msgid "Duration"
 msgstr "Durata"
 
-#: ipam/admin.py:655
+#: ipam/admin.py:615
 #, python-format
-msgid ""
-"alive %(alive)s / pinged %(pinged)s / created %(created)s / updated "
-"%(updated)s"
+msgid "alive %(alive)s / pinged %(pinged)s / created %(created)s / updated %(updated)s"
 msgstr "attivi %(alive)s / pingati %(pinged)s / creati %(created)s / aggiornati %(updated)s"
 
-#: ipam/models.py:41
+#: ipam/models.py:20
 msgid "Number"
 msgstr "Numero"
 
-#: ipam/models.py:42
+#: ipam/models.py:21
 msgid "Enter a VLAN ID between 1 and 4094."
 msgstr "Inserisci un ID VLAN tra 1 e 4094."
 
-#: ipam/models.py:48
+#: ipam/models.py:27
 msgid "Add an optional display name for this VLAN."
 msgstr "Aggiungi un nome visualizzato facoltativo per questa VLAN."
 
-#: ipam/models.py:65
+#: ipam/models.py:44
 msgid "Sequential"
 msgstr "Sequenziale"
 
-#: ipam/models.py:66
+#: ipam/models.py:45
 msgid "Parallel"
 msgstr "Parallelo"
 
-#: ipam/models.py:78
+#: ipam/models.py:58
 msgid "Warning after (minutes)"
 msgstr "Avviso dopo (minuti)"
 
-#: ipam/models.py:79
+#: ipam/models.py:59
 msgid "Mark an IP as stale after this many minutes without a response."
 msgstr "Segna un IP come non aggiornato dopo questo numero di minuti senza risposta."
 
-#: ipam/models.py:83
+#: ipam/models.py:64
 msgid "Offline after (minutes)"
 msgstr "Offline dopo (minuti)"
 
-#: ipam/models.py:84
+#: ipam/models.py:65
 msgid "Mark an IP as offline after this many minutes without a response."
 msgstr "Segna un IP come offline dopo questo numero di minuti senza risposta."
 
-#: ipam/models.py:88
+#: ipam/models.py:70
 msgid "Default scan interval (minutes)"
 msgstr "Intervallo di scansione predefinito (minuti)"
 
-#: ipam/models.py:89
+#: ipam/models.py:71
 msgid "Use this interval when a subnet does not override its scan frequency."
 msgstr "Usa questo intervallo quando una sottorete non sovrascrive la propria frequenza di scansione."
 
-#: ipam/models.py:95
+#: ipam/models.py:77
 msgid "Worker mode"
 msgstr "Modalità worker"
 
-#: ipam/models.py:96
+#: ipam/models.py:78
 msgid "Choose whether the worker runs one scan at a time or multiple scans."
 msgstr "Scegli se il worker esegue una scansione alla volta o più scansioni."
 
-#: ipam/models.py:100
+#: ipam/models.py:83
 msgid "Worker concurrency"
 msgstr "Concorrenza worker"
 
-#: ipam/models.py:101
+#: ipam/models.py:84
 msgid "Use this many worker processes when parallel mode is enabled."
 msgstr "Usa questo numero di processi worker quando la modalità parallela è abilitata."
 
-#: ipam/models.py:105
+#: ipam/models.py:89
 msgid "Ping timeout (ms)"
 msgstr "Timeout ping (ms)"
 
-#: ipam/models.py:106
+#: ipam/models.py:90
 msgid "Wait this many milliseconds for each ICMP response."
 msgstr "Attendi questo numero di millisecondi per ogni risposta ICMP."
 
-#: ipam/models.py:110
+#: ipam/models.py:95
 msgid "Ping concurrency"
 msgstr "Concorrenza ping"
 
-#: ipam/models.py:111
+#: ipam/models.py:96
 msgid "Limit how many ping subprocesses run at once inside one scan job."
 msgstr "Limita quanti sottoprocessi di ping vengono eseguiti contemporaneamente in un job di scansione."
 
-#: ipam/models.py:154
+#: ipam/models.py:139
 msgid "Offline threshold must be greater than the warning threshold."
 msgstr "La soglia offline deve essere maggiore della soglia di avviso."
 
-#: ipam/models.py:173
+#: ipam/models.py:152
 msgid "Select the VLAN associated with this subnet, if any."
 msgstr "Seleziona la VLAN associata a questa sottorete, se presente."
 
-#: ipam/models.py:181
+#: ipam/models.py:160
 msgid "Parent subnet"
 msgstr "Sottorete padre"
 
-#: ipam/models.py:182
+#: ipam/models.py:161
 msgid "Select a parent subnet when this subnet is nested inside another one."
 msgstr "Seleziona una sottorete padre quando questa sottorete è annidata in un'altra."
 
-#: ipam/models.py:186
+#: ipam/models.py:165
 msgid "Subnet (CIDR)"
 msgstr "Sottorete (CIDR)"
 
-#: ipam/models.py:187
+#: ipam/models.py:166
 msgid "Enter an IPv4 subnet in CIDR notation, for example 10.0.0.0/24."
 msgstr "Inserisci una sottorete IPv4 in notazione CIDR, ad esempio 10.0.0.0/24."
 
-#: ipam/models.py:191 ipam/models.py:371
+#: ipam/models.py:170
 msgid "Description"
 msgstr "Descrizione"
 
-#: ipam/models.py:192
+#: ipam/models.py:171
 msgid "Add optional notes about this subnet."
 msgstr "Aggiungi note facoltative su questa sottorete."
 
-#: ipam/models.py:196
-msgid "Scan enabled"
-msgstr "Scansione abilitata"
-
-#: ipam/models.py:197
+#: ipam/models.py:176
 msgid "Enable ICMP reachability checks for this subnet."
 msgstr "Abilita controlli di raggiungibilità ICMP per questa sottorete."
 
-#: ipam/models.py:201
+#: ipam/models.py:180
 msgid "Discovery enabled"
 msgstr "Discovery abilitata"
 
-#: ipam/models.py:202
+#: ipam/models.py:181
 msgid "Enable discovery tasks for this subnet."
 msgstr "Abilita task di discovery per questa sottorete."
 
-#: ipam/models.py:207
-msgid "Scan interval (minutes)"
-msgstr "Intervallo scansione (minuti)"
-
-#: ipam/models.py:208
-msgid ""
-"Override the global scan frequency for this subnet. Leave blank to use the "
-"global default."
+#: ipam/models.py:188
+msgid "Override the global scan frequency for this subnet. Leave blank to use the global default."
 msgstr "Sovrascrivi la frequenza di scansione globale per questa sottorete. Lascia vuoto per usare il predefinito globale."
 
-#: ipam/models.py:213
+#: ipam/models.py:194
 msgid "Warning after override (minutes)"
 msgstr "Sovrascrittura avviso dopo (minuti)"
 
-#: ipam/models.py:214
-msgid ""
-"Override the global warning threshold for this subnet. Leave blank to use "
-"the global default."
+#: ipam/models.py:195
+msgid "Override the global warning threshold for this subnet. Leave blank to use the global default."
 msgstr "Sovrascrivi la soglia di avviso globale per questa sottorete. Lascia vuoto per usare il predefinito globale."
 
-#: ipam/models.py:219
+#: ipam/models.py:201
 msgid "Offline after override (minutes)"
 msgstr "Sovrascrittura offline dopo (minuti)"
 
-#: ipam/models.py:220
-msgid ""
-"Override the global offline threshold for this subnet. Leave blank to use "
-"the global default."
+#: ipam/models.py:202
+msgid "Override the global offline threshold for this subnet. Leave blank to use the global default."
 msgstr "Sovrascrivi la soglia offline globale per questa sottorete. Lascia vuoto per usare il predefinito globale."
 
-#: ipam/models.py:267
+#: ipam/models.py:251
 msgid "Enter a valid IPv4 subnet in CIDR notation, for example 10.0.0.0/24."
 msgstr "Inserisci una sottorete IPv4 valida in notazione CIDR, ad esempio 10.0.0.0/24."
 
-#: ipam/models.py:278
+#: ipam/models.py:262
 msgid "A subnet cannot be its own parent."
 msgstr "Una sottorete non può essere padre di sé stessa."
 
-#: ipam/models.py:287
+#: ipam/models.py:271
 msgid "The child subnet must be contained in the parent subnet."
 msgstr "La sottorete figlia deve essere contenuta nella sottorete padre."
 
-#: ipam/models.py:313
+#: ipam/models.py:284
 msgid "Offline override must be greater than the warning override."
 msgstr "La sovrascrittura offline deve essere maggiore della sovrascrittura di avviso."
 
-#: ipam/models.py:324
+#: ipam/models.py:295
 msgid "Scanning requires a valid interval in minutes."
 msgstr "La scansione richiede un intervallo valido in minuti."
 
-#: ipam/models.py:333
-msgid ""
-"The effective offline threshold must be greater than the effective warning "
-"threshold."
+#: ipam/models.py:304
+msgid "The effective offline threshold must be greater than the effective warning threshold."
 msgstr "La soglia offline effettiva deve essere maggiore della soglia di avviso effettiva."
 
-#: ipam/models.py:341
+#: ipam/models.py:312
 msgid "In use"
 msgstr "In uso"
 
-#: ipam/models.py:342
+#: ipam/models.py:313
 msgid "Reserved"
 msgstr "Riservato"
 
-#: ipam/models.py:343
+#: ipam/models.py:314
 msgid "Deprecated"
 msgstr "Deprecato"
 
-#: ipam/models.py:349
+#: ipam/models.py:320
 msgid "Choose the subnet that contains this IP address."
 msgstr "Scegli la sottorete che contiene questo indirizzo IP."
 
-#: ipam/models.py:354
+#: ipam/models.py:325
 msgid "Enter an IPv4 address."
 msgstr "Inserisci un indirizzo IPv4."
 
-#: ipam/models.py:361
+#: ipam/models.py:332
 msgid "Controls allocation and scan handling."
 msgstr "Controlla l'allocazione e la gestione della scansione."
 
-#: ipam/models.py:366
-msgid "Hostname"
-msgstr "Nome host"
-
-#: ipam/models.py:367
+#: ipam/models.py:338
 msgid "Add an optional DNS name or host label."
 msgstr "Aggiungi un nome DNS o etichetta host facoltativa."
 
-#: ipam/models.py:377
+#: ipam/models.py:343
 msgid "Add optional operational notes for this IP address."
 msgstr "Aggiungi note operative facoltative per questo indirizzo IP."
 
-#: ipam/models.py:382
+#: ipam/models.py:348
 msgid "MAC address"
 msgstr "Indirizzo MAC"
 
-#: ipam/models.py:383
+#: ipam/models.py:349
 msgid "Add an optional MAC address."
 msgstr "Aggiungi un indirizzo MAC facoltativo."
 
-#: ipam/models.py:394
+#: ipam/models.py:355
 msgid "Last seen"
 msgstr "Ultima rilevazione"
 
-#: ipam/models.py:395
+#: ipam/models.py:356
 msgid "Record when this IP address was last observed."
 msgstr "Registra quando questo indirizzo IP è stato osservato l'ultima volta."
 
-#: ipam/models.py:399
+#: ipam/models.py:360
 msgid "Exclude from ping"
 msgstr "Escludi dal ping"
 
-#: ipam/models.py:400
+#: ipam/models.py:361
 msgid "Exclude this IP address from ping checks."
 msgstr "Escludi questo indirizzo IP dai controlli ping."
 
-#: ipam/models.py:427
+#: ipam/models.py:367
+msgid "IP addresses"
+msgstr "Indirizzi IP"
+
+#: ipam/models.py:388
 msgid "The IP address must belong to the selected subnet."
 msgstr "L'indirizzo IP deve appartenere alla sottorete selezionata."
 
-#: ipam/models.py:433
+#: ipam/models.py:402
 msgid "Subnet scan"
 msgstr "Scansione sottorete"
 
-#: ipam/models.py:436
+#: ipam/models.py:405
 msgid "Scheduled"
 msgstr "Pianificato"
 
-#: ipam/models.py:437
+#: ipam/models.py:406
 msgid "Running"
 msgstr "In esecuzione"
 
-#: ipam/models.py:438
+#: ipam/models.py:407
 msgid "Success"
 msgstr "Completato"
 
-#: ipam/models.py:439
+#: ipam/models.py:408
 msgid "Failed"
 msgstr "Fallito"
 
-#: ipam/models.py:440
+#: ipam/models.py:409
 msgid "Skipped (guardrail)"
 msgstr "Saltato (guardrail)"
 
-#: ipam/models.py:441
+#: ipam/models.py:410
 msgid "Skipped (disabled)"
 msgstr "Saltato (disabilitato)"
 
-#: ipam/models.py:447
+#: ipam/models.py:416
 msgid "Job type"
 msgstr "Tipo job"
 
-#: ipam/models.py:461
+#: ipam/models.py:430
 msgid "Scheduled for"
 msgstr "Pianificato per"
 
-#: ipam/models.py:462
+#: ipam/models.py:431
 msgid "Started at"
 msgstr "Avviato alle"
 
-#: ipam/models.py:463
+#: ipam/models.py:432
 msgid "Finished at"
 msgstr "Terminato alle"
 
-#: ipam/models.py:464
+#: ipam/models.py:433
 msgid "Hosts total"
 msgstr "Host totali"
 
-#: ipam/models.py:465
+#: ipam/models.py:434
 msgid "Hosts pinged"
 msgstr "Host pingati"
 
-#: ipam/models.py:466
+#: ipam/models.py:435
 msgid "Hosts alive"
 msgstr "Host attivi"
 
-#: ipam/models.py:467
+#: ipam/models.py:436
 msgid "IP records created"
 msgstr "Record IP creati"
 
-#: ipam/models.py:468
+#: ipam/models.py:437
 msgid "IP records updated"
 msgstr "Record IP aggiornati"
 
-#: ipam/models.py:469
+#: ipam/models.py:438
 msgid "Error message"
 msgstr "Messaggio di errore"
 
-#: ipam/models.py:470
+#: ipam/models.py:439
 msgid "Task reference"
 msgstr "Riferimento task"
 
-#: ipam/models.py:474
+#: ipam/models.py:443
 msgid "Job run"
 msgstr "Esecuzione job"
 
-#: ipam/models.py:494
+#: ipam/models.py:463
 #, python-format
 msgid "%(job_type)s for %(subnet)s at %(when)s"
 msgstr "%(job_type)s per %(subnet)s alle %(when)s"
-
-#: ipam/templates/admin/ipam/subnet/change_form_outer_after.html:3
-msgid "IP addresses in this subnet"
-msgstr "Indirizzi IP in questa sottorete"
-
-#: ipam/templates/admin/ipam/subnet/change_form_outer_after.html:7
-#, python-format
-msgid ""
-"%(total)s IP record is shown below. Use the inline form above to add or edit "
-"it."
-msgid_plural ""
-"%(total)s IP records are shown below. Use the inline form above to add or "
-"edit them."
-msgstr[0] "%(total)s record IP è mostrato qui sotto. Usa il modulo inline sopra per aggiungerlo o modificarlo."
-msgstr[1] "%(total)s record IP sono mostrati qui sotto. Usa il modulo inline sopra per aggiungerli o modificarli."
-
-#: ipam/templates/admin/ipam/subnet/change_form_outer_after.html:20
-msgid "Recent subnet scan jobs"
-msgstr "Job di scansione sottorete recenti"
-
-#: ipam/templates/admin/ipam/subnet/change_form_outer_after.html:24
-#, python-format
-msgid "%(total)s recent job is shown below."
-msgid_plural "%(total)s recent jobs are shown below."
-msgstr[0] "%(total)s job recente è mostrato qui sotto."
-msgstr[1] "%(total)s job recenti sono mostrati qui sotto."

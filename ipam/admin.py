@@ -394,15 +394,9 @@ class SubnetAdmin(ModelAdmin):
         obj=None,
     ):
         if change and obj is not None:
-            ip_addresses = list(
-                IPAddress.objects.filter(subnet_id=obj.pk)
-                .order_by('address')
-                .only(
-                    'address',
-                    'status',
-                    'hostname',
-                    'mac_address',
-                )
+            ip_addresses = sorted(
+                obj.ipaddress_set.all(),
+                key=lambda ip: ip.address,
             )
             context.update(self._get_overview_context(obj, ip_addresses))
 

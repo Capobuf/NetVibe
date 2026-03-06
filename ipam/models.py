@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
-def parse_ipv4_cidr(value: str):
+def parse_cidr(value: str):
     return ip_network(value)
 
 
@@ -212,13 +212,13 @@ class Subnet(models.Model):
 
     @property
     def network_object(self):
-        return parse_ipv4_cidr(self.cidr)
+        return parse_cidr(self.cidr)
 
     def get_ipam_settings(self):
         return IPAMSettings.load()
 
     def get_effective_scan_interval_minutes(self):
-        if self.scan_interval_minutes:
+        if self.scan_interval_minutes is not None:
             return self.scan_interval_minutes
         return self.get_ipam_settings().default_scan_interval_minutes
 
@@ -226,11 +226,13 @@ class Subnet(models.Model):
         settings = self.get_ipam_settings()
         warning_after_minutes = (
             self.warning_after_minutes_override
-            or settings.warning_after_minutes
+            if self.warning_after_minutes_override is not None
+            else settings.warning_after_minutes
         )
         offline_after_minutes = (
             self.offline_after_minutes_override
-            or settings.offline_after_minutes
+            if self.offline_after_minutes_override is not None
+            else settings.offline_after_minutes
         )
         return warning_after_minutes, offline_after_minutes
 
@@ -241,7 +243,7 @@ class Subnet(models.Model):
             return
 
         try:
-            current_network = parse_ipv4_cidr(self.cidr)
+            current_network = parse_cidr(self.cidr)
         except (AddressValueError, NetmaskValueError, ValueError):
             raise ValidationError(
                 {

@@ -227,13 +227,25 @@ def _scan_subnet(subnet, network, settings_obj):
             if future.result():
                 successful_addresses.append(future_map[future])
 
+    def _collect_host_info(address):
+        return address, _get_mac_address(address), _get_hostname(address)
+
+    host_info = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_collect_host_info, addr): addr
+            for addr in successful_addresses
+        }
+        for future in as_completed(futures):
+            addr, mac, hostname = future.result()
+            host_info[addr] = (mac, hostname)
+
     observed_at = timezone.now()
     existing_updates = []
     new_records = []
 
     for address in successful_addresses:
-        mac_address = _get_mac_address(address)
-        hostname = _get_hostname(address)
+        mac_address, hostname = host_info[address]
         ip_record = records_by_address.get(address)
         if ip_record is not None:
             ip_record.last_seen = observed_at
@@ -272,6 +284,9 @@ def _scan_subnet(subnet, network, settings_obj):
     }
 
 
+SCAN_MIN_PREFIX_LENGTH = 21
+
+
 @task
 def run_subnet_scan(job_run_id: int):
     subnet = None
@@ -300,7 +315,7 @@ def run_subnet_scan(job_run_id: int):
             return
 
         network = subnet.network_object
-        if network.prefixlen < 21:
+        if network.prefixlen < SCAN_MIN_PREFIX_LENGTH:
             completed_job = _finalize_job_run(
                 job_run_id,
                 status=JobRun.Status.SKIPPED_GUARDRAIL,

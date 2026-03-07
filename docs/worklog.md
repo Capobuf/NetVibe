@@ -1,196 +1,37 @@
-# IPAM simplification worklog
+# NetVibe worklog (current state)
 
-## Interventi
+## Admin IA (Prompt 1)
 
-- Rimossi `Section` e `strict mode` dal dominio IPAM: eliminato il model dedicato, la FK `Subnet.section`, la validazione di overlap condizionale e tutti i riferimenti admin/UI collegati.
-- Convertiti i campi temporali di IPAM da secondi a minuti nel dominio dati:
-  `warning_after_minutes`, `offline_after_minutes`, `default_scan_interval_minutes`,
-  `scan_interval_minutes`, `warning_after_minutes_override`,
-  `offline_after_minutes_override`.
-- Lasciato `ping_timeout_ms` in millisecondi, perché in `ipam/tasks.py` viene passato al timeout di `subprocess.run()` e la conversione a secondi resta solo al bordo di chiamata.
-- Semplificata la UI admin di subnet:
-  `VLAN` spostata in testa alla form, rimosso il layer overview/edit separato, unificati discovery e scheduling in una sola sezione `Scanning`.
-- Ridotto il rumore UI in Unfold:
-  rimossa la configurazione `UNFOLD["TABS"]`, rimossa la voce sidebar `Sections`, eliminati i template custom inutilizzati della subnet.
-- Corretto il doppio header di `IPAM settings` azzerando il `subtitle` nel change form del singleton admin.
-- Resettate le migrazioni `ipam` e rigenerata una baseline pulita (`ipam/migrations/0001_initial.py`).
-- Ripristinata la vista overview della subnet come destinazione di default al click, mantenendo l’edit separato via azione dedicata e senza reintrodurre i tab globali.
-- Chiarita la differenza UI tra scansione e discovery con label/help text admin piu espliciti.
-- Esteso il worker di scansione per recuperare e salvare i MAC address dalla neighbor table (`ip neigh`) dopo il ping, quando disponibili.
-- Esteso il worker di scansione per recuperare e salvare anche l’hostname via reverse DNS (`socket.gethostbyaddr`) per gli host raggiungibili.
-- Aggiornato `docker-compose.yml` per eseguire il worker in `host` networking, cosi puo operare direttamente sulla LAN `10.0.0.0/24`; PostgreSQL resta esposto solo su `127.0.0.1:5432` per supportare il worker senza esporre il DB in LAN.
-- Separata la colonna `Hostname` nella tabella IP dell’overview subnet, invece di mostrarla come testo secondario sotto l’indirizzo IP.
+- Sidebar is IPAM-first:
+  - Navigation: Dashboard
+  - Networks: VLANs, Subnets, IP addresses, IPAM settings
+  - Discovery: Discovery overview, MikroTik targets, MikroTik devices, Discovery runs, Review queue
+  - System: Job runs, Task results, MikroTik settings
+- Discovery operations are centered on a single server-rendered **Discovery overview** admin page.
+- MikroTik proxy views (`MikroTikVLAN`, `MikroTikSubnet`) remain registered but are not top-level sidebar entries.
 
-## File principali toccati
+## Canonical vs observed separation (Prompt 2)
 
-- `ipam/models.py`
-- `ipam/admin.py`
-- `ipam/tasks.py`
-- `ipam/tests.py`
-- `config/settings.py`
-- `ipam/migrations/0001_initial.py`
-- `locale/it/LC_MESSAGES/django.po`
+- Added `IPAddressObservation` model for latest observed facts per source-device-per-IP.
+- Added `ReviewItem` model as a persistent operational review queue with dedupe by `dedupe_key`.
+- DHCP/ARP sync now always upserts observations.
+- Canonical `IPAddress` records keep MSP-owned editorial fields protected:
+  - sync updates operational fields (timestamps, lease metadata, sync provenance/state)
+  - sync does not silently overwrite canonical `hostname`, `mac_address`, `status`, `note`
+- New observed IPs create:
+  - minimal canonical `IPAddress` (blank canonical hostname/MAC)
+  - one `IPAddressObservation`
+  - one deduped `ReviewItem(kind=new_ip_observed)`
+- Imported MikroTik subnets now default to:
+  - `scan_enabled=False`
+  - `discover_subnet=False`
+- Failed MikroTik sync runs now create/update `ReviewItem(kind=sync_failure)` deduped by device + error category.
+- Discovery identity conflicts now create/update `ReviewItem(kind=discovery_conflict)`.
 
-## Motivazioni basate sul codice
+## Explicit stale-claim removals
 
-- `Section` era ancora strutturale in `ipam/models.py` e propagava complessità in `Subnet`, nei filtri job e nel menu Unfold, ma non serviva ad altro oltre alla validazione `strict_mode`.
-- I tab rumorosi erano generati da due layer diversi:
-  `classes=("tab",)` nei fieldset admin e `UNFOLD["TABS"]` in `config/settings.py`.
-  In particolare i tab subnet `Child Subnets` e `Subnet IPs` erano vuoti perché `SubnetAdmin.get_inlines()` restituiva sempre `()`.
-- La duplicazione visiva di `IPAM settings` derivava dal singleton change form: Django popola `title` e `subtitle`, e `IPAMSettings.__str__()` restituiva lo stesso testo del verbose name.
-- La pianificazione delle scansioni usava davvero i campi in secondi in `ipam/tasks.py` (`timedelta(seconds=...)`), quindi la conversione a minuti richiedeva l’aggiornamento del dominio e del worker, non solo delle label admin.
+The following previously documented claims were removed because they no longer match code:
 
-## Trade-off
-
-- Il reset schema elimina completamente la storia delle migrazioni precedenti, coerentemente con il vincolo greenfield.
-- La form subnet ora è lineare e senza tab; si perde la vista “overview” precedente, ma si elimina un flusso duplicato che obbligava a passare tra `view` e `edit`.
-- Non ho ricreato seed o bootstrap admin: nella repo non risultano fixture, command o codice di provisioning per utenti iniziali.
-
----
-
-## MikroTik integration – Milestone 1
-
-### Scope
-
-End-to-end integration with MikroTik RouterOS v7 via REST API only.
-Supports: device onboarding, connection test, periodic sync, VLAN/subnet/IP import (DHCP + ARP enrichment), neighbor observation, per-object sync control.
-
-### Changes
-
-- Added `httpx` and `pydantic` to `requirements.txt`.
-- Created `ipam/crypto.py` — pgcrypto encrypt/decrypt helpers using `pgp_sym_encrypt`/`pgp_sym_decrypt`. Key via `NETVIBE_PGCRYPTO_KEY` env var.
-- Created migration `0002_enable_pgcrypto.py` — enables the `pgcrypto` PostgreSQL extension.
-- Added `MikroTikDevice` model — stores connection details (host, port, scheme, username, encrypted password), import policy toggles, sync interval, authority flags, and status fields populated by test/sync.
-- Added `MikroTikSyncRun` model — one row per test or sync execution, with mode, status, timing, counters, warnings, and diagnostics.
-- Added provenance fields to `VLAN`, `Subnet`, `IPAddress` — `source_kind`, `source_device`, `source_remote_id`, `source_job_id`, `source_trace_id`, `last_synced_at`, `sync_state`, `integration_sync_enabled`.
-- Added lease fields to `IPAddress` — `lease_kind`, `lease_status`, `lease_server_name`.
-- Created migration `0003_mikrotik_integration.py` — all new models and fields.
-- Created `ipam/contracts.py` — Pydantic DTOs for `icmp.scan.result.v1`, `mikrotik.snapshot.result.v1`, `mikrotik.sync.apply.result.v1`.
-- Created `ipam/integrations/mikrotik_client.py` — httpx-based REST client with bounded timeouts, explicit TLS, error hierarchy.
-- Created `ipam/integrations/mikrotik_mapper.py` — maps raw RouterOS JSON to Pydantic DTOs, handles bool strings and hyphenated keys.
-- Created `ipam/integrations/mikrotik_sync.py` — sync engine with `run_device_test` (metadata population), `run_device_sync` (full IPAM upsert), VLAN/subnet/DHCP/ARP sync rules.
-- Created `ipam/forms.py` — `MikroTikDeviceForm` with write-only password field, encryption on save, blank-means-keep-existing.
-- Updated `ipam/admin.py` — `MikroTikDeviceAdmin` (Save and test, Sync now actions), `MikroTikSyncRunAdmin`, proxy `MikroTikVLAN`/`MikroTikSubnet` admins for Integrations sidebar.
-- Updated `config/settings.py` — added Integrations sidebar group.
-- Updated `ipam/tasks.py` — MikroTik scheduling helpers (`schedule_mikrotik_sync_now`, `schedule_next_mikrotik_sync`) and `run_mikrotik_sync` task.
-- Updated `ipam/tests.py` — comprehensive tests for pgcrypto, contracts, models, client, mapper, sync, scheduling, proxy admin, and regression.
-- Updated `.env.example` and `.env` — added `NETVIBE_PGCRYPTO_KEY`.
-
-### Files added
-
-- `ipam/crypto.py`
-- `ipam/contracts.py`
-- `ipam/forms.py`
-- `ipam/integrations/__init__.py`
-- `ipam/integrations/mikrotik_client.py`
-- `ipam/integrations/mikrotik_mapper.py`
-- `ipam/integrations/mikrotik_sync.py`
-- `ipam/migrations/0002_enable_pgcrypto.py`
-- `ipam/migrations/0003_mikrotik_integration.py`
-
-### Files modified
-
-- `ipam/models.py`
-- `ipam/admin.py`
-- `ipam/tasks.py`
-- `ipam/tests.py`
-- `config/settings.py`
-- `requirements.txt`
-- `.env.example`
-- `.env`
-
-### Design decisions
-
-- Credentials use pgcrypto `pgp_sym_encrypt`/`pgp_sym_decrypt` because reversible encryption is needed (the client must decrypt to authenticate). Key via env var to separate from Django's `SECRET_KEY`.
-- Proxy models (`MikroTikVLAN`, `MikroTikSubnet`) provide filtered admin views without duplicating schema — the proxy queryset filters by `source_kind=mikrotik`.
-- VLAN uniqueness is global on `number` for this milestone. One-NetVibe-instance = one-logical-network-domain.
-- Subnets derive from `/ip/address` (not from VLANs), which is the RouterOS source of truth for L3.
-- DHCP leases are the primary source for IP records; ARP enriches MAC on existing IPs or creates observed-only records. Neighbors are observed (summary stored) but never create IPAM objects.
-- `integration_sync_enabled` on each VLAN/Subnet lets the operator freeze individual objects without disabling the whole device.
-- Scheduling follows the same `django-tasks-db` pattern as ICMP scans: guard against duplicate active runs, enqueue via `task.using(run_after=...).enqueue()`.
-
-### Trade-offs and omissions
-
-- No write-back to MikroTik — this milestone is read-only.
-- No Celery, Redis, or external task broker — reuses `django-tasks-db`.
-- No destructive sync deletes — orphaned objects are only marked `sync_state=orphaned` in future milestones.
-- Subnet↔VLAN auto-linking from interface names is deferred — operator assigns manually for now.
-- No custom CSS or extra containers.
-
----
-
-## MikroTik onboarding/admin UX hardening – Milestone 2
-
-### Final operator-facing rules
-
-- Add form is now onboarding-only and shows only minimum connection fields plus one gateway question (`Is this the gateway/router?`).
-- Device `name` is hidden on add and never required during onboarding.
-- Name population rule:
-  - on successful connection test/sync, if local `name` is blank, set it from RouterOS identity;
-  - if local `name` is already set (manual edit), never overwrite it automatically.
-- `scheme` is now a validated dropdown with explicit options (`HTTPS`, `HTTP`).
-- Advanced controls (sync/import/authority) are hidden until the first successful device contact.
-
-### Backend behavior changes
-
-- `Save and test` no longer performs outbound MikroTik calls in the admin HTTP request path.
-- Admin now saves first, schedules a background test job via existing `django-tasks-db`, and returns immediately with a clear message.
-- Added dedicated async execution path for test runs (`schedule_mikrotik_test_now` + `run_mikrotik_test`).
-- Device deletion no longer fails due to linked run objects:
-  - `MikroTikSyncRun.device` is nullable with `SET_NULL`;
-  - historical runs stay readable and no longer block deleting the parent device.
-
----
-
-## MikroTik target-based discovery refactor – Milestone 3
-
-### Scope
-
-Replaced the old device-first onboarding (`Save and test`, per-device credentials, test-mode sync runs) with target-based discovery using one global credential profile.
-
-### Changes
-
-- Added singleton `MikroTikIntegrationSettings` with global username/password and retention days.
-- Added `MikroTikTarget` inventory (IPv4-only, unique host, endpoint source of truth).
-- Added `MikroTikDiscoveryRun` and `MikroTikDiscoveryResult` for batch onboarding history.
-- Refactored runtime so sync and discovery both use global credentials from settings.
-- Removed per-device credentials and obsolete onboarding fields/logic:
-  - removed per-device `username` / `password_encrypted`
-  - removed `Save and test` workflow
-  - removed `custom_port` flow + JS
-  - removed `is_gateway_router` onboarding question
-  - removed advanced-controls reveal tied to first test success
-- Converted `MikroTikSyncRun` to sync-only (removed `TEST` mode).
-- Added host uniqueness at DB level for `MikroTikDevice` and `MikroTikTarget`.
-- Added batch discovery execution:
-  - one active discovery run globally
-  - max 100 selected targets
-  - one task per run with bounded internal concurrency (`max_workers=10`)
-  - incremental result/counter updates for live admin refresh
-- Added identity-conflict blocking (`conflicting_device` link on discovery result).
-- Added automatic first sync scheduling immediately after discovery success.
-- Added MikroTik run retention pruning driven by settings retention days.
-- Integrated coarse periodic `prune_jobs` execution into existing `worker_manager` loop (no new scheduler/service).
-
-### Admin/UI
-
-- Integrations sidebar now includes:
-  - MikroTik settings
-  - MikroTik targets
-  - MikroTik discovery runs
-  - MikroTik devices
-  - MikroTik sync runs
-  - MikroTik VLANs
-  - MikroTik subnets
-- Target changelist is the primary onboarding entry point with queryset bulk discovery action.
-- Discovery run change form now embeds live related results and auto-refreshes while active.
-- Device admin is now post-onboarding only:
-  - no add permission
-  - readonly endpoint diagnostics
-  - link back to linked target
-  - manual `Sync now` retained
-
-### Data/migrations
-
-- Reset `ipam` migration baseline to the new architecture (`0001_initial` + `0002_enable_pgcrypto`).
-- Removed dead MikroTik onboarding schema paths from migrations.
+- DHCP/ARP synchronizations directly and silently overwriting canonical hostname/MAC.
+- Newly imported MikroTik subnets auto-enabling scans/discovery by default.
+- Sidebar architecture that treated all MikroTik operational lists as top-level primary entries.

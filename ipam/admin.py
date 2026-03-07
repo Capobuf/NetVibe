@@ -6,7 +6,8 @@ from django.contrib.auth.models import Group, User
 from django.db import models as django_models
 from django.db.utils import OperationalError, ProgrammingError
 from django.shortcuts import redirect
-from django.urls import reverse
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.html import format_html, strip_tags
 from django.utils.text import Truncator
 from django.utils import timezone
@@ -19,10 +20,10 @@ from unfold.decorators import action, display
 
 from .forms import MikroTikIntegrationSettingsForm
 from .models import (
-    IPAMSettings, IPAddress, JobRun, MikroTikDevice,
+    IPAMSettings, IPAddress, IPAddressObservation, JobRun, MikroTikDevice,
     MikroTikDiscoveryResult, MikroTikDiscoveryRun, MikroTikIntegrationSettings,
-    MikroTikSubnet, MikroTikSyncRun, MikroTikTarget, MikroTikVLAN, SourceKind,
-    Subnet, VLAN,
+    MikroTikSubnet, MikroTikSyncRun, MikroTikTarget, MikroTikVLAN, ReviewItem,
+    SourceKind, Subnet, VLAN,
 )
 
 
@@ -206,11 +207,189 @@ class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
                 'fields': ('note',),
             },
         ),
+        (
+            _('Latest observed data'),
+            {
+                'fields': (
+                    (
+                        'latest_observed_hostname',
+                        'latest_observed_mac_address',
+                    ),
+                    (
+                        'latest_observed_lease',
+                        'latest_observed_at',
+                    ),
+                    'latest_observed_device',
+                ),
+            },
+        ),
     )
     formfield_overrides = {
         django_models.TextField: {'widget': WysiwygWidget},
     }
     list_filter = ('subnet', 'status', 'exclude_ping')
+    readonly_fields = (
+        'latest_observed_hostname',
+        'latest_observed_mac_address',
+        'latest_observed_lease',
+        'latest_observed_at',
+        'latest_observed_device',
+    )
+
+    def _get_latest_observation(self, obj):
+        if obj is None:
+            return None
+        if hasattr(obj, '_latest_observation_cache'):
+            return obj._latest_observation_cache
+
+        observation = (
+            IPAddressObservation.objects.filter(subnet=obj.subnet, address=obj.address)
+            .select_related('mikrotik_device')
+            .order_by('-last_observed_at', '-pk')
+            .first()
+        )
+        # Cache once per request-object render to avoid repeated lookups.
+        obj._latest_observation_cache = observation
+        return observation
+
+    @admin.display(description=_('Observed hostname'))
+    def latest_observed_hostname(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None:
+            return '-'
+        return observation.observed_hostname or '-'
+
+    @admin.display(description=_('Observed MAC'))
+    def latest_observed_mac_address(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None:
+            return '-'
+        return observation.observed_mac_address or '-'
+
+    @admin.display(description=_('Observed lease'))
+    def latest_observed_lease(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None:
+            return '-'
+        if observation.lease_kind == IPAddress.LeaseKind.NONE:
+            return '-'
+        parts = [observation.get_lease_kind_display()]
+        if observation.lease_status:
+            parts.append(observation.lease_status)
+        if observation.lease_server_name:
+            parts.append(observation.lease_server_name)
+        return ' | '.join(parts)
+
+    @admin.display(description=_('Observed at'))
+    def latest_observed_at(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None or observation.last_observed_at is None:
+            return '-'
+        return timezone.localtime(observation.last_observed_at).strftime(
+            '%Y-%m-%d %H:%M:%S'
+        )
+
+    @admin.display(description=_('Observed from'))
+    def latest_observed_device(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None or observation.mikrotik_device_id is None:
+            return '-'
+        return _admin_change_link(
+            self,
+            MikroTikDevice,
+            observation.mikrotik_device_id,
+            observation.mikrotik_device.name or observation.mikrotik_device.host,
+        )
+
+
+@admin.register(ReviewItem)
+class ReviewItemAdmin(ModelAdmin):
+    list_display = (
+        'kind',
+        'severity',
+        'status',
+        'title',
+        'subnet',
+        'ip_address',
+        'mikrotik_device',
+        'first_seen_at',
+        'last_seen_at',
+    )
+    list_filter = ('kind', 'severity', 'status', 'mikrotik_device')
+    ordering = ('-last_seen_at', '-pk')
+    search_fields = (
+        'title',
+        'message',
+        'dedupe_key',
+        'subnet__cidr',
+        'ip_address__address',
+        'mikrotik_device__host',
+        'mikrotik_device__name',
+    )
+    actions = ('mark_reviewed', 'mark_ignored', 'reopen')
+    readonly_fields = (
+        'kind',
+        'severity',
+        'title',
+        'message',
+        'subnet',
+        'ip_address',
+        'mikrotik_device',
+        'dedupe_key',
+        'first_seen_at',
+        'last_seen_at',
+        'payload_json',
+    )
+    fieldsets = (
+        (
+            _('Review item'),
+            {
+                'fields': (
+                    'kind',
+                    'severity',
+                    'status',
+                    'title',
+                    'message',
+                ),
+            },
+        ),
+        (
+            _('Related objects'),
+            {
+                'fields': (
+                    'subnet',
+                    'ip_address',
+                    'mikrotik_device',
+                ),
+            },
+        ),
+        (
+            _('Tracking'),
+            {
+                'fields': (
+                    'dedupe_key',
+                    'first_seen_at',
+                    'last_seen_at',
+                    'payload_json',
+                ),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description=_('Mark reviewed'))
+    def mark_reviewed(self, request, queryset):
+        queryset.update(status=ReviewItem.Status.REVIEWED)
+
+    @admin.action(description=_('Ignore'))
+    def mark_ignored(self, request, queryset):
+        queryset.update(status=ReviewItem.Status.IGNORED)
+
+    @admin.action(description=_('Reopen'))
+    def reopen(self, request, queryset):
+        queryset.update(status=ReviewItem.Status.OPEN)
 
 
 @admin.register(IPAMSettings)
@@ -659,6 +838,149 @@ def _admin_change_link(admin_obj, model, object_id, label):
     return format_html('<a href="{}">{}</a>', url, label)
 
 
+def _admin_datetime(value):
+    if value is None:
+        return '-'
+    if timezone.is_naive(value):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    return timezone.localtime(value).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def discovery_overview_view(request):
+    failed_sync_runs = list(
+        MikroTikSyncRun.objects.filter(status=MikroTikSyncRun.Status.FAILED)
+        .select_related('device')
+        .order_by('-scheduled_for', '-pk')[:5]
+    )
+    latest_failed_sync_runs = [
+        {
+            'id': run.pk,
+            'device_label': (
+                (run.device.name or run.device.host)
+                if run.device_id
+                else _('Deleted device')
+            ),
+            'scheduled_for': _admin_datetime(run.scheduled_for),
+            'error_message': Truncator(run.error_message).chars(140) or '-',
+            'change_url': reverse(
+                'admin:ipam_mikrotiksyncrun_change',
+                args=(run.pk,),
+                current_app=admin.site.name,
+            ),
+        }
+        for run in failed_sync_runs
+    ]
+
+    conflicts_filter = {
+        'status__exact': MikroTikDiscoveryResult.Status.BLOCKED,
+        'reason_code__exact': MikroTikDiscoveryResult.ReasonCode.IDENTITY_CONFLICT,
+    }
+
+    quick_links = [
+        {
+            'title': _('Targets'),
+            'description': _('Manage onboarding endpoints.'),
+            'url': reverse('admin:ipam_mikrotiktarget_changelist'),
+        },
+        {
+            'title': _('Devices'),
+            'description': _('Tune sync behavior for onboarded devices.'),
+            'url': reverse('admin:ipam_mikrotikdevice_changelist'),
+        },
+        {
+            'title': _('Discovery runs'),
+            'description': _('Review onboarding batches and statuses.'),
+            'url': reverse('admin:ipam_mikrotikdiscoveryrun_changelist'),
+        },
+        {
+            'title': _('Sync runs'),
+            'description': _('Inspect synchronization history and errors.'),
+            'url': reverse('admin:ipam_mikrotiksyncrun_changelist'),
+        },
+        {
+            'title': _('MikroTik settings'),
+            'description': _('Update integration credentials and retention.'),
+            'url': reverse('admin:ipam_mikrotikintegrationsettings_changelist'),
+        },
+        {
+            'title': _('Review queue'),
+            'description': _('Review conflicts, new IPs, and failures.'),
+            'url': reverse('admin:ipam_reviewitem_changelist'),
+        },
+    ]
+
+    context = {
+        **admin.site.each_context(request),
+        'title': _('Discovery overview'),
+        'subtitle': None,
+        'overview_cards': [
+            {
+                'title': _('Total MikroTik targets'),
+                'headline': str(MikroTikTarget.objects.count()),
+                'footer': _('Configured discovery endpoints'),
+            },
+            {
+                'title': _('Linked/onboarded devices'),
+                'headline': str(
+                    MikroTikTarget.objects.exclude(linked_device__isnull=True).count()
+                ),
+                'footer': _('Targets already linked to a device'),
+            },
+            {
+                'title': _('Active discovery runs'),
+                'headline': str(
+                    MikroTikDiscoveryRun.objects.filter(
+                        status__in=(
+                            MikroTikDiscoveryRun.Status.SCHEDULED,
+                            MikroTikDiscoveryRun.Status.RUNNING,
+                        )
+                    ).count()
+                ),
+                'footer': _('Runs currently scheduled or running'),
+            },
+            {
+                'title': _('Blocked discovery conflicts'),
+                'headline': str(
+                    MikroTikDiscoveryResult.objects.filter(**conflicts_filter).count()
+                ),
+                'footer': _('Identity conflicts requiring manual resolution'),
+            },
+        ],
+        'latest_failed_sync_runs': latest_failed_sync_runs,
+        'latest_failed_sync_runs_url': (
+            reverse('admin:ipam_mikrotiksyncrun_changelist')
+            + '?'
+            + urlencode({'status__exact': MikroTikSyncRun.Status.FAILED})
+        ),
+        'blocked_conflicts_url': (
+            reverse('admin:ipam_mikrotikdiscoveryresult_changelist')
+            + '?'
+            + urlencode(conflicts_filter)
+        ),
+        'quick_links': quick_links,
+    }
+    return TemplateResponse(request, 'admin/ipam/discovery_overview.html', context)
+
+
+_original_admin_extra_urls = getattr(admin.site, 'extra_urls', None)
+
+
+def _netvibe_admin_extra_urls():
+    # Preserve extra admin URLs from other modules and prepend NetVibe overview.
+    existing_urls = _original_admin_extra_urls() if callable(_original_admin_extra_urls) else []
+    return [
+        path(
+            'discovery-overview/',
+            admin.site.admin_view(discovery_overview_view),
+            name='ipam_discovery_overview',
+        ),
+        *existing_urls,
+    ]
+
+
+admin.site.extra_urls = _netvibe_admin_extra_urls
+
+
 @admin.register(MikroTikIntegrationSettings)
 class MikroTikIntegrationSettingsAdmin(ModelAdmin):
     form = MikroTikIntegrationSettingsForm
@@ -877,6 +1199,7 @@ class MikroTikDiscoveryRunAdmin(ModelAdmin):
     change_form_outer_before_template = (
         'admin/ipam/mikrotik_discovery_run/change_form_outer_before.html'
     )
+    actions_detail = ('open_filtered_results',)
     readonly_fields = (
         'status',
         'created_at',
@@ -961,12 +1284,22 @@ class MikroTikDiscoveryRunAdmin(ModelAdmin):
 
     @admin.display(description=_('All results'))
     def results_changelist_link(self, obj):
-        url = (
-            reverse('admin:ipam_mikrotikdiscoveryresult_changelist')
-            + '?'
-            + urlencode({'run__id__exact': obj.pk})
+        return format_html(
+            '<a href="{}">{}</a>',
+            self._get_filtered_results_url(obj.pk),
+            _('Open filtered results list'),
         )
-        return format_html('<a href="{}">{}</a>', url, _('Open filtered results list'))
+
+    def _get_filtered_results_url(self, object_id):
+        changelist_url = reverse(
+            'admin:ipam_mikrotikdiscoveryresult_changelist',
+            current_app=self.admin_site.name,
+        )
+        return f'{changelist_url}?{urlencode({"run__id__exact": object_id})}'
+
+    @action(description=_('Open filtered results list'), icon='table_view')
+    def open_filtered_results(self, request, object_id):
+        return redirect(self._get_filtered_results_url(object_id))
 
 
 @admin.register(MikroTikDiscoveryResult)

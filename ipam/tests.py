@@ -3,6 +3,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
@@ -11,14 +12,17 @@ from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.management import call_command
 from django.db.utils import ProgrammingError
 from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .crypto import decrypt_password, encrypt_password
 from .forms import MikroTikIntegrationSettingsForm
+from .integrations.mikrotik_client import MikroTikConnectionError
 from .integrations.mikrotik_sync import run_device_sync
 from .models import (
     IPAMSettings,
     IPAddress,
+    IPAddressObservation,
     JobRun,
     MikroTikDevice,
     MikroTikDiscoveryResult,
@@ -26,6 +30,7 @@ from .models import (
     MikroTikIntegrationSettings,
     MikroTikSyncRun,
     MikroTikTarget,
+    ReviewItem,
     SourceKind,
     Subnet,
     VLAN,
@@ -425,6 +430,10 @@ class MikroTikDiscoveryFlowTests(TestCase):
         self.assertEqual(result.conflicting_device_id, existing.pk)
         self.assertIn(existing.host, result.detail_message)
         self.assertFalse(MikroTikDevice.objects.filter(host='10.15.0.20').exists())
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.DISCOVERY_CONFLICT).count(),
+            1,
+        )
 
 
 class MikroTikAdminTests(TestCase):
@@ -501,6 +510,45 @@ class MikroTikAdminTests(TestCase):
 
         sync_admin = admin.site._registry[MikroTikSyncRun]
         self.assertNotIn('mode', sync_admin.list_display)
+
+
+class AdminNavigationTests(TestCase):
+    def setUp(self):
+        create_mikrotik_settings()
+        self.user = get_user_model().objects.create_superuser(
+            username='admin-nav',
+            email='admin-nav@example.com',
+            password='test-pass-123',
+        )
+        self.client.force_login(self.user)
+
+    def test_discovery_overview_page_is_reachable(self):
+        response = self.client.get(reverse('admin:ipam_discovery_overview'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Discovery overview')
+
+    def test_target_device_and_run_detail_actions_remain_available(self):
+        target_admin = admin.site._registry[MikroTikTarget]
+        device_admin = admin.site._registry[MikroTikDevice]
+        discovery_run_admin = admin.site._registry[MikroTikDiscoveryRun]
+
+        self.assertIn('run_discovery_now', target_admin.actions_detail)
+        self.assertIn('sync_now_action', device_admin.actions_detail)
+        self.assertIn('open_filtered_results', discovery_run_admin.actions_detail)
+
+    def test_sidebar_removes_fragmented_mikrotik_entries(self):
+        navigation = settings.UNFOLD['SIDEBAR']['navigation']
+        all_titles = {
+            str(item['title'])
+            for group in navigation
+            for item in group['items']
+        }
+
+        self.assertIn('Discovery overview', all_titles)
+        self.assertIn('Review queue', all_titles)
+        self.assertNotIn('MikroTik sync runs', all_titles)
+        self.assertNotIn('MikroTik VLANs', all_titles)
+        self.assertNotIn('MikroTik subnets', all_titles)
 
 
 class MikroTikRetentionTests(TestCase):
@@ -683,6 +731,216 @@ class MikroTikSyncRegressionTests(TestCase):
         self.assertIsNotNone(device.last_successful_sync_at)
 
 
+class MikroTikObservationReviewTests(TestCase):
+    def setUp(self):
+        create_mikrotik_settings()
+        self.device = MikroTikDevice.objects.create(host='10.60.0.1')
+        self.vlan = VLAN.objects.create(number=60)
+        self.subnet = Subnet.objects.create(
+            vlan=self.vlan,
+            cidr='10.60.0.0/24',
+            source_kind=SourceKind.MANUAL,
+        )
+
+    def _run_sync(
+        self,
+        *,
+        dhcp_leases=None,
+        arp_entries=None,
+        ip_addresses=None,
+        raise_client_error=None,
+    ):
+        sync_run = MikroTikSyncRun.objects.create(
+            device=self.device,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=timezone.now(),
+        )
+
+        class FakeClient:
+            def get_identity(self_inner):
+                if raise_client_error:
+                    raise raise_client_error
+                return {'name': 'RTR-60'}
+
+            def get_system_resource(self_inner):
+                return {
+                    'version': '7.15',
+                    'board-name': 'RB5009',
+                    'platform': 'MikroTik',
+                }
+
+            def get_bridge_vlans(self_inner):
+                return []
+
+            def get_ip_addresses(self_inner):
+                return ip_addresses or []
+
+            def get_dhcp_servers(self_inner):
+                return []
+
+            def get_dhcp_leases(self_inner):
+                return dhcp_leases or []
+
+            def get_arp(self_inner):
+                return arp_entries or []
+
+            def get_neighbors(self_inner):
+                return []
+
+        with patch(
+            'ipam.integrations.mikrotik_sync._make_client_for_device',
+            return_value=FakeClient(),
+        ):
+            run_device_sync(self.device, sync_run)
+        sync_run.refresh_from_db()
+        return sync_run
+
+    def test_existing_canonical_hostname_is_not_overwritten_by_dhcp_observation(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.10',
+            hostname='canonical-host',
+        )
+
+        self._run_sync(
+            dhcp_leases=[
+                {
+                    'address': '10.60.0.10',
+                    'host-name': 'observed-host',
+                    'mac-address': 'AA:BB:CC:DD:EE:10',
+                    'status': 'bound',
+                    'server': 'dhcp60',
+                    'dynamic': 'true',
+                }
+            ]
+        )
+
+        ip.refresh_from_db()
+        self.assertEqual(ip.hostname, 'canonical-host')
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.HOSTNAME_CONFLICT).count(),
+            1,
+        )
+
+    def test_existing_canonical_mac_is_not_overwritten_by_arp_observation(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.20',
+            mac_address='aa:bb:cc:dd:ee:aa',
+        )
+
+        self._run_sync(
+            arp_entries=[
+                {
+                    'address': '10.60.0.20',
+                    'mac-address': 'aa:bb:cc:dd:ee:bb',
+                    'interface': 'bridge1',
+                    'complete': 'true',
+                }
+            ]
+        )
+
+        ip.refresh_from_db()
+        self.assertEqual(ip.mac_address, 'aa:bb:cc:dd:ee:aa')
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.MAC_CONFLICT).count(),
+            1,
+        )
+
+    def test_conflict_review_items_are_deduplicated_on_repeated_sync(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.30',
+            hostname='canonical-host',
+            mac_address='aa:bb:cc:dd:ee:30',
+        )
+
+        lease_payload = [
+            {
+                'address': '10.60.0.30',
+                'host-name': 'observed-host',
+                'mac-address': 'aa:bb:cc:dd:ee:31',
+                'status': 'bound',
+                'server': 'dhcp60',
+                'dynamic': 'true',
+            }
+        ]
+        self._run_sync(dhcp_leases=lease_payload)
+        self._run_sync(dhcp_leases=lease_payload)
+
+        ip.refresh_from_db()
+        self.assertEqual(ip.hostname, 'canonical-host')
+        self.assertEqual(ip.mac_address, 'aa:bb:cc:dd:ee:30')
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.HOSTNAME_CONFLICT).count(),
+            1,
+        )
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.MAC_CONFLICT).count(),
+            1,
+        )
+
+    def test_newly_observed_ip_creates_canonical_observation_and_review_item(self):
+        self._run_sync(
+            dhcp_leases=[
+                {
+                    'address': '10.60.0.40',
+                    'host-name': 'observed-40',
+                    'mac-address': 'AA:BB:CC:DD:EE:40',
+                    'status': 'bound',
+                    'server': 'dhcp60',
+                    'dynamic': 'true',
+                }
+            ]
+        )
+
+        ip = IPAddress.objects.get(subnet=self.subnet, address='10.60.0.40')
+        observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.40',
+        )
+        review_item = ReviewItem.objects.get(kind=ReviewItem.Kind.NEW_IP_OBSERVED)
+
+        self.assertEqual(ip.hostname, '')
+        self.assertEqual(ip.mac_address, '')
+        self.assertEqual(ip.source_kind, SourceKind.MIKROTIK)
+        self.assertEqual(observation.observed_hostname, 'observed-40')
+        self.assertEqual(observation.observed_mac_address, 'aa:bb:cc:dd:ee:40')
+        self.assertTrue(observation.observed_via_dhcp)
+        self.assertEqual(review_item.ip_address_id, ip.pk)
+
+    def test_imported_mikrotik_subnets_default_to_scan_and_discovery_disabled(self):
+        self._run_sync(
+            ip_addresses=[
+                {
+                    'address': '10.61.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*61',
+                }
+            ]
+        )
+
+        imported_subnet = Subnet.objects.get(cidr='10.61.0.0/24')
+        self.assertEqual(imported_subnet.source_kind, SourceKind.MIKROTIK)
+        self.assertFalse(imported_subnet.scan_enabled)
+        self.assertFalse(imported_subnet.discover_subnet)
+
+    def test_failed_sync_creates_and_updates_sync_failure_review_item(self):
+        self._run_sync(
+            raise_client_error=MikroTikConnectionError('connection failed'),
+        )
+        self._run_sync(
+            raise_client_error=MikroTikConnectionError('connection failed again'),
+        )
+
+        self.assertEqual(
+            ReviewItem.objects.filter(kind=ReviewItem.Kind.SYNC_FAILURE).count(),
+            1,
+        )
+
 class SubnetScanRegressionTests(TestCase):
     def setUp(self):
         self.vlan = VLAN.objects.create(number=999)
@@ -734,3 +992,4 @@ class CompatibilitySmokeTests(SimpleTestCase):
         self.assertIn(MikroTikDiscoveryRun, admin.site._registry)
         self.assertIn(MikroTikDevice, admin.site._registry)
         self.assertIn(MikroTikSyncRun, admin.site._registry)
+        self.assertIn(ReviewItem, admin.site._registry)

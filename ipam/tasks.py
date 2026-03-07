@@ -33,7 +33,9 @@ from .models import (
     MikroTikDiscoveryRun,
     MikroTikSyncRun,
     MikroTikTarget,
+    ReviewItem,
     Subnet,
+    upsert_review_item,
 )
 
 
@@ -704,6 +706,20 @@ def _apply_discovery_success(outcome: dict) -> dict:
                 seen_version=seen_version,
                 seen_board=seen_board,
                 seen_platform=seen_platform,
+            )
+            upsert_review_item(
+                kind=ReviewItem.Kind.DISCOVERY_CONFLICT,
+                severity=ReviewItem.Severity.WARNING,
+                title=f'Discovery conflict on target {target.host}',
+                message=message,
+                dedupe_key=f'discovery_conflict:{target.pk}:{seen_identity or "unknown"}',
+                mikrotik_device=conflicting_device,
+                payload_json={
+                    'target_id': target.pk,
+                    'target_host': target.host,
+                    'conflicting_device_id': conflicting_device.pk,
+                    'identity': seen_identity,
+                },
             )
 
             return {

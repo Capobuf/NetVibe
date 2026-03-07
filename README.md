@@ -70,21 +70,20 @@ Then attach from VS Code using the included `Python: Attach (Docker)` launch con
 - No Node.js/npm/yarn/pnpm or frontend build pipeline
 - Docker Compose runs three services: `web`, `db`, `worker`
 
-## MikroTik integration operator flow
+## Admin navigation
 
-Admin sidebar under **Integrations** includes:
+The admin sidebar is organized as:
 
-- MikroTik settings
-- MikroTik targets
-- MikroTik discovery runs
-- MikroTik devices
-- MikroTik sync runs
-- MikroTik VLANs
-- MikroTik subnets
+- **Navigation**: Dashboard
+- **Networks**: VLANs, Subnets, IP addresses, IPAM settings
+- **Discovery**: Discovery overview, MikroTik targets, MikroTik devices, Discovery runs, Review queue
+- **System**: Job runs, Task results, MikroTik settings
+
+## Discovery operator flow
 
 ### 1. Configure global credentials
 
-Open **Integrations -> MikroTik settings** and configure:
+Open **System -> MikroTik settings** and configure:
 
 - global username
 - global password (write-only)
@@ -92,7 +91,7 @@ Open **Integrations -> MikroTik settings** and configure:
 
 ### 2. Add discovery targets
 
-Open **Integrations -> MikroTik targets** and add one IPv4 endpoint per row:
+Open **Discovery -> MikroTik targets** and add one IPv4 endpoint per row:
 
 - host (IPv4 only)
 - scheme (`https` or `http`)
@@ -110,6 +109,11 @@ In the target changelist, select one or more rows and execute the action:
 This creates one discovery batch run, pre-creates per-target result rows, enqueues one background task, and redirects to the run detail page.
 
 ### 4. Watch live run progress
+
+From **Discovery -> Discovery overview**:
+
+- monitor targets/devices/runs/conflicts counters
+- jump quickly to targets, devices, discovery runs, sync runs, and MikroTik settings
 
 On the discovery run detail page:
 
@@ -135,7 +139,7 @@ On failure or blocked conflict:
 
 ### 6. Operate devices after onboarding
 
-Open **MikroTik devices** only for operational tuning:
+Open **Discovery -> MikroTik devices** only for operational tuning:
 
 - sync interval
 - import flags
@@ -143,7 +147,27 @@ Open **MikroTik devices** only for operational tuning:
 - status diagnostics
 
 Endpoint fields on devices are readonly diagnostics.
-Endpoint edits belong to **MikroTik targets**; rerunning discovery overwrites device endpoint fields from target values.
+Endpoint edits belong to **Discovery -> MikroTik targets**; rerunning discovery overwrites device endpoint fields from target values.
+
+## Canonical vs observed data
+
+- `IPAddress` is the canonical MSP-owned IPAM record.
+- `IPAddressObservation` stores latest observed discovery facts per device/IP (hostname, MAC, lease metadata, timestamps).
+- DHCP/ARP sync updates operational canonical fields (`last_seen`, sync/source timestamps, lease metadata, sync state) but does not silently overwrite canonical `hostname`, `mac_address`, `status`, or `note`.
+
+## Review queue
+
+Use **Discovery -> Review queue** as the persistent operational inbox.
+
+Current review kinds:
+
+- `new_ip_observed`
+- `hostname_conflict`
+- `mac_conflict`
+- `sync_failure`
+- `discovery_conflict`
+
+Repeated occurrences update the same review item via `dedupe_key` instead of creating duplicates.
 
 ## Running tests
 
@@ -155,11 +179,12 @@ docker compose exec web python manage.py test ipam
 
 After sync completes, check:
 
-- **MikroTik VLANs**: imported VLANs, source device, upstream state, sync toggle
-- **MikroTik subnets**: imported subnets, interface name, upstream state, scan toggle
-- **IP addresses**: MikroTik provenance, lease fields, sync state
-- **MikroTik sync runs**: sync-only run history and diagnostics
-- **MikroTik discovery runs/results**: per-target onboarding outcomes
+- **Networks -> VLANs**: imported VLANs, source device, upstream state, sync toggle
+- **Networks -> Subnets**: imported subnets, interface name, upstream state, scan toggle
+- **Networks -> IP addresses**: MikroTik provenance, lease fields, sync state
+- **Discovery -> Review queue**: conflicts, new IP observations, and sync/discovery issues
+- **System -> Task results** and **System -> Job runs**: background execution status
+- **Discovery -> Discovery runs/results**: per-target onboarding outcomes
 
 ## Translations
 

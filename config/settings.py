@@ -179,86 +179,84 @@ UNFOLD = {
                 ],
             },
             {
-                'title': _('IPAM'),
+                'title': _('Networks'),
                 'collapsible': True,
                 'items': [
                     {
-                        'title': _('VLANs'),
                         'icon': 'tag',
+                        'title': _('VLANs'),
                         'link': reverse_lazy('admin:ipam_vlan_changelist'),
                     },
                     {
-                        'title': _('Subnets'),
                         'icon': 'lan',
+                        'title': _('Subnets'),
                         'link': reverse_lazy('admin:ipam_subnet_changelist'),
                     },
                     {
-                        'title': _('IPAM settings'),
+                        'icon': 'dns',
+                        'title': _('IP addresses'),
+                        'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
+                    },
+                    {
                         'icon': 'tune',
+                        'title': _('IPAM settings'),
                         'link': reverse_lazy('admin:ipam_ipamsettings_changelist'),
                     },
                 ],
             },
             {
-                'title': _('Jobs & Tasks'),
+                'title': _('Discovery'),
                 'collapsible': True,
                 'items': [
                     {
-                        'title': _('Job runs'),
-                        'icon': 'schedule',
-                        'link': reverse_lazy('admin:ipam_jobrun_changelist'),
+                        'icon': 'explore',
+                        'title': _('Discovery overview'),
+                        'link': reverse_lazy('admin:ipam_discovery_overview'),
                     },
                     {
-                        'title': _('Task results'),
-                        'icon': 'task_alt',
-                        'link': reverse_lazy(
-                            'admin:django_tasks_database_dbtaskresult_changelist'
-                        ),
+                        'icon': 'my_location',
+                        'title': _('MikroTik targets'),
+                        'link': reverse_lazy('admin:ipam_mikrotiktarget_changelist'),
+                    },
+                    {
+                        'icon': 'router',
+                        'title': _('MikroTik devices'),
+                        'link': reverse_lazy('admin:ipam_mikrotikdevice_changelist'),
+                    },
+                    {
+                        'icon': 'travel_explore',
+                        'title': _('Discovery runs'),
+                        'link': reverse_lazy('admin:ipam_mikrotikdiscoveryrun_changelist'),
+                    },
+                    {
+                        'icon': 'inventory_2',
+                        'title': _('Review queue'),
+                        'link': reverse_lazy('admin:ipam_reviewitem_changelist'),
                     },
                 ],
             },
             {
-                'title': _('Integrations'),
+                'title': _('System'),
                 'collapsible': True,
                 'items': [
                     {
-                        'title': _('MikroTik settings'),
+                        'icon': 'schedule',
+                        'title': _('Job runs'),
+                        'link': reverse_lazy('admin:ipam_jobrun_changelist'),
+                    },
+                    {
+                        'icon': 'task_alt',
+                        'title': _('Task results'),
+                        'link': reverse_lazy(
+                            'admin:django_tasks_database_dbtaskresult_changelist'
+                        ),
+                    },
+                    {
                         'icon': 'tune',
+                        'title': _('MikroTik settings'),
                         'link': reverse_lazy(
                             'admin:ipam_mikrotikintegrationsettings_changelist'
                         ),
-                    },
-                    {
-                        'title': _('MikroTik targets'),
-                        'icon': 'my_location',
-                        'link': reverse_lazy('admin:ipam_mikrotiktarget_changelist'),
-                    },
-                    {
-                        'title': _('MikroTik discovery runs'),
-                        'icon': 'travel_explore',
-                        'link': reverse_lazy(
-                            'admin:ipam_mikrotikdiscoveryrun_changelist'
-                        ),
-                    },
-                    {
-                        'title': _('MikroTik devices'),
-                        'icon': 'router',
-                        'link': reverse_lazy('admin:ipam_mikrotikdevice_changelist'),
-                    },
-                    {
-                        'title': _('MikroTik sync runs'),
-                        'icon': 'sync',
-                        'link': reverse_lazy('admin:ipam_mikrotiksyncrun_changelist'),
-                    },
-                    {
-                        'title': _('MikroTik VLANs'),
-                        'icon': 'tag',
-                        'link': reverse_lazy('admin:ipam_mikrotikvlan_changelist'),
-                    },
-                    {
-                        'title': _('MikroTik subnets'),
-                        'icon': 'lan',
-                        'link': reverse_lazy('admin:ipam_mikrotiksubnet_changelist'),
                     },
                 ],
             },

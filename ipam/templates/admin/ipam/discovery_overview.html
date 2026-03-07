@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load i18n unfold %}
+
+{% block content %}
+{% trans "Quick links" as quick_links_title %}
+{% trans "Latest failed sync runs" as failed_sync_title %}
+{% trans "Only failed runs are listed here." as failed_sync_footer %}
+<div class="space-y-6">
+    <div class="grid gap-6 xl:grid-cols-4">
+        {% for card in overview_cards %}
+            {% component "unfold/components/card.html" with title=card.title footer=card.footer %}
+                <p class="text-3xl font-semibold">{{ card.headline }}</p>
+            {% endcomponent %}
+        {% endfor %}
+    </div>
+
+    {% component "unfold/components/card.html" with title=quick_links_title %}
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {% for link in quick_links %}
+                {% component "unfold/components/button.html" with href=link.url variant="default" class="justify-start" %}
+                    <span>{{ link.title }}</span>
+                {% endcomponent %}
+            {% endfor %}
+        </div>
+    {% endcomponent %}
+
+    {% component "unfold/components/card.html" with title=failed_sync_title footer=failed_sync_footer %}
+        {% if latest_failed_sync_runs %}
+            <div class="space-y-3">
+                {% for sync_run in latest_failed_sync_runs %}
+                    <div class="border border-base-200 rounded-default p-3 dark:border-base-800">
+                        <div class="flex items-center justify-between gap-3 text-sm">
+                            <strong>{{ sync_run.device_label }}</strong>
+                            <a href="{{ sync_run.change_url }}">{% trans "Run" %} #{{ sync_run.id }}</a>
+                        </div>
+                        <div class="text-sm mt-2">
+                            <p>{% trans "Scheduled" %}: {{ sync_run.scheduled_for }}</p>
+                            <p>{% trans "Error" %}: {{ sync_run.error_message }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-sm">{% trans "No failed sync runs found." %}</p>
+        {% endif %}
+        <div class="mt-4 flex flex-wrap gap-3">
+            {% component "unfold/components/button.html" with href=latest_failed_sync_runs_url variant="secondary" %}
+                {% trans "Open failed sync runs" %}
+            {% endcomponent %}
+            {% component "unfold/components/button.html" with href=blocked_conflicts_url variant="secondary" %}
+                {% trans "Open blocked conflicts" %}
+            {% endcomponent %}
+        </div>
+    {% endcomponent %}
+</div>
+{% endblock %}

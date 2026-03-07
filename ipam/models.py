@@ -607,6 +607,267 @@ class IPAddress(models.Model):
         )
 
 
+class IntegrationVendor(models.TextChoices):
+    MIKROTIK = 'mikrotik', _('MikroTik')
+
+
+class IPAddressObservation(models.Model):
+    integration_vendor = models.CharField(
+        max_length=32,
+        choices=IntegrationVendor.choices,
+        default=IntegrationVendor.MIKROTIK,
+        verbose_name=_('Integration vendor'),
+    )
+    mikrotik_device = models.ForeignKey(
+        'MikroTikDevice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ip_observations',
+        verbose_name=_('MikroTik device'),
+    )
+    subnet = models.ForeignKey(
+        Subnet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ip_observations',
+        verbose_name=_('Subnet'),
+    )
+    address = models.GenericIPAddressField(
+        protocol='IPv4',
+        verbose_name=_('IP address'),
+    )
+    observed_hostname = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_('Observed hostname'),
+    )
+    observed_mac_address = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name=_('Observed MAC address'),
+    )
+    lease_kind = models.CharField(
+        max_length=16,
+        choices=IPAddress.LeaseKind.choices,
+        default=IPAddress.LeaseKind.NONE,
+        verbose_name=_('Observed lease kind'),
+    )
+    lease_status = models.CharField(
+        max_length=32,
+        blank=True,
+        verbose_name=_('Observed lease status'),
+    )
+    lease_server_name = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name=_('Observed DHCP server'),
+    )
+    observed_via_dhcp = models.BooleanField(
+        default=False,
+        verbose_name=_('Observed via DHCP'),
+    )
+    observed_via_arp = models.BooleanField(
+        default=False,
+        verbose_name=_('Observed via ARP'),
+    )
+    first_observed_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name=_('First observed at'),
+    )
+    last_observed_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name=_('Last observed at'),
+    )
+    payload_json = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('Payload'),
+    )
+
+    class Meta:
+        ordering = ('-last_observed_at', 'address')
+        verbose_name = _('IP address observation')
+        verbose_name_plural = _('IP address observations')
+        constraints = [
+            models.UniqueConstraint(
+                fields=('integration_vendor', 'mikrotik_device', 'address'),
+                name='ipam_ipobs_vendor_dev_addr_uniq',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=('address', 'last_observed_at'),
+                name='ipam_ipobs_addr_seen_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.address} ({self.integration_vendor})'
+
+
+class ReviewItem(models.Model):
+    class Kind(models.TextChoices):
+        NEW_IP_OBSERVED = 'new_ip_observed', _('New IP observed')
+        HOSTNAME_CONFLICT = 'hostname_conflict', _('Hostname conflict')
+        MAC_CONFLICT = 'mac_conflict', _('MAC conflict')
+        SYNC_FAILURE = 'sync_failure', _('Sync failure')
+        DISCOVERY_CONFLICT = 'discovery_conflict', _('Discovery conflict')
+
+    class Severity(models.TextChoices):
+        INFO = 'info', _('Info')
+        WARNING = 'warning', _('Warning')
+        CRITICAL = 'critical', _('Critical')
+
+    class Status(models.TextChoices):
+        OPEN = 'open', _('Open')
+        REVIEWED = 'reviewed', _('Reviewed')
+        IGNORED = 'ignored', _('Ignored')
+
+    kind = models.CharField(
+        max_length=64,
+        choices=Kind.choices,
+        verbose_name=_('Kind'),
+    )
+    severity = models.CharField(
+        max_length=16,
+        choices=Severity.choices,
+        default=Severity.INFO,
+        verbose_name=_('Severity'),
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.OPEN,
+        verbose_name=_('Status'),
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name=_('Title'),
+    )
+    message = models.TextField(
+        blank=True,
+        verbose_name=_('Message'),
+    )
+    subnet = models.ForeignKey(
+        Subnet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review_items',
+        verbose_name=_('Subnet'),
+    )
+    ip_address = models.ForeignKey(
+        IPAddress,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review_items',
+        verbose_name=_('IP address'),
+    )
+    mikrotik_device = models.ForeignKey(
+        'MikroTikDevice',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='review_items',
+        verbose_name=_('MikroTik device'),
+    )
+    dedupe_key = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name=_('Dedupe key'),
+    )
+    first_seen_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name=_('First seen at'),
+    )
+    last_seen_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name=_('Last seen at'),
+    )
+    payload_json = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('Payload'),
+    )
+
+    class Meta:
+        ordering = ('-last_seen_at', '-pk')
+        verbose_name = _('Review item')
+        verbose_name_plural = _('Review queue')
+        indexes = [
+            models.Index(
+                fields=('status', 'severity', 'kind'),
+                name='ipam_review_state_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+def upsert_review_item(
+    *,
+    kind: str,
+    severity: str,
+    title: str,
+    message: str,
+    dedupe_key: str,
+    subnet: Subnet | None = None,
+    ip_address: IPAddress | None = None,
+    mikrotik_device: 'MikroTikDevice | None' = None,
+    payload_json: dict | None = None,
+) -> tuple[ReviewItem, bool]:
+    now = timezone.now()
+    payload = payload_json or {}
+
+    item, created = ReviewItem.objects.get_or_create(
+        dedupe_key=dedupe_key,
+        defaults={
+            'kind': kind,
+            'severity': severity,
+            'status': ReviewItem.Status.OPEN,
+            'title': title,
+            'message': message,
+            'subnet': subnet,
+            'ip_address': ip_address,
+            'mikrotik_device': mikrotik_device,
+            'first_seen_at': now,
+            'last_seen_at': now,
+            'payload_json': payload,
+        },
+    )
+    if created:
+        return item, True
+
+    # Repeated signals should refresh context and reopen the queue item.
+    item.kind = kind
+    item.severity = severity
+    item.status = ReviewItem.Status.OPEN
+    item.title = title
+    item.message = message
+    item.subnet = subnet
+    item.ip_address = ip_address
+    item.mikrotik_device = mikrotik_device
+    item.last_seen_at = now
+    item.payload_json = payload
+    item.save(update_fields=[
+        'kind',
+        'severity',
+        'status',
+        'title',
+        'message',
+        'subnet',
+        'ip_address',
+        'mikrotik_device',
+        'last_seen_at',
+        'payload_json',
+    ])
+    return item, False
+
+
 class JobRun(models.Model):
     class JobType(models.TextChoices):
         SUBNET_SCAN = 'subnet_scan', _('Subnet scan')

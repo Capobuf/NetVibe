@@ -23,12 +23,16 @@ from ipam.integrations.mikrotik_mapper import build_snapshot
 from ipam.models import (
     VLAN,
     IPAddress,
+    IPAddressObservation,
+    IntegrationVendor,
     MikroTikDevice,
     MikroTikIntegrationSettings,
+    ReviewItem,
     MikroTikSyncRun,
     SourceKind,
     Subnet,
     SyncState,
+    upsert_review_item,
 )
 
 logger = logging.getLogger(__name__)
@@ -204,19 +208,31 @@ def run_device_sync(device: MikroTikDevice, sync_run: MikroTikSyncRun) -> MikroT
         sync_run.save()
 
     except MikroTikClientError as exc:
-        _fail_sync_run(device, sync_run, sanitize_detail_message(str(exc)))
+        _fail_sync_run(
+            device,
+            sync_run,
+            sanitize_detail_message(str(exc)),
+            error_category=exc.__class__.__name__,
+        )
     except Exception as exc:
         _fail_sync_run(
             device,
             sync_run,
             sanitize_detail_message(f'{exc.__class__.__name__}: {exc}'),
+            error_category=exc.__class__.__name__,
         )
         raise
 
     return sync_run
 
 
-def _fail_sync_run(device: MikroTikDevice, sync_run: MikroTikSyncRun, error: str) -> None:
+def _fail_sync_run(
+    device: MikroTikDevice,
+    sync_run: MikroTikSyncRun,
+    error: str,
+    *,
+    error_category: str,
+) -> None:
     now = timezone.now()
     device.last_error = error
     device.save(update_fields=['last_error'])
@@ -225,6 +241,7 @@ def _fail_sync_run(device: MikroTikDevice, sync_run: MikroTikSyncRun, error: str
     sync_run.error_message = error
     sync_run.finished_at = now
     sync_run.save(update_fields=['status', 'error_message', 'finished_at'])
+    _upsert_sync_failure_review(device, sync_run, error, error_category)
 
 
 # ---------------------------------------------------------------------------
@@ -433,8 +450,8 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
             else:
                 Subnet.objects.create(
                     cidr=cidr,
-                    scan_enabled=True,
-                    discover_subnet=True,
+                    scan_enabled=False,
+                    discover_subnet=False,
                     source_kind=SourceKind.MIKROTIK,
                     source_device=device,
                     source_remote_id=remote_id,
@@ -489,6 +506,24 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
         hostname = lease.active_host_name or lease.host_name
         remote_id = lease.dot_id or f'dhcp-lease:{addr_str}'
 
+        _upsert_ip_observation(
+            device=device,
+            subnet=subnet,
+            address=addr_str,
+            now=now,
+            observed_hostname=hostname,
+            observed_mac_address=mac,
+            lease_kind=lease_kind,
+            lease_status=lease.status,
+            lease_server_name=lease.server,
+            observed_via_dhcp=True,
+            payload_json={
+                'source': 'dhcp',
+                'status': lease.status,
+                'server': lease.server,
+            },
+        )
+
         with transaction.atomic():
             existing = IPAddress.objects.filter(
                 subnet=subnet,
@@ -496,8 +531,6 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
             ).first()
 
             if existing is not None:
-                existing.mac_address = mac or existing.mac_address
-                existing.hostname = hostname or existing.hostname
                 existing.lease_kind = lease_kind
                 existing.lease_status = lease.status
                 existing.lease_server_name = lease.server
@@ -508,8 +541,6 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                 existing.source_trace_id = trace_id
                 existing.last_seen = now
                 existing.save(update_fields=[
-                    'mac_address',
-                    'hostname',
                     'lease_kind',
                     'lease_status',
                     'lease_server_name',
@@ -520,13 +551,25 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                     'source_trace_id',
                     'last_seen',
                 ])
+                _maybe_create_hostname_conflict_review(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=existing,
+                    observed_hostname=hostname,
+                )
+                _maybe_create_mac_conflict_review(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=existing,
+                    observed_mac_address=mac,
+                )
                 updated += 1
             else:
-                IPAddress.objects.create(
+                created_ip = IPAddress.objects.create(
                     subnet=subnet,
                     address=addr_str,
-                    mac_address=mac,
-                    hostname=hostname,
+                    mac_address='',
+                    hostname='',
                     source_kind=SourceKind.MIKROTIK,
                     source_device=device,
                     source_remote_id=remote_id,
@@ -539,6 +582,11 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                     lease_status=lease.status,
                     lease_server_name=lease.server,
                     last_seen=now,
+                )
+                _upsert_new_ip_observed_review(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=created_ip,
                 )
                 created += 1
 
@@ -577,6 +625,19 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
         seen_addresses.add(arp.address)
         mac = arp.mac_address.lower() if arp.mac_address else ''
+        remote_id = f'arp:{arp.interface}:{arp.address}'
+        _upsert_ip_observation(
+            device=device,
+            subnet=subnet,
+            address=arp.address,
+            now=now,
+            observed_mac_address=mac,
+            observed_via_arp=True,
+            payload_json={
+                'source': 'arp',
+                'interface': arp.interface,
+            },
+        )
 
         with transaction.atomic():
             existing = IPAddress.objects.filter(
@@ -585,30 +646,35 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
             ).first()
 
             if existing is not None:
-                changed = False
-                if mac and not existing.mac_address:
-                    existing.mac_address = mac
-                    changed = True
-
-                if changed:
-                    existing.last_synced_at = now
-                    existing.source_job_id = job_id
-                    existing.source_trace_id = trace_id
-                    existing.save(update_fields=[
-                        'mac_address',
-                        'last_synced_at',
-                        'source_job_id',
-                        'source_trace_id',
-                    ])
-                    updated += 1
+                existing.source_observed_at = now
+                existing.last_synced_at = now
+                existing.sync_state = SyncState.LIVE
+                existing.source_job_id = job_id
+                existing.source_trace_id = trace_id
+                existing.last_seen = now
+                existing.save(update_fields=[
+                    'source_observed_at',
+                    'last_synced_at',
+                    'sync_state',
+                    'source_job_id',
+                    'source_trace_id',
+                    'last_seen',
+                ])
+                _maybe_create_mac_conflict_review(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=existing,
+                    observed_mac_address=mac,
+                )
+                updated += 1
             else:
-                IPAddress.objects.create(
+                created_ip = IPAddress.objects.create(
                     subnet=subnet,
                     address=arp.address,
-                    mac_address=mac,
+                    mac_address='',
                     source_kind=SourceKind.MIKROTIK,
                     source_device=device,
-                    source_remote_id=f'arp:{arp.interface}:{arp.address}',
+                    source_remote_id=remote_id,
                     source_job_id=job_id,
                     source_trace_id=trace_id,
                     source_observed_at=now,
@@ -616,6 +682,11 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                     sync_state=SyncState.LIVE,
                     lease_kind=IPAddress.LeaseKind.NONE,
                     last_seen=now,
+                )
+                _upsert_new_ip_observed_review(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=created_ip,
                 )
                 created += 1
 
@@ -665,3 +736,181 @@ def _build_observed_summary(snapshot: MikroTikSnapshotResultV1) -> dict:
         'neighbors': list(unique_neighbors.values())[:50],
         'arp_entry_count': len(snapshot.arp_entries),
     }
+
+
+def _upsert_ip_observation(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    address: str,
+    now,
+    observed_hostname: str = '',
+    observed_mac_address: str = '',
+    lease_kind: str | None = None,
+    lease_status: str = '',
+    lease_server_name: str = '',
+    observed_via_dhcp: bool = False,
+    observed_via_arp: bool = False,
+    payload_json: dict | None = None,
+) -> None:
+    observation, created = IPAddressObservation.objects.get_or_create(
+        integration_vendor=IntegrationVendor.MIKROTIK,
+        mikrotik_device=device,
+        address=address,
+        defaults={
+            'subnet': subnet,
+            'observed_hostname': observed_hostname or '',
+            'observed_mac_address': observed_mac_address or '',
+            'lease_kind': lease_kind or IPAddress.LeaseKind.NONE,
+            'lease_status': lease_status or '',
+            'lease_server_name': lease_server_name or '',
+            'observed_via_dhcp': observed_via_dhcp,
+            'observed_via_arp': observed_via_arp,
+            'first_observed_at': now,
+            'last_observed_at': now,
+            'payload_json': payload_json or {},
+        },
+    )
+    if created:
+        return
+
+    observation.subnet = subnet
+    if observed_hostname:
+        observation.observed_hostname = observed_hostname
+    if observed_mac_address:
+        observation.observed_mac_address = observed_mac_address
+    if lease_kind is not None:
+        observation.lease_kind = lease_kind
+    if lease_status:
+        observation.lease_status = lease_status
+    if lease_server_name:
+        observation.lease_server_name = lease_server_name
+    observation.observed_via_dhcp = observation.observed_via_dhcp or observed_via_dhcp
+    observation.observed_via_arp = observation.observed_via_arp or observed_via_arp
+    observation.last_observed_at = now
+    if payload_json:
+        observation.payload_json = payload_json
+    observation.save(update_fields=[
+        'subnet',
+        'observed_hostname',
+        'observed_mac_address',
+        'lease_kind',
+        'lease_status',
+        'lease_server_name',
+        'observed_via_dhcp',
+        'observed_via_arp',
+        'last_observed_at',
+        'payload_json',
+    ])
+
+
+def _upsert_new_ip_observed_review(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    canonical_ip: IPAddress,
+) -> None:
+    upsert_review_item(
+        kind=ReviewItem.Kind.NEW_IP_OBSERVED,
+        severity=ReviewItem.Severity.INFO,
+        title=f'New IP observed: {canonical_ip.address}',
+        message=(
+            'A new IP was discovered by synchronization. '
+            'Review and enrich canonical hostname and MAC if needed.'
+        ),
+        dedupe_key=f'new_ip_observed:{device.pk}:{canonical_ip.address}',
+        subnet=subnet,
+        ip_address=canonical_ip,
+        mikrotik_device=device,
+        payload_json={
+            'address': canonical_ip.address,
+            'subnet': subnet.cidr,
+            'integration_vendor': IntegrationVendor.MIKROTIK,
+        },
+    )
+
+
+def _maybe_create_hostname_conflict_review(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    canonical_ip: IPAddress,
+    observed_hostname: str,
+) -> None:
+    if not observed_hostname or not canonical_ip.hostname:
+        return
+    if canonical_ip.hostname == observed_hostname:
+        return
+
+    upsert_review_item(
+        kind=ReviewItem.Kind.HOSTNAME_CONFLICT,
+        severity=ReviewItem.Severity.WARNING,
+        title=f'Hostname conflict on {canonical_ip.address}',
+        message=(
+            f'Canonical hostname "{canonical_ip.hostname}" differs from observed '
+            f'hostname "{observed_hostname}".'
+        ),
+        dedupe_key=f'hostname_conflict:{device.pk}:{canonical_ip.address}',
+        subnet=subnet,
+        ip_address=canonical_ip,
+        mikrotik_device=device,
+        payload_json={
+            'canonical_hostname': canonical_ip.hostname,
+            'observed_hostname': observed_hostname,
+        },
+    )
+
+
+def _maybe_create_mac_conflict_review(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    canonical_ip: IPAddress,
+    observed_mac_address: str,
+) -> None:
+    canonical_mac = (canonical_ip.mac_address or '').lower()
+    observed_mac = (observed_mac_address or '').lower()
+    if not canonical_mac or not observed_mac:
+        return
+    if canonical_mac == observed_mac:
+        return
+
+    upsert_review_item(
+        kind=ReviewItem.Kind.MAC_CONFLICT,
+        severity=ReviewItem.Severity.WARNING,
+        title=f'MAC conflict on {canonical_ip.address}',
+        message=(
+            f'Canonical MAC "{canonical_ip.mac_address}" differs from observed '
+            f'MAC "{observed_mac}".'
+        ),
+        dedupe_key=f'mac_conflict:{device.pk}:{canonical_ip.address}',
+        subnet=subnet,
+        ip_address=canonical_ip,
+        mikrotik_device=device,
+        payload_json={
+            'canonical_mac': canonical_ip.mac_address,
+            'observed_mac': observed_mac,
+        },
+    )
+
+
+def _upsert_sync_failure_review(
+    device: MikroTikDevice,
+    sync_run: MikroTikSyncRun,
+    error: str,
+    error_category: str,
+) -> None:
+    normalized_category = (error_category or 'unknown').strip().lower() or 'unknown'
+    upsert_review_item(
+        kind=ReviewItem.Kind.SYNC_FAILURE,
+        severity=ReviewItem.Severity.CRITICAL,
+        title=f'Sync failure on {device.host}',
+        message=error,
+        dedupe_key=f'sync_failure:{device.pk}:{normalized_category}',
+        mikrotik_device=device,
+        payload_json={
+            'sync_run_id': sync_run.pk,
+            'error_category': normalized_category,
+            'error_message': error,
+        },
+    )

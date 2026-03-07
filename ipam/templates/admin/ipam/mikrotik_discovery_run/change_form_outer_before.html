@@ -1,0 +1,13 @@
+{% load i18n %}
+{% if original and original.status == "scheduled" or original and original.status == "running" %}
+<div class="mb-6 rounded border px-4 py-3 text-sm">
+    {% blocktrans with status=original.get_status_display %}Discovery run is {{ status }}. This page refreshes automatically every 5 seconds while active.{% endblocktrans %}
+</div>
+<script>
+(function () {
+  setTimeout(function () {
+    window.location.reload();
+  }, 5000);
+})();
+</script>
+{% endif %}

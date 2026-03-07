@@ -222,6 +222,25 @@ UNFOLD = {
                 'collapsible': True,
                 'items': [
                     {
+                        'title': _('MikroTik settings'),
+                        'icon': 'tune',
+                        'link': reverse_lazy(
+                            'admin:ipam_mikrotikintegrationsettings_changelist'
+                        ),
+                    },
+                    {
+                        'title': _('MikroTik targets'),
+                        'icon': 'my_location',
+                        'link': reverse_lazy('admin:ipam_mikrotiktarget_changelist'),
+                    },
+                    {
+                        'title': _('MikroTik discovery runs'),
+                        'icon': 'travel_explore',
+                        'link': reverse_lazy(
+                            'admin:ipam_mikrotikdiscoveryrun_changelist'
+                        ),
+                    },
+                    {
                         'title': _('MikroTik devices'),
                         'icon': 'router',
                         'link': reverse_lazy('admin:ipam_mikrotikdevice_changelist'),

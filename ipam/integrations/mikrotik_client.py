@@ -1,26 +1,17 @@
-"""Thin REST client for MikroTik RouterOS v7.
-
-Each public method maps to one RouterOS REST endpoint and returns
-parsed JSON.  All calls use bounded timeouts and explicit TLS
-verification so the caller never hangs or silently ignores cert issues.
-
-Requires ``httpx`` (listed in ``requirements.txt``).
-"""
+"""Thin REST client for MikroTik RouterOS v7."""
 
 from __future__ import annotations
 
-import logging
+import ssl
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 
-logger = logging.getLogger(__name__)
-
-# RouterOS REST responses arrive quickly for read operations.
-# 15 s connect + 30 s read is generous for any single GET.
 DEFAULT_CONNECT_TIMEOUT = 15.0
 DEFAULT_READ_TIMEOUT = 30.0
+DISCOVERY_CONNECT_TIMEOUT = 5.0
+DISCOVERY_READ_TIMEOUT = 10.0
 
 
 class MikroTikClientError(Exception):
@@ -31,29 +22,32 @@ class MikroTikAuthError(MikroTikClientError):
     """Authentication to the device was rejected."""
 
 
+class MikroTikForbiddenError(MikroTikClientError):
+    """The user authenticated but lacks required RouterOS permissions."""
+
+
 class MikroTikConnectionError(MikroTikClientError):
-    """Could not reach the device at all."""
+    """Could not reach the device endpoint."""
 
 
-class MikroTikAPIError(MikroTikClientError):
-    """The device returned a non-2xx response."""
+class MikroTikTimeoutError(MikroTikConnectionError):
+    """The device did not respond within configured timeout bounds."""
+
+
+class MikroTikTLSError(MikroTikConnectionError):
+    """TLS negotiation or certificate validation failed."""
+
+
+class MikroTikHTTPError(MikroTikClientError):
+    """The device returned a non-auth HTTP error."""
+
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        super().__init__(message)
 
 
 class MikroTikClient:
-    """REST client for one MikroTik RouterOS v7 device.
-
-    Parameters
-    ----------
-    base_url : str
-        e.g. ``https://10.0.0.1:443``
-    username : str
-    password : str
-    verify_tls : bool
-        Pass ``False`` to skip TLS certificate verification (common in
-        lab / internal networks with self-signed certs).
-    connect_timeout : float
-    read_timeout : float
-    """
+    """REST client for one MikroTik RouterOS v7 device."""
 
     def __init__(
         self,
@@ -75,17 +69,9 @@ class MikroTikClient:
             pool=5.0,
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _get(self, path: str) -> Any:
-        """Execute a GET request and return the parsed JSON body.
-
-        Raises specific exceptions so callers can distinguish auth
-        failures from connection or API errors.
-        """
         url = f'{self._base_url}/rest{path}'
+
         try:
             response = httpx.get(
                 url,
@@ -98,76 +84,87 @@ class MikroTikClient:
             raise MikroTikConnectionError(
                 f'{exc}{self._protocol_hint()}'
             ) from exc
-        except httpx.ConnectError as exc:
-            raise MikroTikConnectionError(
-                f'Cannot connect to {self._base_url}: {exc}'
-            ) from exc
         except httpx.TimeoutException as exc:
+            raise MikroTikTimeoutError(
+                f'Timeout while connecting to {self._base_url}.'
+            ) from exc
+        except httpx.ConnectError as exc:
+            if self._looks_like_tls_error(exc):
+                raise MikroTikTLSError(
+                    f'TLS handshake failed for {self._base_url}. '
+                    'Check scheme, port, and certificate settings.'
+                ) from exc
+
+            message = str(exc)
+            if 'refused' in message.lower():
+                raise MikroTikConnectionError(
+                    f'Connection refused by {self._base_url}.'
+                ) from exc
+
             raise MikroTikConnectionError(
-                f'Timeout connecting to {self._base_url}: {exc}'
+                f'Cannot connect to {self._base_url}: {message}'
             ) from exc
         except httpx.HTTPError as exc:
             raise MikroTikClientError(str(exc)) from exc
 
         if response.status_code == 401:
             raise MikroTikAuthError(
-                f'Authentication failed for {self._base_url} '
-                f'(HTTP {response.status_code})'
+                f'Authentication failed for {self._base_url} (HTTP 401).'
             )
         if response.status_code == 403:
-            raise MikroTikAuthError(
-                f'Forbidden for {self._base_url} (HTTP 403)'
+            raise MikroTikForbiddenError(
+                f'Forbidden for {self._base_url} (HTTP 403). '
+                'Verify RouterOS REST API permissions.'
             )
         if response.status_code >= 400:
-            raise MikroTikAPIError(
-                f'RouterOS returned HTTP {response.status_code} '
-                f'for {path}: {response.text[:500]}'
+            body_preview = (response.text or '')[:300]
+            raise MikroTikHTTPError(
+                response.status_code,
+                (
+                    f'RouterOS returned HTTP {response.status_code} for {path}. '
+                    f'{body_preview}'
+                ).strip(),
             )
+
         return response.json()
 
+    def _looks_like_tls_error(self, exc: httpx.ConnectError) -> bool:
+        cause = exc.__cause__
+        if isinstance(cause, ssl.SSLError):
+            return True
+        message = str(exc).lower()
+        return 'tls' in message or 'ssl' in message or 'certificate' in message
+
     def _protocol_hint(self) -> str:
-        """Return a short hint for likely scheme/port mismatches."""
         parts = urlsplit(self._base_url)
         scheme = (parts.scheme or '').lower()
         port = parts.port
         if scheme == 'http' and port == 443:
-            return ' (configured as HTTP on port 443; verify scheme/port, HTTPS is typical on 443).'
+            return ' (configured as HTTP on port 443; verify scheme/port).' 
         if scheme == 'https' and port == 80:
-            return ' (configured as HTTPS on port 80; verify scheme/port, HTTP is typical on 80).'
+            return ' (configured as HTTPS on port 80; verify scheme/port).'
         return ''
 
-    # ------------------------------------------------------------------
-    # Public endpoint methods
-    # ------------------------------------------------------------------
-
     def get_identity(self) -> dict:
-        """``/system/identity`` → ``{"name": "..."}``."""
         return self._get('/system/identity')
 
     def get_system_resource(self) -> dict:
-        """``/system/resource`` → ``{"board-name": ..., "platform": ..., "version": ...}``."""
         return self._get('/system/resource')
 
     def get_bridge_vlans(self) -> list[dict]:
-        """``/interface/bridge/vlan`` → list of bridge VLAN rows."""
         return self._get('/interface/bridge/vlan')
 
     def get_ip_addresses(self) -> list[dict]:
-        """``/ip/address`` → list of IP address rows."""
         return self._get('/ip/address')
 
     def get_dhcp_servers(self) -> list[dict]:
-        """``/ip/dhcp-server`` → list of DHCP server rows."""
         return self._get('/ip/dhcp-server')
 
     def get_dhcp_leases(self) -> list[dict]:
-        """``/ip/dhcp-server/lease`` → list of DHCP lease rows."""
         return self._get('/ip/dhcp-server/lease')
 
     def get_arp(self) -> list[dict]:
-        """``/ip/arp`` → list of ARP entries."""
         return self._get('/ip/arp')
 
     def get_neighbors(self) -> list[dict]:
-        """``/ip/neighbor`` → list of discovered neighbor entries."""
         return self._get('/ip/neighbor')

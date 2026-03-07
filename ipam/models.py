@@ -1,6 +1,7 @@
 from datetime import timedelta
 from ipaddress import AddressValueError, NetmaskValueError, ip_address, ip_network
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -684,59 +685,82 @@ class JobRun(models.Model):
         return end_time - self.started_at
 
 
+class MikroTikScheme(models.TextChoices):
+    HTTPS = 'https', _('HTTPS')
+    HTTP = 'http', _('HTTP')
+
+
+class MikroTikIntegrationSettings(models.Model):
+    DEFAULT_RUN_RETENTION_DAYS = 30
+
+    username = models.CharField(
+        max_length=128,
+        verbose_name=_('Username'),
+        help_text=_('Global username used for MikroTik discovery and synchronization.'),
+    )
+    password_encrypted = models.BinaryField(
+        editable=False,
+        blank=True,
+        verbose_name=_('Password (encrypted)'),
+    )
+    run_retention_days = models.PositiveIntegerField(
+        default=DEFAULT_RUN_RETENTION_DAYS,
+        validators=[MinValueValidator(1)],
+        verbose_name=_('Run retention (days)'),
+        help_text=_('Delete completed MikroTik discovery and sync history older than this value.'),
+    )
+
+    class Meta:
+        verbose_name = _('MikroTik settings')
+        verbose_name_plural = _('MikroTik settings')
+
+    def __str__(self):
+        return str(_('MikroTik settings'))
+
+    @classmethod
+    def load(cls):
+        try:
+            instance = cls.objects.order_by('pk').first()
+        except (OperationalError, ProgrammingError):
+            instance = None
+
+        if instance is not None:
+            return instance
+
+        return cls(run_retention_days=cls.DEFAULT_RUN_RETENTION_DAYS)
+
+
 class MikroTikDevice(models.Model):
-    """One MikroTik RouterOS v7 device managed via REST API."""
+    """Post-onboarding MikroTik RouterOS v7 device settings and state."""
 
-    class Scheme(models.TextChoices):
-        HTTPS = 'https', _('HTTPS')
-        HTTP = 'http', _('HTTP')
-
-    class DeviceRole(models.TextChoices):
-        ROUTER = 'router', _('Router')
-        SWITCH = 'switch', _('Switch')
-        UNKNOWN = 'unknown', _('Unknown')
-
-    # --- Identity ---
     name = models.CharField(
         max_length=128,
         blank=True,
         verbose_name=_('Name'),
-        help_text=_('Display name. Auto-populated from the device identity if left blank.'),
+        help_text=_('Display name. If empty, discovery populates it from RouterOS identity.'),
     )
-
-    # --- Connection ---
-    host = models.CharField(
-        max_length=255,
+    host = models.GenericIPAddressField(
+        protocol='IPv4',
+        unique=True,
         verbose_name=_('Host / IP'),
-        help_text=_('Hostname or IP address of the RouterOS device.'),
+        help_text=_('IPv4 address of the RouterOS endpoint.'),
     )
     port = models.PositiveIntegerField(
         default=443,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
         verbose_name=_('Port'),
     )
     scheme = models.CharField(
         max_length=8,
-        choices=Scheme.choices,
-        default=Scheme.HTTPS,
+        choices=MikroTikScheme.choices,
+        default=MikroTikScheme.HTTPS,
         verbose_name=_('Scheme'),
-        help_text=_('Choose the protocol used by the RouterOS REST API.'),
-    )
-    username = models.CharField(
-        max_length=128,
-        verbose_name=_('Username'),
-    )
-    # Encrypted password stored as binary via pgcrypto.
-    password_encrypted = models.BinaryField(
-        editable=False,
-        verbose_name=_('Password (encrypted)'),
     )
     verify_tls = models.BooleanField(
         default=False,
         verbose_name=_('Verify TLS'),
         help_text=_('Enable strict TLS certificate verification.'),
     )
-
-    # --- Synchronization ---
     enabled = models.BooleanField(
         default=True,
         verbose_name=_('Enabled'),
@@ -751,8 +775,6 @@ class MikroTikDevice(models.Model):
         validators=[MinValueValidator(1)],
         verbose_name=_('Sync interval (minutes)'),
     )
-
-    # --- Import policy ---
     import_vlans = models.BooleanField(default=True, verbose_name=_('Import VLANs'))
     import_subnets = models.BooleanField(default=True, verbose_name=_('Import subnets'))
     import_dhcp_leases = models.BooleanField(default=True, verbose_name=_('Import DHCP leases'))
@@ -762,14 +784,6 @@ class MikroTikDevice(models.Model):
         default=True,
         verbose_name=_('Ignore dynamic bridge VLANs'),
         help_text=_('Skip bridge VLAN rows where dynamic=true.'),
-    )
-
-    # --- Authority ---
-    device_role = models.CharField(
-        max_length=16,
-        choices=DeviceRole.choices,
-        default=DeviceRole.UNKNOWN,
-        verbose_name=_('Device role'),
     )
     is_authoritative_for_l3 = models.BooleanField(
         default=True,
@@ -781,53 +795,270 @@ class MikroTikDevice(models.Model):
         verbose_name=_('Authoritative for DHCP'),
         help_text=_('If true, sync will import DHCP lease data from this device.'),
     )
-
-    # --- Status (populated by test / sync) ---
     last_successful_sync_at = models.DateTimeField(
-        null=True, blank=True, verbose_name=_('Last successful sync'),
+        null=True,
+        blank=True,
+        verbose_name=_('Last successful sync'),
     )
-    last_error = models.TextField(
-        blank=True, verbose_name=_('Last error'),
-    )
-    last_seen_identity = models.CharField(
-        max_length=128, blank=True, verbose_name=_('Identity'),
-    )
-    last_seen_version = models.CharField(
-        max_length=64, blank=True, verbose_name=_('RouterOS version'),
-    )
-    last_seen_board = models.CharField(
-        max_length=128, blank=True, verbose_name=_('Board'),
-    )
-    last_seen_platform = models.CharField(
-        max_length=128, blank=True, verbose_name=_('Platform'),
-    )
+    last_error = models.TextField(blank=True, verbose_name=_('Last error'))
+    last_seen_identity = models.CharField(max_length=128, blank=True, verbose_name=_('Identity'))
+    last_seen_version = models.CharField(max_length=64, blank=True, verbose_name=_('RouterOS version'))
+    last_seen_board = models.CharField(max_length=128, blank=True, verbose_name=_('Board'))
+    last_seen_platform = models.CharField(max_length=128, blank=True, verbose_name=_('Platform'))
 
     class Meta:
-        ordering = ('name', 'host')
+        ordering = ('host',)
         verbose_name = _('MikroTik device')
         verbose_name_plural = _('MikroTik devices')
 
     def __str__(self):
         return self.name or self.host
 
-    @classmethod
-    def default_port_for_scheme(cls, scheme: str) -> int:
-        if scheme == cls.Scheme.HTTP:
-            return 80
-        return 443
+    @property
+    def base_url(self) -> str:
+        return f'{self.scheme}://{self.host}:{self.port}'
+
+
+class MikroTikTarget(models.Model):
+    class LastStatus(models.TextChoices):
+        SCHEDULED = 'scheduled', _('Scheduled')
+        RUNNING = 'running', _('Running')
+        SUCCESS = 'success', _('Success')
+        FAILED = 'failed', _('Failed')
+        BLOCKED = 'blocked', _('Blocked')
+
+    host = models.GenericIPAddressField(
+        protocol='IPv4',
+        unique=True,
+        verbose_name=_('Host / IP'),
+        help_text=_('One IPv4 endpoint per target.'),
+    )
+    scheme = models.CharField(
+        max_length=8,
+        choices=MikroTikScheme.choices,
+        default=MikroTikScheme.HTTPS,
+        verbose_name=_('Scheme'),
+    )
+    port = models.PositiveIntegerField(
+        default=443,
+        validators=[MinValueValidator(1), MaxValueValidator(65535)],
+        verbose_name=_('Port'),
+    )
+    verify_tls = models.BooleanField(
+        default=False,
+        verbose_name=_('Verify TLS'),
+    )
+    linked_device = models.OneToOneField(
+        MikroTikDevice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_target',
+        verbose_name=_('Linked device'),
+    )
+    last_discovered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Last discovered at'),
+    )
+    last_discovery_status = models.CharField(
+        max_length=16,
+        choices=LastStatus.choices,
+        blank=True,
+        verbose_name=_('Last discovery status'),
+    )
+    last_reason_code = models.CharField(
+        max_length=64,
+        blank=True,
+        verbose_name=_('Last reason code'),
+    )
+    last_message = models.TextField(
+        blank=True,
+        verbose_name=_('Last message'),
+    )
+    last_seen_identity = models.CharField(max_length=128, blank=True, verbose_name=_('Last seen identity'))
+    last_seen_version = models.CharField(max_length=64, blank=True, verbose_name=_('Last seen version'))
+    last_seen_board = models.CharField(max_length=128, blank=True, verbose_name=_('Last seen board'))
+    last_seen_platform = models.CharField(max_length=128, blank=True, verbose_name=_('Last seen platform'))
+
+    class Meta:
+        ordering = ('host',)
+        verbose_name = _('MikroTik target')
+        verbose_name_plural = _('MikroTik targets')
+
+    def __str__(self):
+        return self.host
+
+    def save(self, *args, **kwargs):
+        if self.linked_device_id:
+            linked_host = None
+            if hasattr(self, 'linked_device') and self.linked_device is not None:
+                linked_host = self.linked_device.host
+            elif self.pk:
+                linked_host = (
+                    MikroTikDevice.objects.filter(pk=self.linked_device_id)
+                    .values_list('host', flat=True)
+                    .first()
+                )
+            if linked_host and linked_host != self.host:
+                self.linked_device = None
+        super().save(*args, **kwargs)
 
     @property
     def base_url(self) -> str:
         return f'{self.scheme}://{self.host}:{self.port}'
 
 
+class MikroTikDiscoveryRun(models.Model):
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', _('Scheduled')
+        RUNNING = 'running', _('Running')
+        SUCCESS = 'success', _('Success')
+        PARTIAL = 'partial', _('Partial')
+        FAILED = 'failed', _('Failed')
+
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+        verbose_name=_('Status'),
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Started at'))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finished at'))
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mikrotik_discovery_runs',
+        verbose_name=_('Created by'),
+    )
+    total_targets = models.PositiveIntegerField(default=0, verbose_name=_('Total targets'))
+    success_count = models.PositiveIntegerField(default=0, verbose_name=_('Success count'))
+    failed_count = models.PositiveIntegerField(default=0, verbose_name=_('Failed count'))
+    blocked_count = models.PositiveIntegerField(default=0, verbose_name=_('Blocked count'))
+    created_count = models.PositiveIntegerField(default=0, verbose_name=_('Created count'))
+    updated_count = models.PositiveIntegerField(default=0, verbose_name=_('Updated count'))
+    reused_count = models.PositiveIntegerField(default=0, verbose_name=_('Reused count'))
+    task_ref = models.CharField(
+        max_length=64,
+        blank=True,
+        db_index=True,
+        verbose_name=_('Task reference'),
+    )
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        verbose_name = _('MikroTik discovery run')
+        verbose_name_plural = _('MikroTik discovery runs')
+
+    def __str__(self):
+        return f'Discovery run #{self.pk}'
+
+
+class MikroTikDiscoveryResult(models.Model):
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', _('Scheduled')
+        RUNNING = 'running', _('Running')
+        SUCCESS = 'success', _('Success')
+        FAILED = 'failed', _('Failed')
+        BLOCKED = 'blocked', _('Blocked')
+
+    class ReasonCode(models.TextChoices):
+        TIMEOUT = 'timeout', _('Timeout')
+        CONNECTION_ERROR = 'connection_error', _('Connection error')
+        CONNECTION_REFUSED = 'connection_refused', _('Connection refused')
+        TLS_ERROR = 'tls_error', _('TLS error')
+        AUTH_FAILED = 'auth_failed', _('Authentication failed')
+        FORBIDDEN = 'forbidden', _('Forbidden')
+        HTTP_ERROR = 'http_error', _('HTTP error')
+        UNSUPPORTED_ROUTEROS = 'unsupported_routeros', _('Unsupported RouterOS')
+        IDENTITY_CONFLICT = 'identity_conflict', _('Identity conflict')
+        INVALID_TARGET = 'invalid_target', _('Invalid target')
+        UNEXPECTED_ERROR = 'unexpected_error', _('Unexpected error')
+
+    class ActionTaken(models.TextChoices):
+        NONE = 'none', _('None')
+        CREATED_DEVICE = 'created_device', _('Created device')
+        UPDATED_EXISTING_DEVICE = 'updated_existing_device', _('Updated existing device')
+        REUSED_EXISTING_DEVICE = 'reused_existing_device', _('Reused existing device')
+        BLOCKED_MANUAL_RESOLUTION = 'blocked_manual_resolution', _('Blocked (manual resolution)')
+
+    run = models.ForeignKey(
+        MikroTikDiscoveryRun,
+        on_delete=models.CASCADE,
+        related_name='results',
+        verbose_name=_('Run'),
+    )
+    target = models.ForeignKey(
+        MikroTikTarget,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='discovery_results',
+        verbose_name=_('Target'),
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+        verbose_name=_('Status'),
+    )
+    reason_code = models.CharField(
+        max_length=64,
+        choices=ReasonCode.choices,
+        blank=True,
+        verbose_name=_('Reason code'),
+    )
+    detail_message = models.TextField(blank=True, verbose_name=_('Detail message'))
+    seen_identity = models.CharField(max_length=128, blank=True, verbose_name=_('Seen identity'))
+    seen_version = models.CharField(max_length=64, blank=True, verbose_name=_('Seen version'))
+    seen_board = models.CharField(max_length=128, blank=True, verbose_name=_('Seen board'))
+    seen_platform = models.CharField(max_length=128, blank=True, verbose_name=_('Seen platform'))
+    action_taken = models.CharField(
+        max_length=64,
+        choices=ActionTaken.choices,
+        default=ActionTaken.NONE,
+        verbose_name=_('Action taken'),
+    )
+    linked_device = models.ForeignKey(
+        MikroTikDevice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='discovery_linked_results',
+        verbose_name=_('Linked device'),
+    )
+    conflicting_device = models.ForeignKey(
+        MikroTikDevice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='discovery_conflicts',
+        verbose_name=_('Conflicting device'),
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Started at'))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finished at'))
+
+    class Meta:
+        ordering = ('run_id', 'pk')
+        verbose_name = _('MikroTik discovery result')
+        verbose_name_plural = _('MikroTik discovery results')
+        constraints = [
+            models.UniqueConstraint(
+                fields=('run', 'target'),
+                name='ipam_mikrotik_discovery_result_unique_target_per_run',
+            ),
+        ]
+
+    def __str__(self):
+        target_label = self.target.host if self.target_id and self.target else _('Deleted target')
+        return f'{target_label} [{self.get_status_display()}]'
+
+
 class MikroTikSyncRun(models.Model):
-    """One test or sync run against a MikroTik device."""
-
-    class Mode(models.TextChoices):
-        TEST = 'test', _('Test')
-        SYNC = 'sync', _('Sync')
-
     class Status(models.TextChoices):
         SCHEDULED = 'scheduled', _('Scheduled')
         RUNNING = 'running', _('Running')
@@ -842,11 +1073,6 @@ class MikroTikSyncRun(models.Model):
         related_name='sync_runs',
         verbose_name=_('Device'),
     )
-    mode = models.CharField(
-        max_length=8,
-        choices=Mode.choices,
-        verbose_name=_('Mode'),
-    )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
@@ -858,31 +1084,20 @@ class MikroTikSyncRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Finished at'))
     trace_id = models.CharField(max_length=64, blank=True, db_index=True, verbose_name=_('Trace ID'))
     job_id = models.CharField(max_length=64, blank=True, verbose_name=_('Job ID'))
-
-    # --- Summary counters ---
     vlans_created = models.PositiveIntegerField(default=0, verbose_name=_('VLANs created'))
     vlans_updated = models.PositiveIntegerField(default=0, verbose_name=_('VLANs updated'))
     subnets_created = models.PositiveIntegerField(default=0, verbose_name=_('Subnets created'))
     subnets_updated = models.PositiveIntegerField(default=0, verbose_name=_('Subnets updated'))
     ips_created = models.PositiveIntegerField(default=0, verbose_name=_('IPs created'))
     ips_updated = models.PositiveIntegerField(default=0, verbose_name=_('IPs updated'))
-
-    # --- Diagnostics ---
-    warning_summary = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name=_('Warnings'),
-    )
+    warning_summary = models.JSONField(default=list, blank=True, verbose_name=_('Warnings'))
     observed_summary = models.JSONField(
         default=dict,
         blank=True,
         verbose_name=_('Observed summary'),
         help_text=_('Normalized neighbor/ARP summary for diagnostics.'),
     )
-    error_message = models.TextField(
-        blank=True,
-        verbose_name=_('Error message'),
-    )
+    error_message = models.TextField(blank=True, verbose_name=_('Error message'))
     task_ref = models.CharField(
         max_length=64,
         blank=True,
@@ -897,7 +1112,7 @@ class MikroTikSyncRun(models.Model):
 
     def __str__(self):
         device_label = self.device if self.device_id else _('Deleted device')
-        return f'{self.get_mode_display()} – {device_label} @ {self.scheduled_for}'
+        return f'{device_label} @ {self.scheduled_for}'
 
     @property
     def duration(self):
@@ -905,3 +1120,17 @@ class MikroTikSyncRun(models.Model):
             return None
         end_time = self.finished_at or timezone.now()
         return end_time - self.started_at
+
+
+class MikroTikVLAN(VLAN):
+    class Meta:
+        proxy = True
+        verbose_name = _('MikroTik VLAN')
+        verbose_name_plural = _('MikroTik VLANs')
+
+
+class MikroTikSubnet(Subnet):
+    class Meta:
+        proxy = True
+        verbose_name = _('MikroTik subnet')
+        verbose_name_plural = _('MikroTik subnets')

@@ -4,9 +4,10 @@ from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth.models import Group, User
 from django.db import models as django_models
+from django.db.utils import OperationalError, ProgrammingError
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.html import strip_tags
+from django.utils.html import format_html, strip_tags
 from django.utils.text import Truncator
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -16,10 +17,12 @@ from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.datasets import BaseDataset
 from unfold.decorators import action, display
 
-from .forms import MikroTikDeviceForm
+from .forms import MikroTikIntegrationSettingsForm
 from .models import (
     IPAMSettings, IPAddress, JobRun, MikroTikDevice,
-    MikroTikSyncRun, SourceKind, Subnet, VLAN,
+    MikroTikDiscoveryResult, MikroTikDiscoveryRun, MikroTikIntegrationSettings,
+    MikroTikSubnet, MikroTikSyncRun, MikroTikTarget, MikroTikVLAN, SourceKind,
+    Subnet, VLAN,
 )
 
 
@@ -29,6 +32,20 @@ for model in (User, Group):
         admin.site.unregister(model)
     except NotRegistered:
         pass
+
+
+def _safe_exists(model):
+    try:
+        return model.objects.exists()
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def _safe_first(model):
+    try:
+        return model.objects.order_by('pk').first()
+    except (OperationalError, ProgrammingError):
+        return None
 
 
 class IPAddressTableMixin:
@@ -235,13 +252,13 @@ class IPAMSettingsAdmin(ModelAdmin):
     )
 
     def has_add_permission(self, request):
-        return not IPAMSettings.objects.exists()
+        return not _safe_exists(IPAMSettings)
 
     def has_delete_permission(self, request, obj=None):
         return False
 
     def changelist_view(self, request, extra_context=None):
-        instance = IPAMSettings.objects.order_by('pk').first()
+        instance = _safe_first(IPAMSettings)
         if instance is not None:
             return redirect('admin:ipam_ipamsettings_change', instance.pk)
         return super().changelist_view(request, extra_context=extra_context)
@@ -630,76 +647,104 @@ class JobRunAdmin(ModelAdmin):
 # =====================================================================
 
 
-@admin.register(MikroTikDevice)
-class MikroTikDeviceAdmin(ModelAdmin):
-    form = MikroTikDeviceForm
+def _admin_change_link(admin_obj, model, object_id, label):
+    if not object_id:
+        return '-'
+
+    url = reverse(
+        f'admin:{model._meta.app_label}_{model._meta.model_name}_change',
+        args=(object_id,),
+        current_app=admin_obj.admin_site.name,
+    )
+    return format_html('<a href="{}">{}</a>', url, label)
+
+
+@admin.register(MikroTikIntegrationSettings)
+class MikroTikIntegrationSettingsAdmin(ModelAdmin):
+    form = MikroTikIntegrationSettingsForm
+    fieldsets = (
+        (
+            _('Credentials'),
+            {
+                'fields': ('username', 'password'),
+            },
+        ),
+        (
+            _('Housekeeping'),
+            {
+                'fields': ('run_retention_days',),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return not _safe_exists(MikroTikIntegrationSettings)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        instance = _safe_first(MikroTikIntegrationSettings)
+        if instance is not None:
+            return redirect('admin:ipam_mikrotikintegrationsettings_change', instance.pk)
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['subtitle'] = None
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+
+@admin.register(MikroTikTarget)
+class MikroTikTargetAdmin(ModelAdmin):
     list_display = (
-        'name_or_host',
         'host',
-        'enabled',
-        'sync_enabled',
-        'last_seen_version',
-        'last_successful_sync_at',
+        'scheme',
+        'port',
+        'verify_tls',
+        'last_discovery_status',
+        'last_reason_code',
+        'last_seen_identity',
+        'linked_device_link',
+        'last_discovered_at',
     )
-    list_filter = ('enabled', 'sync_enabled', 'device_role')
-    search_fields = ('=host', 'name', 'last_seen_identity')
-    search_help_text = _('Search by host, name, or identity.')
-    ordering = ('name', 'host')
-    add_fieldsets = (
-        (
-            _('Connection'),
-            {
-                'fields': (
-                    'host',
-                    ('scheme', 'custom_port'),
-                    'port',
-                    'username',
-                    'password',
-                ),
-            },
-        ),
-        (
-            _('Role'),
-            {
-                'fields': ('is_gateway_router',),
-            },
-        ),
+    list_filter = (
+        'scheme',
+        'verify_tls',
+        'last_discovery_status',
+        ('linked_device', admin.EmptyFieldListFilter),
     )
-    change_base_fieldsets = (
+    search_fields = ('=host', 'last_seen_identity')
+    search_help_text = _(
+        '1) Configure settings. 2) Add targets. 3) Select targets. 4) Run discovery.'
+    )
+    list_fullwidth = True
+    list_horizontal_scrollbar_top = True
+    actions = ('run_discovery_for_selected_targets',)
+    fieldsets = (
         (
-            _('Identity'),
+            _('Endpoint'),
             {
-                'fields': ('name',),
-            },
-        ),
-        (
-            _('Connection'),
-            {
-                'fields': (
-                    'host',
-                    ('scheme', 'custom_port'),
-                    'port',
-                    'username',
-                    'password',
-                    'verify_tls',
+                'fields': ('host', 'scheme', 'port', 'verify_tls'),
+                'description': _(
+                    'Targets are the onboarding source of truth for endpoint settings.'
                 ),
             },
         ),
         (
-            _('Status summary'),
+            _('Discovery state'),
             {
                 'fields': (
-                    'connection_test_summary',
-                    'sync_summary',
-                    'last_successful_sync_at',
-                    'last_error',
-                ),
-            },
-        ),
-        (
-            _('Detected device'),
-            {
-                'fields': (
+                    'linked_device',
+                    'last_discovered_at',
+                    'last_discovery_status',
+                    'last_reason_code',
+                    'last_message',
                     'last_seen_identity',
                     'last_seen_version',
                     'last_seen_board',
@@ -708,7 +753,371 @@ class MikroTikDeviceAdmin(ModelAdmin):
             },
         ),
     )
-    advanced_fieldsets = (
+    readonly_fields = (
+        'linked_device',
+        'last_discovered_at',
+        'last_discovery_status',
+        'last_reason_code',
+        'last_message',
+        'last_seen_identity',
+        'last_seen_version',
+        'last_seen_board',
+        'last_seen_platform',
+    )
+    actions_detail = ('run_discovery_now',)
+
+    @admin.display(description=_('Linked device'))
+    def linked_device_link(self, obj):
+        if not obj.linked_device_id:
+            return '-'
+        label = obj.linked_device.name or obj.linked_device.host
+        return _admin_change_link(self, MikroTikDevice, obj.linked_device_id, label)
+
+    @admin.action(description=_('Run discovery for selected targets'))
+    def run_discovery_for_selected_targets(self, request, queryset):
+        from .tasks import schedule_mikrotik_discovery_for_targets
+
+        run, error_message = schedule_mikrotik_discovery_for_targets(
+            queryset,
+            created_by=request.user,
+        )
+        if run is None:
+            self.message_user(request, error_message, level=messages.WARNING)
+            return None
+
+        self.message_user(
+            request,
+            _(
+                'Discovery run #%(run_id)s scheduled for %(count)s target(s).'
+            )
+            % {'run_id': run.pk, 'count': run.total_targets},
+            level=messages.INFO,
+        )
+        return redirect(
+            reverse(
+                'admin:ipam_mikrotikdiscoveryrun_change',
+                args=(run.pk,),
+                current_app=self.admin_site.name,
+            )
+        )
+
+    @action(description=_('Run discovery now'), icon='play_arrow')
+    def run_discovery_now(self, request, object_id):
+        target_qs = MikroTikTarget.objects.filter(pk=object_id)
+        return self.run_discovery_for_selected_targets(request, target_qs)
+
+
+class MikroTikDiscoveryResultDatasetAdmin(ModelAdmin):
+    list_display = (
+        'target',
+        'status_badge',
+        'reason_code',
+        'action_taken',
+        'linked_device',
+        'conflicting_device',
+        'detail_message_summary',
+        'finished_at',
+    )
+    list_display_links = ('target',)
+    ordering = ('pk',)
+
+    @display(
+        description=_('Status'),
+        label={
+            MikroTikDiscoveryResult.Status.SUCCESS: 'success',
+            MikroTikDiscoveryResult.Status.FAILED: 'danger',
+            MikroTikDiscoveryResult.Status.BLOCKED: 'warning',
+            MikroTikDiscoveryResult.Status.RUNNING: 'info',
+            MikroTikDiscoveryResult.Status.SCHEDULED: 'info',
+        },
+    )
+    def status_badge(self, obj):
+        return (obj.status, obj.get_status_display())
+
+    @admin.display(description=_('Detail'))
+    def detail_message_summary(self, obj):
+        return Truncator(obj.detail_message or '').chars(120) or '-'
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).select_related(
+            'target',
+            'linked_device',
+            'conflicting_device',
+        )
+        run_id = getattr(self, 'extra_context', {}).get('object')
+        if run_id is None:
+            return queryset.none()
+        return queryset.filter(run_id=run_id)
+
+
+class MikroTikDiscoveryResultDataset(BaseDataset):
+    model = MikroTikDiscoveryResult
+    model_admin = MikroTikDiscoveryResultDatasetAdmin
+    tab = False
+
+
+@admin.register(MikroTikDiscoveryRun)
+class MikroTikDiscoveryRunAdmin(ModelAdmin):
+    list_display = (
+        'id',
+        'status',
+        'created_at',
+        'started_at',
+        'finished_at',
+        'created_by',
+        'total_targets',
+        'success_count',
+        'failed_count',
+        'blocked_count',
+    )
+    list_filter = ('status', 'created_by')
+    search_fields = ('=id', 'created_by__username', 'task_ref')
+    ordering = ('-created_at',)
+    change_form_datasets = (MikroTikDiscoveryResultDataset,)
+    change_form_outer_before_template = (
+        'admin/ipam/mikrotik_discovery_run/change_form_outer_before.html'
+    )
+    readonly_fields = (
+        'status',
+        'created_at',
+        'started_at',
+        'finished_at',
+        'created_by',
+        'total_targets',
+        'success_count',
+        'failed_count',
+        'blocked_count',
+        'created_count',
+        'updated_count',
+        'reused_count',
+        'task_ref',
+        'results_changelist_link',
+    )
+    fieldsets = (
+        (
+            _('Run'),
+            {
+                'fields': (
+                    'status',
+                    'task_ref',
+                    'created_by',
+                    'results_changelist_link',
+                ),
+            },
+        ),
+        (
+            _('Timing'),
+            {
+                'fields': ('created_at', 'started_at', 'finished_at'),
+            },
+        ),
+        (
+            _('Counters'),
+            {
+                'fields': (
+                    'total_targets',
+                    'success_count',
+                    'failed_count',
+                    'blocked_count',
+                    'created_count',
+                    'updated_count',
+                    'reused_count',
+                ),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_changeform_datasets(self, request):
+        object_id = getattr(getattr(request, 'resolver_match', None), 'kwargs', {}).get(
+            'object_id'
+        )
+        if object_id is None:
+            return []
+        return super().get_changeform_datasets(request)
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update(
+            {
+                'show_save': False,
+                'show_save_and_continue': False,
+                'show_save_and_add_another': False,
+                'show_save_as_new': False,
+                'show_delete': False,
+            }
+        )
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    @admin.display(description=_('All results'))
+    def results_changelist_link(self, obj):
+        url = (
+            reverse('admin:ipam_mikrotikdiscoveryresult_changelist')
+            + '?'
+            + urlencode({'run__id__exact': obj.pk})
+        )
+        return format_html('<a href="{}">{}</a>', url, _('Open filtered results list'))
+
+
+@admin.register(MikroTikDiscoveryResult)
+class MikroTikDiscoveryResultAdmin(ModelAdmin):
+    list_display = (
+        'run',
+        'target_link',
+        'status',
+        'reason_code',
+        'action_taken',
+        'linked_device_link',
+        'conflicting_device_link',
+        'finished_at',
+    )
+    list_filter = ('run', 'status', 'reason_code')
+    search_fields = ('target__host', 'seen_identity')
+    ordering = ('-created_at',)
+    readonly_fields = (
+        'run',
+        'target_link',
+        'status',
+        'reason_code',
+        'detail_message',
+        'seen_identity',
+        'seen_version',
+        'seen_board',
+        'seen_platform',
+        'action_taken',
+        'linked_device_link',
+        'conflicting_device_link',
+        'created_at',
+        'started_at',
+        'finished_at',
+    )
+    fieldsets = (
+        (
+            _('Result'),
+            {
+                'fields': (
+                    'run',
+                    'target_link',
+                    'status',
+                    'reason_code',
+                    'action_taken',
+                    'detail_message',
+                ),
+            },
+        ),
+        (
+            _('Detected'),
+            {
+                'fields': (
+                    'seen_identity',
+                    'seen_version',
+                    'seen_board',
+                    'seen_platform',
+                ),
+            },
+        ),
+        (
+            _('Links'),
+            {
+                'fields': ('linked_device_link', 'conflicting_device_link'),
+            },
+        ),
+        (
+            _('Timing'),
+            {
+                'fields': ('created_at', 'started_at', 'finished_at'),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description=_('Target'))
+    def target_link(self, obj):
+        if not obj.target_id:
+            return '-'
+        return _admin_change_link(self, MikroTikTarget, obj.target_id, obj.target.host)
+
+    @admin.display(description=_('Linked device'))
+    def linked_device_link(self, obj):
+        if not obj.linked_device_id:
+            return '-'
+        label = obj.linked_device.name or obj.linked_device.host
+        return _admin_change_link(self, MikroTikDevice, obj.linked_device_id, label)
+
+    @admin.display(description=_('Conflicting device'))
+    def conflicting_device_link(self, obj):
+        if not obj.conflicting_device_id:
+            return '-'
+        label = obj.conflicting_device.name or obj.conflicting_device.host
+        return _admin_change_link(self, MikroTikDevice, obj.conflicting_device_id, label)
+
+
+@admin.register(MikroTikDevice)
+class MikroTikDeviceAdmin(ModelAdmin):
+    list_display = (
+        'name_or_host',
+        'host',
+        'sync_enabled',
+        'sync_interval_minutes',
+        'last_seen_version',
+        'last_successful_sync_at',
+    )
+    list_filter = ('enabled', 'sync_enabled')
+    search_fields = ('=host', 'name', 'last_seen_identity')
+    search_help_text = _('Search by host, name, or last seen identity.')
+    ordering = ('host',)
+    readonly_fields = (
+        'host',
+        'scheme',
+        'port',
+        'verify_tls',
+        'linked_target_link',
+        'last_successful_sync_at',
+        'last_error',
+        'last_seen_identity',
+        'last_seen_version',
+        'last_seen_board',
+        'last_seen_platform',
+        'sync_summary',
+    )
+    fieldsets = (
+        (
+            _('Identity'),
+            {
+                'fields': ('name',),
+            },
+        ),
+        (
+            _('Endpoint (managed from target)'),
+            {
+                'fields': (
+                    'host',
+                    'scheme',
+                    'port',
+                    'verify_tls',
+                    'linked_target_link',
+                ),
+                'description': _(
+                    'Endpoint configuration is managed in MikroTik targets. '
+                    'Rerunning discovery overwrites these endpoint values.'
+                ),
+            },
+        ),
         (
             _('Synchronization'),
             {
@@ -716,6 +1125,7 @@ class MikroTikDeviceAdmin(ModelAdmin):
                     'enabled',
                     'sync_enabled',
                     'sync_interval_minutes',
+                    'sync_summary',
                 ),
             },
         ),
@@ -736,192 +1146,66 @@ class MikroTikDeviceAdmin(ModelAdmin):
             _('Authority'),
             {
                 'fields': (
-                    'device_role',
                     'is_authoritative_for_l3',
                     'is_authoritative_for_dhcp',
                 ),
             },
         ),
+        (
+            _('Status'),
+            {
+                'fields': (
+                    'last_successful_sync_at',
+                    'last_error',
+                    'last_seen_identity',
+                    'last_seen_version',
+                    'last_seen_board',
+                    'last_seen_platform',
+                ),
+            },
+        ),
     )
-    readonly_change_fields = (
-        'connection_test_summary',
-        'sync_summary',
-        'last_seen_identity',
-        'last_seen_version',
-        'last_seen_board',
-        'last_seen_platform',
-        'last_successful_sync_at',
-        'last_error',
-    )
-
-    # Submitline actions — shown as buttons next to the Save button.
-    actions_submit_line = ('save_and_test',)
-
-    # Changeform object actions — shown in the detail toolbar.
     actions_detail = ('sync_now_action',)
+
+    def has_add_permission(self, request):
+        return False
 
     @admin.display(description=_('Name'))
     def name_or_host(self, obj):
         return obj.name or obj.host
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
-        kwargs['fields'] = self._get_form_fields(request, obj)
-        return super().get_form(request, obj=obj, change=change, **kwargs)
-
-    def get_fieldsets(self, request, obj=None):
-        if obj is None:
-            return (
-                (
-                    _('Connection'),
-                    {
-                        'fields': self._connection_fields(request, obj=None),
-                    },
-                ),
-                self.add_fieldsets[1],
-            )
-
-        fieldsets = [
-            self.change_base_fieldsets[0],
-            (
-                _('Connection'),
-                {
-                    'fields': self._connection_fields(request, obj=obj),
-                },
-            ),
-            self.change_base_fieldsets[2],
-            self.change_base_fieldsets[3],
-        ]
-        if self._show_advanced_controls(obj):
-            fieldsets.extend(self.advanced_fieldsets)
-        return tuple(fieldsets)
-
-    def get_readonly_fields(self, request, obj=None):
-        if obj is None:
-            return ()
-        return self.readonly_change_fields
-
-    @admin.display(description=_('Last connection test'))
-    def connection_test_summary(self, obj):
-        latest_test = self._latest_run(obj, MikroTikSyncRun.Mode.TEST)
-        return self._format_run_status(latest_test)
+    @admin.display(description=_('Linked target'))
+    def linked_target_link(self, obj):
+        if not hasattr(obj, 'linked_target') or obj.linked_target is None:
+            return '-'
+        return _admin_change_link(
+            self,
+            MikroTikTarget,
+            obj.linked_target.pk,
+            obj.linked_target.host,
+        )
 
     @admin.display(description=_('Last synchronization run'))
     def sync_summary(self, obj):
-        latest_sync = self._latest_run(obj, MikroTikSyncRun.Mode.SYNC)
-        return self._format_run_status(latest_sync)
-
-    def _latest_run(self, obj, mode):
-        return (
-            obj.sync_runs.filter(mode=mode)
-            .order_by('-scheduled_for', '-pk')
-            .first()
+        latest_sync = (
+            obj.sync_runs.order_by('-scheduled_for', '-pk').first()
         )
-
-    def _format_run_status(self, sync_run):
-        if sync_run is None:
+        if latest_sync is None:
             return _('Never run')
-
-        when = sync_run.finished_at or sync_run.started_at or sync_run.scheduled_for
+        when = latest_sync.finished_at or latest_sync.started_at or latest_sync.scheduled_for
         parts = [
-            sync_run.get_status_display(),
+            latest_sync.get_status_display(),
             timezone.localtime(when).strftime('%Y-%m-%d %H:%M:%S'),
         ]
-        if sync_run.status == MikroTikSyncRun.Status.FAILED and sync_run.error_message:
+        if latest_sync.status == MikroTikSyncRun.Status.FAILED and latest_sync.error_message:
             parts.append(
                 _('error: %(message)s')
-                % {'message': Truncator(sync_run.error_message).chars(180)}
+                % {'message': Truncator(latest_sync.error_message).chars(180)}
             )
         return ' | '.join(parts)
 
-    def _show_advanced_controls(self, obj):
-        # Advanced settings become available after the first successful contact.
-        return obj.sync_runs.filter(
-            status=MikroTikSyncRun.Status.SUCCESS,
-        ).exists()
-
-    def get_actions_detail(self, request, object_id):
-        obj = self.get_object(request, object_id)
-        if obj is None or not self._show_advanced_controls(obj):
-            return ()
-        return super().get_actions_detail(request, object_id)
-
-    def _connection_fields(self, request, obj):
-        fields = [
-            'host',
-            ('scheme', 'custom_port'),
-            'port',
-        ]
-        fields.extend(['username', 'password'])
-        if obj is not None:
-            fields.append('verify_tls')
-        return tuple(fields)
-
-    def _get_form_fields(self, request, obj):
-        if obj is None:
-            return (
-                'host',
-                'scheme',
-                'custom_port',
-                'port',
-                'username',
-                'password',
-                'is_gateway_router',
-            )
-
-        fields = [
-            'name',
-            'host',
-            'scheme',
-            'custom_port',
-            'port',
-            'username',
-            'password',
-            'verify_tls',
-            'connection_test_summary',
-            'sync_summary',
-            'last_successful_sync_at',
-            'last_error',
-            'last_seen_identity',
-            'last_seen_version',
-            'last_seen_board',
-            'last_seen_platform',
-        ]
-        if self._show_advanced_controls(obj):
-            fields.extend(
-                [
-                    'enabled',
-                    'sync_enabled',
-                    'sync_interval_minutes',
-                    'import_vlans',
-                    'import_subnets',
-                    'import_dhcp_leases',
-                    'import_arp',
-                    'import_neighbors',
-                    'ignore_dynamic_bridge_vlans',
-                    'device_role',
-                    'is_authoritative_for_l3',
-                    'is_authoritative_for_dhcp',
-                ]
-            )
-        return tuple(fields)
-
-    @action(description=_('Save and test'), attrs={'type': 'submit'})
-    def save_and_test(self, request, obj):
-        """Submit-line action: save the device and schedule a connection test."""
-        from .tasks import schedule_mikrotik_test_now
-
-        schedule_mikrotik_test_now(obj)
-        messages.info(
-            request,
-            _(
-                'Device saved. Connection test scheduled in background. '
-                'Refresh this page to see the result.'
-            ),
-        )
-
     @action(description=_('Sync now'), icon='sync')
     def sync_now_action(self, request, object_id):
-        """Changeform object action: trigger an immediate full sync."""
         from .tasks import schedule_mikrotik_sync_now
 
         device = MikroTikDevice.objects.get(pk=object_id)
@@ -930,7 +1214,7 @@ class MikroTikDeviceAdmin(ModelAdmin):
             messages.warning(
                 request,
                 _(
-                    'Synchronization was not scheduled because this integration is disabled.'
+                    'Synchronization was not scheduled because this device is disabled.'
                 ),
             )
         else:
@@ -954,33 +1238,44 @@ class MikroTikDeviceAdmin(ModelAdmin):
 class MikroTikSyncRunAdmin(ModelAdmin):
     list_display = (
         'device',
-        'mode',
         'status',
         'scheduled_for',
         'started_at',
         'finished_at',
         'sync_counters',
     )
-    list_filter = ('status', 'mode', 'device')
+    list_filter = ('status', 'device')
     ordering = ('-scheduled_for',)
     search_fields = ('device__name', 'device__host', 'error_message', 'trace_id')
     readonly_fields = (
-        'device', 'mode', 'status',
-        'scheduled_for', 'started_at', 'finished_at',
-        'trace_id', 'job_id',
-        'vlans_created', 'vlans_updated',
-        'subnets_created', 'subnets_updated',
-        'ips_created', 'ips_updated',
-        'warning_summary', 'observed_summary',
-        'error_message', 'task_ref',
+        'device',
+        'status',
+        'scheduled_for',
+        'started_at',
+        'finished_at',
+        'trace_id',
+        'job_id',
+        'vlans_created',
+        'vlans_updated',
+        'subnets_created',
+        'subnets_updated',
+        'ips_created',
+        'ips_updated',
+        'warning_summary',
+        'observed_summary',
+        'error_message',
+        'task_ref',
     )
     fieldsets = (
         (
             _('Run'),
             {
                 'fields': (
-                    'device', 'mode', 'status', 'task_ref',
-                    'trace_id', 'job_id',
+                    'device',
+                    'status',
+                    'task_ref',
+                    'trace_id',
+                    'job_id',
                 ),
             },
         ),
@@ -994,9 +1289,12 @@ class MikroTikSyncRunAdmin(ModelAdmin):
             _('Counters'),
             {
                 'fields': (
-                    'vlans_created', 'vlans_updated',
-                    'subnets_created', 'subnets_updated',
-                    'ips_created', 'ips_updated',
+                    'vlans_created',
+                    'vlans_updated',
+                    'subnets_created',
+                    'subnets_updated',
+                    'ips_created',
+                    'ips_updated',
                 ),
             },
         ),
@@ -1032,29 +1330,8 @@ class MikroTikSyncRunAdmin(ModelAdmin):
         return obj.device
 
 
-# =====================================================================
-# Proxy models for Integrations sidebar
-# =====================================================================
-
-class MikroTikVLAN(VLAN):
-    """Proxy model to show only MikroTik-sourced VLANs in the Integrations group."""
-    class Meta:
-        proxy = True
-        verbose_name = _('MikroTik VLAN')
-        verbose_name_plural = _('MikroTik VLANs')
-
-
-class MikroTikSubnet(Subnet):
-    """Proxy model to show only MikroTik-sourced subnets in the Integrations group."""
-    class Meta:
-        proxy = True
-        verbose_name = _('MikroTik subnet')
-        verbose_name_plural = _('MikroTik subnets')
-
-
 @admin.register(MikroTikVLAN)
 class MikroTikVLANAdmin(ModelAdmin):
-    """Filtered view of VLANs imported from MikroTik."""
     list_display = (
         'number',
         'name',
@@ -1114,7 +1391,6 @@ class MikroTikVLANAdmin(ModelAdmin):
 
 @admin.register(MikroTikSubnet)
 class MikroTikSubnetAdmin(ModelAdmin):
-    """Filtered view of subnets imported from MikroTik."""
     list_display = (
         'cidr',
         'vlan',

@@ -1,18 +1,10 @@
-"""MikroTik → IPAM synchronization engine.
-
-Orchestrates: collect facts → normalize → upsert IPAM objects.
-
-Entry points
-~~~~~~~~~~~~
-- ``run_device_test(device)``  — connection test + metadata population.
-- ``run_device_sync(device, sync_run)`` — full sync to IPAM.
-"""
+"""MikroTik -> IPAM synchronization engine."""
 
 from __future__ import annotations
 
 import logging
+import re
 from ipaddress import ip_address, ip_network
-from typing import TYPE_CHECKING
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -20,6 +12,10 @@ from django.utils import timezone
 from ipam.contracts import MikroTikSnapshotResultV1
 from ipam.crypto import decrypt_password
 from ipam.integrations.mikrotik_client import (
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_READ_TIMEOUT,
+    DISCOVERY_CONNECT_TIMEOUT,
+    DISCOVERY_READ_TIMEOUT,
     MikroTikClient,
     MikroTikClientError,
 )
@@ -28,30 +24,104 @@ from ipam.models import (
     VLAN,
     IPAddress,
     MikroTikDevice,
+    MikroTikIntegrationSettings,
     MikroTikSyncRun,
     SourceKind,
     Subnet,
     SyncState,
 )
 
-if TYPE_CHECKING:
-    pass
-
 logger = logging.getLogger(__name__)
 
 
+def sanitize_detail_message(value: str, *, max_len: int = 500) -> str:
+    """Return a concise, storage-safe detail message."""
+    sanitized = ' '.join((value or '').split())
+    return sanitized[:max_len]
+
+
+def load_global_credentials() -> tuple[str, str]:
+    """Load and decrypt global MikroTik credentials."""
+    settings_obj = MikroTikIntegrationSettings.objects.order_by('pk').first()
+    if settings_obj is None:
+        raise MikroTikClientError('MikroTik settings are not configured.')
+
+    if not settings_obj.username or not settings_obj.password_encrypted:
+        raise MikroTikClientError('Global MikroTik credentials are incomplete.')
+
+    password = decrypt_password(settings_obj.password_encrypted)
+    return settings_obj.username, password
+
+
+def is_routeros_v7(version: str) -> bool:
+    match = re.search(r'(\d+)', version or '')
+    if match is None:
+        return False
+    return int(match.group(1)) == 7
+
+
 # ---------------------------------------------------------------------------
-# Client factory
+# Client factories
 # ---------------------------------------------------------------------------
 
-def _make_client(device: MikroTikDevice) -> MikroTikClient:
-    password = decrypt_password(device.password_encrypted)
+def _make_client_for_endpoint(
+    *,
+    host: str,
+    scheme: str,
+    port: int,
+    verify_tls: bool,
+    username: str,
+    password: str,
+    connect_timeout: float,
+    read_timeout: float,
+) -> MikroTikClient:
     return MikroTikClient(
-        base_url=device.base_url,
-        username=device.username,
+        base_url=f'{scheme}://{host}:{port}',
+        username=username,
         password=password,
-        verify_tls=device.verify_tls,
+        verify_tls=verify_tls,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
     )
+
+
+def _make_client_for_device(device: MikroTikDevice) -> MikroTikClient:
+    username, password = load_global_credentials()
+    return _make_client_for_endpoint(
+        host=device.host,
+        scheme=device.scheme,
+        port=device.port,
+        verify_tls=device.verify_tls,
+        username=username,
+        password=password,
+        connect_timeout=DEFAULT_CONNECT_TIMEOUT,
+        read_timeout=DEFAULT_READ_TIMEOUT,
+    )
+
+
+def collect_target_metadata(
+    *,
+    host: str,
+    scheme: str,
+    port: int,
+    verify_tls: bool,
+    username: str,
+    password: str,
+    connect_timeout: float = DISCOVERY_CONNECT_TIMEOUT,
+    read_timeout: float = DISCOVERY_READ_TIMEOUT,
+) -> tuple[dict, dict]:
+    """Fetch only identity and system resource for discovery."""
+    client = _make_client_for_endpoint(
+        host=host,
+        scheme=scheme,
+        port=port,
+        verify_tls=verify_tls,
+        username=username,
+        password=password,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+    )
+    return client.get_identity(), client.get_system_resource()
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +129,9 @@ def _make_client(device: MikroTikDevice) -> MikroTikClient:
 # ---------------------------------------------------------------------------
 
 def _collect_snapshot(client: MikroTikClient, device: MikroTikDevice) -> MikroTikSnapshotResultV1:
-    """Fetch all relevant facts from the device and return a DTO."""
     identity_raw = client.get_identity()
     resource_raw = client.get_system_resource()
 
-    # Optional data sources; only fetch when the device's import policy allows.
     bridge_vlans_raw = client.get_bridge_vlans() if device.import_vlans else []
     ip_addresses_raw = client.get_ip_addresses() if device.import_subnets else []
     dhcp_servers_raw = client.get_dhcp_servers() if device.import_dhcp_leases else []
@@ -85,73 +153,6 @@ def _collect_snapshot(client: MikroTikClient, device: MikroTikDevice) -> MikroTi
 
 
 # ---------------------------------------------------------------------------
-# Device test (Save and test)
-# ---------------------------------------------------------------------------
-
-def run_device_test(
-    device: MikroTikDevice,
-    sync_run: MikroTikSyncRun | None = None,
-) -> MikroTikSyncRun:
-    """Connection test: populate metadata fields and record a test run."""
-    now = timezone.now()
-    if sync_run is None:
-        sync_run = MikroTikSyncRun.objects.create(
-            device=device,
-            mode=MikroTikSyncRun.Mode.TEST,
-            status=MikroTikSyncRun.Status.RUNNING,
-            scheduled_for=now,
-            started_at=now,
-        )
-    elif sync_run.status != MikroTikSyncRun.Status.RUNNING:
-        sync_run.status = MikroTikSyncRun.Status.RUNNING
-        sync_run.started_at = sync_run.started_at or now
-        sync_run.error_message = ''
-        sync_run.save(update_fields=['status', 'started_at', 'error_message'])
-
-    try:
-        client = _make_client(device)
-        identity = client.get_identity()
-        resource = client.get_system_resource()
-
-        # Populate device metadata — do not overwrite a user-edited name.
-        if not device.name:
-            device.name = identity.get('name', '') or device.host
-
-        device.last_seen_identity = identity.get('name', '')
-        device.last_seen_version = resource.get('version', '')
-        device.last_seen_board = resource.get('board-name', '')
-        device.last_seen_platform = resource.get('platform', '')
-        device.last_error = ''
-        device.last_successful_sync_at = now
-        device.save(update_fields=[
-            'name', 'last_seen_identity', 'last_seen_version',
-            'last_seen_board', 'last_seen_platform',
-            'last_error', 'last_successful_sync_at',
-        ])
-
-        sync_run.status = MikroTikSyncRun.Status.SUCCESS
-        sync_run.finished_at = timezone.now()
-        sync_run.save(update_fields=['status', 'finished_at'])
-
-    except MikroTikClientError as exc:
-        device.last_error = str(exc)[:2000]
-        device.save(update_fields=['last_error'])
-        sync_run.status = MikroTikSyncRun.Status.FAILED
-        sync_run.error_message = str(exc)[:2000]
-        sync_run.finished_at = timezone.now()
-        sync_run.save(update_fields=['status', 'error_message', 'finished_at'])
-    except Exception as exc:
-        device.last_error = f'{exc.__class__.__name__}: {exc}'[:2000]
-        device.save(update_fields=['last_error'])
-        sync_run.status = MikroTikSyncRun.Status.FAILED
-        sync_run.error_message = f'{exc.__class__.__name__}: {exc}'[:2000]
-        sync_run.finished_at = timezone.now()
-        sync_run.save(update_fields=['status', 'error_message', 'finished_at'])
-
-    return sync_run
-
-
-# ---------------------------------------------------------------------------
 # Full sync
 # ---------------------------------------------------------------------------
 
@@ -159,13 +160,13 @@ def run_device_sync(device: MikroTikDevice, sync_run: MikroTikSyncRun) -> MikroT
     """Full sync: collect facts and upsert IPAM objects."""
     sync_run.status = MikroTikSyncRun.Status.RUNNING
     sync_run.started_at = timezone.now()
-    sync_run.save(update_fields=['status', 'started_at'])
+    sync_run.error_message = ''
+    sync_run.save(update_fields=['status', 'started_at', 'error_message'])
 
     try:
-        client = _make_client(device)
+        client = _make_client_for_device(device)
         snapshot = _collect_snapshot(client, device)
 
-        # Update device metadata from snapshot.
         device.last_seen_identity = snapshot.identity.name
         device.last_seen_version = snapshot.system_resource.version
         device.last_seen_board = snapshot.system_resource.board_name
@@ -176,12 +177,17 @@ def run_device_sync(device: MikroTikDevice, sync_run: MikroTikSyncRun) -> MikroT
         warnings: list[str] = []
         counters = _apply_snapshot(device, snapshot, sync_run, warnings)
 
+        now = timezone.now()
         device.last_error = ''
-        device.last_successful_sync_at = timezone.now()
+        device.last_successful_sync_at = now
         device.save(update_fields=[
-            'name', 'last_seen_identity', 'last_seen_version',
-            'last_seen_board', 'last_seen_platform',
-            'last_error', 'last_successful_sync_at',
+            'name',
+            'last_seen_identity',
+            'last_seen_version',
+            'last_seen_board',
+            'last_seen_platform',
+            'last_error',
+            'last_successful_sync_at',
         ])
 
         sync_run.vlans_created = counters['vlans_created']
@@ -193,24 +199,31 @@ def run_device_sync(device: MikroTikDevice, sync_run: MikroTikSyncRun) -> MikroT
         sync_run.warning_summary = warnings
         sync_run.observed_summary = _build_observed_summary(snapshot)
         sync_run.status = MikroTikSyncRun.Status.SUCCESS
-        sync_run.finished_at = timezone.now()
+        sync_run.finished_at = now
+        sync_run.error_message = ''
         sync_run.save()
 
     except MikroTikClientError as exc:
-        _fail_sync_run(device, sync_run, str(exc))
+        _fail_sync_run(device, sync_run, sanitize_detail_message(str(exc)))
     except Exception as exc:
-        _fail_sync_run(device, sync_run, f'{exc.__class__.__name__}: {exc}')
+        _fail_sync_run(
+            device,
+            sync_run,
+            sanitize_detail_message(f'{exc.__class__.__name__}: {exc}'),
+        )
         raise
 
     return sync_run
 
 
 def _fail_sync_run(device: MikroTikDevice, sync_run: MikroTikSyncRun, error: str) -> None:
-    device.last_error = error[:2000]
+    now = timezone.now()
+    device.last_error = error
     device.save(update_fields=['last_error'])
+
     sync_run.status = MikroTikSyncRun.Status.FAILED
-    sync_run.error_message = error[:2000]
-    sync_run.finished_at = timezone.now()
+    sync_run.error_message = error
+    sync_run.finished_at = now
     sync_run.save(update_fields=['status', 'error_message', 'finished_at'])
 
 
@@ -237,15 +250,12 @@ def _apply_snapshot(
     trace_id = sync_run.trace_id
     job_id = str(sync_run.pk)
 
-    # --- 1. VLANs ---
     if device.import_vlans:
         counters.update(_sync_vlans(device, snapshot, now, trace_id, job_id, warnings))
 
-    # --- 2. Subnets ---
     if device.import_subnets and device.is_authoritative_for_l3:
         counters.update(_sync_subnets(device, snapshot, now, trace_id, job_id, warnings))
 
-    # --- 3. IP records (DHCP leases → ARP enrichment) ---
     if device.import_dhcp_leases and device.is_authoritative_for_dhcp:
         counters.update(_sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings))
 
@@ -265,44 +275,43 @@ def _sync_vlans(device, snapshot, now, trace_id, job_id, warnings) -> dict:
     created = 0
     updated = 0
 
-    for bv in snapshot.bridge_vlans:
-        # Ignore dynamic bridge VLAN rows per PO decision.
-        if bv.dynamic and device.ignore_dynamic_bridge_vlans:
+    for bridge_vlan in snapshot.bridge_vlans:
+        if bridge_vlan.dynamic and device.ignore_dynamic_bridge_vlans:
             continue
 
-        # vlan_ids can be a single number or a comma-separated range.
-        # RouterOS uses formats like "10" or "10,20" or "10-20".
-        for vlan_number in _parse_vlan_ids(bv.vlan_ids):
-            # Build a stable remote ID so we can match on re-sync.
-            remote_id = f'bridge-vlan:{bv.bridge}:{vlan_number}'
+        for vlan_number in _parse_vlan_ids(bridge_vlan.vlan_ids):
+            remote_id = f'bridge-vlan:{bridge_vlan.bridge}:{vlan_number}'
 
             with transaction.atomic():
                 existing = VLAN.objects.filter(number=vlan_number).first()
 
                 if existing is not None:
-                    # If this is a manually created VLAN, do not overwrite.
-                    if existing.source_kind == SourceKind.MANUAL and existing.source_device_id is None:
-                        if existing.source_kind != SourceKind.MIKROTIK:
-                            warnings.append(
-                                f'VLAN {vlan_number}: already exists as manual entry, '
-                                f'skipped import from {device.host}.'
-                            )
+                    if (
+                        existing.source_kind == SourceKind.MANUAL
+                        and existing.source_device_id is None
+                    ):
+                        warnings.append(
+                            f'VLAN {vlan_number}: already exists as manual entry, '
+                            f'skipped import from {device.host}.'
+                        )
                         continue
 
-                    # If sync is disabled for this VLAN, skip.
                     if not existing.integration_sync_enabled:
                         continue
 
-                    existing.source_upstream_disabled = bv.disabled
-                    existing.source_bridge_name = bv.bridge
+                    existing.source_upstream_disabled = bridge_vlan.disabled
+                    existing.source_bridge_name = bridge_vlan.bridge
                     existing.last_synced_at = now
                     existing.sync_state = SyncState.LIVE
                     existing.source_job_id = job_id
                     existing.source_trace_id = trace_id
                     existing.save(update_fields=[
-                        'source_upstream_disabled', 'source_bridge_name',
-                        'last_synced_at', 'sync_state',
-                        'source_job_id', 'source_trace_id',
+                        'source_upstream_disabled',
+                        'source_bridge_name',
+                        'last_synced_at',
+                        'sync_state',
+                        'source_job_id',
+                        'source_trace_id',
                     ])
                     updated += 1
                 else:
@@ -317,8 +326,8 @@ def _sync_vlans(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                         last_synced_at=now,
                         sync_state=SyncState.LIVE,
                         integration_sync_enabled=True,
-                        source_upstream_disabled=bv.disabled,
-                        source_bridge_name=bv.bridge,
+                        source_upstream_disabled=bridge_vlan.disabled,
+                        source_bridge_name=bridge_vlan.bridge,
                     )
                     created += 1
 
@@ -326,7 +335,6 @@ def _sync_vlans(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
 
 def _parse_vlan_ids(raw: str) -> list[int]:
-    """Parse RouterOS vlan-ids like ``"10"``, ``"10,20"``, ``"10-15"``."""
     result = []
     for part in raw.split(','):
         part = part.strip()
@@ -335,16 +343,16 @@ def _parse_vlan_ids(raw: str) -> list[int]:
         if '-' in part:
             try:
                 start, end = part.split('-', 1)
-                for n in range(int(start), int(end) + 1):
-                    if 1 <= n <= 4094:
-                        result.append(n)
+                for value in range(int(start), int(end) + 1):
+                    if 1 <= value <= 4094:
+                        result.append(value)
             except (ValueError, TypeError):
                 continue
         else:
             try:
-                n = int(part)
-                if 1 <= n <= 4094:
-                    result.append(n)
+                value = int(part)
+                if 1 <= value <= 4094:
+                    result.append(value)
             except (ValueError, TypeError):
                 continue
     return result
@@ -355,23 +363,15 @@ def _parse_vlan_ids(raw: str) -> list[int]:
 # ---------------------------------------------------------------------------
 
 def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
-    """Create/update subnets from ``/ip/address`` rows."""
     created = 0
     updated = 0
 
-    # Build a set of VLAN objects by interface for potential linking.
-    # We cannot link subnets to VLANs automatically without heuristic
-    # interface-name matching, so we leave vlan=None for now and let
-    # the operator assign VLANs manually or in a future milestone.
-
     for ip_addr in snapshot.ip_addresses:
         if not ip_addr.address or '/' not in ip_addr.address:
-            # /32 host addresses or malformed entries → skip subnet creation
-            # but record a reason.
             if ip_addr.address and ip_addr.address.endswith('/32'):
                 warnings.append(
                     f'Skipped /32 host address {ip_addr.address} on '
-                    f'{ip_addr.interface} — not a subnet.'
+                    f'{ip_addr.interface} - not a subnet.'
                 )
             continue
 
@@ -383,11 +383,10 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
             )
             continue
 
-        # Skip /32 host routes — they are not subnets.
         if net.prefixlen == 32:
             warnings.append(
                 f'Skipped /32 host address {ip_addr.address} on '
-                f'{ip_addr.interface} — not a subnet.'
+                f'{ip_addr.interface} - not a subnet.'
             )
             continue
 
@@ -398,8 +397,10 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
             existing = Subnet.objects.filter(cidr=cidr).first()
 
             if existing is not None:
-                # Manual subnet — do not overwrite.
-                if existing.source_kind == SourceKind.MANUAL and existing.source_device_id is None:
+                if (
+                    existing.source_kind == SourceKind.MANUAL
+                    and existing.source_device_id is None
+                ):
                     warnings.append(
                         f'Subnet {cidr}: already exists as manual entry, '
                         f'skipped import from {device.host}.'
@@ -409,9 +410,7 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                 if not existing.integration_sync_enabled:
                     continue
 
-                # Check if linked VLAN has sync disabled.
-                if (existing.vlan_id and existing.vlan
-                        and not existing.vlan.integration_sync_enabled):
+                if existing.vlan_id and existing.vlan and not existing.vlan.integration_sync_enabled:
                     continue
 
                 existing.source_upstream_disabled = ip_addr.disabled
@@ -422,9 +421,13 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                 existing.source_job_id = job_id
                 existing.source_trace_id = trace_id
                 existing.save(update_fields=[
-                    'source_upstream_disabled', 'source_upstream_invalid',
-                    'source_interface_name', 'last_synced_at', 'sync_state',
-                    'source_job_id', 'source_trace_id',
+                    'source_upstream_disabled',
+                    'source_upstream_invalid',
+                    'source_interface_name',
+                    'last_synced_at',
+                    'sync_state',
+                    'source_job_id',
+                    'source_trace_id',
                 ])
                 updated += 1
             else:
@@ -454,11 +457,9 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 # ---------------------------------------------------------------------------
 
 def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict:
-    """Create/update IP records from DHCP leases inside managed subnets."""
     created = 0
     updated = 0
 
-    # Pre-load managed subnets for membership checks.
     managed_subnets = _load_managed_subnets(device)
 
     for lease in snapshot.dhcp_leases:
@@ -475,15 +476,14 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
         if subnet is None:
             continue
 
-        # Skip if subnet has sync disabled.
         if not subnet.integration_sync_enabled:
             continue
 
-        # Determine lease kind from the ``dynamic`` field.
-        if lease.dynamic:
-            lease_kind = IPAddress.LeaseKind.DHCP_DYNAMIC
-        else:
-            lease_kind = IPAddress.LeaseKind.DHCP_STATIC
+        lease_kind = (
+            IPAddress.LeaseKind.DHCP_DYNAMIC
+            if lease.dynamic
+            else IPAddress.LeaseKind.DHCP_STATIC
+        )
 
         mac = (lease.active_mac_address or lease.mac_address).lower()
         hostname = lease.active_host_name or lease.host_name
@@ -491,7 +491,8 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
 
         with transaction.atomic():
             existing = IPAddress.objects.filter(
-                subnet=subnet, address=addr_str,
+                subnet=subnet,
+                address=addr_str,
             ).first()
 
             if existing is not None:
@@ -507,10 +508,17 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                 existing.source_trace_id = trace_id
                 existing.last_seen = now
                 existing.save(update_fields=[
-                    'mac_address', 'hostname',
-                    'lease_kind', 'lease_status', 'lease_server_name',
-                    'source_observed_at', 'last_synced_at', 'sync_state',
-                    'source_job_id', 'source_trace_id', 'last_seen',
+                    'mac_address',
+                    'hostname',
+                    'lease_kind',
+                    'lease_status',
+                    'lease_server_name',
+                    'source_observed_at',
+                    'last_synced_at',
+                    'sync_state',
+                    'source_job_id',
+                    'source_trace_id',
+                    'last_seen',
                 ])
                 updated += 1
             else:
@@ -542,18 +550,10 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
 # ---------------------------------------------------------------------------
 
 def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
-    """Enrich existing IPs or create observed records from ARP inside managed subnets.
-
-    ARP is **enrichment only** — it never creates subnets and only
-    touches IPs within already-known managed subnets.  If duplicate ARP
-    entries exist across interfaces, the first match in subnet context
-    wins.
-    """
     created = 0
     updated = 0
 
     managed_subnets = _load_managed_subnets(device)
-    # Track which IPs we already touched to handle duplicates.
     seen_addresses: set[str] = set()
 
     for arp in snapshot.arp_entries:
@@ -570,7 +570,6 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
         subnet = _find_containing_subnet(addr, managed_subnets)
         if subnet is None:
-            # ARP outside managed subnets → ignore.
             continue
 
         if not subnet.integration_sync_enabled:
@@ -581,26 +580,28 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
         with transaction.atomic():
             existing = IPAddress.objects.filter(
-                subnet=subnet, address=arp.address,
+                subnet=subnet,
+                address=arp.address,
             ).first()
 
             if existing is not None:
-                # Only enrich MAC if we have one and the existing is empty.
                 changed = False
                 if mac and not existing.mac_address:
                     existing.mac_address = mac
                     changed = True
+
                 if changed:
                     existing.last_synced_at = now
                     existing.source_job_id = job_id
                     existing.source_trace_id = trace_id
                     existing.save(update_fields=[
-                        'mac_address', 'last_synced_at',
-                        'source_job_id', 'source_trace_id',
+                        'mac_address',
+                        'last_synced_at',
+                        'source_job_id',
+                        'source_trace_id',
                     ])
                     updated += 1
             else:
-                # Create an observed-only IP record — not a static truth.
                 IPAddress.objects.create(
                     subnet=subnet,
                     address=arp.address,
@@ -613,7 +614,6 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                     source_observed_at=now,
                     last_synced_at=now,
                     sync_state=SyncState.LIVE,
-                    # Explicitly not DHCP — we only know it from ARP.
                     lease_kind=IPAddress.LeaseKind.NONE,
                     last_seen=now,
                 )
@@ -627,11 +627,6 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 # ---------------------------------------------------------------------------
 
 def _load_managed_subnets(device: MikroTikDevice) -> list[Subnet]:
-    """Return subnets that this device is allowed to modify.
-
-    Includes both MikroTik-imported subnets owned by this device
-    and any manually created subnets (which may receive DHCP/ARP data).
-    """
     return list(
         Subnet.objects.filter(
             models.Q(source_device=device) | models.Q(source_kind=SourceKind.MANUAL),
@@ -640,7 +635,6 @@ def _load_managed_subnets(device: MikroTikDevice) -> list[Subnet]:
 
 
 def _find_containing_subnet(addr, subnets: list[Subnet]):
-    """Find the most-specific subnet that contains *addr*."""
     best = None
     best_prefix = -1
     for subnet in subnets:
@@ -655,17 +649,15 @@ def _find_containing_subnet(addr, subnets: list[Subnet]):
 
 
 def _build_observed_summary(snapshot: MikroTikSnapshotResultV1) -> dict:
-    """Build a compact diagnostic summary of neighbors and ARP."""
-    # De-duplicate neighbors by address.
     unique_neighbors = {}
-    for n in snapshot.neighbors:
-        key = n.address or n.mac_address
+    for neighbor in snapshot.neighbors:
+        key = neighbor.address or neighbor.mac_address
         if key and key not in unique_neighbors:
             unique_neighbors[key] = {
-                'address': n.address,
-                'identity': n.identity,
-                'platform': n.platform,
-                'interface': n.interface_name or n.interface,
+                'address': neighbor.address,
+                'identity': neighbor.identity,
+                'platform': neighbor.platform,
+                'interface': neighbor.interface_name or neighbor.interface,
             }
 
     return {

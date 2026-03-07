@@ -139,3 +139,58 @@ Supports: device onboarding, connection test, periodic sync, VLAN/subnet/IP impo
 - Device deletion no longer fails due to linked run objects:
   - `MikroTikSyncRun.device` is nullable with `SET_NULL`;
   - historical runs stay readable and no longer block deleting the parent device.
+
+---
+
+## MikroTik target-based discovery refactor – Milestone 3
+
+### Scope
+
+Replaced the old device-first onboarding (`Save and test`, per-device credentials, test-mode sync runs) with target-based discovery using one global credential profile.
+
+### Changes
+
+- Added singleton `MikroTikIntegrationSettings` with global username/password and retention days.
+- Added `MikroTikTarget` inventory (IPv4-only, unique host, endpoint source of truth).
+- Added `MikroTikDiscoveryRun` and `MikroTikDiscoveryResult` for batch onboarding history.
+- Refactored runtime so sync and discovery both use global credentials from settings.
+- Removed per-device credentials and obsolete onboarding fields/logic:
+  - removed per-device `username` / `password_encrypted`
+  - removed `Save and test` workflow
+  - removed `custom_port` flow + JS
+  - removed `is_gateway_router` onboarding question
+  - removed advanced-controls reveal tied to first test success
+- Converted `MikroTikSyncRun` to sync-only (removed `TEST` mode).
+- Added host uniqueness at DB level for `MikroTikDevice` and `MikroTikTarget`.
+- Added batch discovery execution:
+  - one active discovery run globally
+  - max 100 selected targets
+  - one task per run with bounded internal concurrency (`max_workers=10`)
+  - incremental result/counter updates for live admin refresh
+- Added identity-conflict blocking (`conflicting_device` link on discovery result).
+- Added automatic first sync scheduling immediately after discovery success.
+- Added MikroTik run retention pruning driven by settings retention days.
+- Integrated coarse periodic `prune_jobs` execution into existing `worker_manager` loop (no new scheduler/service).
+
+### Admin/UI
+
+- Integrations sidebar now includes:
+  - MikroTik settings
+  - MikroTik targets
+  - MikroTik discovery runs
+  - MikroTik devices
+  - MikroTik sync runs
+  - MikroTik VLANs
+  - MikroTik subnets
+- Target changelist is the primary onboarding entry point with queryset bulk discovery action.
+- Discovery run change form now embeds live related results and auto-refreshes while active.
+- Device admin is now post-onboarding only:
+  - no add permission
+  - readonly endpoint diagnostics
+  - link back to linked target
+  - manual `Sync now` retained
+
+### Data/migrations
+
+- Reset `ipam` migration baseline to the new architecture (`0001_initial` + `0002_enable_pgcrypto`).
+- Removed dead MikroTik onboarding schema paths from migrations.

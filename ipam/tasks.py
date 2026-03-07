@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
+from ipaddress import ip_address
 import re
 import socket
 import subprocess
@@ -8,7 +9,32 @@ from django.db import transaction
 from django.tasks import task
 from django.utils import timezone
 
-from .models import IPAMSettings, IPAddress, JobRun, MikroTikDevice, MikroTikSyncRun, Subnet
+from .integrations.mikrotik_client import (
+    MikroTikAuthError,
+    MikroTikConnectionError,
+    MikroTikForbiddenError,
+    MikroTikHTTPError,
+    MikroTikTLSError,
+    MikroTikTimeoutError,
+)
+from .integrations.mikrotik_sync import (
+    collect_target_metadata,
+    is_routeros_v7,
+    load_global_credentials,
+    run_device_sync,
+    sanitize_detail_message,
+)
+from .models import (
+    IPAMSettings,
+    IPAddress,
+    JobRun,
+    MikroTikDevice,
+    MikroTikDiscoveryResult,
+    MikroTikDiscoveryRun,
+    MikroTikSyncRun,
+    MikroTikTarget,
+    Subnet,
+)
 
 
 ACTIVE_JOB_STATUSES = (
@@ -16,10 +42,27 @@ ACTIVE_JOB_STATUSES = (
     JobRun.Status.RUNNING,
 )
 
+MIKROTIK_SYNC_ACTIVE_STATUSES = (
+    MikroTikSyncRun.Status.SCHEDULED,
+    MikroTikSyncRun.Status.RUNNING,
+)
+
+MIKROTIK_DISCOVERY_ACTIVE_STATUSES = (
+    MikroTikDiscoveryRun.Status.SCHEDULED,
+    MikroTikDiscoveryRun.Status.RUNNING,
+)
+
+MIKROTIK_DISCOVERY_MAX_TARGETS = 100
+MIKROTIK_DISCOVERY_MAX_WORKERS = 10
+
 
 def _normalize_schedule_time(value):
     return value.replace(microsecond=0)
 
+
+# =====================================================================
+# Subnet scan scheduling
+# =====================================================================
 
 def _enqueue_job_run(job_run):
     if job_run.task_ref:
@@ -321,8 +364,6 @@ def run_subnet_scan(job_run_id: int):
                 status=JobRun.Status.SKIPPED_GUARDRAIL,
                 finished_at=timezone.now(),
             )
-            # We keep rescheduling here so oversized subnets remain visible as
-            # intentionally skipped until an operator fixes or disables them.
             schedule_next_subnet_scan(completed_job, completed_job.finished_at)
             return
 
@@ -350,14 +391,606 @@ def run_subnet_scan(job_run_id: int):
 
 
 # =====================================================================
-# MikroTik sync scheduling
+# MikroTik discovery scheduling + execution
 # =====================================================================
 
-MIKROTIK_ACTIVE_STATUSES = (
-    MikroTikSyncRun.Status.SCHEDULED,
-    MikroTikSyncRun.Status.RUNNING,
-)
+def schedule_mikrotik_discovery_for_targets(target_queryset, *, created_by=None):
+    target_ids = list(target_queryset.values_list('pk', flat=True))
+    if not target_ids:
+        return None, 'Select at least one target to run discovery.'
 
+    if len(target_ids) > MIKROTIK_DISCOVERY_MAX_TARGETS:
+        return (
+            None,
+            f'You can select at most {MIKROTIK_DISCOVERY_MAX_TARGETS} targets per run.',
+        )
+
+    with transaction.atomic():
+        active_run = (
+            MikroTikDiscoveryRun.objects.select_for_update()
+            .filter(status__in=MIKROTIK_DISCOVERY_ACTIVE_STATUSES)
+            .order_by('created_at')
+            .first()
+        )
+        if active_run is not None:
+            return (
+                None,
+                f'Discovery run #{active_run.pk} is already active. Wait for completion.',
+            )
+
+        targets = list(
+            MikroTikTarget.objects.select_for_update()
+            .filter(pk__in=target_ids)
+            .order_by('pk')
+        )
+        if not targets:
+            return None, 'No valid targets found for discovery.'
+
+        created_by_user = (
+            created_by
+            if getattr(created_by, 'is_authenticated', False)
+            else None
+        )
+
+        run = MikroTikDiscoveryRun.objects.create(
+            status=MikroTikDiscoveryRun.Status.SCHEDULED,
+            created_by=created_by_user,
+            total_targets=len(targets),
+        )
+
+        MikroTikDiscoveryResult.objects.bulk_create(
+            [
+                MikroTikDiscoveryResult(
+                    run=run,
+                    target=target,
+                    status=MikroTikDiscoveryResult.Status.SCHEDULED,
+                    action_taken=MikroTikDiscoveryResult.ActionTaken.NONE,
+                )
+                for target in targets
+            ]
+        )
+
+    run = _enqueue_mikrotik_discovery_run(run)
+    return run, None
+
+
+def _enqueue_mikrotik_discovery_run(run: MikroTikDiscoveryRun) -> MikroTikDiscoveryRun:
+    if run.task_ref:
+        return run
+
+    task_result = run_mikrotik_discovery.using(run_after=timezone.now()).enqueue(
+        discovery_run_id=run.pk
+    )
+    run.task_ref = str(task_result.id)
+    run.save(update_fields=('task_ref',))
+    return run
+
+
+def _map_discovery_exception(exc: Exception) -> tuple[str, str]:
+    message = sanitize_detail_message(str(exc))
+
+    if isinstance(exc, MikroTikTimeoutError):
+        return MikroTikDiscoveryResult.ReasonCode.TIMEOUT, message
+    if isinstance(exc, MikroTikTLSError):
+        return MikroTikDiscoveryResult.ReasonCode.TLS_ERROR, message
+    if isinstance(exc, MikroTikAuthError):
+        return MikroTikDiscoveryResult.ReasonCode.AUTH_FAILED, message
+    if isinstance(exc, MikroTikForbiddenError):
+        return MikroTikDiscoveryResult.ReasonCode.FORBIDDEN, message
+    if isinstance(exc, MikroTikHTTPError):
+        return MikroTikDiscoveryResult.ReasonCode.HTTP_ERROR, message
+    if isinstance(exc, MikroTikConnectionError):
+        if 'refused' in message.lower():
+            return MikroTikDiscoveryResult.ReasonCode.CONNECTION_REFUSED, message
+        return MikroTikDiscoveryResult.ReasonCode.CONNECTION_ERROR, message
+
+    return MikroTikDiscoveryResult.ReasonCode.UNEXPECTED_ERROR, message
+
+
+def _probe_target(
+    *,
+    result_id: int,
+    target_id: int,
+    host: str,
+    scheme: str,
+    port: int,
+    verify_tls: bool,
+    username: str,
+    password: str,
+) -> dict:
+    try:
+        ip_address(host)
+    except ValueError:
+        return {
+            'result_id': result_id,
+            'target_id': target_id,
+            'ok': False,
+            'reason_code': MikroTikDiscoveryResult.ReasonCode.INVALID_TARGET,
+            'detail_message': 'Target host must be a valid IPv4 address.',
+            'status': MikroTikDiscoveryResult.Status.FAILED,
+            'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+        }
+
+    try:
+        identity, resource = collect_target_metadata(
+            host=host,
+            scheme=scheme,
+            port=port,
+            verify_tls=verify_tls,
+            username=username,
+            password=password,
+        )
+    except Exception as exc:  # noqa: BLE001 - normalized into reason codes below
+        reason_code, message = _map_discovery_exception(exc)
+        return {
+            'result_id': result_id,
+            'target_id': target_id,
+            'ok': False,
+            'reason_code': reason_code,
+            'detail_message': message,
+            'status': MikroTikDiscoveryResult.Status.FAILED,
+            'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+        }
+
+    version = (resource or {}).get('version', '')
+    if not is_routeros_v7(version):
+        return {
+            'result_id': result_id,
+            'target_id': target_id,
+            'ok': False,
+            'reason_code': MikroTikDiscoveryResult.ReasonCode.UNSUPPORTED_ROUTEROS,
+            'detail_message': sanitize_detail_message(
+                f'Unsupported RouterOS version "{version}". Only RouterOS v7 is supported.'
+            ),
+            'status': MikroTikDiscoveryResult.Status.FAILED,
+            'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+            'seen_identity': (identity or {}).get('name', ''),
+            'seen_version': version,
+            'seen_board': (resource or {}).get('board-name', ''),
+            'seen_platform': (resource or {}).get('platform', ''),
+        }
+
+    return {
+        'result_id': result_id,
+        'target_id': target_id,
+        'ok': True,
+        'seen_identity': (identity or {}).get('name', ''),
+        'seen_version': version,
+        'seen_board': (resource or {}).get('board-name', ''),
+        'seen_platform': (resource or {}).get('platform', ''),
+    }
+
+
+def _update_target_discovery_state(
+    target: MikroTikTarget,
+    *,
+    status: str,
+    reason_code: str,
+    detail_message: str,
+    seen_identity: str = '',
+    seen_version: str = '',
+    seen_board: str = '',
+    seen_platform: str = '',
+) -> None:
+    target.last_discovered_at = timezone.now()
+    target.last_discovery_status = status
+    target.last_reason_code = reason_code
+    target.last_message = detail_message
+    target.last_seen_identity = seen_identity
+    target.last_seen_version = seen_version
+    target.last_seen_board = seen_board
+    target.last_seen_platform = seen_platform
+    target.save(update_fields=[
+        'last_discovered_at',
+        'last_discovery_status',
+        'last_reason_code',
+        'last_message',
+        'last_seen_identity',
+        'last_seen_version',
+        'last_seen_board',
+        'last_seen_platform',
+    ])
+
+
+def _apply_discovery_failure(outcome: dict) -> dict:
+    with transaction.atomic():
+        result = MikroTikDiscoveryResult.objects.select_for_update().get(
+            pk=outcome['result_id']
+        )
+        target = (
+            MikroTikTarget.objects.select_for_update()
+            .filter(pk=outcome['target_id'])
+            .first()
+        )
+
+        reason_code = outcome['reason_code']
+        status = outcome.get('status', MikroTikDiscoveryResult.Status.FAILED)
+        detail_message = sanitize_detail_message(outcome.get('detail_message', ''))
+
+        result.status = status
+        result.reason_code = reason_code
+        result.detail_message = detail_message
+        result.seen_identity = outcome.get('seen_identity', '')
+        result.seen_version = outcome.get('seen_version', '')
+        result.seen_board = outcome.get('seen_board', '')
+        result.seen_platform = outcome.get('seen_platform', '')
+        result.action_taken = outcome.get(
+            'action_taken', MikroTikDiscoveryResult.ActionTaken.NONE
+        )
+        result.finished_at = timezone.now()
+        result.save(update_fields=[
+            'status',
+            'reason_code',
+            'detail_message',
+            'seen_identity',
+            'seen_version',
+            'seen_board',
+            'seen_platform',
+            'action_taken',
+            'finished_at',
+        ])
+
+        if target is not None:
+            _update_target_discovery_state(
+                target,
+                status=status,
+                reason_code=reason_code,
+                detail_message=detail_message,
+                seen_identity=result.seen_identity,
+                seen_version=result.seen_version,
+                seen_board=result.seen_board,
+                seen_platform=result.seen_platform,
+            )
+
+    return {'status': status, 'action_taken': result.action_taken}
+
+
+def _apply_discovery_success(outcome: dict) -> dict:
+    with transaction.atomic():
+        result = MikroTikDiscoveryResult.objects.select_for_update().get(
+            pk=outcome['result_id']
+        )
+        target = MikroTikTarget.objects.select_for_update().get(pk=outcome['target_id'])
+
+        seen_identity = outcome.get('seen_identity', '')
+        seen_version = outcome.get('seen_version', '')
+        seen_board = outcome.get('seen_board', '')
+        seen_platform = outcome.get('seen_platform', '')
+
+        conflicting_device = None
+        if seen_identity:
+            conflicting_device = (
+                MikroTikDevice.objects.filter(last_seen_identity=seen_identity)
+                .exclude(host=target.host)
+                .order_by('pk')
+                .first()
+            )
+
+        if conflicting_device is not None:
+            message = sanitize_detail_message(
+                f'Identity "{seen_identity}" already belongs to device {conflicting_device.host}. '
+                'Manual resolution required before retrying discovery.'
+            )
+
+            result.status = MikroTikDiscoveryResult.Status.BLOCKED
+            result.reason_code = MikroTikDiscoveryResult.ReasonCode.IDENTITY_CONFLICT
+            result.detail_message = message
+            result.seen_identity = seen_identity
+            result.seen_version = seen_version
+            result.seen_board = seen_board
+            result.seen_platform = seen_platform
+            result.action_taken = MikroTikDiscoveryResult.ActionTaken.BLOCKED_MANUAL_RESOLUTION
+            result.conflicting_device = conflicting_device
+            result.finished_at = timezone.now()
+            result.save(update_fields=[
+                'status',
+                'reason_code',
+                'detail_message',
+                'seen_identity',
+                'seen_version',
+                'seen_board',
+                'seen_platform',
+                'action_taken',
+                'conflicting_device',
+                'finished_at',
+            ])
+
+            _update_target_discovery_state(
+                target,
+                status=MikroTikTarget.LastStatus.BLOCKED,
+                reason_code=MikroTikDiscoveryResult.ReasonCode.IDENTITY_CONFLICT,
+                detail_message=message,
+                seen_identity=seen_identity,
+                seen_version=seen_version,
+                seen_board=seen_board,
+                seen_platform=seen_platform,
+            )
+
+            return {
+                'status': MikroTikDiscoveryResult.Status.BLOCKED,
+                'action_taken': MikroTikDiscoveryResult.ActionTaken.BLOCKED_MANUAL_RESOLUTION,
+            }
+
+        device = MikroTikDevice.objects.filter(host=target.host).first()
+        created = device is None
+        changed = False
+
+        if device is None:
+            device = MikroTikDevice(
+                host=target.host,
+                scheme=target.scheme,
+                port=target.port,
+                verify_tls=target.verify_tls,
+                enabled=True,
+                sync_enabled=True,
+            )
+            changed = True
+        else:
+            if device.scheme != target.scheme:
+                device.scheme = target.scheme
+                changed = True
+            if device.port != target.port:
+                device.port = target.port
+                changed = True
+            if device.verify_tls != target.verify_tls:
+                device.verify_tls = target.verify_tls
+                changed = True
+            if not device.enabled:
+                device.enabled = True
+                changed = True
+            if not device.sync_enabled:
+                device.sync_enabled = True
+                changed = True
+
+        if not device.name:
+            desired_name = seen_identity or target.host
+            if device.name != desired_name:
+                device.name = desired_name
+                changed = True
+
+        for field_name, value in (
+            ('last_seen_identity', seen_identity),
+            ('last_seen_version', seen_version),
+            ('last_seen_board', seen_board),
+            ('last_seen_platform', seen_platform),
+        ):
+            if getattr(device, field_name) != value:
+                setattr(device, field_name, value)
+                changed = True
+
+        if device.last_error:
+            device.last_error = ''
+            changed = True
+
+        if created or changed:
+            device.save()
+
+        action_taken = MikroTikDiscoveryResult.ActionTaken.REUSED_EXISTING_DEVICE
+        if created:
+            action_taken = MikroTikDiscoveryResult.ActionTaken.CREATED_DEVICE
+        elif changed:
+            action_taken = MikroTikDiscoveryResult.ActionTaken.UPDATED_EXISTING_DEVICE
+
+        target.linked_device = device
+        target.save(update_fields=['linked_device'])
+        _update_target_discovery_state(
+            target,
+            status=MikroTikTarget.LastStatus.SUCCESS,
+            reason_code='',
+            detail_message='Discovery succeeded.',
+            seen_identity=seen_identity,
+            seen_version=seen_version,
+            seen_board=seen_board,
+            seen_platform=seen_platform,
+        )
+
+        result.status = MikroTikDiscoveryResult.Status.SUCCESS
+        result.reason_code = ''
+        result.detail_message = 'Discovery succeeded.'
+        result.seen_identity = seen_identity
+        result.seen_version = seen_version
+        result.seen_board = seen_board
+        result.seen_platform = seen_platform
+        result.action_taken = action_taken
+        result.linked_device = device
+        result.conflicting_device = None
+        result.finished_at = timezone.now()
+        result.save(update_fields=[
+            'status',
+            'reason_code',
+            'detail_message',
+            'seen_identity',
+            'seen_version',
+            'seen_board',
+            'seen_platform',
+            'action_taken',
+            'linked_device',
+            'conflicting_device',
+            'finished_at',
+        ])
+
+    schedule_mikrotik_sync_now(device)
+    return {'status': result.status, 'action_taken': action_taken}
+
+
+def _increment_discovery_counters(run: MikroTikDiscoveryRun, status: str, action_taken: str) -> None:
+    if status == MikroTikDiscoveryResult.Status.SUCCESS:
+        run.success_count += 1
+    elif status == MikroTikDiscoveryResult.Status.BLOCKED:
+        run.blocked_count += 1
+    else:
+        run.failed_count += 1
+
+    if action_taken == MikroTikDiscoveryResult.ActionTaken.CREATED_DEVICE:
+        run.created_count += 1
+    elif action_taken == MikroTikDiscoveryResult.ActionTaken.UPDATED_EXISTING_DEVICE:
+        run.updated_count += 1
+    elif action_taken == MikroTikDiscoveryResult.ActionTaken.REUSED_EXISTING_DEVICE:
+        run.reused_count += 1
+
+    run.save(update_fields=[
+        'success_count',
+        'failed_count',
+        'blocked_count',
+        'created_count',
+        'updated_count',
+        'reused_count',
+    ])
+
+
+def _finalize_discovery_run(run: MikroTikDiscoveryRun) -> None:
+    if run.success_count == run.total_targets and run.total_targets > 0:
+        run.status = MikroTikDiscoveryRun.Status.SUCCESS
+    elif run.success_count > 0:
+        run.status = MikroTikDiscoveryRun.Status.PARTIAL
+    else:
+        run.status = MikroTikDiscoveryRun.Status.FAILED
+
+    run.finished_at = timezone.now()
+    run.save(update_fields=['status', 'finished_at'])
+
+
+@task
+def run_mikrotik_discovery(discovery_run_id: int):
+    with transaction.atomic():
+        run = MikroTikDiscoveryRun.objects.select_for_update().get(pk=discovery_run_id)
+        if run.status != MikroTikDiscoveryRun.Status.SCHEDULED:
+            return
+
+        run.status = MikroTikDiscoveryRun.Status.RUNNING
+        run.started_at = timezone.now()
+        run.save(update_fields=['status', 'started_at'])
+
+    results = list(
+        MikroTikDiscoveryResult.objects.filter(run=run)
+        .select_related('target')
+        .order_by('pk')
+    )
+
+    if not results:
+        run.refresh_from_db()
+        run.status = MikroTikDiscoveryRun.Status.FAILED
+        run.finished_at = timezone.now()
+        run.save(update_fields=['status', 'finished_at'])
+        return
+
+    try:
+        username, password = load_global_credentials()
+    except Exception as exc:  # noqa: BLE001 - normalized below
+        reason_code, detail_message = _map_discovery_exception(exc)
+        for result in results:
+            outcome = {
+                'result_id': result.pk,
+                'target_id': result.target_id,
+                'reason_code': reason_code,
+                'detail_message': detail_message,
+                'status': MikroTikDiscoveryResult.Status.FAILED,
+                'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+            }
+            counters = _apply_discovery_failure(outcome)
+            run.refresh_from_db(fields=[
+                'success_count',
+                'failed_count',
+                'blocked_count',
+                'created_count',
+                'updated_count',
+                'reused_count',
+            ])
+            _increment_discovery_counters(
+                run,
+                counters['status'],
+                counters['action_taken'],
+            )
+
+        run.refresh_from_db()
+        _finalize_discovery_run(run)
+        return
+
+    futures = {}
+    max_workers = min(MIKROTIK_DISCOVERY_MAX_WORKERS, len(results))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for result in results:
+            target = result.target
+            if target is None:
+                counters = _apply_discovery_failure(
+                    {
+                        'result_id': result.pk,
+                        'target_id': result.target_id,
+                        'reason_code': MikroTikDiscoveryResult.ReasonCode.INVALID_TARGET,
+                        'detail_message': 'Target was deleted before discovery started.',
+                        'status': MikroTikDiscoveryResult.Status.FAILED,
+                        'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+                    }
+                )
+                run.refresh_from_db(fields=[
+                    'success_count',
+                    'failed_count',
+                    'blocked_count',
+                    'created_count',
+                    'updated_count',
+                    'reused_count',
+                ])
+                _increment_discovery_counters(run, counters['status'], counters['action_taken'])
+                continue
+
+            result.status = MikroTikDiscoveryResult.Status.RUNNING
+            result.started_at = timezone.now()
+            result.save(update_fields=['status', 'started_at'])
+
+            future = executor.submit(
+                _probe_target,
+                result_id=result.pk,
+                target_id=target.pk,
+                host=target.host,
+                scheme=target.scheme,
+                port=target.port,
+                verify_tls=target.verify_tls,
+                username=username,
+                password=password,
+            )
+            futures[future] = result.pk
+
+        for future in as_completed(futures):
+            try:
+                outcome = future.result()
+            except Exception as exc:  # noqa: BLE001 - worker safety
+                reason_code, detail_message = _map_discovery_exception(exc)
+                outcome = {
+                    'result_id': futures[future],
+                    'target_id': None,
+                    'reason_code': reason_code,
+                    'detail_message': detail_message,
+                    'status': MikroTikDiscoveryResult.Status.FAILED,
+                    'action_taken': MikroTikDiscoveryResult.ActionTaken.NONE,
+                }
+
+            if outcome.get('ok'):
+                counters = _apply_discovery_success(outcome)
+            else:
+                counters = _apply_discovery_failure(outcome)
+
+            run.refresh_from_db(fields=[
+                'success_count',
+                'failed_count',
+                'blocked_count',
+                'created_count',
+                'updated_count',
+                'reused_count',
+            ])
+            _increment_discovery_counters(
+                run,
+                counters['status'],
+                counters['action_taken'],
+            )
+
+    run.refresh_from_db()
+    _finalize_discovery_run(run)
+
+
+# =====================================================================
+# MikroTik sync scheduling
+# =====================================================================
 
 def schedule_mikrotik_sync_now(device):
     """Schedule an immediate sync for the given device."""
@@ -368,17 +1001,7 @@ def schedule_mikrotik_sync_now(device):
     )
 
 
-def schedule_mikrotik_test_now(device):
-    """Schedule an immediate connection test for the given device."""
-    device_id = device.pk if isinstance(device, MikroTikDevice) else int(device)
-    return _schedule_mikrotik_test_at(
-        device_id=device_id,
-        scheduled_for=_normalize_schedule_time(timezone.now()),
-    )
-
-
 def _schedule_mikrotik_sync_at(device_id, scheduled_for):
-    """Create a MikroTikSyncRun at a specific time, guarding against duplicates."""
     with transaction.atomic():
         device = MikroTikDevice.objects.select_for_update().get(pk=device_id)
         if not device.enabled:
@@ -388,8 +1011,7 @@ def _schedule_mikrotik_sync_at(device_id, scheduled_for):
             MikroTikSyncRun.objects.select_for_update()
             .filter(
                 device=device,
-                mode=MikroTikSyncRun.Mode.SYNC,
-                status__in=MIKROTIK_ACTIVE_STATUSES,
+                status__in=MIKROTIK_SYNC_ACTIVE_STATUSES,
             )
             .order_by('scheduled_for')
             .first()
@@ -399,42 +1021,13 @@ def _schedule_mikrotik_sync_at(device_id, scheduled_for):
 
         sync_run = MikroTikSyncRun.objects.create(
             device=device,
-            mode=MikroTikSyncRun.Mode.SYNC,
             status=MikroTikSyncRun.Status.SCHEDULED,
             scheduled_for=scheduled_for,
         )
         return _enqueue_mikrotik_sync_run(sync_run)
 
 
-def _schedule_mikrotik_test_at(device_id, scheduled_for):
-    """Create a MikroTik test run at a specific time, guarding against duplicates."""
-    with transaction.atomic():
-        device = MikroTikDevice.objects.select_for_update().get(pk=device_id)
-
-        existing = (
-            MikroTikSyncRun.objects.select_for_update()
-            .filter(
-                device=device,
-                mode=MikroTikSyncRun.Mode.TEST,
-                status__in=MIKROTIK_ACTIVE_STATUSES,
-            )
-            .order_by('scheduled_for')
-            .first()
-        )
-        if existing is not None:
-            return _enqueue_mikrotik_test_run(existing)
-
-        sync_run = MikroTikSyncRun.objects.create(
-            device=device,
-            mode=MikroTikSyncRun.Mode.TEST,
-            status=MikroTikSyncRun.Status.SCHEDULED,
-            scheduled_for=scheduled_for,
-        )
-        return _enqueue_mikrotik_test_run(sync_run)
-
-
 def schedule_next_mikrotik_sync(device, finished_at):
-    """Schedule the next periodic sync after a completed run."""
     with transaction.atomic():
         device = MikroTikDevice.objects.select_for_update().get(pk=device.pk)
         if not device.enabled or not device.sync_enabled:
@@ -444,8 +1037,7 @@ def schedule_next_mikrotik_sync(device, finished_at):
             MikroTikSyncRun.objects.select_for_update()
             .filter(
                 device=device,
-                mode=MikroTikSyncRun.Mode.SYNC,
-                status__in=MIKROTIK_ACTIVE_STATUSES,
+                status__in=MIKROTIK_SYNC_ACTIVE_STATUSES,
             )
             .order_by('scheduled_for')
             .first()
@@ -458,7 +1050,6 @@ def schedule_next_mikrotik_sync(device, finished_at):
         )
         sync_run = MikroTikSyncRun.objects.create(
             device=device,
-            mode=MikroTikSyncRun.Mode.SYNC,
             status=MikroTikSyncRun.Status.SCHEDULED,
             scheduled_for=scheduled_for,
         )
@@ -466,7 +1057,6 @@ def schedule_next_mikrotik_sync(device, finished_at):
 
 
 def _enqueue_mikrotik_sync_run(sync_run):
-    """Attach a django-tasks task to the sync run if not already enqueued."""
     if sync_run.task_ref:
         return sync_run
 
@@ -478,61 +1068,18 @@ def _enqueue_mikrotik_sync_run(sync_run):
     return sync_run
 
 
-def _enqueue_mikrotik_test_run(sync_run):
-    """Attach a django-tasks task to the test run if not already enqueued."""
-    if sync_run.task_ref:
-        return sync_run
-
-    task_result = run_mikrotik_test.using(
-        run_after=sync_run.scheduled_for,
-    ).enqueue(sync_run_id=sync_run.pk)
-    sync_run.task_ref = str(task_result.id)
-    sync_run.save(update_fields=('task_ref',))
-    return sync_run
-
-
 def _fail_mikrotik_run(sync_run, error_message):
     sync_run.status = MikroTikSyncRun.Status.FAILED
-    sync_run.error_message = error_message[:2000]
+    sync_run.error_message = sanitize_detail_message(error_message, max_len=2000)
     sync_run.finished_at = timezone.now()
     sync_run.save(update_fields=('status', 'error_message', 'finished_at'))
 
 
 @task
-def run_mikrotik_test(sync_run_id: int):
-    """Execute a MikroTik connection test run."""
-    from .integrations.mikrotik_sync import run_device_test
-
-    with transaction.atomic():
-        sync_run = MikroTikSyncRun.objects.select_for_update().get(pk=sync_run_id)
-        if (
-            sync_run.mode != MikroTikSyncRun.Mode.TEST
-            or sync_run.status != MikroTikSyncRun.Status.SCHEDULED
-        ):
-            return
-
-    device = sync_run.device
-    if device is None:
-        _fail_mikrotik_run(
-            sync_run,
-            'Device was deleted before the connection test started.',
-        )
-        return
-
-    run_device_test(device, sync_run=sync_run)
-
-
-@task
 def run_mikrotik_sync(sync_run_id: int):
-    """Execute a MikroTik sync run."""
-    from .integrations.mikrotik_sync import run_device_sync
-
     with transaction.atomic():
         sync_run = MikroTikSyncRun.objects.select_for_update().get(pk=sync_run_id)
-        if (
-            sync_run.mode != MikroTikSyncRun.Mode.SYNC
-            or sync_run.status != MikroTikSyncRun.Status.SCHEDULED
-        ):
+        if sync_run.status != MikroTikSyncRun.Status.SCHEDULED:
             return
 
     device = sync_run.device
@@ -552,6 +1099,7 @@ def run_mikrotik_sync(sync_run_id: int):
         sync_run.refresh_from_db()
         if device.sync_enabled and device.enabled:
             schedule_next_mikrotik_sync(
-                device, sync_run.finished_at or timezone.now()
+                device,
+                sync_run.finished_at or timezone.now(),
             )
         raise

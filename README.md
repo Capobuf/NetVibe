@@ -21,6 +21,12 @@ Minimal Django + Unfold + PostgreSQL development setup with Docker Compose.
    python -c "import secrets; print(secrets.token_urlsafe(50))"
    ```
 
+3. Set the pgcrypto key used for MikroTik credential encryption:
+
+   ```env
+   NETVIBE_PGCRYPTO_KEY=change-me-to-a-real-secret
+   ```
+
 ## Start (normal)
 
 ```powershell
@@ -33,10 +39,22 @@ Then run:
 docker compose exec web python manage.py migrate
 ```
 
-The site is served at http://127.0.0.1:8000 and the admin is at http://127.0.0.1:8000/admin/.
+The site and admin are served at `http://127.0.0.1:8001` (`/admin/` for admin).
 For local development, a default admin account is available with username `admin` and password `admin`.
-After migrating, the admin sidebar includes an `IPAM` group with `VLANs` and a nested `Subnets` link.
-When `DJANGO_DEBUG=1`, `django-debug-toolbar` is enabled at http://127.0.0.1:8000/__debug__/.
+
+## Greenfield reset (canonical schema path)
+
+Use this when you want a fully clean database with no preserved dev data.
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py showmigrations ipam
+docker compose exec web python manage.py test ipam
+```
+
+This is the canonical setup path for a fresh environment. No manual SQL and no `schema_editor` patching are required.
 
 ## Start (debug)
 
@@ -46,59 +64,102 @@ docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build
 
 Then attach from VS Code using the included `Python: Attach (Docker)` launch configuration.
 
-## Project constraints
+## Runtime constraints
 
-- No Node.js, npm, yarn, pnpm, or frontend build step
-- Only two containers: `web` and `db`
-- PostgreSQL is always used, with development-only dependencies kept in `requirements-dev.txt`
+- Stack stays Django + Unfold + PostgreSQL + existing worker process
+- No Node.js/npm/yarn/pnpm or frontend build pipeline
+- Docker Compose runs three services: `web`, `db`, `worker`
 
-## MikroTik integration
+## MikroTik integration operator flow
 
-### Environment
+Admin sidebar under **Integrations** includes:
 
-Add `NETVIBE_PGCRYPTO_KEY` to your `.env` file. This key is used to encrypt MikroTik device passwords at rest via PostgreSQL's `pgcrypto` extension. **Use a strong, unique value in production.**
-
-```env
-NETVIBE_PGCRYPTO_KEY=change-me-to-a-real-secret
-```
-
-### Setup
-
-After rebuilding the containers and running migrations:
-
-```powershell
-docker compose up --build
-docker compose exec web python manage.py migrate
-```
-
-The admin sidebar now includes an **Integrations** group with:
+- MikroTik settings
+- MikroTik targets
+- MikroTik discovery runs
 - MikroTik devices
 - MikroTik sync runs
-- MikroTik VLANs (filtered view of imported VLANs)
-- MikroTik subnets (filtered view of imported subnets)
+- MikroTik VLANs
+- MikroTik subnets
 
-### Adding a device
+### 1. Configure global credentials
 
-1. Navigate to **Integrations → MikroTik devices → Add**
-2. Enter the minimum onboarding fields (host/IP, scheme, port, username, password, gateway flag)
-3. Click **Save and test** to save immediately and schedule a background connection test
-4. Refresh the change page to see test result, detected identity/version, and any error details
-5. After first successful contact, advanced sync/import/authority settings become available
-6. Use the **Sync now** action on the device detail page to trigger a full sync
+Open **Integrations -> MikroTik settings** and configure:
 
-### Running tests
+- global username
+- global password (write-only)
+- run retention days
+
+### 2. Add discovery targets
+
+Open **Integrations -> MikroTik targets** and add one IPv4 endpoint per row:
+
+- host (IPv4 only)
+- scheme (`https` or `http`)
+- port
+- verify TLS
+
+Default onboarding target values: `https`, `443`, `verify_tls=False`.
+
+### 3. Run discovery for selected targets
+
+In the target changelist, select one or more rows and execute the action:
+
+- `Run discovery for selected targets`
+
+This creates one discovery batch run, pre-creates per-target result rows, enqueues one background task, and redirects to the run detail page.
+
+### 4. Watch live run progress
+
+On the discovery run detail page:
+
+- the page auto-refreshes while status is `scheduled` or `running`
+- a live related results table is embedded on the same page
+- a direct link opens the filtered full results list
+
+### 5. Outcome behavior
+
+On success, discovery automatically:
+
+- creates or updates `MikroTikDevice` by host
+- copies endpoint config from target to device
+- updates detected metadata
+- links target to device
+- schedules first full sync immediately
+
+On failure or blocked conflict:
+
+- target remains available for retry
+- result stores concise reason and message
+- identity conflicts are blocked for manual resolution (no merge wizard)
+
+### 6. Operate devices after onboarding
+
+Open **MikroTik devices** only for operational tuning:
+
+- sync interval
+- import flags
+- authority flags
+- status diagnostics
+
+Endpoint fields on devices are readonly diagnostics.
+Endpoint edits belong to **MikroTik targets**; rerunning discovery overwrites device endpoint fields from target values.
+
+## Running tests
 
 ```powershell
 docker compose exec web python manage.py test ipam
 ```
 
-### Verification
+## Verification
 
-After a successful sync, check:
-- **MikroTik VLANs**: shows imported VLANs with source device, upstream state, and sync toggle
-- **MikroTik subnets**: shows imported subnets with interface name, upstream state, and scan toggles
-- **IP addresses**: MikroTik-sourced IPs show lease kind, DHCP server, and provenance fields
-- **MikroTik sync runs**: each test/sync is logged with counters and diagnostics
+After sync completes, check:
+
+- **MikroTik VLANs**: imported VLANs, source device, upstream state, sync toggle
+- **MikroTik subnets**: imported subnets, interface name, upstream state, scan toggle
+- **IP addresses**: MikroTik provenance, lease fields, sync state
+- **MikroTik sync runs**: sync-only run history and diagnostics
+- **MikroTik discovery runs/results**: per-target onboarding outcomes
 
 ## Translations
 

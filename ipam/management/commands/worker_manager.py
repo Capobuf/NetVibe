@@ -15,12 +15,14 @@ class Command(BaseCommand):
     poll_interval_seconds = 15
     worker_interval_seconds = 5
     shutdown_timeout_seconds = 10
+    prune_interval_seconds = 3600
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._stop_requested = False
         self._worker_index = 0
         self._workers = {}
+        self._next_prune_at = 0.0
 
     def handle(self, *args, **options):
         signal.signal(signal.SIGTERM, self._request_stop)
@@ -30,6 +32,7 @@ class Command(BaseCommand):
             while not self._stop_requested:
                 self._reap_workers()
                 self._reconcile_workers()
+                self._run_periodic_prune_if_due()
                 time.sleep(self.poll_interval_seconds)
         finally:
             self._stop_all_workers()
@@ -105,3 +108,29 @@ class Command(BaseCommand):
     def _stop_all_workers(self):
         for worker_name in list(self._workers):
             self._stop_worker(worker_name)
+
+    def _run_periodic_prune_if_due(self):
+        now_monotonic = time.monotonic()
+        if now_monotonic < self._next_prune_at:
+            return
+
+        self._next_prune_at = now_monotonic + self.prune_interval_seconds
+
+        completed = subprocess.run(
+            [
+                sys.executable,
+                'manage.py',
+                'prune_jobs',
+            ],
+            cwd=str(settings.BASE_DIR),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if completed.returncode != 0:
+            self.stdout.write(
+                self.style.WARNING(
+                    'Periodic prune_jobs execution failed: '
+                    f'{(completed.stderr or completed.stdout or "").strip()}'
+                )
+            )

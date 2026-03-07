@@ -525,70 +525,43 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
         )
 
         with transaction.atomic():
-            existing = IPAddress.objects.filter(
+            canonical_ip, was_created = _upsert_canonical_ip_from_observation(
+                device=device,
                 subnet=subnet,
                 address=addr_str,
-            ).first()
-
-            if existing is not None:
-                existing.lease_kind = lease_kind
-                existing.lease_status = lease.status
-                existing.lease_server_name = lease.server
-                existing.source_observed_at = now
-                existing.last_synced_at = now
-                existing.sync_state = SyncState.LIVE
-                existing.source_job_id = job_id
-                existing.source_trace_id = trace_id
-                existing.last_seen = now
-                existing.save(update_fields=[
-                    'lease_kind',
-                    'lease_status',
-                    'lease_server_name',
-                    'source_observed_at',
-                    'last_synced_at',
-                    'sync_state',
-                    'source_job_id',
-                    'source_trace_id',
-                    'last_seen',
-                ])
-                _maybe_create_hostname_conflict_review(
-                    device=device,
-                    subnet=subnet,
-                    canonical_ip=existing,
-                    observed_hostname=hostname,
-                )
-                _maybe_create_mac_conflict_review(
-                    device=device,
-                    subnet=subnet,
-                    canonical_ip=existing,
-                    observed_mac_address=mac,
-                )
-                updated += 1
-            else:
-                created_ip = IPAddress.objects.create(
-                    subnet=subnet,
-                    address=addr_str,
-                    mac_address='',
-                    hostname='',
-                    source_kind=SourceKind.MIKROTIK,
-                    source_device=device,
-                    source_remote_id=remote_id,
-                    source_job_id=job_id,
-                    source_trace_id=trace_id,
-                    source_observed_at=now,
-                    last_synced_at=now,
-                    sync_state=SyncState.LIVE,
-                    lease_kind=lease_kind,
-                    lease_status=lease.status,
-                    lease_server_name=lease.server,
-                    last_seen=now,
-                )
+                remote_id=remote_id,
+                now=now,
+                trace_id=trace_id,
+                job_id=job_id,
+                existing_updates={
+                    'lease_kind': lease_kind,
+                    'lease_status': lease.status,
+                    'lease_server_name': lease.server,
+                },
+                create_defaults={
+                    'mac_address': '',
+                    'hostname': '',
+                    'lease_kind': lease_kind,
+                    'lease_status': lease.status,
+                    'lease_server_name': lease.server,
+                },
+            )
+            if was_created:
                 _upsert_new_ip_observed_review(
                     device=device,
                     subnet=subnet,
-                    canonical_ip=created_ip,
+                    canonical_ip=canonical_ip,
                 )
                 created += 1
+            else:
+                _upsert_conflict_reviews_for_observed_identity(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=canonical_ip,
+                    observed_hostname=hostname,
+                    observed_mac_address=mac,
+                )
+                updated += 1
 
     return {'ips_created': created, 'ips_updated': updated}
 
@@ -640,55 +613,34 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
         )
 
         with transaction.atomic():
-            existing = IPAddress.objects.filter(
+            canonical_ip, was_created = _upsert_canonical_ip_from_observation(
+                device=device,
                 subnet=subnet,
                 address=arp.address,
-            ).first()
-
-            if existing is not None:
-                existing.source_observed_at = now
-                existing.last_synced_at = now
-                existing.sync_state = SyncState.LIVE
-                existing.source_job_id = job_id
-                existing.source_trace_id = trace_id
-                existing.last_seen = now
-                existing.save(update_fields=[
-                    'source_observed_at',
-                    'last_synced_at',
-                    'sync_state',
-                    'source_job_id',
-                    'source_trace_id',
-                    'last_seen',
-                ])
-                _maybe_create_mac_conflict_review(
-                    device=device,
-                    subnet=subnet,
-                    canonical_ip=existing,
-                    observed_mac_address=mac,
-                )
-                updated += 1
-            else:
-                created_ip = IPAddress.objects.create(
-                    subnet=subnet,
-                    address=arp.address,
-                    mac_address='',
-                    source_kind=SourceKind.MIKROTIK,
-                    source_device=device,
-                    source_remote_id=remote_id,
-                    source_job_id=job_id,
-                    source_trace_id=trace_id,
-                    source_observed_at=now,
-                    last_synced_at=now,
-                    sync_state=SyncState.LIVE,
-                    lease_kind=IPAddress.LeaseKind.NONE,
-                    last_seen=now,
-                )
+                remote_id=remote_id,
+                now=now,
+                trace_id=trace_id,
+                job_id=job_id,
+                create_defaults={
+                    'mac_address': '',
+                    'lease_kind': IPAddress.LeaseKind.NONE,
+                },
+            )
+            if was_created:
                 _upsert_new_ip_observed_review(
                     device=device,
                     subnet=subnet,
-                    canonical_ip=created_ip,
+                    canonical_ip=canonical_ip,
                 )
                 created += 1
+            else:
+                _upsert_conflict_reviews_for_observed_identity(
+                    device=device,
+                    subnet=subnet,
+                    canonical_ip=canonical_ip,
+                    observed_mac_address=mac,
+                )
+                updated += 1
 
     return {'ips_created': created, 'ips_updated': updated}
 
@@ -736,6 +688,96 @@ def _build_observed_summary(snapshot: MikroTikSnapshotResultV1) -> dict:
         'neighbors': list(unique_neighbors.values())[:50],
         'arp_entry_count': len(snapshot.arp_entries),
     }
+
+
+def _save_canonical_ip_operational_updates(
+    canonical_ip: IPAddress,
+    *,
+    now,
+    trace_id: str,
+    job_id: str,
+    extra_updates: dict | None = None,
+) -> None:
+    update_values = {
+        'source_observed_at': now,
+        'last_synced_at': now,
+        'sync_state': SyncState.LIVE,
+        'source_job_id': job_id,
+        'source_trace_id': trace_id,
+        'last_seen': now,
+    }
+    if extra_updates:
+        update_values.update(extra_updates)
+    for field_name, field_value in update_values.items():
+        setattr(canonical_ip, field_name, field_value)
+    canonical_ip.save(update_fields=list(update_values.keys()))
+
+
+def _upsert_canonical_ip_from_observation(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    address: str,
+    remote_id: str,
+    now,
+    trace_id: str,
+    job_id: str,
+    existing_updates: dict | None = None,
+    create_defaults: dict | None = None,
+) -> tuple[IPAddress, bool]:
+    existing = IPAddress.objects.filter(
+        subnet=subnet,
+        address=address,
+    ).first()
+    if existing is not None:
+        _save_canonical_ip_operational_updates(
+            existing,
+            now=now,
+            trace_id=trace_id,
+            job_id=job_id,
+            extra_updates=existing_updates,
+        )
+        return existing, False
+
+    created = IPAddress.objects.create(
+        subnet=subnet,
+        address=address,
+        source_kind=SourceKind.MIKROTIK,
+        source_device=device,
+        source_remote_id=remote_id,
+        source_job_id=job_id,
+        source_trace_id=trace_id,
+        source_observed_at=now,
+        last_synced_at=now,
+        sync_state=SyncState.LIVE,
+        last_seen=now,
+        **(create_defaults or {}),
+    )
+    return created, True
+
+
+def _upsert_conflict_reviews_for_observed_identity(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    canonical_ip: IPAddress,
+    observed_hostname: str = '',
+    observed_mac_address: str = '',
+) -> None:
+    if observed_hostname:
+        _maybe_create_hostname_conflict_review(
+            device=device,
+            subnet=subnet,
+            canonical_ip=canonical_ip,
+            observed_hostname=observed_hostname,
+        )
+    if observed_mac_address:
+        _maybe_create_mac_conflict_review(
+            device=device,
+            subnet=subnet,
+            canonical_ip=canonical_ip,
+            observed_mac_address=observed_mac_address,
+        )
 
 
 def _upsert_ip_observation(

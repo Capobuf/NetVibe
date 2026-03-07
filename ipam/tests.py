@@ -64,6 +64,25 @@ def create_mikrotik_settings(username='admin', password='secret-pass', retention
     return settings_obj
 
 
+def passthrough(value):
+    return value
+
+
+def mikrotik_metadata(name, version, board_name, platform='MikroTik'):
+    return (
+        {'name': name},
+        {'version': version, 'board-name': board_name, 'platform': platform},
+    )
+
+
+def create_admin_user(username):
+    return get_user_model().objects.create_superuser(
+        username=username,
+        email=f'{username}@example.com',
+        password='test-pass-123',
+    )
+
+
 class MikroTikSettingsTests(TestCase):
     def test_singleton_admin_add_permission(self):
         settings_admin = admin.site._registry[MikroTikIntegrationSettings]
@@ -147,17 +166,40 @@ class MikroTikDiscoveryFlowTests(TestCase):
             for host in hosts
         ]
 
+    def _schedule_discovery(self, queryset):
+        with patch(
+            'ipam.tasks._enqueue_mikrotik_discovery_run',
+            side_effect=passthrough,
+        ):
+            return schedule_mikrotik_discovery_for_targets(
+                queryset,
+                created_by=None,
+            )
+
+    def _run_discovery_with_metadata(self, run_pk, *, name, version, board_name):
+        with patch(
+            'ipam.tasks.collect_target_metadata',
+            return_value=mikrotik_metadata(name, version, board_name),
+        ), patch('ipam.tasks.schedule_mikrotik_sync_now') as schedule_sync_mock:
+            run_mikrotik_discovery.call(run_pk)
+        return schedule_sync_mock
+
+    def _run_discovery_with_sync_enqueue(self, run_pk, *, name, version, board_name):
+        with patch(
+            'ipam.tasks.collect_target_metadata',
+            return_value=mikrotik_metadata(name, version, board_name),
+        ), patch(
+            'ipam.tasks._enqueue_mikrotik_sync_run',
+            side_effect=passthrough,
+        ):
+            run_mikrotik_discovery.call(run_pk)
+
     def test_bulk_scheduler_creates_discovery_run_and_precreates_results(self):
         t1, t2 = self._create_targets('10.10.0.1', '10.10.0.2')
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, error = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk__in=[t1.pk, t2.pk]),
-                created_by=None,
-            )
+        run, error = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk__in=[t1.pk, t2.pk]),
+        )
 
         self.assertIsNone(error)
         self.assertIsNotNone(run)
@@ -181,14 +223,9 @@ class MikroTikDiscoveryFlowTests(TestCase):
             total_targets=1,
         )
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, error = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
+        run, error = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
 
         self.assertIsNone(run)
         self.assertIn('already active', error)
@@ -196,14 +233,9 @@ class MikroTikDiscoveryFlowTests(TestCase):
     def test_discovery_success_creates_device_and_schedules_first_sync(self):
         target = self._create_targets('10.12.0.1')[0]
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
+        run, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
 
         self.assertEqual(
             MikroTikDiscoveryResult.objects.filter(
@@ -213,14 +245,12 @@ class MikroTikDiscoveryFlowTests(TestCase):
             1,
         )
 
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-12'},
-                {'version': '7.15.2', 'board-name': 'RB5009', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now') as schedule_sync_mock:
-            run_mikrotik_discovery.call(run.pk)
+        schedule_sync_mock = self._run_discovery_with_metadata(
+            run.pk,
+            name='RTR-12',
+            version='7.15.2',
+            board_name='RB5009',
+        )
 
         run.refresh_from_db()
         target.refresh_from_db()
@@ -237,23 +267,15 @@ class MikroTikDiscoveryFlowTests(TestCase):
     def test_rerun_updates_same_device_and_propagates_target_endpoint_config(self):
         target = self._create_targets('10.13.0.1')[0]
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run_one, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-13'},
-                {'version': '7.14.1', 'board-name': 'RB4011', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now'):
-            run_mikrotik_discovery.call(run_one.pk)
+        run_one, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_metadata(
+            run_one.pk,
+            name='RTR-13',
+            version='7.14.1',
+            board_name='RB4011',
+        )
 
         device = MikroTikDevice.objects.get(host='10.13.0.1')
         device_pk = device.pk
@@ -263,23 +285,15 @@ class MikroTikDiscoveryFlowTests(TestCase):
         target.verify_tls = True
         target.save()
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run_two, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-13'},
-                {'version': '7.16', 'board-name': 'RB4011', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now'):
-            run_mikrotik_discovery.call(run_two.pk)
+        run_two, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_metadata(
+            run_two.pk,
+            name='RTR-13',
+            version='7.16',
+            board_name='RB4011',
+        )
 
         device.refresh_from_db()
         self.assertEqual(device.pk, device_pk)
@@ -291,50 +305,28 @@ class MikroTikDiscoveryFlowTests(TestCase):
     def test_rerun_does_not_create_duplicate_sync_run_when_one_is_active(self):
         target = self._create_targets('10.13.0.20')[0]
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run_one, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-13-20'},
-                {'version': '7.17', 'board-name': 'RB5009', 'platform': 'MikroTik'},
-            ),
-        ), patch(
-            'ipam.tasks._enqueue_mikrotik_sync_run',
-            side_effect=lambda run: run,
-        ):
-            run_mikrotik_discovery.call(run_one.pk)
+        run_one, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_sync_enqueue(
+            run_one.pk,
+            name='RTR-13-20',
+            version='7.17',
+            board_name='RB5009',
+        )
 
         device = MikroTikDevice.objects.get(host='10.13.0.20')
         self.assertEqual(MikroTikSyncRun.objects.filter(device=device).count(), 1)
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run_two, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-13-20'},
-                {'version': '7.17.1', 'board-name': 'RB5009', 'platform': 'MikroTik'},
-            ),
-        ), patch(
-            'ipam.tasks._enqueue_mikrotik_sync_run',
-            side_effect=lambda run: run,
-        ):
-            run_mikrotik_discovery.call(run_two.pk)
+        run_two, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_sync_enqueue(
+            run_two.pk,
+            name='RTR-13-20',
+            version='7.17.1',
+            board_name='RB5009',
+        )
 
         self.assertEqual(MikroTikSyncRun.objects.filter(device=device).count(), 1)
 
@@ -346,23 +338,15 @@ class MikroTikDiscoveryFlowTests(TestCase):
         )
         target = MikroTikTarget.objects.create(host='10.13.0.30', linked_device=device)
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-13-30'},
-                {'version': '7.17', 'board-name': 'RB4011', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now'):
-            run_mikrotik_discovery.call(run.pk)
+        run, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_metadata(
+            run.pk,
+            name='RTR-13-30',
+            version='7.17',
+            board_name='RB4011',
+        )
 
         device.refresh_from_db()
         self.assertEqual(device.last_successful_sync_at, old_sync_time)
@@ -370,23 +354,15 @@ class MikroTikDiscoveryFlowTests(TestCase):
     def test_non_v7_routeros_is_blocked_as_failed(self):
         target = self._create_targets('10.14.0.1')[0]
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-14'},
-                {'version': '6.49.8', 'board-name': 'RB750', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now'):
-            run_mikrotik_discovery.call(run.pk)
+        run, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_metadata(
+            run.pk,
+            name='RTR-14',
+            version='6.49.8',
+            board_name='RB750',
+        )
 
         result = MikroTikDiscoveryResult.objects.get(run=run, target=target)
         self.assertEqual(result.status, MikroTikDiscoveryResult.Status.FAILED)
@@ -403,23 +379,15 @@ class MikroTikDiscoveryFlowTests(TestCase):
         )
         target = self._create_targets('10.15.0.20')[0]
 
-        with patch(
-            'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
-        ):
-            run, _ = schedule_mikrotik_discovery_for_targets(
-                MikroTikTarget.objects.filter(pk=target.pk),
-                created_by=None,
-            )
-
-        with patch(
-            'ipam.tasks.collect_target_metadata',
-            return_value=(
-                {'name': 'RTR-CONFLICT'},
-                {'version': '7.12', 'board-name': 'RB5009', 'platform': 'MikroTik'},
-            ),
-        ), patch('ipam.tasks.schedule_mikrotik_sync_now'):
-            run_mikrotik_discovery.call(run.pk)
+        run, _ = self._schedule_discovery(
+            MikroTikTarget.objects.filter(pk=target.pk),
+        )
+        self._run_discovery_with_metadata(
+            run.pk,
+            name='RTR-CONFLICT',
+            version='7.12',
+            board_name='RB5009',
+        )
 
         result = MikroTikDiscoveryResult.objects.get(run=run, target=target)
         self.assertEqual(result.status, MikroTikDiscoveryResult.Status.BLOCKED)
@@ -442,11 +410,7 @@ class MikroTikAdminTests(TestCase):
         self.factory = RequestFactory()
 
     def test_target_admin_queryset_action_redirects_to_run(self):
-        user = get_user_model().objects.create_superuser(
-            username='admin-action',
-            email='admin-action@example.com',
-            password='test-pass-123',
-        )
+        user = create_admin_user('admin-action')
         target = MikroTikTarget.objects.create(host='10.20.0.1')
         model_admin = admin.site._registry[MikroTikTarget]
 
@@ -456,7 +420,7 @@ class MikroTikAdminTests(TestCase):
 
         with patch(
             'ipam.tasks._enqueue_mikrotik_discovery_run',
-            side_effect=lambda run: run,
+            side_effect=passthrough,
         ):
             response = model_admin.run_discovery_for_selected_targets(
                 request,
@@ -515,11 +479,7 @@ class MikroTikAdminTests(TestCase):
 class AdminNavigationTests(TestCase):
     def setUp(self):
         create_mikrotik_settings()
-        self.user = get_user_model().objects.create_superuser(
-            username='admin-nav',
-            email='admin-nav@example.com',
-            password='test-pass-123',
-        )
+        self.user = create_admin_user('admin-nav')
         self.client.force_login(self.user)
 
     def test_discovery_overview_page_is_reachable(self):

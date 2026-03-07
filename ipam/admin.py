@@ -846,13 +846,20 @@ def _admin_datetime(value):
     return timezone.localtime(value).strftime('%Y-%m-%d %H:%M:%S')
 
 
-def discovery_overview_view(request):
+def _admin_url(view_name, *, args=None, query=None):
+    url = reverse(view_name, args=args or (), current_app=admin.site.name)
+    if not query:
+        return url
+    return f'{url}?{urlencode(query)}'
+
+
+def _build_failed_sync_run_entries():
     failed_sync_runs = list(
         MikroTikSyncRun.objects.filter(status=MikroTikSyncRun.Status.FAILED)
         .select_related('device')
         .order_by('-scheduled_for', '-pk')[:5]
     )
-    latest_failed_sync_runs = [
+    return [
         {
             'id': run.pk,
             'device_label': (
@@ -862,102 +869,100 @@ def discovery_overview_view(request):
             ),
             'scheduled_for': _admin_datetime(run.scheduled_for),
             'error_message': Truncator(run.error_message).chars(140) or '-',
-            'change_url': reverse(
-                'admin:ipam_mikrotiksyncrun_change',
-                args=(run.pk,),
-                current_app=admin.site.name,
-            ),
+            'change_url': _admin_url('admin:ipam_mikrotiksyncrun_change', args=(run.pk,)),
         }
         for run in failed_sync_runs
     ]
 
-    conflicts_filter = {
+
+def _discovery_conflicts_filter():
+    return {
         'status__exact': MikroTikDiscoveryResult.Status.BLOCKED,
         'reason_code__exact': MikroTikDiscoveryResult.ReasonCode.IDENTITY_CONFLICT,
     }
 
-    quick_links = [
+
+def _build_discovery_quick_links():
+    quick_link_specs = (
+        ('Targets', 'Manage onboarding endpoints.', 'admin:ipam_mikrotiktarget_changelist'),
+        ('Devices', 'Tune sync behavior for onboarded devices.', 'admin:ipam_mikrotikdevice_changelist'),
+        (
+            'Discovery runs',
+            'Review onboarding batches and statuses.',
+            'admin:ipam_mikrotikdiscoveryrun_changelist',
+        ),
+        ('Sync runs', 'Inspect synchronization history and errors.', 'admin:ipam_mikrotiksyncrun_changelist'),
+        (
+            'MikroTik settings',
+            'Update integration credentials and retention.',
+            'admin:ipam_mikrotikintegrationsettings_changelist',
+        ),
+        ('Review queue', 'Review conflicts, new IPs, and failures.', 'admin:ipam_reviewitem_changelist'),
+    )
+    return [
         {
-            'title': _('Targets'),
-            'description': _('Manage onboarding endpoints.'),
-            'url': reverse('admin:ipam_mikrotiktarget_changelist'),
+            'title': _(title),
+            'description': _(description),
+            'url': _admin_url(url_name),
+        }
+        for title, description, url_name in quick_link_specs
+    ]
+
+
+def _build_discovery_overview_cards(conflicts_filter):
+    return [
+        {
+            'title': _('Total MikroTik targets'),
+            'headline': str(MikroTikTarget.objects.count()),
+            'footer': _('Configured discovery endpoints'),
         },
         {
-            'title': _('Devices'),
-            'description': _('Tune sync behavior for onboarded devices.'),
-            'url': reverse('admin:ipam_mikrotikdevice_changelist'),
+            'title': _('Linked/onboarded devices'),
+            'headline': str(
+                MikroTikTarget.objects.exclude(linked_device__isnull=True).count()
+            ),
+            'footer': _('Targets already linked to a device'),
         },
         {
-            'title': _('Discovery runs'),
-            'description': _('Review onboarding batches and statuses.'),
-            'url': reverse('admin:ipam_mikrotikdiscoveryrun_changelist'),
+            'title': _('Active discovery runs'),
+            'headline': str(
+                MikroTikDiscoveryRun.objects.filter(
+                    status__in=(
+                        MikroTikDiscoveryRun.Status.SCHEDULED,
+                        MikroTikDiscoveryRun.Status.RUNNING,
+                    )
+                ).count()
+            ),
+            'footer': _('Runs currently scheduled or running'),
         },
         {
-            'title': _('Sync runs'),
-            'description': _('Inspect synchronization history and errors.'),
-            'url': reverse('admin:ipam_mikrotiksyncrun_changelist'),
-        },
-        {
-            'title': _('MikroTik settings'),
-            'description': _('Update integration credentials and retention.'),
-            'url': reverse('admin:ipam_mikrotikintegrationsettings_changelist'),
-        },
-        {
-            'title': _('Review queue'),
-            'description': _('Review conflicts, new IPs, and failures.'),
-            'url': reverse('admin:ipam_reviewitem_changelist'),
+            'title': _('Blocked discovery conflicts'),
+            'headline': str(
+                MikroTikDiscoveryResult.objects.filter(**conflicts_filter).count()
+            ),
+            'footer': _('Identity conflicts requiring manual resolution'),
         },
     ]
+
+
+def discovery_overview_view(request):
+    conflicts_filter = _discovery_conflicts_filter()
 
     context = {
         **admin.site.each_context(request),
         'title': _('Discovery overview'),
         'subtitle': None,
-        'overview_cards': [
-            {
-                'title': _('Total MikroTik targets'),
-                'headline': str(MikroTikTarget.objects.count()),
-                'footer': _('Configured discovery endpoints'),
-            },
-            {
-                'title': _('Linked/onboarded devices'),
-                'headline': str(
-                    MikroTikTarget.objects.exclude(linked_device__isnull=True).count()
-                ),
-                'footer': _('Targets already linked to a device'),
-            },
-            {
-                'title': _('Active discovery runs'),
-                'headline': str(
-                    MikroTikDiscoveryRun.objects.filter(
-                        status__in=(
-                            MikroTikDiscoveryRun.Status.SCHEDULED,
-                            MikroTikDiscoveryRun.Status.RUNNING,
-                        )
-                    ).count()
-                ),
-                'footer': _('Runs currently scheduled or running'),
-            },
-            {
-                'title': _('Blocked discovery conflicts'),
-                'headline': str(
-                    MikroTikDiscoveryResult.objects.filter(**conflicts_filter).count()
-                ),
-                'footer': _('Identity conflicts requiring manual resolution'),
-            },
-        ],
-        'latest_failed_sync_runs': latest_failed_sync_runs,
-        'latest_failed_sync_runs_url': (
-            reverse('admin:ipam_mikrotiksyncrun_changelist')
-            + '?'
-            + urlencode({'status__exact': MikroTikSyncRun.Status.FAILED})
+        'overview_cards': _build_discovery_overview_cards(conflicts_filter),
+        'latest_failed_sync_runs': _build_failed_sync_run_entries(),
+        'latest_failed_sync_runs_url': _admin_url(
+            'admin:ipam_mikrotiksyncrun_changelist',
+            query={'status__exact': MikroTikSyncRun.Status.FAILED},
         ),
-        'blocked_conflicts_url': (
-            reverse('admin:ipam_mikrotikdiscoveryresult_changelist')
-            + '?'
-            + urlencode(conflicts_filter)
+        'blocked_conflicts_url': _admin_url(
+            'admin:ipam_mikrotikdiscoveryresult_changelist',
+            query=conflicts_filter,
         ),
-        'quick_links': quick_links,
+        'quick_links': _build_discovery_quick_links(),
     }
     return TemplateResponse(request, 'admin/ipam/discovery_overview.html', context)
 

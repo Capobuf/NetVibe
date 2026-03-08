@@ -1,5 +1,20 @@
 {% extends "admin/base_site.html" %}
 {% load i18n unfold %}
+{% comment %}
+Purpose:
+- Render the discovery operations overview dashboard in Django admin.
+
+Expected context:
+- overview_cards
+- quick_links
+- latest_failed_sync_runs
+- latest_failed_sync_runs_url
+- blocked_conflicts_url
+
+Constraints:
+- Keep server-rendered and translation-friendly.
+- Do not add business logic; data shaping belongs to admin Python code.
+{% endcomment %}
 
 {% block content %}
 {% trans "Quick links" as quick_links_title %}

@@ -1,4 +1,17 @@
 {% load i18n unfold %}
+{% comment %}
+Purpose:
+- Render read-first IP overview cards above the admin change form.
+
+Expected context:
+- ip_overview_header
+- ip_overview_primary_cards
+- ip_overview_operational_card
+
+Constraints:
+- Keep this block presentation-only.
+- Preserve card structure expected by the IP admin overview workflow.
+{% endcomment %}
 {% if ip_overview_header %}
 <div class="mb-6">
     {% trans "Panoramica IP" as ip_overview_title %}

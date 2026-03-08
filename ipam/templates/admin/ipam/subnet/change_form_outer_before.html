@@ -1,4 +1,15 @@
 {% load i18n unfold %}
+{% comment %}
+Purpose:
+- Render subnet summary cards above the change form in overview mode.
+
+Expected context:
+- subnet_overview_cards
+
+Constraints:
+- Keep card content display-only.
+- Do not move aggregation logic here; compute values in SubnetAdmin.
+{% endcomment %}
 {% if subnet_overview_cards %}
 <div class="mb-8 grid gap-6 xl:grid-cols-3">
     {% for card in subnet_overview_cards %}

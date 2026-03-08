@@ -1,4 +1,15 @@
 {% load i18n %}
+{% comment %}
+Purpose:
+- Show live-run status notice and auto-refresh behavior for discovery runs.
+
+Expected context:
+- original (MikroTikDiscoveryRun instance)
+
+Constraints:
+- Refresh only while run status is scheduled/running.
+- Keep refresh interval stable to avoid noisy admin polling.
+{% endcomment %}
 {% if original and original.status == "scheduled" or original and original.status == "running" %}
 <div class="mb-6 rounded border px-4 py-3 text-sm">
     {% blocktrans with status=original.get_status_display %}Discovery run is {{ status }}. This page refreshes automatically every 5 seconds while active.{% endblocktrans %}

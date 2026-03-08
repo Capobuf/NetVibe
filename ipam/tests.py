@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
@@ -41,6 +42,8 @@ from .tasks import (
     schedule_mikrotik_discovery_for_targets,
 )
 
+TEST_NETVIBE_PGCRYPTO_KEY = 'netvibe-test-pgcrypto-key'
+
 
 def attach_request_messages(request):
     request.session = {}
@@ -54,7 +57,13 @@ def fake_enqueue(run_obj, task_ref='task-ref'):
     return run_obj
 
 
+def ensure_test_pgcrypto_key():
+    # Keep encryption-related tests independent from host/container .env files.
+    os.environ.setdefault('NETVIBE_PGCRYPTO_KEY', TEST_NETVIBE_PGCRYPTO_KEY)
+
+
 def create_mikrotik_settings(username='admin', password='secret-pass', retention_days=30):
+    ensure_test_pgcrypto_key()
     settings_obj = MikroTikIntegrationSettings(
         username=username,
         run_retention_days=retention_days,

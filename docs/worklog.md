@@ -35,3 +35,11 @@ The following previously documented claims were removed because they no longer m
 - DHCP/ARP synchronizations directly and silently overwriting canonical hostname/MAC.
 - Newly imported MikroTik subnets auto-enabling scans/discovery by default.
 - Sidebar architecture that treated all MikroTik operational lists as top-level primary entries.
+
+## Truthfulness and reproducibility cleanup (Prompt B)
+
+- README no longer claims a default `admin/admin` account; setup now states `createsuperuser`.
+- `.env.example` now explicitly states `.env` is local-only (gitignored) and that
+  `NETVIBE_PGCRYPTO_KEY` is required by `ipam/crypto.py`.
+- `ipam/tests.py` now sets a test-local fallback `NETVIBE_PGCRYPTO_KEY` before
+  encryption helpers are used, so IPAM tests do not rely on ambient host/container `.env`.

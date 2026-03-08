@@ -183,6 +183,17 @@ class VLANAdmin(ModelAdmin):
 
 @admin.register(IPAddress)
 class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
+    list_display = (
+        'status_badge',
+        'address_display',
+        'hostname_display',
+        'mac_address_display',
+        'latest_observed_hostname',
+        'latest_observed_mac_address',
+        'latest_observed_via',
+        'last_seen',
+        'notes_summary',
+    )
     fieldsets = (
         (
             _('Identity'),
@@ -228,6 +239,10 @@ class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
         django_models.TextField: {'widget': WysiwygWidget},
     }
     list_filter = ('subnet', 'status', 'exclude_ping')
+    search_help_text = _(
+        'Hostname and MAC are canonical IPAM values. '
+        'Observed columns show latest DHCP/ARP data.'
+    )
     readonly_fields = (
         'latest_observed_hostname',
         'latest_observed_mac_address',
@@ -265,6 +280,19 @@ class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
         if observation is None:
             return '-'
         return observation.observed_mac_address or '-'
+
+    @admin.display(description=_('Observed via'))
+    def latest_observed_via(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None:
+            return '-'
+
+        observed_via = []
+        if observation.observed_via_dhcp:
+            observed_via.append('DHCP')
+        if observation.observed_via_arp:
+            observed_via.append('ARP')
+        return ' + '.join(observed_via) if observed_via else '-'
 
     @admin.display(description=_('Observed lease'))
     def latest_observed_lease(self, obj):
@@ -398,6 +426,9 @@ class IPAMSettingsAdmin(ModelAdmin):
         (
             _('Thresholds'),
             {
+                'description': _(
+                    'Create this global settings record once, then update values as needed.'
+                ),
                 'fields': (
                     'warning_after_minutes',
                     'offline_after_minutes',
@@ -1050,7 +1081,7 @@ class MikroTikTargetAdmin(ModelAdmin):
     search_help_text = _(
         '1) Configure settings. 2) Add targets. 3) Select targets. 4) Run discovery.'
     )
-    list_fullwidth = True
+    list_fullwidth = False
     list_horizontal_scrollbar_top = True
     actions = ('run_discovery_for_selected_targets',)
     fieldsets = (

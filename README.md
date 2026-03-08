@@ -4,8 +4,8 @@ Minimal Django + Unfold + PostgreSQL development setup with Docker Compose.
 
 ## Prerequisites
 
-- Docker Desktop
-- VS Code
+- Docker Desktop (or Docker Engine + Docker Compose plugin)
+- Optional: VS Code for debugging with `docker-compose.debug.yml`
 
 ## Environment setup
 
@@ -14,6 +14,8 @@ Minimal Django + Unfold + PostgreSQL development setup with Docker Compose.
    ```powershell
    Copy-Item .env.example .env
    ```
+
+   `.env` is local-only and ignored by git.
 
 2. Generate a real Django secret key on the host and replace `DJANGO_SECRET_KEY` in `.env`:
 
@@ -27,6 +29,8 @@ Minimal Django + Unfold + PostgreSQL development setup with Docker Compose.
    NETVIBE_PGCRYPTO_KEY=change-me-to-a-real-secret
    ```
 
+   `NETVIBE_PGCRYPTO_KEY` is required by `ipam/crypto.py` for credential encrypt/decrypt.
+
 ## Start (normal)
 
 ```powershell
@@ -37,10 +41,10 @@ Then run:
 
 ```powershell
 docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
 ```
 
 The site and admin are served at `http://127.0.0.1:8001` (`/admin/` for admin).
-For local development, a default admin account is available with username `admin` and password `admin`.
 
 ## Greenfield reset (canonical schema path)
 
@@ -53,8 +57,6 @@ docker compose exec web python manage.py migrate
 docker compose exec web python manage.py showmigrations ipam
 docker compose exec web python manage.py test ipam
 ```
-
-This is the canonical setup path for a fresh environment. No manual SQL and no `schema_editor` patching are required.
 
 ## Start (debug)
 
@@ -172,8 +174,11 @@ Repeated occurrences update the same review item via `dedupe_key` instead of cre
 ## Running tests
 
 ```powershell
+docker compose exec web python manage.py check
 docker compose exec web python manage.py test ipam
 ```
+
+`ipam/tests.py` sets a test-local fallback `NETVIBE_PGCRYPTO_KEY` so encryption-related tests do not depend on ambient host `.env` state.
 
 ## Verification
 

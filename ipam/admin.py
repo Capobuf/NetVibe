@@ -329,6 +329,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         'edit_ip_settings',
         'back_to_subnet',
         'open_subnet_ip_list',
+        'open_history',
         'back_to_ip_overview',
     )
     list_display = (
@@ -344,7 +345,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
     )
     fieldsets = (
         (
-            _('Identity'),
+            _('Identità'),
             {
                 'fields': (
                     'subnet',
@@ -361,7 +362,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             },
         ),
         (
-            _('Notes'),
+            _('Note'),
             {
                 'fields': (
                     'note',
@@ -370,7 +371,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             },
         ),
         (
-            _('Latest observed data'),
+            _('Ultimi dati osservati'),
             {
                 'fields': (
                     (
@@ -392,8 +393,8 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
     }
     list_filter = ('subnet', 'status', 'exclude_ping')
     search_help_text = _(
-        'Hostname and MAC are canonical IPAM values. '
-        'Observed columns show latest DHCP/ARP data.'
+        'Hostname e MAC sono dati canonici IPAM. '
+        'Le colonne osservate mostrano gli ultimi dati DHCP/ARP.'
     )
     readonly_fields = (
         'latest_observed_hostname',
@@ -458,6 +459,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             ),
             'back_to_subnet',
             'open_subnet_ip_list',
+            'open_history',
         ]
         actions = [self.get_unfold_action(name) for name in action_names]
         return self._filter_unfold_actions_by_permissions(request, actions, object_id)
@@ -487,94 +489,141 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         reachability_labels = {
             'online': _('Online'),
             'offline': _('Offline'),
-            'unknown': _('Unknown'),
+            'unknown': _('Sconosciuta'),
         }
+        ip_status_labels = {
+            IPAddress.Status.IN_USE: _('In uso'),
+            IPAddress.Status.RESERVED: _('Riservato'),
+            IPAddress.Status.DEPRECATED: _('Deprecato'),
+        }
+        badge_classes = {
+            'success': (
+                'border-green-200 bg-green-50 text-green-800 '
+                'dark:border-green-700 dark:bg-green-900/30 dark:text-green-300'
+            ),
+            'warning': (
+                'border-amber-200 bg-amber-50 text-amber-800 '
+                'dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+            ),
+            'danger': (
+                'border-red-200 bg-red-50 text-red-800 '
+                'dark:border-red-700 dark:bg-red-900/30 dark:text-red-300'
+            ),
+            'neutral': (
+                'border-gray-200 bg-gray-50 text-gray-800 '
+                'dark:border-gray-700 dark:bg-gray-900/30 dark:text-gray-300'
+            ),
+        }
+        reachability_status = self._get_reachability_status(obj)
+        latest_observation = self._get_latest_observation(obj)
+        lease_kind = latest_observation.lease_kind if latest_observation else None
         subnet_change_url = reverse(
             f'admin:{Subnet._meta.app_label}_{Subnet._meta.model_name}_change',
             args=(obj.subnet_id,),
             current_app=self.admin_site.name,
         )
-        subnet_ip_list_url = self._get_subnet_ip_list_url(obj.subnet_id)
         vlan_label = _format_vlan_read_label(
             obj.subnet.vlan if obj.subnet.vlan_id else None,
-            empty_label=str(_('No VLAN assigned')),
+            empty_label=str(_('Nessuna VLAN assegnata')),
         )
         note = strip_tags(obj.note or '').strip()
 
         return {
-            'ip_overview_cards': [
+            'ip_overview_header': {
+                'ip_address': obj.address,
+                'context_items': [
+                    {
+                        'label': _('Sottorete'),
+                        'value': format_html(
+                            '<a href="{}">{}</a>',
+                            subnet_change_url,
+                            obj.subnet.cidr,
+                        ),
+                    },
+                    {'label': _('VLAN'), 'value': vlan_label},
+                ],
+                'badges': [
+                    {
+                        'label': _('Raggiungibilità'),
+                        'value': reachability_labels[reachability_status],
+                        'class': badge_classes.get(
+                            {
+                                'online': 'success',
+                                'offline': 'danger',
+                                'unknown': 'warning',
+                            }.get(reachability_status, 'neutral'),
+                            badge_classes['neutral'],
+                        ),
+                    },
+                    {
+                        'label': _('Stato IP'),
+                        'value': ip_status_labels.get(obj.status, obj.get_status_display()),
+                        'class': badge_classes.get(
+                            {
+                                IPAddress.Status.IN_USE: 'success',
+                                IPAddress.Status.RESERVED: 'warning',
+                                IPAddress.Status.DEPRECATED: 'neutral',
+                            }.get(obj.status, 'neutral'),
+                            badge_classes['neutral'],
+                        ),
+                    },
+                    {
+                        'label': _('Modalità lease'),
+                        'value': self.latest_observed_lease(obj),
+                        'class': badge_classes.get(
+                            {
+                                IPAddress.LeaseKind.NONE: 'neutral',
+                                IPAddress.LeaseKind.DHCP_DYNAMIC: 'warning',
+                                IPAddress.LeaseKind.DHCP_STATIC: 'success',
+                            }.get(lease_kind, 'neutral'),
+                            badge_classes['neutral'],
+                        ),
+                    },
+                ],
+            },
+            'ip_overview_primary_cards': [
                 {
-                    'title': _('Network'),
-                    'headline': obj.subnet.cidr,
+                    'title': _('Dati IPAM'),
                     'details': [
+                        {'label': _('Hostname canonico'), 'value': obj.hostname or '-'},
+                        {'label': _('MAC canonico'), 'value': obj.mac_address or '-'},
                         {
-                            'label': _('Subnet'),
-                            'value': format_html(
-                                '<a href="{}">{}</a>',
-                                subnet_change_url,
-                                obj.subnet.cidr,
-                            ),
+                            'label': _('Note'),
+                            'value': Truncator(note).chars(120) if note else '-',
                         },
-                        {'label': _('VLAN'), 'value': vlan_label},
-                        {
-                            'label': _('Lista IP'),
-                            'value': format_html(
-                                '<a href="{}">{}</a>',
-                                subnet_ip_list_url,
-                                _('Open subnet IP list'),
-                            ),
-                        },
+                        {'label': _('Tag'), 'value': self._format_tag_list(obj)},
                     ],
-                    'footer': _('Subnet and VLAN context'),
                 },
                 {
-                    'title': _('Canonical data'),
-                    'headline': obj.address,
-                    'details': [
-                        {'label': _('Status'), 'value': obj.get_status_display()},
-                        {'label': _('Hostname'), 'value': obj.hostname or '-'},
-                        {'label': _('MAC'), 'value': obj.mac_address or '-'},
-                        {'label': _('Tags'), 'value': self._format_tag_list(obj)},
-                        {
-                            'label': _('Notes'),
-                            'value': Truncator(note).chars(80) if note else '-',
-                        },
-                    ],
-                    'footer': _('MSP-owned canonical fields'),
-                },
-                {
-                    'title': _('Latest observed data'),
-                    'headline': self.latest_observed_lease(obj),
+                    'title': _('Ultimi dati osservati'),
                     'details': [
                         {
-                            'label': _('Observed hostname'),
+                            'label': _('Hostname osservato'),
                             'value': self.latest_observed_hostname(obj),
                         },
-                        {'label': _('Observed MAC'), 'value': self.latest_observed_mac_address(obj)},
-                        {'label': _('Observed via'), 'value': self.latest_observed_via(obj)},
-                        {'label': _('Observed lease'), 'value': self.latest_observed_lease(obj)},
+                        {'label': _('MAC osservato'), 'value': self.latest_observed_mac_address(obj)},
+                        {'label': _('Modalità lease'), 'value': self.latest_observed_lease(obj)},
                         {
                             'label': _('Commento lease'),
                             'value': self.latest_observed_lease_comment(obj),
                         },
-                        {'label': _('Observed at'), 'value': self.latest_observed_at(obj)},
-                        {'label': _('Observed from'), 'value': self.latest_observed_device(obj)},
+                        {'label': _('Osservato il'), 'value': self.latest_observed_at(obj)},
+                        {'label': _('Osservato da'), 'value': self.latest_observed_device(obj)},
                     ],
-                    'footer': _('Observed DHCP/ARP values'),
-                },
-                {
-                    'title': _('Reachability'),
-                    'headline': reachability_labels[self._get_reachability_status(obj)],
-                    'details': [
-                        {'label': _('Last seen'), 'value': _format_admin_last_seen(obj.last_seen)},
-                        {
-                            'label': _('Excluded from ping'),
-                            'value': _('Yes') if obj.exclude_ping else _('No'),
-                        },
-                    ],
-                    'footer': _('Operational reachability summary'),
                 },
             ],
+            'ip_overview_operational_card': {
+                'title': _('Stato operativo'),
+                'details': [
+                    {'label': _('Raggiungibilità'), 'value': reachability_labels[reachability_status]},
+                    {'label': _('Ultima rilevazione'), 'value': _format_admin_last_seen(obj.last_seen)},
+                    {
+                        'label': _('Escluso dal ping'),
+                        'value': _('Sì') if obj.exclude_ping else _('No'),
+                    },
+                    {'label': _('Stato IP'), 'value': ip_status_labels.get(obj.status, obj.get_status_display())},
+                ],
+            },
         }
 
     def _is_overview_mode(self, request):
@@ -601,11 +650,18 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         )
         return f'{changelist_url}?{urlencode({"subnet__id__exact": subnet_id})}'
 
+    def _get_history_url(self, object_id):
+        return reverse(
+            f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_history',
+            args=(object_id,),
+            current_app=self.admin_site.name,
+        )
+
     @action(description=_('Modifica IP'), icon='edit')
     def edit_ip_settings(self, request, object_id):
         return redirect(f'{self._get_change_url(object_id)}?mode=edit')
 
-    @action(description=_('Back to overview'), icon='visibility')
+    @action(description=_('Panoramica IP'), icon='visibility')
     def back_to_ip_overview(self, request, object_id):
         return redirect(self._get_change_url(object_id))
 
@@ -641,7 +697,11 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             return redirect(changelist_url)
         return redirect(self._get_subnet_ip_list_url(subnet_id))
 
-    @admin.display(description=_('Last seen'))
+    @action(description=_('Storia'), icon='history')
+    def open_history(self, request, object_id):
+        return redirect(self._get_history_url(object_id))
+
+    @admin.display(description=_('Ultima rilevazione'))
     def last_seen_display_readonly(self, obj):
         return _format_admin_last_seen(obj.last_seen)
 
@@ -661,21 +721,21 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         obj._latest_observation_cache = observation
         return observation
 
-    @admin.display(description=_('Observed hostname'))
+    @admin.display(description=_('Hostname osservato'))
     def latest_observed_hostname(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None:
             return '-'
         return observation.observed_hostname or '-'
 
-    @admin.display(description=_('Observed MAC'))
+    @admin.display(description=_('MAC osservato'))
     def latest_observed_mac_address(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None:
             return '-'
         return observation.observed_mac_address or '-'
 
-    @admin.display(description=_('Observed via'))
+    @admin.display(description=_('Osservato via'))
     def latest_observed_via(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None:
@@ -688,7 +748,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             observed_via.append('ARP')
         return ' + '.join(observed_via) if observed_via else '-'
 
-    @admin.display(description=_('Observed lease'))
+    @admin.display(description=_('Modalità lease'))
     def latest_observed_lease(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None:
@@ -709,7 +769,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         comment = str(payload.get('lease_comment') or payload.get('comment') or '').strip()
         return comment or '-'
 
-    @admin.display(description=_('Observed at'))
+    @admin.display(description=_('Osservato il'))
     def latest_observed_at(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None or observation.last_observed_at is None:
@@ -718,7 +778,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             '%Y-%m-%d %H:%M:%S'
         )
 
-    @admin.display(description=_('Observed from'))
+    @admin.display(description=_('Osservato da'))
     def latest_observed_device(self, obj):
         observation = self._get_latest_observation(obj)
         if observation is None or observation.mikrotik_device_id is None:

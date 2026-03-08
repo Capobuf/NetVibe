@@ -715,6 +715,9 @@ class AdminReadUXTests(TestCase):
         overview_response = self.client.get(change_url)
         self.assertEqual(overview_response.status_code, 200)
         self.assertNotContains(overview_response, 'name="_save"')
+        self.assertContains(overview_response, 'Dati IPAM')
+        self.assertContains(overview_response, 'Ultimi dati osservati')
+        self.assertContains(overview_response, 'Stato operativo')
 
         edit_response = self.client.get(f'{change_url}?mode=edit')
         self.assertEqual(edit_response.status_code, 200)
@@ -752,6 +755,22 @@ class AdminReadUXTests(TestCase):
             f'{reverse("admin:ipam_ipaddress_changelist")}?subnet__id__exact={subnet.pk}',
         )
 
+    def test_ip_admin_history_action_redirects_to_admin_history(self):
+        vlan = VLAN.objects.create(number=373, name='Infra')
+        subnet = Subnet.objects.create(cidr='10.37.3.0/24', vlan=vlan)
+        ip = IPAddress.objects.create(subnet=subnet, address='10.37.3.12')
+        ip_admin = admin.site._registry[IPAddress]
+        request = self.factory.get(reverse('admin:ipam_ipaddress_change', args=(ip.pk,)))
+        request.user = self.user
+
+        response = ip_admin.open_history(request, ip.pk)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse('admin:ipam_ipaddress_history', args=(ip.pk,)),
+        )
+
     def test_ip_overview_context_includes_tags_and_latest_observed_values(self):
         vlan = VLAN.objects.create(number=372, name='Users')
         subnet = Subnet.objects.create(cidr='10.37.2.0/24', vlan=vlan)
@@ -786,24 +805,25 @@ class AdminReadUXTests(TestCase):
         overview_context = ip_admin._get_overview_context(ip)
         canonical_card = next(
             card
-            for card in overview_context['ip_overview_cards']
-            if str(card['title']) == 'Canonical data'
+            for card in overview_context['ip_overview_primary_cards']
+            if str(card['title']) == 'Dati IPAM'
         )
         observed_card = next(
             card
-            for card in overview_context['ip_overview_cards']
-            if str(card['title']) == 'Latest observed data'
+            for card in overview_context['ip_overview_primary_cards']
+            if str(card['title']) == 'Ultimi dati osservati'
         )
+        operational_card = overview_context['ip_overview_operational_card']
 
         self.assertTrue(
             any(
-                str(item['label']) == 'Tags' and 'UX tag' in str(item['value'])
+                str(item['label']) == 'Tag' and 'UX tag' in str(item['value'])
                 for item in canonical_card['details']
             )
         )
         self.assertTrue(
             any(
-                str(item['label']) == 'Observed hostname'
+                str(item['label']) == 'Hostname osservato'
                 and str(item['value']) == 'observed-host'
                 for item in observed_card['details']
             )
@@ -815,6 +835,7 @@ class AdminReadUXTests(TestCase):
                 for item in observed_card['details']
             )
         )
+        self.assertEqual(str(operational_card['title']), 'Stato operativo')
 
 
 class MikroTikRetentionTests(TestCase):

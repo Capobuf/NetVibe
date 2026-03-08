@@ -1,20 +1,61 @@
 {% load i18n unfold %}
-{% if ip_overview_cards %}
-<div class="mb-8 grid gap-6 xl:grid-cols-3">
-    {% for card in ip_overview_cards %}
-        {% component "unfold/components/card.html" with title=card.title footer=card.footer %}
-            <div class="space-y-4">
-                <p class="text-2xl font-semibold">{{ card.headline }}</p>
-                <dl class="space-y-2">
-                    {% for item in card.details %}
-                        <div class="flex items-center justify-between gap-4 text-sm">
-                            <dt>{{ item.label }}</dt>
-                            <dd class="text-right">{{ item.value }}</dd>
+{% if ip_overview_header %}
+<div class="mb-6">
+    {% trans "Panoramica IP" as ip_overview_title %}
+    {% component "unfold/components/card.html" with title=ip_overview_title %}
+        <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div class="space-y-2">
+                <h2 class="text-3xl font-semibold">{{ ip_overview_header.ip_address }}</h2>
+                <dl class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                    {% for item in ip_overview_header.context_items %}
+                        <div class="flex items-center gap-2">
+                            <dt class="text-font-subtle-light dark:text-font-subtle-dark">{{ item.label }}:</dt>
+                            <dd>{{ item.value }}</dd>
                         </div>
                     {% endfor %}
                 </dl>
             </div>
+            <div class="flex flex-wrap gap-2 xl:max-w-md xl:justify-end">
+                {% for badge in ip_overview_header.badges %}
+                    <span class="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-medium {{ badge.class }}">
+                        <span class="text-font-subtle-light dark:text-font-subtle-dark">{{ badge.label }}</span>
+                        <span>{{ badge.value }}</span>
+                    </span>
+                {% endfor %}
+            </div>
+        </div>
+    {% endcomponent %}
+</div>
+{% endif %}
+
+{% if ip_overview_primary_cards %}
+<div class="mb-6 grid gap-6 xl:grid-cols-2">
+    {% for card in ip_overview_primary_cards %}
+        {% component "unfold/components/card.html" with title=card.title %}
+            <dl class="space-y-2">
+                {% for item in card.details %}
+                    <div class="flex items-center justify-between gap-4 text-sm">
+                        <dt>{{ item.label }}</dt>
+                        <dd class="text-right">{{ item.value }}</dd>
+                    </div>
+                {% endfor %}
+            </dl>
         {% endcomponent %}
     {% endfor %}
+</div>
+{% endif %}
+
+{% if ip_overview_operational_card %}
+<div class="mb-8 xl:max-w-3xl">
+    {% component "unfold/components/card.html" with title=ip_overview_operational_card.title %}
+        <dl class="space-y-2">
+            {% for item in ip_overview_operational_card.details %}
+                <div class="flex items-center justify-between gap-4 text-sm">
+                    <dt>{{ item.label }}</dt>
+                    <dd class="text-right">{{ item.value }}</dd>
+                </div>
+            {% endfor %}
+        </dl>
+    {% endcomponent %}
 </div>
 {% endif %}

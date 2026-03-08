@@ -378,6 +378,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
                     ),
                     (
                         'latest_observed_lease',
+                        'latest_observed_lease_comment',
                         'latest_observed_at',
                     ),
                     'latest_observed_device',
@@ -397,6 +398,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         'latest_observed_hostname',
         'latest_observed_mac_address',
         'latest_observed_lease',
+        'latest_observed_lease_comment',
         'latest_observed_at',
         'latest_observed_device',
     )
@@ -418,6 +420,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
                     'latest_observed_hostname',
                     'latest_observed_mac_address',
                     'latest_observed_lease',
+                    'latest_observed_lease_comment',
                     'latest_observed_at',
                     'latest_observed_device',
                 )
@@ -521,6 +524,18 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
                         {'label': _('Status'), 'value': obj.get_status_display()},
                     ],
                     'footer': _('Operational reachability summary'),
+                },
+                {
+                    'title': _('Observed DHCP'),
+                    'headline': self.latest_observed_lease(obj),
+                    'details': [
+                        {'label': _('Lease mode'), 'value': self.latest_observed_lease(obj)},
+                        {
+                            'label': _('Commento lease'),
+                            'value': self.latest_observed_lease_comment(obj),
+                        },
+                    ],
+                    'footer': _('Latest observed DHCP lease details'),
                 },
                 {
                     'title': _('Canonical data'),
@@ -633,14 +648,21 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         observation = self._get_latest_observation(obj)
         if observation is None:
             return '-'
-        if observation.lease_kind == IPAddress.LeaseKind.NONE:
+        lease_mode_labels = {
+            IPAddress.LeaseKind.NONE: _('Statico'),
+            IPAddress.LeaseKind.DHCP_DYNAMIC: _('Dinamico'),
+            IPAddress.LeaseKind.DHCP_STATIC: _('DHCP lease statico'),
+        }
+        return lease_mode_labels.get(observation.lease_kind, '-')
+
+    @admin.display(description=_('Commento lease'))
+    def latest_observed_lease_comment(self, obj):
+        observation = self._get_latest_observation(obj)
+        if observation is None:
             return '-'
-        parts = [observation.get_lease_kind_display()]
-        if observation.lease_status:
-            parts.append(observation.lease_status)
-        if observation.lease_server_name:
-            parts.append(observation.lease_server_name)
-        return ' | '.join(parts)
+        payload = observation.payload_json if isinstance(observation.payload_json, dict) else {}
+        comment = str(payload.get('lease_comment') or payload.get('comment') or '').strip()
+        return comment or '-'
 
     @admin.display(description=_('Observed at'))
     def latest_observed_at(self, obj):

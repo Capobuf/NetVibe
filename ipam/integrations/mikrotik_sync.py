@@ -569,6 +569,7 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
 
         mac = (lease.active_mac_address or lease.mac_address).lower()
         hostname = lease.active_host_name or lease.host_name
+        lease_comment = (lease.comment or '').strip()
         remote_id = lease.dot_id or f'dhcp-lease:{addr_str}'
 
         _upsert_ip_observation(
@@ -586,6 +587,7 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                 'source': 'dhcp',
                 'status': lease.status,
                 'server': lease.server,
+                'lease_comment': lease_comment,
             },
         )
 

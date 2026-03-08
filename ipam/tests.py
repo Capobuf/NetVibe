@@ -1285,6 +1285,36 @@ class MikroTikObservationReviewTests(TestCase):
         self.assertTrue(observation.observed_via_dhcp)
         self.assertEqual(review_item.ip_address_id, ip.pk)
 
+    def test_dhcp_lease_comment_is_stored_in_observation_not_in_canonical_note(self):
+        canonical_ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.50',
+            note='MSP editorial note',
+        )
+
+        self._run_sync(
+            dhcp_leases=[
+                {
+                    'address': '10.60.0.50',
+                    'host-name': 'observed-50',
+                    'mac-address': 'AA:BB:CC:DD:EE:50',
+                    'status': 'bound',
+                    'server': 'dhcp60',
+                    'dynamic': 'true',
+                    'comment': 'Customer CPE',
+                }
+            ]
+        )
+
+        canonical_ip.refresh_from_db()
+        observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.50',
+        )
+
+        self.assertEqual(canonical_ip.note, 'MSP editorial note')
+        self.assertEqual(observation.payload_json.get('lease_comment'), 'Customer CPE')
+
     def test_local_ip_from_address_snapshot_creates_observation_for_existing_canonical_ip(self):
         IPAddress.objects.create(
             subnet=self.subnet,
@@ -1464,8 +1494,41 @@ class MikroTikObservationReviewTests(TestCase):
         self.assertEqual(ip_admin.latest_observed_hostname(ip), '-')
         self.assertEqual(ip_admin.latest_observed_mac_address(ip), '-')
         self.assertEqual(ip_admin.latest_observed_via(ip), '-')
+        self.assertEqual(ip_admin.latest_observed_lease(ip), 'Statico')
+        self.assertEqual(ip_admin.latest_observed_lease_comment(ip), '-')
         self.assertNotEqual(ip_admin.latest_observed_at(ip), '-')
         self.assertNotEqual(ip_admin.latest_observed_device(ip), '-')
+
+    def test_ip_admin_observed_lease_mode_hides_status_and_server(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.70',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+        IPAddressObservation.objects.create(
+            integration_vendor='mikrotik',
+            mikrotik_device=self.device,
+            subnet=self.subnet,
+            address='10.60.0.70',
+            lease_kind=IPAddress.LeaseKind.DHCP_STATIC,
+            lease_status='bound',
+            lease_server_name='dhcp60',
+            payload_json={
+                'source': 'dhcp',
+                'status': 'bound',
+                'server': 'dhcp60',
+                'lease_comment': 'Desk phone',
+            },
+        )
+
+        ip_admin = admin.site._registry[IPAddress]
+
+        lease_mode = ip_admin.latest_observed_lease(ip)
+        self.assertEqual(lease_mode, 'DHCP lease statico')
+        self.assertNotIn('bound', lease_mode)
+        self.assertNotIn('dhcp60', lease_mode)
+        self.assertEqual(ip_admin.latest_observed_lease_comment(ip), 'Desk phone')
 
     def test_imported_mikrotik_subnets_default_to_scan_and_discovery_disabled(self):
         self._run_sync(

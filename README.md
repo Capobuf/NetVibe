@@ -156,6 +156,7 @@ Endpoint edits belong to **Discovery -> MikroTik targets**; rerunning discovery 
 - `IPAddress` is the canonical MSP-owned IPAM record.
 - `IPAddressObservation` stores latest observed discovery facts per device/IP (hostname, MAC, lease metadata, timestamps).
 - DHCP/ARP sync updates operational canonical fields (`last_seen`, sync/source timestamps, lease metadata, sync state) but does not silently overwrite canonical `hostname`, `mac_address`, `status`, or `note`.
+- ICMP subnet scan updates operational reachability (`last_seen`) and does not auto-populate or overwrite canonical `hostname`/`mac_address`.
 
 ## Review queue
 

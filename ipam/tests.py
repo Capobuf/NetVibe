@@ -1405,12 +1405,7 @@ class SubnetScanRegressionTests(TestCase):
             discover_subnet=False,
         )
 
-    def test_existing_icmp_scan_behavior_still_works(self):
-        ip_record = IPAddress.objects.create(
-            subnet=self.subnet,
-            address='10.99.0.1',
-            last_seen=timezone.now() - timedelta(days=2),
-        )
+    def _run_scan(self):
         job_run = JobRun.objects.create(
             subnet=self.subnet,
             scheduled_for=timezone.now(),
@@ -1426,12 +1421,60 @@ class SubnetScanRegressionTests(TestCase):
             run_subnet_scan.call(job_run.pk)
 
         job_run.refresh_from_db()
-        ip_record.refresh_from_db()
+        return job_run
 
+    def test_icmp_scan_on_existing_ip_does_not_overwrite_canonical_hostname(self):
+        ip_record = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.99.0.1',
+            hostname='canonical-host',
+        )
+
+        self._run_scan()
+
+        ip_record.refresh_from_db()
+        self.assertEqual(ip_record.hostname, 'canonical-host')
+
+    def test_icmp_scan_on_existing_ip_does_not_overwrite_canonical_mac(self):
+        ip_record = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.99.0.1',
+            mac_address='aa:bb:cc:dd:ee:01',
+        )
+
+        self._run_scan()
+
+        ip_record.refresh_from_db()
+        self.assertEqual(ip_record.mac_address, 'aa:bb:cc:dd:ee:01')
+
+    def test_icmp_scan_updates_last_seen_for_existing_ip(self):
+        old_last_seen = timezone.now() - timedelta(days=2)
+        ip_record = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.99.0.1',
+            last_seen=old_last_seen,
+        )
+
+        job_run = self._run_scan()
+
+        ip_record.refresh_from_db()
         self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
         self.assertGreater(job_run.hosts_pinged, 0)
-        self.assertEqual(ip_record.hostname, 'host-99.local')
-        self.assertEqual(ip_record.mac_address, 'aa:bb:cc:dd:ee:ff')
+        self.assertGreater(ip_record.last_seen, old_last_seen)
+
+    def test_discover_subnet_creation_keeps_canonical_identity_fields_blank(self):
+        self.subnet.discover_subnet = True
+        self.subnet.save(update_fields=['discover_subnet'])
+
+        job_run = self._run_scan()
+        created_ips = list(IPAddress.objects.filter(subnet=self.subnet).order_by('address'))
+
+        self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
+        self.assertEqual(job_run.ip_records_created, 2)
+        self.assertEqual(len(created_ips), 2)
+        self.assertTrue(all(ip.hostname == '' for ip in created_ips))
+        self.assertTrue(all(ip.mac_address == '' for ip in created_ips))
+        self.assertTrue(all(ip.last_seen is not None for ip in created_ips))
 
 
 class CompatibilitySmokeTests(SimpleTestCase):

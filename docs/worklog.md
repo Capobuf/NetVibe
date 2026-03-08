@@ -18,6 +18,7 @@
 - Canonical `IPAddress` records keep MSP-owned editorial fields protected:
   - sync updates operational fields (timestamps, lease metadata, sync provenance/state)
   - sync does not silently overwrite canonical `hostname`, `mac_address`, `status`, `note`
+- ICMP subnet scan updates only operational reachability (`last_seen`) and does not overwrite or auto-fill canonical hostname/MAC.
 - New observed IPs create:
   - minimal canonical `IPAddress` (blank canonical hostname/MAC)
   - one `IPAddressObservation`

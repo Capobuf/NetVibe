@@ -1,6 +1,6 @@
 Django==6.0.2
-django-unfold
+django-unfold==0.83.1
 django-tasks-db==0.12.0
-psycopg[binary]
-httpx
-pydantic
+psycopg[binary]==3.3.3
+httpx==0.28.1
+pydantic==2.12.5

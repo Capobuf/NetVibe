@@ -600,6 +600,7 @@ def _sync_dhcp_leases(device, snapshot, now, trace_id, job_id, warnings) -> dict
                 now=now,
                 trace_id=trace_id,
                 job_id=job_id,
+                update_last_seen=False,
                 existing_updates={
                     'lease_kind': lease_kind,
                     'lease_status': lease.status,
@@ -688,6 +689,7 @@ def _sync_arp(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                 now=now,
                 trace_id=trace_id,
                 job_id=job_id,
+                update_last_seen=True,
                 create_defaults={
                     'mac_address': '',
                     'lease_kind': IPAddress.LeaseKind.NONE,
@@ -763,6 +765,7 @@ def _save_canonical_ip_operational_updates(
     now,
     trace_id: str,
     job_id: str,
+    update_last_seen: bool = False,
     extra_updates: dict | None = None,
 ) -> None:
     update_values = {
@@ -771,8 +774,9 @@ def _save_canonical_ip_operational_updates(
         'sync_state': SyncState.LIVE,
         'source_job_id': job_id,
         'source_trace_id': trace_id,
-        'last_seen': now,
     }
+    if update_last_seen:
+        update_values['last_seen'] = now
     if extra_updates:
         update_values.update(extra_updates)
     for field_name, field_value in update_values.items():
@@ -789,6 +793,7 @@ def _upsert_canonical_ip_from_observation(
     now,
     trace_id: str,
     job_id: str,
+    update_last_seen: bool = False,
     existing_updates: dict | None = None,
     create_defaults: dict | None = None,
 ) -> tuple[IPAddress, bool]:
@@ -802,23 +807,30 @@ def _upsert_canonical_ip_from_observation(
             now=now,
             trace_id=trace_id,
             job_id=job_id,
+            update_last_seen=update_last_seen,
             extra_updates=existing_updates,
         )
         return existing, False
 
+    create_values = {
+        'subnet': subnet,
+        'address': address,
+        'source_kind': SourceKind.MIKROTIK,
+        'source_device': device,
+        'source_remote_id': remote_id,
+        'source_job_id': job_id,
+        'source_trace_id': trace_id,
+        'source_observed_at': now,
+        'last_synced_at': now,
+        'sync_state': SyncState.LIVE,
+    }
+    if update_last_seen:
+        create_values['last_seen'] = now
+    if create_defaults:
+        create_values.update(create_defaults)
+
     created = IPAddress.objects.create(
-        subnet=subnet,
-        address=address,
-        source_kind=SourceKind.MIKROTIK,
-        source_device=device,
-        source_remote_id=remote_id,
-        source_job_id=job_id,
-        source_trace_id=trace_id,
-        source_observed_at=now,
-        last_synced_at=now,
-        sync_state=SyncState.LIVE,
-        last_seen=now,
-        **(create_defaults or {}),
+        **create_values,
     )
     return created, True
 
@@ -881,6 +893,7 @@ def _upsert_ip_observation(
     observed_via_arp: bool = False,
     payload_json: dict | None = None,
 ) -> None:
+    merged_payload = _merge_observation_payload({}, payload_json)
     observation, created = IPAddressObservation.objects.get_or_create(
         integration_vendor=IntegrationVendor.MIKROTIK,
         mikrotik_device=device,
@@ -896,7 +909,7 @@ def _upsert_ip_observation(
             'observed_via_arp': observed_via_arp,
             'first_observed_at': now,
             'last_observed_at': now,
-            'payload_json': payload_json or {},
+            'payload_json': merged_payload,
         },
     )
     if created:
@@ -917,7 +930,10 @@ def _upsert_ip_observation(
     observation.observed_via_arp = observation.observed_via_arp or observed_via_arp
     observation.last_observed_at = now
     if payload_json:
-        observation.payload_json = payload_json
+        observation.payload_json = _merge_observation_payload(
+            observation.payload_json,
+            payload_json,
+        )
     observation.save(update_fields=[
         'subnet',
         'observed_hostname',
@@ -930,6 +946,24 @@ def _upsert_ip_observation(
         'last_observed_at',
         'payload_json',
     ])
+
+
+def _merge_observation_payload(existing_payload: dict | None, incoming_payload: dict | None) -> dict:
+    existing = existing_payload if isinstance(existing_payload, dict) else {}
+    incoming = incoming_payload if isinstance(incoming_payload, dict) else {}
+    if not incoming:
+        return dict(existing)
+
+    merged = dict(existing)
+    merged.update(incoming)
+    # Keep the DHCP lease comment durable across non-DHCP observation updates.
+    existing_comment = str(existing.get('lease_comment') or '').strip()
+    if 'lease_comment' in incoming:
+        incoming_comment = str(incoming.get('lease_comment') or '').strip()
+        merged['lease_comment'] = incoming_comment or existing_comment
+    elif existing_comment:
+        merged['lease_comment'] = existing_comment
+    return merged
 
 
 def _upsert_new_ip_observed_review(

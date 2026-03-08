@@ -1416,6 +1416,140 @@ class MikroTikObservationReviewTests(TestCase):
         self.assertEqual(canonical_ip.note, 'MSP editorial note')
         self.assertEqual(observation.payload_json.get('lease_comment'), 'Customer CPE')
 
+    def test_dhcp_only_observation_for_10_0_0_12_is_not_marked_online(self):
+        subnet_10 = Subnet.objects.create(
+            vlan=self.vlan,
+            cidr='10.0.0.0/24',
+            source_kind=SourceKind.MANUAL,
+        )
+        ip = IPAddress.objects.create(
+            subnet=subnet_10,
+            address='10.0.0.12',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+
+        self._run_sync(
+            dhcp_leases=[
+                {
+                    'address': '10.0.0.12',
+                    'host-name': 'lease-only-host',
+                    'mac-address': 'AA:BB:CC:DD:EE:12',
+                    'status': 'bound',
+                    'server': 'dhcp10',
+                    'dynamic': 'true',
+                    'comment': 'Lease only',
+                }
+            ]
+        )
+
+        ip.refresh_from_db()
+        ip_admin = admin.site._registry[IPAddress]
+        observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.0.0.12',
+        )
+
+        self.assertIsNone(ip.last_seen)
+        self.assertEqual(ip_admin._get_reachability_status(ip), 'unknown')
+        self.assertTrue(observation.observed_via_dhcp)
+        self.assertFalse(observation.observed_via_arp)
+
+    def test_arp_observation_updates_operational_last_seen_and_status(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.61',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+
+        self._run_sync(
+            arp_entries=[
+                {
+                    'address': '10.60.0.61',
+                    'mac-address': 'aa:bb:cc:dd:ee:61',
+                    'interface': 'bridge1',
+                    'complete': 'true',
+                }
+            ]
+        )
+
+        ip.refresh_from_db()
+        ip_admin = admin.site._registry[IPAddress]
+
+        self.assertIsNotNone(ip.last_seen)
+        self.assertEqual(ip_admin._get_reachability_status(ip), 'online')
+
+    def test_arp_evidence_is_not_forced_unknown_when_exclude_ping_is_true(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.62',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+            exclude_ping=True,
+        )
+
+        self._run_sync(
+            arp_entries=[
+                {
+                    'address': '10.60.0.62',
+                    'mac-address': 'aa:bb:cc:dd:ee:62',
+                    'interface': 'bridge1',
+                    'complete': 'true',
+                }
+            ]
+        )
+
+        ip.refresh_from_db()
+        ip_admin = admin.site._registry[IPAddress]
+
+        self.assertIsNotNone(ip.last_seen)
+        self.assertEqual(ip_admin._get_reachability_status(ip), 'online')
+
+    def test_lease_comment_survives_subsequent_arp_observation_update(self):
+        IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.63',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+            note='Canonical note must stay untouched',
+        )
+        self._run_sync(
+            dhcp_leases=[
+                {
+                    'address': '10.60.0.63',
+                    'host-name': 'lease-host',
+                    'mac-address': 'AA:BB:CC:DD:EE:63',
+                    'status': 'bound',
+                    'server': 'dhcp60',
+                    'dynamic': 'true',
+                    'comment': 'Customer printer',
+                }
+            ]
+        )
+        self._run_sync(
+            arp_entries=[
+                {
+                    'address': '10.60.0.63',
+                    'mac-address': 'aa:bb:cc:dd:ee:63',
+                    'interface': 'bridge1',
+                    'complete': 'true',
+                }
+            ]
+        )
+
+        ip = IPAddress.objects.get(subnet=self.subnet, address='10.60.0.63')
+        observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.63',
+        )
+        ip_admin = admin.site._registry[IPAddress]
+
+        self.assertEqual(ip.note, 'Canonical note must stay untouched')
+        self.assertEqual(observation.payload_json.get('lease_comment'), 'Customer printer')
+        self.assertEqual(observation.payload_json.get('source'), 'arp')
+        self.assertEqual(ip_admin.latest_observed_lease_comment(ip), 'Customer printer')
+
     def test_local_ip_from_address_snapshot_creates_observation_for_existing_canonical_ip(self):
         IPAddress.objects.create(
             subnet=self.subnet,
@@ -1729,6 +1863,19 @@ class SubnetScanRegressionTests(TestCase):
         self.assertEqual(job_run.status, JobRun.Status.SUCCESS)
         self.assertGreater(job_run.hosts_pinged, 0)
         self.assertGreater(ip_record.last_seen, old_last_seen)
+
+    def test_icmp_scan_contributes_to_operational_online_status(self):
+        ip_record = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.99.0.1',
+        )
+
+        self._run_scan()
+
+        ip_record.refresh_from_db()
+        ip_admin = admin.site._registry[IPAddress]
+        self.assertIsNotNone(ip_record.last_seen)
+        self.assertEqual(ip_admin._get_reachability_status(ip_record), 'online')
 
     def test_discover_subnet_creation_keeps_canonical_identity_fields_blank(self):
         self.subnet.discover_subnet = True

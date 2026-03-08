@@ -89,9 +89,7 @@ class IPAddressTableMixin:
 
     def _get_reachability_status(self, obj):
         """Map reachability window age to an admin-facing status code."""
-        # ``exclude_ping`` intentionally forces ``unknown`` to reflect policy:
-        # no automated reachability judgement is allowed for excluded IPs.
-        if obj.exclude_ping or obj.last_seen is None:
+        if obj.last_seen is None:
             return 'unknown'
 
         warning_after, offline_after = obj.reachability_window

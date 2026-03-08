@@ -327,8 +327,9 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
     )
     actions_detail = (
         'edit_ip_settings',
-        'back_to_ip_overview',
         'back_to_subnet',
+        'open_subnet_ip_list',
+        'back_to_ip_overview',
     )
     list_display = (
         'status_badge',
@@ -450,8 +451,13 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
 
     def get_actions_detail(self, request, object_id):
         action_names = [
-            'back_to_ip_overview' if not self._is_overview_mode(request) else 'edit_ip_settings',
+            (
+                'back_to_ip_overview'
+                if not self._is_overview_mode(request)
+                else 'edit_ip_settings'
+            ),
             'back_to_subnet',
+            'open_subnet_ip_list',
         ]
         actions = [self.get_unfold_action(name) for name in action_names]
         return self._filter_unfold_actions_by_permissions(request, actions, object_id)
@@ -488,6 +494,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             args=(obj.subnet_id,),
             current_app=self.admin_site.name,
         )
+        subnet_ip_list_url = self._get_subnet_ip_list_url(obj.subnet_id)
         vlan_label = _format_vlan_read_label(
             obj.subnet.vlan if obj.subnet.vlan_id else None,
             empty_label=str(_('No VLAN assigned')),
@@ -509,8 +516,51 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
                             ),
                         },
                         {'label': _('VLAN'), 'value': vlan_label},
+                        {
+                            'label': _('Lista IP'),
+                            'value': format_html(
+                                '<a href="{}">{}</a>',
+                                subnet_ip_list_url,
+                                _('Open subnet IP list'),
+                            ),
+                        },
                     ],
                     'footer': _('Subnet and VLAN context'),
+                },
+                {
+                    'title': _('Canonical data'),
+                    'headline': obj.address,
+                    'details': [
+                        {'label': _('Status'), 'value': obj.get_status_display()},
+                        {'label': _('Hostname'), 'value': obj.hostname or '-'},
+                        {'label': _('MAC'), 'value': obj.mac_address or '-'},
+                        {'label': _('Tags'), 'value': self._format_tag_list(obj)},
+                        {
+                            'label': _('Notes'),
+                            'value': Truncator(note).chars(80) if note else '-',
+                        },
+                    ],
+                    'footer': _('MSP-owned canonical fields'),
+                },
+                {
+                    'title': _('Latest observed data'),
+                    'headline': self.latest_observed_lease(obj),
+                    'details': [
+                        {
+                            'label': _('Observed hostname'),
+                            'value': self.latest_observed_hostname(obj),
+                        },
+                        {'label': _('Observed MAC'), 'value': self.latest_observed_mac_address(obj)},
+                        {'label': _('Observed via'), 'value': self.latest_observed_via(obj)},
+                        {'label': _('Observed lease'), 'value': self.latest_observed_lease(obj)},
+                        {
+                            'label': _('Commento lease'),
+                            'value': self.latest_observed_lease_comment(obj),
+                        },
+                        {'label': _('Observed at'), 'value': self.latest_observed_at(obj)},
+                        {'label': _('Observed from'), 'value': self.latest_observed_device(obj)},
+                    ],
+                    'footer': _('Observed DHCP/ARP values'),
                 },
                 {
                     'title': _('Reachability'),
@@ -521,34 +571,8 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
                             'label': _('Excluded from ping'),
                             'value': _('Yes') if obj.exclude_ping else _('No'),
                         },
-                        {'label': _('Status'), 'value': obj.get_status_display()},
                     ],
                     'footer': _('Operational reachability summary'),
-                },
-                {
-                    'title': _('Observed DHCP'),
-                    'headline': self.latest_observed_lease(obj),
-                    'details': [
-                        {'label': _('Lease mode'), 'value': self.latest_observed_lease(obj)},
-                        {
-                            'label': _('Commento lease'),
-                            'value': self.latest_observed_lease_comment(obj),
-                        },
-                    ],
-                    'footer': _('Latest observed DHCP lease details'),
-                },
-                {
-                    'title': _('Canonical data'),
-                    'headline': obj.address,
-                    'details': [
-                        {'label': _('Hostname'), 'value': obj.hostname or '-'},
-                        {'label': _('MAC'), 'value': obj.mac_address or '-'},
-                        {
-                            'label': _('Notes'),
-                            'value': Truncator(note).chars(80) if note else '-',
-                        },
-                    ],
-                    'footer': _('Manually managed IPAM fields'),
                 },
             ],
         }
@@ -570,7 +594,14 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             current_app=self.admin_site.name,
         )
 
-    @action(description=_('Edit IP settings'), icon='edit')
+    def _get_subnet_ip_list_url(self, subnet_id):
+        changelist_url = reverse(
+            f'admin:{IPAddress._meta.app_label}_{IPAddress._meta.model_name}_changelist',
+            current_app=self.admin_site.name,
+        )
+        return f'{changelist_url}?{urlencode({"subnet__id__exact": subnet_id})}'
+
+    @action(description=_('Modifica IP'), icon='edit')
     def edit_ip_settings(self, request, object_id):
         return redirect(f'{self._get_change_url(object_id)}?mode=edit')
 
@@ -578,7 +609,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
     def back_to_ip_overview(self, request, object_id):
         return redirect(self._get_change_url(object_id))
 
-    @action(description=_('Back to subnet'), icon='account_tree')
+    @action(description=_('Apri sottorete'), icon='account_tree')
     def back_to_subnet(self, request, object_id):
         next_url = request.GET.get('next')
         if next_url:
@@ -595,6 +626,20 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
             )
             return redirect(changelist_url)
         return redirect(self._get_subnet_change_url(subnet_id))
+
+    @action(description=_('Lista IP sottorete'), icon='table_view')
+    def open_subnet_ip_list(self, request, object_id):
+        subnet_id = IPAddress.objects.filter(pk=object_id).values_list(
+            'subnet_id',
+            flat=True,
+        ).first()
+        if subnet_id is None:
+            changelist_url = reverse(
+                f'admin:{IPAddress._meta.app_label}_{IPAddress._meta.model_name}_changelist',
+                current_app=self.admin_site.name,
+            )
+            return redirect(changelist_url)
+        return redirect(self._get_subnet_ip_list_url(subnet_id))
 
     @admin.display(description=_('Last seen'))
     def last_seen_display_readonly(self, obj):

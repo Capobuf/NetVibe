@@ -736,6 +736,86 @@ class AdminReadUXTests(TestCase):
             reverse('admin:ipam_subnet_change', args=(subnet.pk,)),
         )
 
+    def test_ip_admin_subnet_ip_list_action_redirects_to_filtered_list(self):
+        vlan = VLAN.objects.create(number=371, name='Infra')
+        subnet = Subnet.objects.create(cidr='10.37.1.0/24', vlan=vlan)
+        ip = IPAddress.objects.create(subnet=subnet, address='10.37.1.12')
+        ip_admin = admin.site._registry[IPAddress]
+        request = self.factory.get(reverse('admin:ipam_ipaddress_change', args=(ip.pk,)))
+        request.user = self.user
+
+        response = ip_admin.open_subnet_ip_list(request, ip.pk)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f'{reverse("admin:ipam_ipaddress_changelist")}?subnet__id__exact={subnet.pk}',
+        )
+
+    def test_ip_overview_context_includes_tags_and_latest_observed_values(self):
+        vlan = VLAN.objects.create(number=372, name='Users')
+        subnet = Subnet.objects.create(cidr='10.37.2.0/24', vlan=vlan)
+        device = MikroTikDevice.objects.create(host='10.37.2.1')
+        tag = Tag.objects.create(slug='ux-tag', name='UX tag')
+        ip = IPAddress.objects.create(
+            subnet=subnet,
+            address='10.37.2.12',
+            hostname='canonical-host',
+            mac_address='aa:bb:cc:dd:ee:12',
+            note='Canonical note',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=device,
+        )
+        ip.tags.add(tag)
+        IPAddressObservation.objects.create(
+            integration_vendor='mikrotik',
+            mikrotik_device=device,
+            subnet=subnet,
+            address='10.37.2.12',
+            observed_hostname='observed-host',
+            observed_mac_address='aa:bb:cc:dd:ee:99',
+            lease_kind=IPAddress.LeaseKind.DHCP_DYNAMIC,
+            observed_via_dhcp=True,
+            payload_json={
+                'source': 'dhcp',
+                'lease_comment': 'Observed comment',
+            },
+        )
+
+        ip_admin = admin.site._registry[IPAddress]
+        overview_context = ip_admin._get_overview_context(ip)
+        canonical_card = next(
+            card
+            for card in overview_context['ip_overview_cards']
+            if str(card['title']) == 'Canonical data'
+        )
+        observed_card = next(
+            card
+            for card in overview_context['ip_overview_cards']
+            if str(card['title']) == 'Latest observed data'
+        )
+
+        self.assertTrue(
+            any(
+                str(item['label']) == 'Tags' and 'UX tag' in str(item['value'])
+                for item in canonical_card['details']
+            )
+        )
+        self.assertTrue(
+            any(
+                str(item['label']) == 'Observed hostname'
+                and str(item['value']) == 'observed-host'
+                for item in observed_card['details']
+            )
+        )
+        self.assertTrue(
+            any(
+                str(item['label']) == 'Commento lease'
+                and str(item['value']) == 'Observed comment'
+                for item in observed_card['details']
+            )
+        )
+
 
 class MikroTikRetentionTests(TestCase):
     def setUp(self):

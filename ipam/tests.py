@@ -15,6 +15,7 @@ from django.db.utils import ProgrammingError
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.module_loading import import_string
 
 from .crypto import decrypt_password, encrypt_password
 from .forms import MikroTikIntegrationSettingsForm
@@ -520,6 +521,60 @@ class AdminNavigationTests(TestCase):
         self.assertNotIn('MikroTik sync runs', all_titles)
         self.assertNotIn('MikroTik VLANs', all_titles)
         self.assertNotIn('MikroTik subnets', all_titles)
+
+
+class VLANAdminHierarchyTests(TestCase):
+    def setUp(self):
+        self.user = create_admin_user('admin-vlan-hierarchy')
+        self.client.force_login(self.user)
+        self.factory = RequestFactory()
+
+    def _get_vlan_section_class(self):
+        vlan_admin = admin.site._registry[VLAN]
+        self.assertGreater(len(vlan_admin.list_sections), 0)
+
+        section_class = vlan_admin.list_sections[0]
+        if isinstance(section_class, str):
+            section_class = import_string(section_class)
+        return section_class
+
+    def test_vlan_changelist_loads_successfully(self):
+        VLAN.objects.create(number=100, name='Core')
+
+        response = self.client.get(reverse('admin:ipam_vlan_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_vlan_admin_has_expandable_subnet_section_configuration(self):
+        section_class = self._get_vlan_section_class()
+
+        self.assertEqual(section_class.related_name, 'subnet_set')
+        self.assertIn('cidr_link', section_class.fields)
+
+    def test_vlan_subnets_are_rendered_inside_section_content(self):
+        vlan = VLAN.objects.create(number=60, name='Operations')
+        subnet_one = Subnet.objects.create(
+            vlan=vlan,
+            cidr='10.60.0.0/24',
+            description='Primary office',
+        )
+        subnet_two = Subnet.objects.create(
+            vlan=vlan,
+            cidr='10.60.1.0/24',
+        )
+        other_vlan = VLAN.objects.create(number=61, name='Guests')
+        other_subnet = Subnet.objects.create(vlan=other_vlan, cidr='10.61.0.0/24')
+
+        request = self.factory.get(reverse('admin:ipam_vlan_changelist'))
+        request.user = self.user
+
+        section_class = self._get_vlan_section_class()
+        section_html = section_class(request, vlan).render()
+
+        self.assertIn(subnet_one.cidr, section_html)
+        self.assertIn(subnet_two.cidr, section_html)
+        self.assertNotIn(other_subnet.cidr, section_html)
+        self.assertIn(reverse('admin:ipam_subnet_change', args=(subnet_one.pk,)), section_html)
 
 
 class TaggingTests(TestCase):
@@ -1125,6 +1180,188 @@ class MikroTikObservationReviewTests(TestCase):
         self.assertEqual(observation.observed_mac_address, 'aa:bb:cc:dd:ee:40')
         self.assertTrue(observation.observed_via_dhcp)
         self.assertEqual(review_item.ip_address_id, ip.pk)
+
+    def test_local_ip_from_address_snapshot_creates_observation_for_existing_canonical_ip(self):
+        IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.1',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+
+        self._run_sync(
+            ip_addresses=[
+                {
+                    'address': '10.60.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*601',
+                }
+            ]
+        )
+
+        observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.1',
+        )
+        self.assertEqual(observation.integration_vendor, 'mikrotik')
+        self.assertEqual(observation.subnet_id, self.subnet.pk)
+        self.assertEqual(observation.address, '10.60.0.1')
+        self.assertEqual(observation.observed_hostname, '')
+        self.assertEqual(observation.observed_mac_address, '')
+        self.assertEqual(observation.lease_kind, IPAddress.LeaseKind.NONE)
+        self.assertFalse(observation.observed_via_dhcp)
+        self.assertFalse(observation.observed_via_arp)
+        self.assertIsNotNone(observation.last_observed_at)
+
+    def test_local_ip_observation_updates_and_dhcp_arp_observation_behavior_is_unchanged(self):
+        IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.1',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+        sync_payload = {
+            'ip_addresses': [
+                {
+                    'address': '10.60.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*601',
+                }
+            ],
+            'dhcp_leases': [
+                {
+                    'address': '10.60.0.40',
+                    'host-name': 'observed-40',
+                    'mac-address': 'AA:BB:CC:DD:EE:40',
+                    'status': 'bound',
+                    'server': 'dhcp60',
+                    'dynamic': 'true',
+                }
+            ],
+            'arp_entries': [
+                {
+                    'address': '10.60.0.41',
+                    'mac-address': 'aa:bb:cc:dd:ee:41',
+                    'interface': 'bridge1',
+                    'complete': 'true',
+                }
+            ],
+        }
+        self._run_sync(**sync_payload)
+
+        local_observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.1',
+        )
+        old_last_observed_at = timezone.now() - timedelta(days=1)
+        local_observation.last_observed_at = old_last_observed_at
+        local_observation.save(update_fields=['last_observed_at'])
+
+        self._run_sync(**sync_payload)
+
+        local_observation.refresh_from_db()
+        dhcp_observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.40',
+        )
+        arp_observation = IPAddressObservation.objects.get(
+            mikrotik_device=self.device,
+            address='10.60.0.41',
+        )
+
+        self.assertGreater(local_observation.last_observed_at, old_last_observed_at)
+        self.assertFalse(local_observation.observed_via_dhcp)
+        self.assertFalse(local_observation.observed_via_arp)
+        self.assertTrue(dhcp_observation.observed_via_dhcp)
+        self.assertTrue(arp_observation.observed_via_arp)
+
+    def test_local_only_update_preserves_rich_preexisting_observation_fields(self):
+        IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.1',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+        observation = IPAddressObservation.objects.create(
+            integration_vendor='mikrotik',
+            mikrotik_device=self.device,
+            subnet=self.subnet,
+            address='10.60.0.1',
+            observed_hostname='rich-host',
+            observed_mac_address='aa:bb:cc:dd:ee:60',
+            lease_kind=IPAddress.LeaseKind.DHCP_DYNAMIC,
+            lease_status='bound',
+            lease_server_name='dhcp60',
+            observed_via_dhcp=True,
+            observed_via_arp=True,
+            payload_json={'source': 'dhcp'},
+        )
+        old_last_observed_at = timezone.now() - timedelta(days=1)
+        observation.last_observed_at = old_last_observed_at
+        observation.save(update_fields=['last_observed_at'])
+
+        self._run_sync(
+            ip_addresses=[
+                {
+                    'address': '10.60.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*601',
+                }
+            ],
+            dhcp_leases=[],
+            arp_entries=[],
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.observed_hostname, 'rich-host')
+        self.assertEqual(observation.observed_mac_address, 'aa:bb:cc:dd:ee:60')
+        self.assertEqual(observation.lease_kind, IPAddress.LeaseKind.DHCP_DYNAMIC)
+        self.assertEqual(observation.lease_status, 'bound')
+        self.assertEqual(observation.lease_server_name, 'dhcp60')
+        self.assertTrue(observation.observed_via_dhcp)
+        self.assertTrue(observation.observed_via_arp)
+        self.assertEqual(observation.payload_json, {'source': 'dhcp'})
+        self.assertGreater(observation.last_observed_at, old_last_observed_at)
+
+    def test_ip_admin_latest_observed_helpers_use_local_observation_values(self):
+        ip = IPAddress.objects.create(
+            subnet=self.subnet,
+            address='10.60.0.1',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=self.device,
+        )
+        self._run_sync(
+            ip_addresses=[
+                {
+                    'address': '10.60.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*601',
+                }
+            ]
+        )
+
+        ip_admin = admin.site._registry[IPAddress]
+        latest_observation = ip_admin._get_latest_observation(ip)
+
+        self.assertIsNotNone(latest_observation)
+        self.assertEqual(latest_observation.mikrotik_device_id, self.device.pk)
+        self.assertEqual(ip_admin.latest_observed_hostname(ip), '-')
+        self.assertEqual(ip_admin.latest_observed_mac_address(ip), '-')
+        self.assertEqual(ip_admin.latest_observed_via(ip), '-')
+        self.assertNotEqual(ip_admin.latest_observed_at(ip), '-')
+        self.assertNotEqual(ip_admin.latest_observed_device(ip), '-')
 
     def test_imported_mikrotik_subnets_default_to_scan_and_discovery_disabled(self):
         self._run_sync(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from ipaddress import ip_address, ip_network
+from ipaddress import ip_address, ip_interface, ip_network
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -423,6 +423,7 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
         try:
             net = ip_network(ip_addr.address, strict=False)
+            local_address = str(ip_interface(ip_addr.address).ip)
         except (ValueError, TypeError):
             warnings.append(
                 f'Invalid CIDR "{ip_addr.address}" on {ip_addr.interface}, skipped.'
@@ -460,6 +461,13 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                         f'Subnet {cidr}: already exists as manual entry, '
                         f'skipped import from {device.host}.'
                     )
+                    if existing.integration_sync_enabled:
+                        _upsert_local_interface_observation_for_existing_canonical_ip(
+                            device=device,
+                            subnet=existing,
+                            address=local_address,
+                            now=now,
+                        )
                     continue
 
                 if not existing.integration_sync_enabled:
@@ -488,6 +496,12 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                     existing.vlan = vlan_1
                     update_fields.append('vlan')
                 existing.save(update_fields=update_fields)
+                _upsert_local_interface_observation_for_existing_canonical_ip(
+                    device=device,
+                    subnet=existing,
+                    address=local_address,
+                    now=now,
+                )
                 updated += 1
             else:
                 subnet = Subnet(
@@ -509,6 +523,12 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                 if is_native_vlan_1_subnet:
                     subnet.vlan = vlan_1
                 subnet.save()
+                _upsert_local_interface_observation_for_existing_canonical_ip(
+                    device=device,
+                    subnet=subnet,
+                    address=local_address,
+                    now=now,
+                )
                 created += 1
 
     return {'subnets_created': created, 'subnets_updated': updated}
@@ -823,6 +843,25 @@ def _upsert_conflict_reviews_for_observed_identity(
             canonical_ip=canonical_ip,
             observed_mac_address=observed_mac_address,
         )
+
+
+def _upsert_local_interface_observation_for_existing_canonical_ip(
+    *,
+    device: MikroTikDevice,
+    subnet: Subnet,
+    address: str,
+    now,
+) -> None:
+    # Local /ip/address rows should mirror observation state only for IPs
+    # that already exist in the canonical IP table for this subnet/address.
+    if not IPAddress.objects.filter(subnet=subnet, address=address).exists():
+        return
+    _upsert_ip_observation(
+        device=device,
+        subnet=subnet,
+        address=address,
+        now=now,
+    )
 
 
 def _upsert_ip_observation(

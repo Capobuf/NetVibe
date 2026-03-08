@@ -17,6 +17,7 @@ from unfold.admin import ModelAdmin
 from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.datasets import BaseDataset
 from unfold.decorators import action, display
+from unfold.sections import TableSection
 
 from .forms import MikroTikIntegrationSettingsForm
 from .models import (
@@ -232,11 +233,43 @@ class VLANAdmin(TagDisplayMixin, ModelAdmin):
         ),
     )
     list_display = ('number', 'name', 'tag_list')
+    list_sections = ('ipam.admin.VLANSubnetSection',)
     list_filter = ('number', 'name')
     search_fields = ('=number', 'name')
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related('tags')
+        subnet_queryset = Subnet.objects.only(
+            'id',
+            'vlan_id',
+            'cidr',
+            'description',
+            'sync_state',
+            'scan_enabled',
+        ).order_by('cidr')
+        # Prefetch related subnets once so expanded rows do not issue per-row queries.
+        return super().get_queryset(request).prefetch_related(
+            'tags',
+            django_models.Prefetch('subnet_set', queryset=subnet_queryset),
+        )
+
+
+class VLANSubnetSection(TableSection):
+    related_name = 'subnet_set'
+    verbose_name = _('Subnets')
+    fields = ('cidr_link', 'description_value', 'sync_state', 'scan_enabled')
+
+    @admin.display(description=_('CIDR'))
+    def cidr_link(self, obj):
+        url = reverse(
+            f'admin:{obj._meta.app_label}_{obj._meta.model_name}_change',
+            args=(obj.pk,),
+            current_app=admin.site.name,
+        )
+        return format_html('<a href="{}">{}</a>', url, obj.cidr)
+
+    @admin.display(description=_('Description'))
+    def description_value(self, obj):
+        return obj.description or '-'
 
 
 @admin.register(IPAddress)

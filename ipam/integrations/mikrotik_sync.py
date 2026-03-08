@@ -293,10 +293,16 @@ def _sync_vlans(device, snapshot, now, trace_id, job_id, warnings) -> dict:
     updated = 0
 
     for bridge_vlan in snapshot.bridge_vlans:
-        if bridge_vlan.dynamic and device.ignore_dynamic_bridge_vlans:
-            continue
-
         for vlan_number in _parse_vlan_ids(bridge_vlan.vlan_ids):
+            # Keep dynamic VLAN import disabled by default, with one practical
+            # exception for the native VLAN 1 case.
+            if (
+                bridge_vlan.dynamic
+                and device.ignore_dynamic_bridge_vlans
+                and vlan_number != 1
+            ):
+                continue
+
             remote_id = f'bridge-vlan:{bridge_vlan.bridge}:{vlan_number}'
 
             with transaction.atomic():
@@ -375,6 +381,23 @@ def _parse_vlan_ids(raw: str) -> list[int]:
     return result
 
 
+def _snapshot_bridge_names_with_vlan_1(snapshot: MikroTikSnapshotResultV1) -> set[str]:
+    bridge_names: set[str] = set()
+    for bridge_vlan in snapshot.bridge_vlans:
+        if 1 in _parse_vlan_ids(bridge_vlan.vlan_ids) and bridge_vlan.bridge:
+            bridge_names.add(bridge_vlan.bridge)
+    return bridge_names
+
+
+def _snapshot_has_vlan_1(
+    snapshot: MikroTikSnapshotResultV1,
+    vlan_1_bridge_names: set[str] | None = None,
+) -> bool:
+    if vlan_1_bridge_names is None:
+        vlan_1_bridge_names = _snapshot_bridge_names_with_vlan_1(snapshot)
+    return bool(vlan_1_bridge_names)
+
+
 # ---------------------------------------------------------------------------
 # Subnet sync
 # ---------------------------------------------------------------------------
@@ -382,6 +405,12 @@ def _parse_vlan_ids(raw: str) -> list[int]:
 def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
     created = 0
     updated = 0
+    vlan_1_bridge_names = _snapshot_bridge_names_with_vlan_1(snapshot)
+    vlan_1 = (
+        VLAN.objects.filter(number=1).first()
+        if _snapshot_has_vlan_1(snapshot, vlan_1_bridge_names)
+        else None
+    )
 
     for ip_addr in snapshot.ip_addresses:
         if not ip_addr.address or '/' not in ip_addr.address:
@@ -409,6 +438,15 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
         cidr = str(net)
         remote_id = ip_addr.dot_id or f'ip-address:{ip_addr.interface}:{cidr}'
+        source_interface_name = ip_addr.actual_interface or ip_addr.interface
+        # Native VLAN linking is intentionally conservative in this pass:
+        # only raw /ip/address interface names matching bridges that carry
+        # VLAN 1 are considered.
+        is_native_vlan_1_subnet = (
+            vlan_1 is not None
+            and bool(ip_addr.interface)
+            and ip_addr.interface in vlan_1_bridge_names
+        )
 
         with transaction.atomic():
             existing = Subnet.objects.filter(cidr=cidr).first()
@@ -432,12 +470,12 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
 
                 existing.source_upstream_disabled = ip_addr.disabled
                 existing.source_upstream_invalid = ip_addr.invalid
-                existing.source_interface_name = ip_addr.actual_interface or ip_addr.interface
+                existing.source_interface_name = source_interface_name
                 existing.last_synced_at = now
                 existing.sync_state = SyncState.LIVE
                 existing.source_job_id = job_id
                 existing.source_trace_id = trace_id
-                existing.save(update_fields=[
+                update_fields = [
                     'source_upstream_disabled',
                     'source_upstream_invalid',
                     'source_interface_name',
@@ -445,10 +483,14 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                     'sync_state',
                     'source_job_id',
                     'source_trace_id',
-                ])
+                ]
+                if existing.vlan_id is None and is_native_vlan_1_subnet:
+                    existing.vlan = vlan_1
+                    update_fields.append('vlan')
+                existing.save(update_fields=update_fields)
                 updated += 1
             else:
-                Subnet.objects.create(
+                subnet = Subnet(
                     cidr=cidr,
                     scan_enabled=False,
                     discover_subnet=False,
@@ -462,8 +504,11 @@ def _sync_subnets(device, snapshot, now, trace_id, job_id, warnings) -> dict:
                     integration_sync_enabled=True,
                     source_upstream_disabled=ip_addr.disabled,
                     source_upstream_invalid=ip_addr.invalid,
-                    source_interface_name=ip_addr.actual_interface or ip_addr.interface,
+                    source_interface_name=source_interface_name,
                 )
+                if is_native_vlan_1_subnet:
+                    subnet.vlan = vlan_1
+                subnet.save()
                 created += 1
 
     return {'subnets_created': created, 'subnets_updated': updated}

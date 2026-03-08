@@ -27,6 +27,33 @@ def parse_cidr(value: str):
     return ip_network(value)
 
 
+class Tag(models.Model):
+    slug = models.SlugField(
+        max_length=64,
+        unique=True,
+        verbose_name=_('Slug'),
+        help_text=_('Stable unique identifier, for example "vpn".'),
+    )
+    name = models.CharField(
+        max_length=100,
+        verbose_name=_('Name'),
+        help_text=_('Display label shown in the admin UI.'),
+    )
+    is_system = models.BooleanField(
+        default=False,
+        verbose_name=_('System tag'),
+        help_text=_('System tags are predefined and protected from accidental deletion.'),
+    )
+
+    class Meta:
+        ordering = ('name',)
+        verbose_name = _('Tag')
+        verbose_name_plural = _('Tags')
+
+    def __str__(self):
+        return self.name
+
+
 class VLAN(models.Model):
     number = models.PositiveSmallIntegerField(
         unique=True,
@@ -99,6 +126,12 @@ class VLAN(models.Model):
         blank=True,
         verbose_name=_('Source bridge'),
         help_text=_('Bridge name from the upstream device, if applicable.'),
+    )
+    tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name='vlans',
+        verbose_name=_('Tags'),
     )
 
     class Meta:
@@ -339,6 +372,12 @@ class Subnet(models.Model):
         verbose_name=_('Source interface'),
         help_text=_('Interface name from the upstream device.'),
     )
+    tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name='subnets',
+        verbose_name=_('Tags'),
+    )
 
     class Meta:
         ordering = ('cidr',)
@@ -569,6 +608,12 @@ class IPAddress(models.Model):
         max_length=128,
         blank=True,
         verbose_name=_('DHCP server'),
+    )
+    tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name='ip_addresses',
+        verbose_name=_('Tags'),
     )
 
     class Meta:

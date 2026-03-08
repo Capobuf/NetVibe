@@ -34,6 +34,7 @@ from .models import (
     ReviewItem,
     SourceKind,
     Subnet,
+    Tag,
     VLAN,
 )
 from .tasks import (
@@ -515,9 +516,66 @@ class AdminNavigationTests(TestCase):
 
         self.assertIn('Discovery overview', all_titles)
         self.assertIn('Review queue', all_titles)
+        self.assertIn('Tags', all_titles)
         self.assertNotIn('MikroTik sync runs', all_titles)
         self.assertNotIn('MikroTik VLANs', all_titles)
         self.assertNotIn('MikroTik subnets', all_titles)
+
+
+class TaggingTests(TestCase):
+    def test_predefined_system_tags_exist(self):
+        self.assertTrue(Tag.objects.filter(slug='vpn', name='VPN', is_system=True).exists())
+        self.assertTrue(Tag.objects.filter(slug='pppoe', name='PPPoE', is_system=True).exists())
+        self.assertTrue(
+            Tag.objects.filter(slug='wireguard', name='WireGuard', is_system=True).exists()
+        )
+
+    def test_vlan_subnet_and_ip_can_all_hold_tags(self):
+        vpn_tag = Tag.objects.get(slug='vpn')
+        custom_tag = Tag.objects.create(slug='custom', name='Custom')
+        vlan = VLAN.objects.create(number=410)
+        subnet = Subnet.objects.create(cidr='10.41.0.0/24', vlan=vlan)
+        ip_address = IPAddress.objects.create(subnet=subnet, address='10.41.0.10')
+
+        vlan.tags.add(vpn_tag, custom_tag)
+        subnet.tags.add(vpn_tag)
+        ip_address.tags.add(custom_tag)
+
+        self.assertEqual(set(vlan.tags.values_list('slug', flat=True)), {'vpn', 'custom'})
+        self.assertEqual(set(subnet.tags.values_list('slug', flat=True)), {'vpn'})
+        self.assertEqual(set(ip_address.tags.values_list('slug', flat=True)), {'custom'})
+
+    def test_system_tags_are_protected_from_admin_queryset_delete(self):
+        system_tag = Tag.objects.get(slug='vpn')
+        custom_tag = Tag.objects.create(slug='removable', name='Removable')
+        tag_admin = admin.site._registry[Tag]
+        request = RequestFactory().post('/admin/ipam/tag/')
+        request.user = create_admin_user('admin-tag-delete')
+        attach_request_messages(request)
+
+        self.assertFalse(tag_admin.has_delete_permission(request, obj=system_tag))
+        tag_admin.delete_queryset(request, Tag.objects.filter(pk__in=[system_tag.pk, custom_tag.pk]))
+
+        self.assertTrue(Tag.objects.filter(pk=system_tag.pk).exists())
+        self.assertFalse(Tag.objects.filter(pk=custom_tag.pk).exists())
+
+
+class SubnetAdminEmptyStateTests(TestCase):
+    def test_subnet_admin_reports_empty_subnets_clearly(self):
+        subnet_admin = admin.site._registry[Subnet]
+        subnet = Subnet.objects.create(cidr='10.42.0.0/24')
+
+        state_code, state_label = subnet_admin.subnet_ip_state(subnet)
+        overview = subnet_admin._get_overview_context(subnet, [])
+        ip_card = next(
+            card
+            for card in overview['subnet_overview_cards']
+            if str(card['title']) == 'IP records'
+        )
+
+        self.assertEqual(state_code, 'empty')
+        self.assertEqual(str(state_label), 'Empty (no tracked IPs yet)')
+        self.assertIn('No tracked IP records yet.', str(ip_card['footer']))
 
 
 class MikroTikRetentionTests(TestCase):
@@ -698,6 +756,196 @@ class MikroTikSyncRegressionTests(TestCase):
         self.assertTrue(IPAddress.objects.filter(address='10.50.0.11').exists())
         self.assertEqual(device.last_seen_identity, 'RTR-50')
         self.assertIsNotNone(device.last_successful_sync_at)
+
+    def _run_sync_with_client_data(
+        self,
+        device,
+        *,
+        bridge_vlans=None,
+        ip_addresses=None,
+    ):
+        sync_run = MikroTikSyncRun.objects.create(
+            device=device,
+            status=MikroTikSyncRun.Status.SCHEDULED,
+            scheduled_for=timezone.now(),
+        )
+
+        class FakeClient:
+            def get_identity(self):
+                return {'name': 'RTR-50'}
+
+            def get_system_resource(self):
+                return {
+                    'version': '7.15',
+                    'board-name': 'RB5009',
+                    'platform': 'MikroTik',
+                }
+
+            def get_bridge_vlans(self):
+                return bridge_vlans or []
+
+            def get_ip_addresses(self):
+                return ip_addresses or []
+
+            def get_dhcp_servers(self):
+                return []
+
+            def get_dhcp_leases(self):
+                return []
+
+            def get_arp(self):
+                return []
+
+            def get_neighbors(self):
+                return []
+
+        with patch(
+            'ipam.integrations.mikrotik_sync._make_client_for_device',
+            return_value=FakeClient(),
+        ):
+            run_device_sync(device, sync_run)
+
+        sync_run.refresh_from_db()
+        return sync_run
+
+    def test_sync_ignores_dynamic_vlans_except_vlan_1(self):
+        device = MikroTikDevice.objects.create(host='10.50.1.1')
+        sync_run = self._run_sync_with_client_data(
+            device,
+            bridge_vlans=[
+                {
+                    'vlan-ids': '1',
+                    'bridge': 'bridge1',
+                    'dynamic': 'true',
+                    'disabled': 'false',
+                },
+                {
+                    'vlan-ids': '60',
+                    'bridge': 'bridge1',
+                    'dynamic': 'true',
+                    'disabled': 'false',
+                },
+            ],
+        )
+
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.SUCCESS)
+        self.assertTrue(VLAN.objects.filter(number=1).exists())
+        self.assertFalse(VLAN.objects.filter(number=60).exists())
+
+    def test_sync_reuses_existing_manual_vlan_1(self):
+        device = MikroTikDevice.objects.create(host='10.50.1.2')
+        manual_vlan_1 = VLAN.objects.create(number=1, name='Manual Native VLAN')
+
+        sync_run = self._run_sync_with_client_data(
+            device,
+            bridge_vlans=[
+                {
+                    'vlan-ids': '1',
+                    'bridge': 'bridge1',
+                    'dynamic': 'true',
+                    'disabled': 'false',
+                }
+            ],
+        )
+
+        manual_vlan_1.refresh_from_db()
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.SUCCESS)
+        self.assertEqual(VLAN.objects.filter(number=1).count(), 1)
+        self.assertEqual(manual_vlan_1.source_kind, SourceKind.MANUAL)
+        self.assertIsNone(manual_vlan_1.source_device_id)
+
+    def test_native_vlan_1_links_multiple_imported_subnets(self):
+        device = MikroTikDevice.objects.create(host='10.50.2.1')
+        sync_run = self._run_sync_with_client_data(
+            device,
+            bridge_vlans=[
+                {
+                    'vlan-ids': '1',
+                    'bridge': 'bridge1',
+                    'dynamic': 'true',
+                    'disabled': 'false',
+                }
+            ],
+            ip_addresses=[
+                {
+                    'address': '10.51.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*511',
+                },
+                {
+                    'address': '10.52.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'vlan1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*521',
+                },
+            ],
+        )
+
+        vlan_1 = VLAN.objects.get(number=1)
+        subnet_one = Subnet.objects.get(cidr='10.51.0.0/24')
+        subnet_two = Subnet.objects.get(cidr='10.52.0.0/24')
+
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.SUCCESS)
+        self.assertEqual(subnet_one.vlan_id, vlan_1.pk)
+        self.assertEqual(subnet_two.vlan_id, vlan_1.pk)
+
+    def test_native_vlan_1_updates_existing_subnet_only_when_vlan_is_null(self):
+        device = MikroTikDevice.objects.create(host='10.50.3.1')
+        custom_vlan = VLAN.objects.create(number=300, name='Manual 300')
+        existing_with_vlan = Subnet.objects.create(
+            cidr='10.53.0.0/24',
+            vlan=custom_vlan,
+            source_kind=SourceKind.MIKROTIK,
+            source_device=device,
+        )
+        existing_without_vlan = Subnet.objects.create(
+            cidr='10.54.0.0/24',
+            source_kind=SourceKind.MIKROTIK,
+            source_device=device,
+        )
+
+        sync_run = self._run_sync_with_client_data(
+            device,
+            bridge_vlans=[
+                {
+                    'vlan-ids': '1',
+                    'bridge': 'bridge1',
+                    'dynamic': 'true',
+                    'disabled': 'false',
+                }
+            ],
+            ip_addresses=[
+                {
+                    'address': '10.53.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*531',
+                },
+                {
+                    'address': '10.54.0.1/24',
+                    'interface': 'bridge1',
+                    'actual-interface': 'bridge1',
+                    'disabled': 'false',
+                    'invalid': 'false',
+                    '.id': '*541',
+                },
+            ],
+        )
+
+        existing_with_vlan.refresh_from_db()
+        existing_without_vlan.refresh_from_db()
+        vlan_1 = VLAN.objects.get(number=1)
+
+        self.assertEqual(sync_run.status, MikroTikSyncRun.Status.SUCCESS)
+        self.assertEqual(existing_with_vlan.vlan_id, custom_vlan.pk)
+        self.assertEqual(existing_without_vlan.vlan_id, vlan_1.pk)
 
 
 class MikroTikObservationReviewTests(TestCase):
@@ -951,6 +1199,7 @@ class SubnetScanRegressionTests(TestCase):
 
 class CompatibilitySmokeTests(SimpleTestCase):
     def test_core_admin_registrations_exist(self):
+        self.assertIn(Tag, admin.site._registry)
         self.assertIn(VLAN, admin.site._registry)
         self.assertIn(Subnet, admin.site._registry)
         self.assertIn(IPAddress, admin.site._registry)

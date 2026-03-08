@@ -23,7 +23,7 @@ from .models import (
     IPAMSettings, IPAddress, IPAddressObservation, JobRun, MikroTikDevice,
     MikroTikDiscoveryResult, MikroTikDiscoveryRun, MikroTikIntegrationSettings,
     MikroTikSubnet, MikroTikSyncRun, MikroTikTarget, MikroTikVLAN, ReviewItem,
-    SourceKind, Subnet, VLAN,
+    SourceKind, Subnet, Tag, VLAN,
 )
 
 
@@ -64,7 +64,7 @@ class IPAddressTableMixin:
     search_fields = ('=address', 'hostname', 'mac_address')
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('subnet')
+        return super().get_queryset(request).select_related('subnet').prefetch_related('tags')
 
     @display(
         description=_('Status'),
@@ -163,8 +163,62 @@ class JobRunVLANFilter(admin.SimpleListFilter):
         return queryset
 
 
+class TagDisplayMixin:
+    @staticmethod
+    def _format_tag_list(obj):
+        tag_names = [tag.name for tag in obj.tags.all()]
+        if not tag_names:
+            return '-'
+        visible_names = tag_names[:3]
+        hidden_count = len(tag_names) - len(visible_names)
+        if hidden_count > 0:
+            return f"{', '.join(visible_names)} +{hidden_count}"
+        return ', '.join(visible_names)
+
+    @admin.display(description=_('Tags'))
+    def tag_list(self, obj):
+        return self._format_tag_list(obj)
+
+
+@admin.register(Tag)
+class TagAdmin(ModelAdmin):
+    fieldsets = (
+        (
+            _('General'),
+            {
+                'fields': ('name', 'slug', 'is_system'),
+            },
+        ),
+    )
+    list_display = ('name', 'slug', 'is_system')
+    list_filter = ('is_system',)
+    search_fields = ('name', 'slug')
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_system:
+            return ('slug', 'is_system')
+        return super().get_readonly_fields(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.is_system:
+            return False
+        return super().has_delete_permission(request, obj=obj)
+
+    def delete_queryset(self, request, queryset):
+        system_tags = queryset.filter(is_system=True)
+        if system_tags.exists():
+            self.message_user(
+                request,
+                _('System tags cannot be deleted.'),
+                level=messages.WARNING,
+            )
+        deletable_queryset = queryset.exclude(is_system=True)
+        if deletable_queryset.exists():
+            super().delete_queryset(request, deletable_queryset)
+
+
 @admin.register(VLAN)
-class VLANAdmin(ModelAdmin):
+class VLANAdmin(TagDisplayMixin, ModelAdmin):
     fieldsets = (
         (
             _('General'),
@@ -172,17 +226,21 @@ class VLANAdmin(ModelAdmin):
                 'fields': (
                     'number',
                     'name',
+                    'tags',
                 ),
             },
         ),
     )
-    list_display = ('number', 'name')
+    list_display = ('number', 'name', 'tag_list')
     list_filter = ('number', 'name')
     search_fields = ('=number', 'name')
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('tags')
+
 
 @admin.register(IPAddress)
-class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
+class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
     list_display = (
         'status_badge',
         'address_display',
@@ -215,7 +273,10 @@ class IPAddressAdmin(IPAddressTableMixin, ModelAdmin):
         (
             _('Notes'),
             {
-                'fields': ('note',),
+                'fields': (
+                    'note',
+                    'tags',
+                ),
             },
         ),
         (
@@ -491,7 +552,7 @@ class IPAMSettingsAdmin(ModelAdmin):
 
 
 @admin.register(Subnet)
-class SubnetAdmin(ModelAdmin):
+class SubnetAdmin(TagDisplayMixin, ModelAdmin):
     change_form_outer_before_template = (
         'admin/ipam/subnet/change_form_outer_before.html'
     )
@@ -510,6 +571,7 @@ class SubnetAdmin(ModelAdmin):
                     'cidr',
                     'parent',
                     'description',
+                    'tags',
                 ),
             },
         ),
@@ -532,7 +594,9 @@ class SubnetAdmin(ModelAdmin):
         'parent',
         'scan_enabled',
         'discover_subnet',
-        'used_count',
+        'subnet_ip_state',
+        'tracked_ip_count',
+        'tag_list',
     )
     list_filter = ('vlan', 'scan_enabled', 'discover_subnet')
     search_fields = ('=cidr', 'description')
@@ -608,11 +672,23 @@ class SubnetAdmin(ModelAdmin):
             super()
             .get_queryset(request)
             .select_related('vlan', 'parent')
-            .prefetch_related('ipaddress_set')
+            .prefetch_related('ipaddress_set', 'tags')
         )
 
-    @admin.display(description=_('Used IPs'))
-    def used_count(self, obj):
+    @display(
+        description=_('IP state'),
+        label={
+            'empty': 'warning',
+            'tracked': 'success',
+        },
+    )
+    def subnet_ip_state(self, obj):
+        if not obj.ipaddress_set.exists():
+            return ('empty', _('Empty (no tracked IPs yet)'))
+        return ('tracked', _('Tracked IPs present'))
+
+    @admin.display(description=_('Tracked IPs'))
+    def tracked_ip_count(self, obj):
         return len(obj.ipaddress_set.all())
 
     def render_change_form(
@@ -684,6 +760,24 @@ class SubnetAdmin(ModelAdmin):
                 }
             )
 
+        ip_record_details = [
+            {
+                'label': _('State'),
+                'value': (
+                    _('Empty (no tracked IPs yet)')
+                    if not ip_addresses
+                    else _('Tracked IPs present')
+                ),
+            },
+            *[
+                {
+                    'label': status_labels[status],
+                    'value': str(status_counts[status]),
+                }
+                for status in status_labels
+            ],
+        ]
+
         summary_cards = [
             {
                 'title': _('VLAN'),
@@ -694,14 +788,12 @@ class SubnetAdmin(ModelAdmin):
             {
                 'title': _('IP records'),
                 'headline': str(len(ip_addresses)),
-                'details': [
-                    {
-                        'label': status_labels[status],
-                        'value': str(status_counts[status]),
-                    }
-                    for status in status_labels
-                ],
-                'footer': _('Total records in this subnet'),
+                'details': ip_record_details,
+                'footer': (
+                    _('No tracked IP records yet. This can be normal right after import.')
+                    if not ip_addresses
+                    else _('Total records in this subnet')
+                ),
             },
             {
                 'title': _('Scanning'),

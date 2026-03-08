@@ -198,6 +198,11 @@ UNFOLD = {
                         'link': reverse_lazy('admin:ipam_ipaddress_changelist'),
                     },
                     {
+                        'icon': 'sell',
+                        'title': _('Tags'),
+                        'link': reverse_lazy('admin:ipam_tag_changelist'),
+                    },
+                    {
                         'icon': 'tune',
                         'title': _('IPAM settings'),
                         'link': reverse_lazy('admin:ipam_ipamsettings_changelist'),

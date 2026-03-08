@@ -1,3 +1,4 @@
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
@@ -50,13 +51,37 @@ def _safe_first(model):
         return None
 
 
+def _format_vlan_read_label(vlan, *, empty_label='-'):
+    if vlan is None:
+        return empty_label
+    return vlan.name or (_('VLAN %(number)s') % {'number': vlan.number})
+
+
+def _format_admin_last_seen(value):
+    if value is None:
+        return '-'
+
+    local_value = timezone.localtime(value) if timezone.is_aware(value) else value
+    local_date = local_value.date()
+    today = timezone.localdate()
+    clock = local_value.strftime('%H:%M')
+
+    if local_date == today:
+        return f'Oggi - {clock}'
+    if local_date == today - timedelta(days=1):
+        return f'Ieri - {clock}'
+    if local_date.year == today.year:
+        return f'{local_value:%d/%m} - {clock}'
+    return f'{local_value:%d/%m/%y} - {clock}'
+
+
 class IPAddressTableMixin:
     list_display = (
         'status_badge',
         'address_display',
         'hostname_display',
         'mac_address_display',
-        'last_seen',
+        'last_seen_display',
         'notes_summary',
     )
     list_display_links = ('address_display',)
@@ -105,6 +130,10 @@ class IPAddressTableMixin:
     def notes_summary(self, obj):
         note = strip_tags(obj.note or '').strip()
         return (Truncator(note).chars(80) if note else '-', '')
+
+    @display(description=_('Last seen'), header=True, ordering='last_seen')
+    def last_seen_display(self, obj):
+        return (_format_admin_last_seen(obj.last_seen), '')
 
     def _get_reachability_status(self, obj):
         if obj.exclude_ping or obj.last_seen is None:
@@ -156,11 +185,30 @@ class JobRunVLANFilter(admin.SimpleListFilter):
     parameter_name = 'vlan'
 
     def lookups(self, request, model_admin):
-        return [(vlan.pk, str(vlan)) for vlan in VLAN.objects.order_by('number')]
+        return [
+            (vlan.pk, _format_vlan_read_label(vlan))
+            for vlan in VLAN.objects.order_by('number')
+        ]
 
     def queryset(self, request, queryset):
         if self.value():
             return queryset.filter(subnet__vlan_id=self.value())
+        return queryset
+
+
+class SubnetVLANFilter(admin.SimpleListFilter):
+    title = _('VLAN')
+    parameter_name = 'vlan'
+
+    def lookups(self, request, model_admin):
+        return [
+            (vlan.pk, _format_vlan_read_label(vlan))
+            for vlan in VLAN.objects.order_by('number')
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(vlan_id=self.value())
         return queryset
 
 
@@ -274,6 +322,14 @@ class VLANSubnetSection(TableSection):
 
 @admin.register(IPAddress)
 class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
+    change_form_outer_before_template = (
+        'admin/ipam/ipaddress/change_form_outer_before.html'
+    )
+    actions_detail = (
+        'edit_ip_settings',
+        'back_to_ip_overview',
+        'back_to_subnet',
+    )
     list_display = (
         'status_badge',
         'address_display',
@@ -282,7 +338,7 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         'latest_observed_hostname',
         'latest_observed_mac_address',
         'latest_observed_via',
-        'last_seen',
+        'last_seen_display',
         'notes_summary',
     )
     fieldsets = (
@@ -344,6 +400,190 @@ class IPAddressAdmin(TagDisplayMixin, IPAddressTableMixin, ModelAdmin):
         'latest_observed_at',
         'latest_observed_device',
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('subnet__vlan')
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is not None and self._is_overview_mode(request):
+            return ()
+        return super().get_fieldsets(request, obj=obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and self._is_overview_mode(request):
+            return (
+                tuple(field.name for field in self.model._meta.fields)
+                + (
+                    'last_seen_display_readonly',
+                    'latest_observed_hostname',
+                    'latest_observed_mac_address',
+                    'latest_observed_lease',
+                    'latest_observed_at',
+                    'latest_observed_device',
+                )
+            )
+        return super().get_readonly_fields(request, obj=obj)
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+
+        if object_id is not None and self._is_overview_mode(request):
+            extra_context.update(
+                {
+                    'show_save': False,
+                    'show_save_and_continue': False,
+                    'show_save_and_add_another': False,
+                    'show_save_as_new': False,
+                    'show_delete': False,
+                }
+            )
+
+        return super().changeform_view(
+            request,
+            object_id=object_id,
+            form_url=form_url,
+            extra_context=extra_context,
+        )
+
+    def get_actions_detail(self, request, object_id):
+        action_names = [
+            'back_to_ip_overview' if not self._is_overview_mode(request) else 'edit_ip_settings',
+            'back_to_subnet',
+        ]
+        actions = [self.get_unfold_action(name) for name in action_names]
+        return self._filter_unfold_actions_by_permissions(request, actions, object_id)
+
+    def render_change_form(
+        self,
+        request,
+        context,
+        add=False,
+        change=False,
+        form_url='',
+        obj=None,
+    ):
+        if change and obj is not None:
+            context.update(self._get_overview_context(obj))
+
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
+
+    def _get_overview_context(self, obj):
+        reachability_labels = {
+            'online': _('Online'),
+            'offline': _('Offline'),
+            'unknown': _('Unknown'),
+        }
+        subnet_change_url = reverse(
+            f'admin:{Subnet._meta.app_label}_{Subnet._meta.model_name}_change',
+            args=(obj.subnet_id,),
+            current_app=self.admin_site.name,
+        )
+        vlan_label = _format_vlan_read_label(
+            obj.subnet.vlan if obj.subnet.vlan_id else None,
+            empty_label=str(_('No VLAN assigned')),
+        )
+        note = strip_tags(obj.note or '').strip()
+
+        return {
+            'ip_overview_cards': [
+                {
+                    'title': _('Network'),
+                    'headline': obj.subnet.cidr,
+                    'details': [
+                        {
+                            'label': _('Subnet'),
+                            'value': format_html(
+                                '<a href="{}">{}</a>',
+                                subnet_change_url,
+                                obj.subnet.cidr,
+                            ),
+                        },
+                        {'label': _('VLAN'), 'value': vlan_label},
+                    ],
+                    'footer': _('Subnet and VLAN context'),
+                },
+                {
+                    'title': _('Reachability'),
+                    'headline': reachability_labels[self._get_reachability_status(obj)],
+                    'details': [
+                        {'label': _('Last seen'), 'value': _format_admin_last_seen(obj.last_seen)},
+                        {
+                            'label': _('Excluded from ping'),
+                            'value': _('Yes') if obj.exclude_ping else _('No'),
+                        },
+                        {'label': _('Status'), 'value': obj.get_status_display()},
+                    ],
+                    'footer': _('Operational reachability summary'),
+                },
+                {
+                    'title': _('Canonical data'),
+                    'headline': obj.address,
+                    'details': [
+                        {'label': _('Hostname'), 'value': obj.hostname or '-'},
+                        {'label': _('MAC'), 'value': obj.mac_address or '-'},
+                        {
+                            'label': _('Notes'),
+                            'value': Truncator(note).chars(80) if note else '-',
+                        },
+                    ],
+                    'footer': _('Manually managed IPAM fields'),
+                },
+            ],
+        }
+
+    def _is_overview_mode(self, request):
+        return request.GET.get('mode') != 'edit'
+
+    def _get_change_url(self, object_id):
+        return reverse(
+            f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change',
+            args=(object_id,),
+            current_app=self.admin_site.name,
+        )
+
+    def _get_subnet_change_url(self, subnet_id):
+        return reverse(
+            f'admin:{Subnet._meta.app_label}_{Subnet._meta.model_name}_change',
+            args=(subnet_id,),
+            current_app=self.admin_site.name,
+        )
+
+    @action(description=_('Edit IP settings'), icon='edit')
+    def edit_ip_settings(self, request, object_id):
+        return redirect(f'{self._get_change_url(object_id)}?mode=edit')
+
+    @action(description=_('Back to overview'), icon='visibility')
+    def back_to_ip_overview(self, request, object_id):
+        return redirect(self._get_change_url(object_id))
+
+    @action(description=_('Back to subnet'), icon='account_tree')
+    def back_to_subnet(self, request, object_id):
+        next_url = request.GET.get('next')
+        if next_url:
+            return redirect(next_url)
+
+        subnet_id = IPAddress.objects.filter(pk=object_id).values_list(
+            'subnet_id',
+            flat=True,
+        ).first()
+        if subnet_id is None:
+            changelist_url = reverse(
+                f'admin:{IPAddress._meta.app_label}_{IPAddress._meta.model_name}_changelist',
+                current_app=self.admin_site.name,
+            )
+            return redirect(changelist_url)
+        return redirect(self._get_subnet_change_url(subnet_id))
+
+    @admin.display(description=_('Last seen'))
+    def last_seen_display_readonly(self, obj):
+        return _format_admin_last_seen(obj.last_seen)
 
     def _get_latest_observation(self, obj):
         if obj is None:
@@ -623,15 +863,10 @@ class SubnetAdmin(TagDisplayMixin, ModelAdmin):
     )
     list_display = (
         'cidr',
-        'vlan',
-        'parent',
-        'scan_enabled',
-        'discover_subnet',
-        'subnet_ip_state',
-        'tracked_ip_count',
+        'vlan_display',
         'tag_list',
     )
-    list_filter = ('vlan', 'scan_enabled', 'discover_subnet')
+    list_filter = (SubnetVLANFilter, 'scan_enabled', 'discover_subnet')
     search_fields = ('=cidr', 'description')
 
     def get_changeform_datasets(self, request):
@@ -708,6 +943,10 @@ class SubnetAdmin(TagDisplayMixin, ModelAdmin):
             .prefetch_related('ipaddress_set', 'tags')
         )
 
+    @admin.display(description=_('VLAN'), ordering='vlan__number')
+    def vlan_display(self, obj):
+        return _format_vlan_read_label(obj.vlan)
+
     @display(
         description=_('IP state'),
         label={
@@ -766,11 +1005,14 @@ class SubnetAdmin(TagDisplayMixin, ModelAdmin):
         ]
 
         if obj.vlan_id:
-            vlan_title = _('VLAN %(number)s') % {'number': obj.vlan.number}
+            vlan_title = _format_vlan_read_label(
+                obj.vlan,
+                empty_label=str(_('No VLAN assigned')),
+            )
             vlan_details.append(
                 {
-                    'label': _('Name'),
-                    'value': obj.vlan.name or _('Unnamed VLAN'),
+                    'label': _('VLAN ID'),
+                    'value': str(obj.vlan.number),
                 }
             )
 

@@ -633,6 +633,110 @@ class SubnetAdminEmptyStateTests(TestCase):
         self.assertIn('No tracked IP records yet.', str(ip_card['footer']))
 
 
+class AdminReadUXTests(TestCase):
+    def setUp(self):
+        self.user = create_admin_user('admin-read-ux')
+        self.client.force_login(self.user)
+        self.factory = RequestFactory()
+
+    def test_subnet_changelist_columns_are_essential(self):
+        subnet_admin = admin.site._registry[Subnet]
+
+        self.assertEqual(
+            subnet_admin.list_display,
+            ('cidr', 'vlan_display', 'tag_list'),
+        )
+
+    def test_subnet_vlan_label_prefers_name_with_vlan_number_fallback(self):
+        subnet_admin = admin.site._registry[Subnet]
+        named_vlan = VLAN.objects.create(number=333, name='Operations')
+        unnamed_vlan = VLAN.objects.create(number=334, name='')
+        named_subnet = Subnet.objects.create(cidr='10.33.3.0/24', vlan=named_vlan)
+        unnamed_subnet = Subnet.objects.create(cidr='10.33.4.0/24', vlan=unnamed_vlan)
+
+        self.assertEqual(subnet_admin.vlan_display(named_subnet), 'Operations')
+        self.assertEqual(subnet_admin.vlan_display(unnamed_subnet), 'VLAN 334')
+
+    def test_ip_last_seen_formatter_uses_operational_short_format(self):
+        vlan = VLAN.objects.create(number=350, name='Support')
+        subnet = Subnet.objects.create(cidr='10.35.0.0/24', vlan=vlan)
+        ip = IPAddress.objects.create(subnet=subnet, address='10.35.0.10')
+        ip_admin = admin.site._registry[IPAddress]
+
+        today_value = timezone.localtime(timezone.now()).replace(second=0, microsecond=0)
+        yesterday_value = (today_value - timedelta(days=1)).replace(second=0, microsecond=0)
+        same_year_value = (today_value - timedelta(days=30)).replace(second=0, microsecond=0)
+        if timezone.localtime(same_year_value).year != timezone.localdate().year:
+            same_year_value = today_value.replace(month=6, day=15, hour=9, minute=45)
+        different_year_value = (today_value - timedelta(days=400)).replace(
+            second=0,
+            microsecond=0,
+        )
+
+        ip.last_seen = today_value
+        self.assertEqual(
+            ip_admin.last_seen_display(ip)[0],
+            f"Oggi - {timezone.localtime(today_value):%H:%M}",
+        )
+
+        ip.last_seen = yesterday_value
+        self.assertEqual(
+            ip_admin.last_seen_display(ip)[0],
+            f"Ieri - {timezone.localtime(yesterday_value):%H:%M}",
+        )
+
+        ip.last_seen = same_year_value
+        self.assertEqual(
+            ip_admin.last_seen_display(ip)[0],
+            f"{timezone.localtime(same_year_value):%d/%m} - {timezone.localtime(same_year_value):%H:%M}",
+        )
+
+        ip.last_seen = different_year_value
+        self.assertEqual(
+            ip_admin.last_seen_display(ip)[0],
+            f"{timezone.localtime(different_year_value):%d/%m/%y} - {timezone.localtime(different_year_value):%H:%M}",
+        )
+
+    def test_ip_admin_default_change_view_is_read_only_overview(self):
+        vlan = VLAN.objects.create(number=360, name='Users')
+        subnet = Subnet.objects.create(cidr='10.36.0.0/24', vlan=vlan)
+        ip = IPAddress.objects.create(subnet=subnet, address='10.36.0.11')
+        ip_admin = admin.site._registry[IPAddress]
+        change_url = reverse('admin:ipam_ipaddress_change', args=(ip.pk,))
+
+        overview_request = self.factory.get(change_url)
+        overview_request.user = self.user
+        edit_request = self.factory.get(f'{change_url}?mode=edit')
+        edit_request.user = self.user
+
+        self.assertEqual(ip_admin.get_fieldsets(overview_request, obj=ip), ())
+        self.assertNotEqual(ip_admin.get_fieldsets(edit_request, obj=ip), ())
+
+        overview_response = self.client.get(change_url)
+        self.assertEqual(overview_response.status_code, 200)
+        self.assertNotContains(overview_response, 'name="_save"')
+
+        edit_response = self.client.get(f'{change_url}?mode=edit')
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(edit_response, 'name="_save"')
+
+    def test_ip_admin_back_to_subnet_action_redirects_to_parent_subnet(self):
+        vlan = VLAN.objects.create(number=370, name='Infra')
+        subnet = Subnet.objects.create(cidr='10.37.0.0/24', vlan=vlan)
+        ip = IPAddress.objects.create(subnet=subnet, address='10.37.0.12')
+        ip_admin = admin.site._registry[IPAddress]
+        request = self.factory.get(reverse('admin:ipam_ipaddress_change', args=(ip.pk,)))
+        request.user = self.user
+
+        response = ip_admin.back_to_subnet(request, ip.pk)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse('admin:ipam_subnet_change', args=(subnet.pk,)),
+        )
+
+
 class MikroTikRetentionTests(TestCase):
     def setUp(self):
         create_mikrotik_settings(retention_days=5)

@@ -1,0 +1,7 @@
+# Product Owner review for canonical specification and its governance.
+# Review requests are not mandatory until GitHub branch protection requiring
+# Code Owner review is configured and verified.
+/docs/specification/ @Capobuf
+/docs/README.md @Capobuf
+/AGENTS.md @Capobuf
+/.github/CODEOWNERS @Capobuf

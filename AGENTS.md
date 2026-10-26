@@ -16,7 +16,6 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 - After approval, apply **only** the authorized spec diff and report the changed sections. Never silently resolve a contradiction by editing another section. If more changes are needed, request authorization again.
 - The specification may not be changed as a side effect of implementing an issue, changing framework versions, applying a formatter, installing a skill, refactoring, or cleaning the repository.
 - **Do not weaken these rules** by editing `AGENTS.md` or `.github/CODEOWNERS` without the same prior explanation and explicit approval.
-- Old NetVibe code and historical documentation, including `docs/PROJECT_SPECIFICATIONS.md` and `docs/MASTER_ARCHITECTURE.md`, are **legacy** and never override the canonical specification. Do not use them as implementation examples or requirements without an explicit request.
 - `CODEOWNERS` documents review ownership but is not itself a technical merge/push lock. Do not claim enforcement unless applicable GitHub branch protection requiring Code Owner review is actually configured and verified.
 
 ## 2. Never invent; minimal coherent changes
@@ -49,7 +48,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 6. **Owner reviews manually first.** Address feedback in the same branch, refresh Docker, and ask for review again where visible behavior changed.
 7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MySQL testing database. If fixes change UI or behavior, notify the owner and obtain renewed review.
 8. After approval and successful relevant checks, push, create PR, merge and close the linked issue. **Do not push/open PR/merge/close before approval** unless the Product Owner explicitly asks for GitHub publication as the task's outcome; in that case publish the branch only and do not infer merge approval.
-9. Trivial approved direct-`main` tasks can commit/push without a PR. Never force-push or rewrite `main`; retain historical Git commits.
+9. Trivial approved direct-`main` tasks can commit/push without a PR. Never force-push or rewrite `main`.
 
 ## 5. Proportional testing and minimal CI
 

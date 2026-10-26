@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Company;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,6 +42,12 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'companyNavigation' => fn () => $request->user()?->hasVerifiedEmail() ? [
+                'companies' => Company::query()->orderBy('name')->orderBy('id')->get(['id', 'name']),
+                'currentCompanyId' => $request->route('company') instanceof Company
+                    ? $request->route('company')->id
+                    : null,
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

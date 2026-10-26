@@ -65,6 +65,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 - Use Ponytail for small effective changes; prefer its skill without lifecycle hook overhead. This project's owner-acceptance-before-tests rule takes precedence over generic skill recommendations.
 - Use Laravel Boost for version-aware reference material and task-relevant Laravel/Inertia/Pest skills when installed.
 - Use the official shadcn/ui skill; reuse configured UI components before adding new ones.
+- Use React Best Practices (vercel:react-best-practices) when writing or reviewing React/TSX code; apply only rules relevant to this React/Inertia application, keeping changes minimal and preserving owner acceptance before automated tests.
 - A NetVibe IPAM skill may refer to approved A01 rules, but must not silently turn proposals into requirements or modify protected documentation.
 - Do not bulk-install unrelated skills or let a skill installer overwrite protected files without the Product Owner's explicit approval.
 

@@ -1,5 +1,5 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { BookOpen, Building2, FolderGit2, LayoutGrid } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -14,6 +14,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as companies } from '@/routes/administration/companies';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -38,6 +39,8 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { auth } = usePage().props;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -54,6 +57,18 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                {auth.user?.is_superadmin ? (
+                    <NavMain
+                        label="Amministrazione"
+                        items={[
+                            {
+                                title: 'Aziende',
+                                href: companies(),
+                                icon: Building2,
+                            },
+                        ]}
+                    />
+                ) : null}
             </SidebarContent>
 
             <SidebarFooter>

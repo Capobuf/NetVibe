@@ -6,7 +6,7 @@
 
 **Già deciso:** backend Laravel, frontend React/Inertia, MySQL, UI shadcn/ui + Tailwind, sviluppo Docker, applicazione utilizzabile senza integrazioni, IPv4 soltanto. Non sono obbligatori in produzione Node, Redis, worker permanenti, SSR, probe, VPN o SNMP.
 
-**Proposta:** partire dallo starter kit ufficiale Laravel per React, con Laravel 13/PHP 8.3+, React 19, Inertia 3, TypeScript, Tailwind CSS 4, shadcn/ui, autenticazione Laravel Fortify, Vite, Pest e Pint. **Verificare le versioni e compatibilità attuali al momento dello starter**, prima di rendere vincolante questa scelta; non importare Filament o vecchi componenti perché presenti nella precedente codebase.
+**Proposta:** partire dallo starter kit ufficiale Laravel per React, con Laravel 13/PHP 8.3+, React 19, Inertia 3, TypeScript, Tailwind CSS 4, shadcn/ui, autenticazione Laravel Fortify, Vite, Pest e Pint. **Verificare le versioni e compatibilità attuali al momento dello starter**, prima di rendere vincolante questa scelta.
 
 **Da verificare prima dello sviluppo ampio:** build frontend senza Node permanente in produzione; deploy PHP-FPM/MySQL non Docker su hosting rappresentativo; estensioni PHP e requisiti cron/HTTPS concretamente necessari.
 
@@ -49,8 +49,8 @@ Le regole **già approvate** su test, Docker e ordine delle approvazioni sono in
 - aggiornare l'istanza Docker dopo ogni iterazione pertinente, senza rebuild superflui;
 - CI iniziale minima e ampliabile soltanto quando necessario.
 
-## 5. GitHub e storico
+## 5. GitHub
 
-Repository selezionato: `ShitWRKS/NetVibe`. Si conserva `main` e tutta la storia Git raggiungibile; il codice legacy non è fonte progettuale. Un commit normale che elimina il codice precedente mantiene la storia di `main`. Prima di eliminare branch storici con commit non presenti su `main`, conservare i relativi riferimenti Git (ad esempio tag), verificandoli.
+Repository selezionato: `ShitWRKS/NetVibe`.
 
-**Pulizia/reset della codebase, installazione dello starter e cancellazione dei branch sono attività separate e non sono autorizzate dal solo inserimento della specifica su GitHub.**
+**L'installazione dello starter non è autorizzata dal solo inserimento della specifica su GitHub.**

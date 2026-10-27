@@ -17,6 +17,7 @@ import ExcludedRanges from '@/components/networks/excluded-ranges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -33,6 +34,8 @@ import type { ExcludedRange, IpAddress, Subnet, Vlan } from '@/types/network';
 
 type IpColumn = TableColumn<'ip' | 'hostname' | 'mac_address' | 'description'>;
 
+type IpRow = Omit<IpAddress, 'id'> & { id: number | null; excluded: boolean };
+
 type Props = {
     company: Company;
     site: Site;
@@ -40,13 +43,14 @@ type Props = {
     vlan: Vlan | null;
     excludedRanges: ExcludedRange[];
     firstProposableIp: string | null;
+    addressCounts: { documented: number; excluded: number; proposable: number };
     query: {
         search: string;
         sort: IpColumn['id'] | null;
         direction: 'asc' | 'desc';
     };
     ipAddresses: {
-        data: IpAddress[];
+        data: IpRow[];
         total: number;
         current_page: number;
         last_page: number;
@@ -63,6 +67,7 @@ export default function SubnetShow({
     ipAddresses,
     excludedRanges,
     firstProposableIp,
+    addressCounts,
     query,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
@@ -126,6 +131,26 @@ export default function SubnetShow({
                         ) : null}
                     </div>
                 </header>
+                <div className="grid gap-3 sm:grid-cols-3">
+                    {(
+                        [
+                            ['documented', 'Documentati'],
+                            ['excluded', 'Esclusi non documentati'],
+                            ['proposable', 'Proponibili'],
+                        ] as const
+                    ).map(([key, label]) => (
+                        <Card key={key}>
+                            <CardHeader>
+                                <CardTitle>{label}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-3xl font-semibold tabular-nums">
+                                    {addressCounts[key].toLocaleString('it-IT')}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
                 <div className="flex flex-wrap items-center gap-3">
                     {firstProposableIp !== null ? (
                         auth.user.is_superadmin ? (
@@ -144,26 +169,19 @@ export default function SubnetShow({
                         )
                     ) : (
                         <p className="text-sm text-muted-foreground">
-                            Nessun IP proponibile: gli indirizzi utilizzabili
-                            sono tutti documentati o esclusi.
+                            Nessun IP proponibile
                         </p>
                     )}
-                    {firstProposableIp !== null ? (
-                        <p className="text-sm text-muted-foreground">
-                            Il suggerimento non prenota l’indirizzo e non
-                            verifica la rete.
-                        </p>
-                    ) : null}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-col gap-1">
-                        <h2 className="font-semibold">IP documentati</h2>
+                        <h2 className="font-semibold">Indirizzi</h2>
                         <p className="text-sm text-muted-foreground">
-                            {ipAddresses.total}{' '}
+                            {ipAddresses.total.toLocaleString('it-IT')}{' '}
                             {ipAddresses.total === 1
-                                ? 'indirizzo registrato'
-                                : 'indirizzi registrati'}
-                            {query.search ? ' trovati' : ''}
+                                ? 'indirizzo'
+                                : 'indirizzi'}
+                            {query.search ? ' trovati' : ' utilizzabili'}
                         </p>
                     </div>
                     <Button variant="outline" asChild>
@@ -260,7 +278,7 @@ export default function SubnetShow({
                     </div>
                     <div className="overflow-hidden rounded-lg border">
                         <Table
-                            aria-label={`IP documentati nella subnet ${subnet.cidr}`}
+                            aria-label={`Indirizzi nella subnet ${subnet.cidr}`}
                         >
                             <TableHeader>
                                 <TableRow>
@@ -329,7 +347,7 @@ export default function SubnetShow({
                             </TableHeader>
                             <TableBody>
                                 {ipAddresses.data.map((ipAddress) => (
-                                    <TableRow key={ipAddress.id}>
+                                    <TableRow key={ipAddress.ip}>
                                         {visibleColumns.map((column) => (
                                             <TableCell
                                                 key={column.id}
@@ -340,15 +358,63 @@ export default function SubnetShow({
                                                         : 'max-w-lg break-words whitespace-pre-wrap'
                                                 }
                                             >
-                                                {ipAddress[column.id] ?? '—'}
+                                                {column.id === 'ip' ? (
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span>
+                                                            {ipAddress.ip}
+                                                        </span>
+                                                        <Badge
+                                                            variant={
+                                                                ipAddress.id !==
+                                                                null
+                                                                    ? 'secondary'
+                                                                    : 'outline'
+                                                            }
+                                                            className="font-sans"
+                                                        >
+                                                            {ipAddress.id !==
+                                                            null
+                                                                ? 'Documentato'
+                                                                : ipAddress.excluded
+                                                                  ? 'Escluso'
+                                                                  : 'Proponibile'}
+                                                        </Badge>
+                                                        {ipAddress.id !==
+                                                            null &&
+                                                        ipAddress.excluded ? (
+                                                            <Badge
+                                                                variant="outline"
+                                                                className="font-sans"
+                                                            >
+                                                                Escluso
+                                                            </Badge>
+                                                        ) : null}
+                                                    </div>
+                                                ) : (
+                                                    (ipAddress[column.id] ??
+                                                    '—')
+                                                )}
                                             </TableCell>
                                         ))}
                                         <TableCell className="text-right">
-                                            <IpAddressForm
-                                                {...formContext}
-                                                ipAddress={ipAddress}
-                                                iconTrigger
-                                            />
+                                            {ipAddress.id !== null ? (
+                                                <IpAddressForm
+                                                    key={`record-${ipAddress.id}`}
+                                                    {...formContext}
+                                                    ipAddress={{
+                                                        ...ipAddress,
+                                                        id: ipAddress.id,
+                                                    }}
+                                                    iconTrigger
+                                                />
+                                            ) : auth.user.is_superadmin ? (
+                                                <IpAddressForm
+                                                    key={`new-${ipAddress.ip}`}
+                                                    {...formContext}
+                                                    suggestedIp={ipAddress.ip}
+                                                    iconTrigger
+                                                />
+                                            ) : null}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -361,16 +427,12 @@ export default function SubnetShow({
                                             <p className="font-medium">
                                                 {query.search
                                                     ? 'Nessun IP trovato'
-                                                    : ipAddresses.total === 0
-                                                      ? 'Nessun IP documentato'
-                                                      : 'Nessun IP in questa pagina'}
+                                                    : 'Nessun IP in questa pagina'}
                                             </p>
                                             <p className="mt-2 text-muted-foreground">
                                                 {query.search
                                                     ? 'Prova un altro termine o azzera la ricerca.'
-                                                    : ipAddresses.total === 0
-                                                      ? 'Gli indirizzi compariranno qui dopo la registrazione.'
-                                                      : 'Torna alla pagina precedente per consultare gli indirizzi rimasti.'}
+                                                    : 'Torna alla pagina precedente.'}
                                             </p>
                                         </TableCell>
                                     </TableRow>
@@ -381,8 +443,8 @@ export default function SubnetShow({
                 </div>
                 {ipAddresses.last_page > 1 || ipAddresses.current_page > 1 ? (
                     <nav
-                        aria-label="Pagine degli IP documentati"
-                        className="flex items-center justify-end gap-3 text-sm text-muted-foreground"
+                        aria-label="Pagine degli indirizzi"
+                        className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground"
                     >
                         {ipAddresses.prev_page_url ? (
                             <IconButton label="Pagina precedente" asChild>
@@ -399,7 +461,46 @@ export default function SubnetShow({
                                 <ArrowLeft />
                             </IconButton>
                         )}
-                        <span>Pagina {ipAddresses.current_page}</span>
+                        <Form
+                            {...show.form(route)}
+                            options={{
+                                preserveState: true,
+                                preserveScroll: true,
+                            }}
+                            className="flex items-center gap-2"
+                        >
+                            <input
+                                type="hidden"
+                                name="search"
+                                value={query.search}
+                            />
+                            <input
+                                type="hidden"
+                                name="sort"
+                                value={query.sort ?? ''}
+                            />
+                            <input
+                                type="hidden"
+                                name="direction"
+                                value={query.direction}
+                            />
+                            <Label htmlFor="ip-page">Pagina</Label>
+                            <Input
+                                key={ipAddresses.current_page}
+                                id="ip-page"
+                                name="page"
+                                type="number"
+                                min={1}
+                                max={ipAddresses.last_page}
+                                defaultValue={ipAddresses.current_page}
+                                className="w-24"
+                                required
+                            />
+                            <span>
+                                di{' '}
+                                {ipAddresses.last_page.toLocaleString('it-IT')}
+                            </span>
+                        </Form>
                         {ipAddresses.next_page_url ? (
                             <IconButton label="Pagina successiva" asChild>
                                 <Link

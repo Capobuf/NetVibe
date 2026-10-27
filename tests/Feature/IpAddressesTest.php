@@ -26,14 +26,19 @@ class IpAddressesTest extends TestCase
             'address' => ip2long('10.0.0.200'), 'hostname' => 'target',
             'description' => 'Carico 50%', 'mac_address' => 'AA:BB:CC:DD:EE:FF',
         ]);
+        $subnet->excludedRanges()->create([
+            'start_address' => ip2long('10.0.0.20'), 'end_address' => ip2long('10.0.0.60'),
+        ]);
         $otherSubnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.1.0/24'));
         $otherSubnet->ipAddresses()->create(['address' => ip2long('10.0.1.200'), 'hostname' => 'target']);
         $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page
             ->where('query.sort', null)->where('query.direction', 'asc')
-            ->where('ipAddresses.total', 52)->where('ipAddresses.data.0.ip', '10.0.0.2')
-            ->where('ipAddresses.data.1.ip', '10.0.0.3'));
+            ->where('addressCounts', ['documented' => 52, 'excluded' => 8, 'proposable' => 194])
+            ->where('ipAddresses.total', 254)->where('ipAddresses.data.0.ip', '10.0.0.1')
+            ->where('ipAddresses.data.0.id', null)->where('ipAddresses.data.1.ip', '10.0.0.2'));
+        $this->assertDatabaseCount('ip_addresses', 53);
         $this->get($show.'?search=target')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.ip', '10.0.0.200'));
         $this->get($show.'?search=%25')->assertInertia(fn (Assert $page) => $page
@@ -42,13 +47,35 @@ class IpAddressesTest extends TestCase
             ->where('query.sort', null)->where('query.direction', 'asc')
             ->where('ipAddresses.total', 51)->where('ipAddresses.data.0.ip', '10.0.0.2'));
         $this->get($show.'?search=10.0.0.&sort=ip&direction=desc')->assertInertia(fn (Assert $page) => $page
-            ->where('ipAddresses.data.0.ip', '10.0.0.200')
-            ->where('ipAddresses.data.1.ip', '10.0.0.52')
+            ->where('ipAddresses.data.0.ip', '10.0.0.254')
+            ->where('ipAddresses.data.1.ip', '10.0.0.253')
             ->where('ipAddresses.next_page_url', function ($url) {
                 parse_str(parse_url($url, PHP_URL_QUERY), $query);
 
                 return $query === ['search' => '10.0.0.', 'sort' => 'ip', 'direction' => 'desc', 'page' => '2'];
             }));
+    }
+
+    public function test_virtual_rows_and_metadata_matches_share_global_sorting_without_duplicates(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/29'));
+        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'hostname' => 'router']);
+        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.4'), 'hostname' => 'router']);
+        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.5'), 'description' => '10.0.0.2']);
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+
+        $this->get($show.'?search=10.0.0.2&sort=hostname')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 2)->where('ipAddresses.data.0.ip', '10.0.0.5')
+            ->where('ipAddresses.data.1.ip', '10.0.0.2'));
+        $this->get($show.'?sort=hostname&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 6)->where('ipAddresses.data.0.ip', '10.0.0.2')
+            ->where('ipAddresses.data.1.ip', '10.0.0.4')->where('ipAddresses.data.2.ip', '10.0.0.1')
+            ->where('ipAddresses.data.3.ip', '10.0.0.3')->where('ipAddresses.data.4.ip', '10.0.0.5')
+            ->where('ipAddresses.data.5.ip', '10.0.0.6'));
+        $this->assertDatabaseCount('ip_addresses', 3);
     }
 
     public function test_documented_ip_is_unique_and_keeps_its_data_when_moved_until_explicitly_freed(): void
@@ -83,8 +110,8 @@ class IpAddressesTest extends TestCase
         $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'address' => 3232235796]);
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page->component('subnets/show')
-            ->where('ipAddresses.total', 2)->where('ipAddresses.data.0.ip', '192.168.1.10')
-            ->where('ipAddresses.data.1.ip', '192.168.1.20'));
+            ->where('ipAddresses.total', 254)->where('ipAddresses.data.9.ip', '192.168.1.10')
+            ->where('ipAddresses.data.19.ip', '192.168.1.20'));
 
         $delete = route('companies.sites.subnets.ip-addresses.destroy', [$company, $site, $subnet, $ip]);
         $this->delete($delete)->assertSessionHasErrors('confirmed');

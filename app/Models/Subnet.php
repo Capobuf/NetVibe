@@ -34,6 +34,27 @@ class Subnet extends Model
         return $address === null ? null : long2ip($address);
     }
 
+    /** @return array{documented: int, excluded: int, proposable: int} */
+    public function addressCounts(): array
+    {
+        [$first, $last] = Ipv4Ranges::usableBounds($this->network_address, $this->broadcast_address);
+        $documented = $this->ipAddresses()->whereBetween('address', [$first, $last])->count();
+        $excluded = (int) $this->excludedRanges()
+            ->where('start_address', '<=', $last)->where('end_address', '>=', $first)
+            ->selectRaw('COALESCE(SUM(LEAST(end_address, ?) - GREATEST(start_address, ?) + 1), 0) AS total', [$last, $first])
+            ->value('total');
+        $documentedExcluded = $this->ipAddresses()->whereBetween('address', [$first, $last])
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')->from('excluded_ranges')
+                    ->whereColumn('excluded_ranges.subnet_id', 'ip_addresses.subnet_id')
+                    ->whereColumn('excluded_ranges.start_address', '<=', 'ip_addresses.address')
+                    ->whereColumn('excluded_ranges.end_address', '>=', 'ip_addresses.address');
+            })->count();
+        $excluded -= $documentedExcluded;
+
+        return ['documented' => $documented, 'excluded' => $excluded, 'proposable' => $last - $first + 1 - $documented - $excluded];
+    }
+
     /** @return HasMany<IpAddress, $this> */
     public function ipAddresses(): HasMany
     {

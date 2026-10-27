@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\VlanController;
@@ -17,11 +18,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->scopeBindings()->name('companies.sites.show');
 
     Route::scopeBindings()->group(function () {
-        Route::resource('companies.sites.subnets', SubnetController::class)->only(['index']);
+        Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);
         Route::resource('companies.sites.vlans', VlanController::class)->only(['index']);
     });
 
     Route::middleware('can:administer')->scopeBindings()->group(function () {
+        Route::resource('companies.sites.subnets.ip-addresses', IpAddressController::class)
+            ->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'update', 'destroy']);
         Route::resource('companies.sites.vlans', VlanController::class)->only(['store', 'update']);
         Route::resource('companies.sites.subnets', SubnetController::class)->only(['store', 'update']);
     });

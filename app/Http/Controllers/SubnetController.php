@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SubnetRequest;
 use App\Models\Company;
+use App\Models\IpAddress;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\Ipv4Cidr;
@@ -32,6 +33,21 @@ class SubnetController extends Controller
         return $this->save($request, $site);
     }
 
+    public function show(Company $company, Site $site, Subnet $subnet): Response
+    {
+        return Inertia::render('subnets/show', [
+            'company' => $company->only('id', 'name'),
+            'site' => $site->only('id', 'name'),
+            'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id'),
+            'vlan' => $subnet->vlan?->only('id', 'tag', 'name'),
+            'ipAddresses' => $subnet->ipAddresses()->orderBy('address')->paginate(50)
+                ->through(fn (IpAddress $ipAddress) => [
+                    ...$ipAddress->only('id', 'description', 'hostname', 'mac_address'),
+                    'ip' => long2ip($ipAddress->address),
+                ]),
+        ]);
+    }
+
     public function update(SubnetRequest $request, Company $company, Site $site, Subnet $subnet): RedirectResponse
     {
         return $this->save($request, $site, $subnet);
@@ -46,7 +62,15 @@ class SubnetController extends Controller
             DB::transaction(function () use ($data, $range, $site, $subnet) {
                 // Lock the existing parent even when it has no subnets yet.
                 $site = Site::query()->lockForUpdate()->findOrFail($site->id);
-                $record = $subnet ? $site->subnets()->findOrFail($subnet->id) : $site->subnets()->make();
+                $record = $subnet ? $site->subnets()->lockForUpdate()->findOrFail($subnet->id) : $site->subnets()->make();
+                if ($subnet && $record->ipAddresses()->where(function ($query) use ($range) {
+                    $query->where('address', '<', $range['network_address'])
+                        ->orWhere('address', '>', $range['broadcast_address']);
+                })->exists()) {
+                    throw ValidationException::withMessages([
+                        'cidr' => 'Il nuovo CIDR lascerebbe fuori IP documentati. Modifica o libera prima gli indirizzi interessati.',
+                    ]);
+                }
                 $overlap = $site->subnets()
                     ->when($subnet, fn ($query) => $query->where('id', '!=', $subnet->id))
                     ->where('network_address', '<=', $range['broadcast_address'])

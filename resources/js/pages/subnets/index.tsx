@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import SubnetForm from '@/components/networks/subnet-form';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index as companiesIndex } from '@/routes/companies';
-import { index } from '@/routes/companies/sites/subnets';
+import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
 
@@ -123,9 +123,16 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
                                 return (
                                     <TableRow key={subnet.id}>
                                         <TableCell className="pl-4">
-                                            <span className="font-mono font-medium tabular-nums">
+                                            <Link
+                                                href={show({
+                                                    company: company.id,
+                                                    site: site.id,
+                                                    subnet: subnet.id,
+                                                })}
+                                                className="font-mono font-medium tabular-nums underline-offset-4 hover:underline focus-visible:underline"
+                                            >
                                                 {subnet.cidr}
-                                            </span>
+                                            </Link>
                                         </TableCell>
                                         <TableCell className="max-w-lg min-w-48 whitespace-normal">
                                             <div className="flex flex-col gap-1 break-words">

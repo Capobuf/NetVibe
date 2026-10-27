@@ -27,7 +27,12 @@ export function DeletionConfirmation({
     const id = useId();
 
     return (
-        <Form {...action} onSuccess={onSuccess} className="flex flex-col gap-5">
+        <Form
+            {...action}
+            onSuccess={onSuccess}
+            options={{ preserveScroll: true }}
+            className="flex flex-col gap-5"
+        >
             {({ processing, errors }) => (
                 <>
                     <Alert>

@@ -15,15 +15,13 @@ type PageProps = {
     auth: Auth;
 };
 
-export default function Profile(
-    {
-        mustVerifyEmail,
-        status,
-    }: {
-        mustVerifyEmail: boolean;
-        status?: string;
-    },
-) {
+export default function Profile({
+    mustVerifyEmail,
+    status,
+}: {
+    mustVerifyEmail: boolean;
+    status?: string;
+}) {
     const { auth } = usePage<PageProps>().props;
 
     return (
@@ -91,20 +89,23 @@ export default function Profile(
                                 auth.user.email_verified_at === null && (
                                     <div>
                                         <p className="-mt-4 text-sm text-muted-foreground">
-                                            Il tuo indirizzo email non è verificato.{' '}
+                                            Il tuo indirizzo email non è
+                                            verificato.{' '}
                                             <Link
                                                 href={send()}
                                                 as="button"
-                                                className="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                                                className="rounded-sm font-medium text-foreground transition-colors hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                             >
-                                                Invia di nuovo l’email di verifica.
+                                                Invia di nuovo l’email di
+                                                verifica.
                                             </Link>
                                         </p>
 
                                         {status ===
                                             'verification-link-sent' && (
                                             <div className="mt-2 text-sm font-medium text-green-600">
-                                                Abbiamo inviato un nuovo link di verifica al tuo indirizzo email.
+                                                Abbiamo inviato un nuovo link di
+                                                verifica al tuo indirizzo email.
                                             </div>
                                         )}
                                     </div>

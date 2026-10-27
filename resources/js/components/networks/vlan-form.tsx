@@ -15,7 +15,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import { store, update } from '@/routes/companies/sites/vlans';
 import type { Vlan } from '@/types/network';
@@ -67,9 +67,11 @@ export default function VlanForm({
                     className="flex flex-col gap-6"
                 >
                     {({ processing, errors }) => (
-                        <>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-tag`}>ID VLAN</Label>
+                        <FieldGroup>
+                            <Field data-invalid={Boolean(errors.tag)}>
+                                <FieldLabel htmlFor={`${id}-tag`}>
+                                    ID VLAN
+                                </FieldLabel>
                                 <Input
                                     id={`${id}-tag`}
                                     name="tag"
@@ -92,11 +94,11 @@ export default function VlanForm({
                                     id={`${id}-tag-error`}
                                     message={errors.tag}
                                 />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-name`}>
+                            </Field>
+                            <Field data-invalid={Boolean(errors.name)}>
+                                <FieldLabel htmlFor={`${id}-name`}>
                                     Nome (facoltativo)
-                                </Label>
+                                </FieldLabel>
                                 <Input
                                     id={`${id}-name`}
                                     name="name"
@@ -110,7 +112,7 @@ export default function VlanForm({
                                     id={`${id}-name-error`}
                                     message={errors.name}
                                 />
-                            </div>
+                            </Field>
                             <DialogFooter>
                                 <DialogClose asChild>
                                     <Button
@@ -130,7 +132,7 @@ export default function VlanForm({
                                     {vlan ? 'Salva VLAN' : 'Crea VLAN'}
                                 </Button>
                             </DialogFooter>
-                        </>
+                        </FieldGroup>
                     )}
                 </Form>
             </DialogContent>

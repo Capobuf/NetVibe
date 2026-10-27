@@ -1,3 +1,10 @@
+import {
+    Empty,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+    EmptyDescription,
+} from '@/components/ui/empty';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import {
     ArrowDown,
@@ -9,17 +16,23 @@ import {
     Search,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
 import { IconButton } from '@/components/icon-button';
 import InputError from '@/components/input-error';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
+import { useTablePreferences } from '@/hooks/use-table-preferences';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import ExcludedRanges from '@/components/networks/excluded-ranges';
 import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+} from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -91,14 +104,19 @@ export default function SubnetShow({
     tags,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
-    const [columns, setColumns] = useState<IpColumn[]>([
-        { id: 'hostname', label: 'Hostname', visible: true },
-        { id: 'ip', label: 'IP', visible: true },
-        { id: 'mac_address', label: 'MAC Address', visible: true },
-        { id: 'description', label: 'Descrizione', visible: true },
-        { id: 'status', label: 'Stato', visible: true },
-        { id: 'tags', label: 'Tag', visible: true },
-    ]);
+    const { columns, setColumns, separators, setSeparators } =
+        useTablePreferences<IpColumn['id']>(
+            'ip-addresses',
+            [
+                { id: 'hostname', label: 'Hostname', visible: true },
+                { id: 'ip', label: 'IP', visible: true },
+                { id: 'mac_address', label: 'MAC Address', visible: true },
+                { id: 'description', label: 'Descrizione', visible: true },
+                { id: 'status', label: 'Stato', visible: true },
+                { id: 'tags', label: 'Tag', visible: true },
+            ],
+            true,
+        );
     const visibleColumns = columns.filter((column) => column.visible);
     const route = { company: company.id, site: site.id, subnet: subnet.id };
     const context =
@@ -118,11 +136,11 @@ export default function SubnetShow({
     return (
         <>
             <Head title={`${subnet.cidr} · ${context}`} />
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex min-w-0 flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-3">
-                            <h1 className="font-mono text-2xl font-semibold tracking-tight">
+                            <h1 className="font-mono text-2xl font-semibold tracking-tight text-balance tabular-nums">
                                 {subnet.cidr}
                             </h1>
                             <Badge variant={vlan ? 'secondary' : 'outline'}>
@@ -155,70 +173,80 @@ export default function SubnetShow({
                         ) : null}
                     </div>
                 </header>
-                <div className="grid gap-3 sm:grid-cols-3">
-                    {(
-                        [
-                            ['documented', 'Documentati'],
-                            ['excluded', 'Esclusi non documentati'],
-                            ['proposable', 'Proponibili'],
-                        ] as const
-                    ).map(([key, label]) => (
-                        <Card key={key}>
-                            <CardHeader>
-                                <CardTitle>{label}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-semibold tabular-nums">
-                                    {addressCounts[key].toLocaleString('it-IT')}
+                <Card>
+                    <CardContent>
+                        <dl className="grid gap-6 sm:grid-cols-3">
+                            {(
+                                [
+                                    ['documented', 'Documentati'],
+                                    ['excluded', 'Esclusi non documentati'],
+                                    ['proposable', 'Proponibili'],
+                                ] as const
+                            ).map(([key, label]) => (
+                                <div key={key} className="flex flex-col gap-2">
+                                    <dt className="text-sm text-muted-foreground">
+                                        {label}
+                                    </dt>
+                                    <dd className="text-2xl font-semibold tracking-tight tabular-nums">
+                                        {addressCounts[key].toLocaleString(
+                                            'it-IT',
+                                        )}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </CardContent>
+                    <CardFooter>
+                        {firstProposableIp !== null ? (
+                            auth.user.is_superadmin ? (
+                                <IpAddressForm
+                                    key={`suggestion-${subnet.id}`}
+                                    {...formContext}
+                                    suggestedIp={firstProposableIp}
+                                />
+                            ) : (
+                                <p className="text-sm">
+                                    Primo IP proponibile:{' '}
+                                    <span className="font-mono">
+                                        {firstProposableIp}
+                                    </span>
                                 </p>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    {firstProposableIp !== null ? (
-                        auth.user.is_superadmin ? (
-                            <IpAddressForm
-                                key={`suggestion-${subnet.id}`}
-                                {...formContext}
-                                suggestedIp={firstProposableIp}
-                            />
+                            )
                         ) : (
-                            <p className="text-sm">
-                                Primo IP proponibile:{' '}
-                                <span className="font-mono">
-                                    {firstProposableIp}
-                                </span>
+                            <p className="text-sm text-muted-foreground">
+                                Nessun IP proponibile
                             </p>
-                        )
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            Nessun IP proponibile
-                        </p>
-                    )}
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-col gap-1">
-                        <h2 className="font-semibold">Indirizzi</h2>
-                        <p className="text-sm text-muted-foreground">
-                            {ipAddresses.total.toLocaleString('it-IT')}{' '}
-                            {ipAddresses.total === 1
-                                ? 'indirizzo'
-                                : 'indirizzi'}
-                            {query.search ? ' trovati' : ' utilizzabili'}
-                        </p>
-                    </div>
-                    <Button variant="outline" asChild>
-                        <Link
-                            href={index({ company: company.id, site: site.id })}
-                        >
-                            <ArrowLeft data-icon="inline-start" />
-                            Subnet
-                        </Link>
-                    </Button>
-                </div>
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-start justify-between gap-3">
+                        )}
+                    </CardFooter>
+                </Card>
+                <Card className="gap-0 overflow-hidden py-0">
+                    <CardHeader className="gap-4 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                                <h2 className="font-semibold">Indirizzi</h2>
+                                <CardDescription className="tabular-nums">
+                                    {ipAddresses.total.toLocaleString('it-IT')}{' '}
+                                    {ipAddresses.total === 1
+                                        ? 'indirizzo'
+                                        : 'indirizzi'}
+                                    {query.search
+                                        ? ' trovati'
+                                        : ' utilizzabili'}
+                                </CardDescription>
+                            </div>
+                            <Button variant="outline" asChild>
+                                <Link
+                                    href={index({
+                                        company: company.id,
+                                        site: site.id,
+                                    })}
+                                >
+                                    <ArrowLeft data-icon="inline-start" />
+                                    Subnet
+                                </Link>
+                            </Button>
+                        </div>
+
                         <Form
                             {...show.form(route)}
                             options={{
@@ -299,16 +327,19 @@ export default function SubnetShow({
                                 </>
                             )}
                         </Form>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border">
+                    </CardHeader>
+                    <CardContent className="px-0">
                         <Table
+                            className="text-center data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            data-separators={separators}
                             aria-label={`Indirizzi nella subnet ${subnet.cidr}`}
                         >
-                            <TableHeader>
+                            <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     {visibleColumns.map((column) => (
                                         <TableHead
                                             key={column.id}
+                                            className="text-center"
                                             scope="col"
                                             aria-sort={
                                                 query.sort === column.id
@@ -360,11 +391,13 @@ export default function SubnetShow({
                                             </Button>
                                         </TableHead>
                                     ))}
-                                    <TableHead className="w-12 text-right">
+                                    <TableHead className="w-12 text-center">
                                         <span className="sr-only">Azioni</span>
                                         <TableColumns
                                             columns={columns}
                                             onChange={setColumns}
+                                            separators={separators}
+                                            onSeparatorsChange={setSeparators}
                                         />
                                     </TableHead>
                                 </TableRow>
@@ -378,12 +411,12 @@ export default function SubnetShow({
                                                 className={
                                                     column.id === 'ip' ||
                                                     column.id === 'mac_address'
-                                                        ? 'px-4 font-mono'
+                                                        ? 'px-4 font-mono tabular-nums'
                                                         : 'max-w-lg break-words whitespace-pre-wrap'
                                                 }
                                             >
                                                 {column.id === 'ip' ? (
-                                                    <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex flex-wrap items-center justify-center gap-2">
                                                         <span>
                                                             {ipAddress.ip}
                                                         </span>
@@ -422,11 +455,11 @@ export default function SubnetShow({
                                                             }
                                                         </Badge>
                                                     ) : (
-                                                        '—'
+                                                        ''
                                                     )
                                                 ) : column.id === 'tags' ? (
                                                     ipAddress.tags.length ? (
-                                                        <div className="flex flex-wrap gap-1">
+                                                        <div className="flex flex-wrap justify-center gap-1">
                                                             {ipAddress.tags.map(
                                                                 (tag) => (
                                                                     <TagBadge
@@ -445,15 +478,14 @@ export default function SubnetShow({
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        '—'
+                                                        ''
                                                     )
                                                 ) : (
-                                                    (ipAddress[column.id] ??
-                                                    '—')
+                                                    (ipAddress[column.id] ?? '')
                                                 )}
                                             </TableCell>
                                         ))}
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-center">
                                             {ipAddress.id !== null ? (
                                                 <IpAddressForm
                                                     key={`record-${ipAddress.id}`}
@@ -481,100 +513,110 @@ export default function SubnetShow({
                                             colSpan={visibleColumns.length + 1}
                                             className="h-40 text-center whitespace-normal"
                                         >
-                                            <p className="font-medium">
-                                                {query.search
-                                                    ? 'Nessun IP trovato'
-                                                    : 'Nessun IP in questa pagina'}
-                                            </p>
-                                            <p className="mt-2 text-muted-foreground">
-                                                {query.search
-                                                    ? 'Prova un altro termine o azzera la ricerca.'
-                                                    : 'Torna alla pagina precedente.'}
-                                            </p>
+                                            <Empty>
+                                                <EmptyHeader>
+                                                    <EmptyMedia variant="icon">
+                                                        <Search />
+                                                    </EmptyMedia>
+                                                    <EmptyTitle>
+                                                        {query.search
+                                                            ? 'Nessun IP trovato'
+                                                            : 'Nessun IP in questa pagina'}
+                                                    </EmptyTitle>
+                                                    <EmptyDescription>
+                                                        {query.search
+                                                            ? 'Prova un altro termine o azzera la ricerca.'
+                                                            : 'Torna alla pagina precedente.'}
+                                                    </EmptyDescription>
+                                                </EmptyHeader>
+                                            </Empty>
                                         </TableCell>
                                     </TableRow>
                                 ) : null}
                             </TableBody>
                         </Table>
-                    </div>
-                </div>
-                {ipAddresses.last_page > 1 || ipAddresses.current_page > 1 ? (
-                    <nav
-                        aria-label="Pagine degli indirizzi"
-                        className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground"
-                    >
-                        {ipAddresses.prev_page_url ? (
-                            <IconButton label="Pagina precedente" asChild>
-                                <Link
-                                    href={ipAddresses.prev_page_url}
-                                    preserveState
-                                    preserveScroll
-                                >
-                                    <ArrowLeft />
-                                </Link>
-                            </IconButton>
-                        ) : (
-                            <IconButton label="Pagina precedente" disabled>
-                                <ArrowLeft />
-                            </IconButton>
-                        )}
-                        <Form
-                            {...show.form(route)}
-                            options={{
-                                preserveState: true,
-                                preserveScroll: true,
-                            }}
-                            className="flex items-center gap-2"
+                    </CardContent>
+                    {ipAddresses.last_page > 1 ||
+                    ipAddresses.current_page > 1 ? (
+                        <nav
+                            aria-label="Pagine degli indirizzi"
+                            className="flex flex-wrap items-center justify-end gap-3 px-6 py-4 text-sm text-muted-foreground tabular-nums"
                         >
-                            <input
-                                type="hidden"
-                                name="search"
-                                value={query.search}
-                            />
-                            <input
-                                type="hidden"
-                                name="sort"
-                                value={query.sort ?? ''}
-                            />
-                            <input
-                                type="hidden"
-                                name="direction"
-                                value={query.direction}
-                            />
-                            <Label htmlFor="ip-page">Pagina</Label>
-                            <Input
-                                key={ipAddresses.current_page}
-                                id="ip-page"
-                                name="page"
-                                type="number"
-                                min={1}
-                                max={ipAddresses.last_page}
-                                defaultValue={ipAddresses.current_page}
-                                className="w-24"
-                                required
-                            />
-                            <span>
-                                di{' '}
-                                {ipAddresses.last_page.toLocaleString('it-IT')}
-                            </span>
-                        </Form>
-                        {ipAddresses.next_page_url ? (
-                            <IconButton label="Pagina successiva" asChild>
-                                <Link
-                                    href={ipAddresses.next_page_url}
-                                    preserveState
-                                    preserveScroll
-                                >
+                            {ipAddresses.prev_page_url ? (
+                                <IconButton label="Pagina precedente" asChild>
+                                    <Link
+                                        href={ipAddresses.prev_page_url}
+                                        preserveState
+                                        preserveScroll
+                                    >
+                                        <ArrowLeft />
+                                    </Link>
+                                </IconButton>
+                            ) : (
+                                <IconButton label="Pagina precedente" disabled>
+                                    <ArrowLeft />
+                                </IconButton>
+                            )}
+                            <Form
+                                {...show.form(route)}
+                                options={{
+                                    preserveState: true,
+                                    preserveScroll: true,
+                                }}
+                                className="flex items-center gap-2"
+                            >
+                                <input
+                                    type="hidden"
+                                    name="search"
+                                    value={query.search}
+                                />
+                                <input
+                                    type="hidden"
+                                    name="sort"
+                                    value={query.sort ?? ''}
+                                />
+                                <input
+                                    type="hidden"
+                                    name="direction"
+                                    value={query.direction}
+                                />
+                                <Label htmlFor="ip-page">Pagina</Label>
+                                <Input
+                                    key={ipAddresses.current_page}
+                                    id="ip-page"
+                                    name="page"
+                                    type="number"
+                                    min={1}
+                                    max={ipAddresses.last_page}
+                                    defaultValue={ipAddresses.current_page}
+                                    className="w-24"
+                                    required
+                                />
+                                <span>
+                                    di{' '}
+                                    {ipAddresses.last_page.toLocaleString(
+                                        'it-IT',
+                                    )}
+                                </span>
+                            </Form>
+                            {ipAddresses.next_page_url ? (
+                                <IconButton label="Pagina successiva" asChild>
+                                    <Link
+                                        href={ipAddresses.next_page_url}
+                                        preserveState
+                                        preserveScroll
+                                    >
+                                        <ArrowRight />
+                                    </Link>
+                                </IconButton>
+                            ) : (
+                                <IconButton label="Pagina successiva" disabled>
                                     <ArrowRight />
-                                </Link>
-                            </IconButton>
-                        ) : (
-                            <IconButton label="Pagina successiva" disabled>
-                                <ArrowRight />
-                            </IconButton>
-                        )}
-                    </nav>
-                ) : null}
+                                </IconButton>
+                            )}
+                        </nav>
+                    ) : null}
+                </Card>
             </div>
         </>
     );

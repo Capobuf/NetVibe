@@ -14,6 +14,12 @@ import {
 } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import {
+    Field,
+    FieldLabel,
+    FieldLegend,
+    FieldSet,
+} from '@/components/ui/field';
+import {
     Select,
     SelectContent,
     SelectGroup,
@@ -73,8 +79,11 @@ export default function IpMetadataFields({
 
     return (
         <>
-            <div className="flex flex-col gap-2">
-                <Label htmlFor={`${id}-status`}>Stato</Label>
+            <Field
+                data-invalid={Boolean(errors.ip_status_id)}
+                data-disabled={disabled || readOnly}
+            >
+                <FieldLabel htmlFor={`${id}-status`}>Stato</FieldLabel>
                 <input
                     type="hidden"
                     name="ip_status_id"
@@ -111,13 +120,13 @@ export default function IpMetadataFields({
                     id={`${id}-status-error`}
                     message={errors.ip_status_id}
                 />
-            </div>
-            <fieldset
+            </Field>
+            <FieldSet
                 ref={tagContainer}
                 className="flex min-w-0 flex-col gap-3"
                 disabled={disabled || readOnly}
             >
-                <legend className="mb-2 text-sm font-medium">Tag</legend>
+                <FieldLegend variant="label">Tag</FieldLegend>
                 {selected.map((tag, index) => (
                     <span key={tag.id} hidden>
                         <input
@@ -292,7 +301,7 @@ export default function IpMetadataFields({
                     </>
                 ) : null}
                 <InputError id={`${id}-tag-error`} message={tagError} />
-            </fieldset>
+            </FieldSet>
         </>
     );
 }

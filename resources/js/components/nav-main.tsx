@@ -11,7 +11,7 @@ import type { NavItem } from '@/types';
 
 export function NavMain({
     items,
-    label = 'Applicazione',
+    label,
 }: {
     items: NavItem[];
     label?: string;
@@ -20,13 +20,15 @@ export function NavMain({
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>{label}</SidebarGroupLabel>
+            {label ? <SidebarGroupLabel>{label}</SidebarGroupLabel> : null}
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>
                         <SidebarMenuButton
                             asChild
-                            isActive={isCurrentOrParentUrl(item.href)}
+                            isActive={
+                                item.isActive ?? isCurrentOrParentUrl(item.href)
+                            }
                             tooltip={{ children: item.title }}
                         >
                             <Link href={item.href} prefetch>

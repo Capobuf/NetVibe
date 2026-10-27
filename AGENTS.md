@@ -30,6 +30,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 
 ## 2a. UI/UX quality and user-facing content
 
+- Non usare sottolineature per link, pulsanti o altro testo interattivo, neppure negli stati hover e focus. Mantieni riconoscibili le azioni tramite i componenti shadcn/ui, il contrasto e un indicatore di focus visibile da tastiera.
 - Tutte le tabelle principali devono offrire ricerca sull’intero elenco, ordinamento dalle intestazioni con ciclo ascendente → discendente → predefinito e selettore delle colonne integrato nell’intestazione, a destra. Il selettore permette di mostrare, nascondere e riordinare le colonne. Ricerca e configurazione devono essere mantenute durante ordinamento e paginazione. Riutilizzare i componenti condivisi.
 - Minimalism applies to implementation complexity and feature scope, not to visual quality, usability or interface completeness.
 - Design interfaces around the user's actual tasks and information hierarchy, not merely around database entities or backend structure.

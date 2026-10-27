@@ -1,6 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { dashboard, login } from '@/routes';
+import { login } from '@/routes';
 import { register } from '@/routes';
+import { index as companies } from '@/routes/companies';
 
 export default function Welcome() {
     const { auth } = usePage().props;
@@ -13,10 +14,10 @@ export default function Welcome() {
                     <nav className="flex items-center justify-end gap-4">
                         {auth.user ? (
                             <Link
-                                href={dashboard()}
+                                href={companies()}
                                 className="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
                             >
-                                Dashboard
+                                Aziende
                             </Link>
                         ) : (
                             <>
@@ -39,9 +40,7 @@ export default function Welcome() {
                 <div className="flex w-full items-center justify-center opacity-100 transition-opacity duration-750 lg:grow starting:opacity-0">
                     <main className="flex w-full max-w-[335px] flex-col-reverse lg:max-w-4xl lg:flex-row">
                         <div className="flex-1 rounded-br-lg rounded-bl-lg bg-white p-6 pb-12 text-[13px] leading-[20px] shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] lg:rounded-tl-lg lg:rounded-br-none lg:p-20 dark:bg-[#161615] dark:text-[#EDEDEC] dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d]">
-                            <h1 className="mb-1 font-medium">
-                                Iniziamo
-                            </h1>
+                            <h1 className="mb-1 font-medium">Iniziamo</h1>
                             <p className="mb-2 text-[#706f6c] dark:text-[#A1A09A]">
                                 Laravel offre un ricco ecosistema.
                                 <br />
@@ -59,7 +58,7 @@ export default function Welcome() {
                                         <a
                                             href="https://laravel.com/docs"
                                             target="_blank"
-                                            className="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
+                                            className="ml-1 inline-flex items-center space-x-1 rounded-sm font-medium text-[#f53003] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-[#FF4433]"
                                         >
                                             <span>Documentazione</span>
                                             <svg
@@ -90,7 +89,7 @@ export default function Welcome() {
                                         <a
                                             href="https://laracasts.com"
                                             target="_blank"
-                                            className="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
+                                            className="ml-1 inline-flex items-center space-x-1 rounded-sm font-medium text-[#f53003] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-[#FF4433]"
                                         >
                                             <span>Laracasts</span>
                                             <svg

@@ -16,7 +16,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import { destroy, store, update } from '@/routes/administration/companies';
 import type { Company, Site } from '@/types/company';
@@ -74,9 +74,11 @@ export default function CompanyForm({
                         className="flex flex-col gap-6"
                     >
                         {({ processing, errors }) => (
-                            <>
-                                <div className="flex flex-col gap-2">
-                                    <Label htmlFor={id}>Nome azienda</Label>
+                            <FieldGroup>
+                                <Field data-invalid={Boolean(errors.name)}>
+                                    <FieldLabel htmlFor={id}>
+                                        Nome azienda
+                                    </FieldLabel>
                                     <Input
                                         id={id}
                                         name="name"
@@ -95,7 +97,7 @@ export default function CompanyForm({
                                         id={`${id}-error`}
                                         message={errors.name}
                                     />
-                                </div>
+                                </Field>
                                 <DialogFooter className="flex-row items-center justify-end">
                                     {company ? (
                                         <IconButton
@@ -129,7 +131,7 @@ export default function CompanyForm({
                                         {processing ? <Spinner /> : <Check />}
                                     </IconButton>
                                 </DialogFooter>
-                            </>
+                            </FieldGroup>
                         )}
                     </Form>
                 </div>

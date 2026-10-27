@@ -1,10 +1,22 @@
+import {
+    Empty,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+} from '@/components/ui/empty';
 import { Head } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Search, Tags } from 'lucide-react';
 import { useState } from 'react';
 import IpStatusForm from '@/components/networks/ip-status-form';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
+import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from '@/components/ui/input-group';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -15,6 +27,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { index } from '@/routes/administration/ip-statuses';
+import { index as administration } from '@/routes/administration';
 import type { IpStatus } from '@/types/network';
 
 type StatusColumn = TableColumn<'name' | 'ip_addresses_count'>;
@@ -26,10 +39,15 @@ export default function IpStatusIndex({ statuses }: Props) {
         column: StatusColumn['id'];
         direction: 'asc' | 'desc';
     } | null>(null);
-    const [columns, setColumns] = useState<StatusColumn[]>([
-        { id: 'name', label: 'Stato', visible: true },
-        { id: 'ip_addresses_count', label: 'IP documentati', visible: true },
-    ]);
+    const { columns, setColumns, separators, setSeparators } =
+        useTablePreferences<StatusColumn['id']>('ip-statuses', [
+            { id: 'name', label: 'Stato', visible: true },
+            {
+                id: 'ip_addresses_count',
+                label: 'IP documentati',
+                visible: true,
+            },
+        ]);
     const visibleColumns = columns.filter((column) => column.visible);
     const filtered = statuses.filter(
         (status) =>
@@ -54,36 +72,43 @@ export default function IpStatusIndex({ statuses }: Props) {
     return (
         <>
             <Head title="Stati IP" />
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-wrap items-center justify-between gap-4">
-                    <h1 className="text-2xl font-semibold tracking-tight">
+                    <h2 className="text-2xl font-semibold tracking-tight text-balance">
                         Stati IP
-                    </h1>
+                    </h2>
                     <IpStatusForm />
                 </header>
-                <div className="flex flex-col gap-3">
-                    <Label htmlFor="status-search" className="sr-only">
-                        Cerca stati IP
-                    </Label>
-                    <div className="flex w-full max-w-lg items-center gap-2">
-                        <Search
-                            className="size-4 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                        <Input
-                            id="status-search"
-                            type="search"
-                            placeholder="Cerca stati IP…"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                        />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        {rows.length} di {statuses.length} stati
-                    </p>
-                    <div className="overflow-hidden rounded-lg border">
-                        <Table aria-label="Catalogo globale degli stati IP">
-                            <TableHeader>
+                <Card className="gap-0 overflow-hidden py-0">
+                    <CardHeader className="gap-3 py-4">
+                        <Label htmlFor="status-search" className="sr-only">
+                            Cerca stati IP
+                        </Label>
+                        <InputGroup className="max-w-sm">
+                            <InputGroupInput
+                                id="status-search"
+                                type="search"
+                                placeholder="Cerca stati IP…"
+                                value={search}
+                                onChange={(event) =>
+                                    setSearch(event.target.value)
+                                }
+                            />
+                            <InputGroupAddon>
+                                <Search aria-hidden="true" />
+                            </InputGroupAddon>
+                        </InputGroup>
+                        <p className="text-sm text-muted-foreground tabular-nums">
+                            {rows.length} di {statuses.length} stati
+                        </p>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                        <Table
+                            className="data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            data-separators={separators}
+                            aria-label="Catalogo globale degli stati IP"
+                        >
+                            <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     {visibleColumns.map((column) => (
                                         <TableHead
@@ -136,6 +161,8 @@ export default function IpStatusIndex({ statuses }: Props) {
                                         <TableColumns
                                             columns={columns}
                                             onChange={setColumns}
+                                            separators={separators}
+                                            onSeparatorsChange={setSeparators}
                                         />
                                     </TableHead>
                                 </TableRow>
@@ -146,7 +173,7 @@ export default function IpStatusIndex({ statuses }: Props) {
                                         {visibleColumns.map((column) => (
                                             <TableCell
                                                 key={column.id}
-                                                className="max-w-lg break-words whitespace-normal"
+                                                className="max-w-lg break-words whitespace-normal tabular-nums"
                                             >
                                                 {status[column.id]}
                                             </TableCell>
@@ -162,21 +189,34 @@ export default function IpStatusIndex({ statuses }: Props) {
                                             colSpan={visibleColumns.length + 1}
                                             className="h-32 text-center"
                                         >
-                                            {search
-                                                ? 'Nessuno stato trovato'
-                                                : 'Nessuno stato'}
+                                            <Empty>
+                                                <EmptyHeader>
+                                                    <EmptyMedia variant="icon">
+                                                        <Tags />
+                                                    </EmptyMedia>
+                                                    <EmptyTitle>
+                                                        {' '}
+                                                        {search
+                                                            ? 'Nessuno stato trovato'
+                                                            : 'Nessuno stato'}
+                                                    </EmptyTitle>
+                                                </EmptyHeader>
+                                            </Empty>
                                         </TableCell>
                                     </TableRow>
                                 ) : null}
                             </TableBody>
                         </Table>
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
             </div>
         </>
     );
 }
 
 IpStatusIndex.layout = () => ({
-    breadcrumbs: [{ title: 'Stati IP', href: index() }],
+    breadcrumbs: [
+        { title: 'Amministrazione', href: administration() },
+        { title: 'Stati IP', href: index() },
+    ],
 });

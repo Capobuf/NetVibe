@@ -11,3 +11,11 @@ export type Subnet = {
     description: string | null;
     vlan_id: number | null;
 };
+
+export type IpAddress = {
+    id: number;
+    ip: string;
+    description: string | null;
+    hostname: string | null;
+    mac_address: string | null;
+};

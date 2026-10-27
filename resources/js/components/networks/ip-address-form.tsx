@@ -1,8 +1,10 @@
 import { Form, usePage } from '@inertiajs/react';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, Check, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import InputError from '@/components/input-error';
+import { IconButton } from '@/components/icon-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -17,12 +19,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
+import { ipv4Number } from '@/lib/ipv4';
 import {
     destroy,
     store,
     update,
 } from '@/routes/companies/sites/subnets/ip-addresses';
-import type { IpAddress } from '@/types/network';
+import type { ExcludedRange, IpAddress } from '@/types/network';
 
 export default function IpAddressForm({
     companyId,
@@ -30,17 +34,32 @@ export default function IpAddressForm({
     subnetId,
     context,
     ipAddress,
+    excludedRanges,
+    suggestedIp,
+    iconTrigger = false,
 }: {
     companyId: number;
     siteId: number;
     subnetId: number;
     context: string;
     ipAddress?: IpAddress;
+    excludedRanges: ExcludedRange[];
+    suggestedIp?: string;
+    iconTrigger?: boolean;
 }) {
     const { auth } = usePage().props;
     const canEdit = auth.user.is_superadmin;
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [ip, setIp] = useState(ipAddress?.ip ?? suggestedIp ?? '');
+    const address = ipv4Number(ip);
+    const excluded =
+        address !== null &&
+        excludedRanges.some(
+            (range) =>
+                ipv4Number(range.start_ip)! <= address &&
+                ipv4Number(range.end_ip)! >= address,
+        );
     const id = useId();
     const route = { company: companyId, site: siteId, subnet: subnetId };
 
@@ -49,11 +68,21 @@ export default function IpAddressForm({
             open={open}
             onOpenChange={(value) => {
                 setOpen(value);
-                if (value) setDeleting(false);
+                if (value) {
+                    setDeleting(false);
+                    setIp(ipAddress?.ip ?? suggestedIp ?? '');
+                }
             }}
         >
             <DialogTrigger asChild>
-                {ipAddress ? (
+                {ipAddress && iconTrigger ? (
+                    <IconButton
+                        label={`Apri IP ${ipAddress.ip}`}
+                        variant="ghost"
+                    >
+                        <ArrowRight />
+                    </IconButton>
+                ) : ipAddress ? (
                     <button
                         type="button"
                         className="font-mono font-medium tabular-nums underline-offset-4 hover:underline focus-visible:underline"
@@ -62,9 +91,11 @@ export default function IpAddressForm({
                         {ipAddress.ip}
                     </button>
                 ) : (
-                    <Button>
+                    <Button variant={suggestedIp ? 'outline' : 'default'}>
                         <Plus data-icon="inline-start" />
-                        Documenta IP
+                        {suggestedIp
+                            ? `Primo proponibile: ${suggestedIp}`
+                            : 'Documenta IP'}
                     </Button>
                 )}
             </DialogTrigger>
@@ -91,34 +122,21 @@ export default function IpAddressForm({
                     >
                         {({ processing, errors }) => (
                             <>
-                                <p
-                                    id={`${id}-help`}
-                                    className="text-sm text-muted-foreground"
-                                >
-                                    Inserisci almeno una descrizione o un
-                                    hostname. Il MAC è facoltativo e può essere
-                                    condiviso da più IP.
-                                </p>
                                 {(
                                     [
-                                        {
-                                            name: 'ip',
-                                            label: 'IPv4',
-                                            maxLength: 15,
-                                        },
-                                        {
-                                            name: 'description',
-                                            label: 'Descrizione',
-                                            maxLength: 2000,
-                                        },
                                         {
                                             name: 'hostname',
                                             label: 'Hostname',
                                             maxLength: 255,
                                         },
                                         {
+                                            name: 'ip',
+                                            label: 'IP',
+                                            maxLength: 15,
+                                        },
+                                        {
                                             name: 'mac_address',
-                                            label: 'MAC (facoltativo)',
+                                            label: 'MAC Address',
                                             maxLength: 17,
                                         },
                                     ] as const
@@ -129,23 +147,48 @@ export default function IpAddressForm({
                                     >
                                         <Label htmlFor={`${id}-${field.name}`}>
                                             {field.label}
+                                            {field.name === 'ip' ? (
+                                                <span aria-hidden="true">
+                                                    *
+                                                </span>
+                                            ) : null}
                                         </Label>
                                         <Input
                                             id={`${id}-${field.name}`}
                                             name={field.name}
                                             maxLength={field.maxLength}
                                             required={field.name === 'ip'}
-                                            autoFocus={field.name === 'ip'}
+                                            autoFocus={
+                                                field.name === 'hostname'
+                                            }
                                             autoComplete="off"
                                             readOnly={!canEdit}
                                             disabled={processing}
                                             defaultValue={
-                                                ipAddress?.[field.name] ?? ''
+                                                field.name === 'ip'
+                                                    ? undefined
+                                                    : (ipAddress?.[
+                                                          field.name
+                                                      ] ?? '')
+                                            }
+                                            value={
+                                                field.name === 'ip'
+                                                    ? ip
+                                                    : undefined
+                                            }
+                                            onChange={
+                                                field.name === 'ip'
+                                                    ? (event) =>
+                                                          setIp(
+                                                              event.target
+                                                                  .value,
+                                                          )
+                                                    : undefined
                                             }
                                             aria-invalid={Boolean(
                                                 errors[field.name],
                                             )}
-                                            aria-describedby={`${id}-help ${id}-${field.name}-error`}
+                                            aria-describedby={`${field.name === 'hostname' ? `${id}-help ` : ''}${id}-${field.name}-error`}
                                         />
                                         <InputError
                                             id={`${id}-${field.name}-error`}
@@ -153,6 +196,51 @@ export default function IpAddressForm({
                                         />
                                     </div>
                                 ))}
+                                <div className="flex flex-col gap-2">
+                                    <Label htmlFor={`${id}-description`}>
+                                        Descrizione
+                                    </Label>
+                                    <Textarea
+                                        id={`${id}-description`}
+                                        name="description"
+                                        defaultValue={
+                                            ipAddress?.description ?? ''
+                                        }
+                                        rows={4}
+                                        className="min-h-28 resize-y"
+                                        maxLength={2000}
+                                        readOnly={!canEdit}
+                                        disabled={processing}
+                                        aria-invalid={Boolean(
+                                            errors.description,
+                                        )}
+                                        aria-describedby={`${id}-help ${id}-description-error`}
+                                    />
+                                    <InputError
+                                        id={`${id}-description-error`}
+                                        message={errors.description}
+                                    />
+                                    <p
+                                        id={`${id}-help`}
+                                        className="text-sm text-muted-foreground"
+                                    >
+                                        Compila almeno Hostname o Descrizione.
+                                    </p>
+                                </div>
+                                {excluded ? (
+                                    <Alert>
+                                        <TriangleAlert />
+                                        <AlertTitle>
+                                            IP in un intervallo escluso
+                                        </AlertTitle>
+                                        <AlertDescription>
+                                            Puoi documentarlo manualmente.
+                                            L’esclusione riguarda solo i
+                                            suggerimenti e non impedisce il
+                                            salvataggio.
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : null}
                                 <DialogFooter>
                                     {ipAddress && canEdit ? (
                                         <Button
@@ -213,8 +301,9 @@ export default function IpAddressForm({
                         <p>
                             Verrà eliminato il record di{' '}
                             <strong>{ipAddress.ip}</strong> con descrizione,
-                            hostname e MAC. Potrai documentare nuovamente questo
-                            indirizzo.
+                            hostname e MAC. Se l’indirizzo è escluso, resterà
+                            escluso dai suggerimenti; potrai comunque
+                            documentarlo manualmente.
                         </p>
                         <p>
                             Questa operazione non modifica alcun dispositivo

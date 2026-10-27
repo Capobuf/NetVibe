@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SubnetRequest;
 use App\Models\Company;
+use App\Models\ExcludedRange;
 use App\Models\IpAddress;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\Ipv4Cidr;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -33,14 +35,42 @@ class SubnetController extends Controller
         return $this->save($request, $site);
     }
 
-    public function show(Company $company, Site $site, Subnet $subnet): Response
+    public function show(Request $request, Company $company, Site $site, Subnet $subnet): Response
     {
+        $options = $request->validate([
+            'search' => ['nullable', 'string', 'max:255'],
+            'sort' => ['nullable', 'in:ip,hostname,mac_address,description'],
+            'direction' => ['sometimes', 'in:asc,desc'],
+        ]);
+        $search = $options['search'] ?? '';
+        $sort = $options['sort'] ?? null;
+        $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
+
         return Inertia::render('subnets/show', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
             'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id'),
             'vlan' => $subnet->vlan?->only('id', 'tag', 'name'),
-            'ipAddresses' => $subnet->ipAddresses()->orderBy('address')->paginate(50)
+            'excludedRanges' => $subnet->excludedRanges()->orderBy('start_address')->get()
+                ->map(fn (ExcludedRange $range) => [
+                    'id' => $range->id,
+                    'start_ip' => long2ip($range->start_address),
+                    'end_ip' => long2ip($range->end_address),
+                ]),
+            'firstProposableIp' => $subnet->firstProposableIp(),
+            'query' => compact('search', 'sort', 'direction'),
+            'ipAddresses' => $subnet->ipAddresses()
+                ->when($search !== '', function ($query) use ($search) {
+                    $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+                    $query->where(function ($query) use ($pattern) {
+                        $query->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])
+                            ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
+                            ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
+                            ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern]);
+                    });
+                })
+                ->orderBy($sort === null || $sort === 'ip' ? 'address' : $sort, $direction)
+                ->orderBy('id')->paginate(50)->withQueryString()
                 ->through(fn (IpAddress $ipAddress) => [
                     ...$ipAddress->only('id', 'description', 'hostname', 'mac_address'),
                     'ip' => long2ip($ipAddress->address),
@@ -63,6 +93,14 @@ class SubnetController extends Controller
                 // Lock the existing parent even when it has no subnets yet.
                 $site = Site::query()->lockForUpdate()->findOrFail($site->id);
                 $record = $subnet ? $site->subnets()->lockForUpdate()->findOrFail($subnet->id) : $site->subnets()->make();
+                if ($subnet && $record->excludedRanges()->where(function ($query) use ($range) {
+                    $query->where('start_address', '<', $range['network_address'])
+                        ->orWhere('end_address', '>', $range['broadcast_address']);
+                })->exists()) {
+                    throw ValidationException::withMessages([
+                        'cidr' => 'Il nuovo CIDR lascerebbe fuori intervalli esclusi. Rimuovi prima le esclusioni interessate.',
+                    ]);
+                }
                 if ($subnet && $record->ipAddresses()->where(function ($query) use ($range) {
                     $query->where('address', '<', $range['network_address'])
                         ->orWhere('address', '>', $range['broadcast_address']);

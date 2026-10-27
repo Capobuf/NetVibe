@@ -28,6 +28,22 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 - Do not remove essential input validation, authorization, error handling, accessible UI, prevention of data loss or customer/site isolation.
 - Code identifiers and non-obvious code comments in English; UI and user-facing updates in Italian. Explain the reason for unusual logic, not obvious syntax.
 
+## 2a. UI/UX quality and user-facing content
+
+- Tutte le tabelle principali devono offrire ricerca sull’intero elenco, ordinamento dalle intestazioni con ciclo ascendente → discendente → predefinito e selettore delle colonne integrato nell’intestazione, a destra. Il selettore permette di mostrare, nascondere e riordinare le colonne. Ricerca e configurazione devono essere mantenute durante ordinamento e paginazione. Riutilizzare i componenti condivisi.
+- Minimalism applies to implementation complexity and feature scope, not to visual quality, usability or interface completeness.
+- Design interfaces around the user's actual tasks and information hierarchy, not merely around database entities or backend structure.
+- Make full and appropriate use of the Laravel React/Inertia starter kit, its layouts, navigation patterns and shadcn/ui ecosystem.
+- Prefer existing components, but freely add official shadcn/ui components when they provide a better interaction. Do not introduce another UI framework or unnecessary third-party dependencies.
+- Choose deliberately between dedicated pages, tabs, sections, dialogs, sheets, menus and contextual actions. Avoid both oversized, mixed-purpose pages and unnecessary navigation fragmentation.
+- Create visually polished, responsive and accessible interfaces with coherent spacing, clear hierarchy, appropriate iconography and well-defined interaction states.
+- The smallest code diff is not automatically the best UI solution. Reasonable layout and component restructuring is allowed when necessary to deliver a complete user experience within the issue's scope.
+- Product specifications define application behavior, not user-facing copy. Do not turn domain rules, invariants, technical limitations or implementation details into explanatory UI text.
+- Until explicitly requested otherwise, do not add educational descriptions, generic disclaimers, redundant helper text or reassuring statements about how the application works.
+- Preserve essential labels, validation feedback, actionable errors, accessibility information and warnings about concrete operational consequences.
+- Exercise autonomy in visual composition and component selection, but never introduce unapproved product behavior or functional requirements.
+- Present complete, usable UI flows for Product Owner review before PR creation or merge.
+
 ## 3. Product boundaries and architecture
 
 - The currently chosen platform is Laravel + React/Inertia + TypeScript + Tailwind + **shadcn/ui** + MySQL. Docker Compose is the development environment. Framework versions and starter-kit details marked as proposals are **not approved merely by appearing in documentation**.

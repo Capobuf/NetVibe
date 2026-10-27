@@ -12,23 +12,23 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
-export type CompanyColumn = {
-    id: 'name' | 'sites_count';
+export type TableColumn<Id extends string> = {
+    id: Id;
     label: string;
     visible: boolean;
 };
 
-export function TableColumns({
+export function TableColumns<Id extends string>({
     columns,
     onChange,
 }: {
-    columns: CompanyColumn[];
-    onChange: (columns: CompanyColumn[]) => void;
+    columns: TableColumn<Id>[];
+    onChange: (columns: TableColumn<Id>[]) => void;
 }) {
-    const dragged = useRef<CompanyColumn['id'] | null>(null);
+    const dragged = useRef<Id | null>(null);
     const [announcement, setAnnouncement] = useState('');
 
-    function move(id: CompanyColumn['id'], target: number) {
+    function move(id: Id, target: number) {
         const reordered = [...columns];
         const from = reordered.findIndex((column) => column.id === id);
         if (from === target) return;

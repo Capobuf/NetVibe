@@ -1,11 +1,9 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowRight,
     Building2,
-    Check,
     MapPin,
-    Settings2,
     ShieldCheck,
 } from 'lucide-react';
 import CompanyForm from '@/components/companies/company-form';
@@ -19,53 +17,32 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
-import {
-    index as administrationIndex,
-    show as administrationShow,
-} from '@/routes/administration/companies';
-import { index, show as companyShow } from '@/routes/companies';
+import { index } from '@/routes/administration/companies';
+import { show as companyShow } from '@/routes/companies';
 import { show as siteShow } from '@/routes/companies/sites';
 import type { Company, Site } from '@/types/company';
 
 export default function CompanyShow({
     company,
     sites,
-    selectedSite,
-    administration,
 }: {
     company: Company;
     sites: Site[];
-    selectedSite: Site;
-    administration: boolean;
 }) {
-    const { auth } = usePage().props;
-    const multipleSites = sites.length > 1;
-
     return (
         <>
-            <Head title={company.name} />
+            <Head title={'Amministrazione · ' + company.name} />
             <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
                 <div className="flex items-center gap-3">
                     <IconButton label="Torna alle aziende" asChild>
-                        <Link
-                            href={
-                                administration ? administrationIndex() : index()
-                            }
-                        >
+                        <Link href={index()}>
                             <ArrowLeft />
                         </Link>
                     </IconButton>
-                    {administration ? (
-                        <Badge variant="secondary">
-                            <ShieldCheck />
-                            Amministrazione
-                        </Badge>
-                    ) : (
-                        <span className="text-sm text-muted-foreground">
-                            Aziende
-                        </span>
-                    )}
+                    <Badge variant="secondary">
+                        <ShieldCheck />
+                        Amministrazione
+                    </Badge>
                 </div>
                 <Card>
                     <CardHeader>
@@ -84,41 +61,20 @@ export default function CompanyShow({
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
-                                {administration ? (
-                                    <>
-                                        <CompanyForm
-                                            company={{ ...company, sites }}
-                                        />
-                                        <IconButton
-                                            label="Apri contesto azienda"
-                                            asChild
-                                        >
-                                            <Link
-                                                href={companyShow(company.id)}
-                                            >
-                                                <ArrowRight />
-                                            </Link>
-                                        </IconButton>
-                                    </>
-                                ) : auth.user.is_superadmin ? (
-                                    <IconButton
-                                        label="Amministra azienda"
-                                        asChild
-                                    >
-                                        <Link
-                                            href={administrationShow(
-                                                company.id,
-                                            )}
-                                        >
-                                            <Settings2 />
-                                        </Link>
-                                    </IconButton>
-                                ) : null}
+                                <CompanyForm company={{ ...company, sites }} />
+                                <IconButton
+                                    label="Apri subnet dell’azienda"
+                                    asChild
+                                >
+                                    <Link href={companyShow(company.id)}>
+                                        <ArrowRight />
+                                    </Link>
+                                </IconButton>
                             </div>
                         </div>
                     </CardHeader>
                 </Card>
-                {multipleSites ? (
+                {sites.length > 1 ? (
                     <section
                         className="flex flex-col gap-4"
                         aria-labelledby="sites-heading"
@@ -136,87 +92,48 @@ export default function CompanyShow({
                                     {sites.length}
                                 </Badge>
                             </div>
-                            {administration ? (
-                                <SiteForm company={company} sites={sites} />
-                            ) : null}
+                            <SiteForm company={company} sites={sites} />
                         </header>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                            {sites.map((site) => {
-                                const selected =
-                                    !administration &&
-                                    selectedSite.id === site.id;
-                                return (
-                                    <Card
-                                        key={site.id}
-                                        className={cn(
-                                            selected && 'ring-2 ring-primary',
-                                        )}
-                                    >
-                                        <CardHeader>
-                                            <div className="mb-3 flex items-center justify-between gap-3">
-                                                <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                                                    <MapPin className="size-5 text-muted-foreground" />
-                                                </div>
-                                                {selected ? (
-                                                    <Badge>
-                                                        <Check />
-                                                        Selezionata
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="outline">
-                                                        Sede
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <CardTitle>
-                                                {administration ? (
-                                                    <span className="break-words">
-                                                        {site.name}
-                                                    </span>
-                                                ) : (
-                                                    <Link
-                                                        href={siteShow({
-                                                            company: company.id,
-                                                            site: site.id,
-                                                        })}
-                                                        className="break-words transition-colors hover:text-primary"
-                                                    >
-                                                        {site.name}
-                                                    </Link>
-                                                )}
-                                            </CardTitle>
-                                            <CardDescription className="break-words">
-                                                {company.name}
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardFooter className="mt-auto justify-end gap-2">
-                                            {administration ? (
-                                                <SiteForm
-                                                    company={company}
-                                                    sites={sites}
-                                                    site={site}
-                                                />
-                                            ) : null}
-                                            <IconButton
-                                                label={`Apri sede ${site.name}`}
-                                                asChild
+                            {sites.map((site) => (
+                                <Card key={site.id}>
+                                    <CardHeader>
+                                        <CardTitle>
+                                            <span className="break-words">
+                                                {site.name}
+                                            </span>
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {company.name}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardFooter className="mt-auto justify-end gap-2">
+                                        <SiteForm
+                                            company={company}
+                                            sites={sites}
+                                            site={site}
+                                        />
+                                        <IconButton
+                                            label={
+                                                'Apri subnet di ' + site.name
+                                            }
+                                            asChild
+                                        >
+                                            <Link
+                                                href={siteShow({
+                                                    company: company.id,
+                                                    site: site.id,
+                                                })}
                                             >
-                                                <Link
-                                                    href={siteShow({
-                                                        company: company.id,
-                                                        site: site.id,
-                                                    })}
-                                                >
-                                                    <ArrowRight />
-                                                </Link>
-                                            </IconButton>
-                                        </CardFooter>
-                                    </Card>
-                                );
-                            })}
+                                                <ArrowRight />
+                                            </Link>
+                                        </IconButton>
+                                    </CardFooter>
+                                </Card>
+                            ))}
                         </div>
                     </section>
-                ) : administration ? (
+                ) : (
                     <Card>
                         <CardHeader className="flex-row items-center justify-between gap-4">
                             <div className="flex flex-col gap-2">
@@ -229,10 +146,12 @@ export default function CompanyShow({
                             <SiteForm company={company} sites={sites} />
                         </CardHeader>
                     </Card>
-                ) : null}
+                )}
             </div>
         </>
     );
 }
 
-CompanyShow.layout = { breadcrumbs: [{ title: 'Aziende', href: index() }] };
+CompanyShow.layout = {
+    breadcrumbs: [{ title: 'Amministrazione · Aziende', href: index() }],
+};

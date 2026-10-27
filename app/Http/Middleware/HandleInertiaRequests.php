@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Company;
+use App\Models\Site;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -46,6 +47,12 @@ class HandleInertiaRequests extends Middleware
                 'companies' => Company::query()->orderBy('name')->orderBy('id')->get(['id', 'name']),
                 'currentCompanyId' => $request->route('company') instanceof Company
                     ? $request->route('company')->id
+                    : null,
+                'sites' => $request->route('company') instanceof Company
+                    ? $request->route('company')->sites()->orderBy('id')->get(['id', 'name'])
+                    : [],
+                'currentSiteId' => $request->route('site') instanceof Site
+                    ? $request->route('site')->id
                     : null,
             ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

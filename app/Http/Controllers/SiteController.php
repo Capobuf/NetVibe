@@ -65,6 +65,7 @@ class SiteController extends Controller
             $company = Company::query()->lockForUpdate()->findOrFail($company->id);
             $sites = $company->sites()->lockForUpdate()->get();
             $request->ensureSitesUnchanged($sites);
+            $request->ensureSitesHaveNoNetworks($sites->where('id', $site->id));
 
             if ($sites->count() === 1) {
                 throw ValidationException::withMessages([

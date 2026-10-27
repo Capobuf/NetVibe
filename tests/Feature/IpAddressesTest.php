@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\IpStatus;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -12,6 +13,62 @@ use Tests\TestCase;
 class IpAddressesTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_ip_metadata_preserves_occupancy_and_keeps_tags_within_the_company(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $otherCompany = Company::create(['name' => 'Beta']);
+        $foreignTag = $otherCompany->tags()->create(['name' => 'Privato Beta']);
+        $status = IpStatus::create(['name' => 'Libero']);
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+        $store = route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]);
+
+        $this->post($store, [
+            'ip' => '10.0.0.1', 'hostname' => 'router', 'ip_status_id' => $status->id,
+            'new_tags' => [['name' => 'Uffici', 'color' => 'blue'], ['name' => 'Critico', 'color' => 'red']],
+        ])->assertSessionHasNoErrors();
+        $ip = $subnet->ipAddresses()->sole();
+        $update = route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ip]);
+
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('firstProposableIp', '10.0.0.2')
+            ->where('addressCounts', ['documented' => 1, 'excluded' => 0, 'proposable' => 253])
+            ->where('ipAddresses.data.0.status.name', 'Libero')->has('ipAddresses.data.0.tags', 2)
+            ->has('tags', 2)->where('ipAddresses.data.0.tags.0.color', 'red'));
+        $this->get($show.'?search=Critico&sort=tags&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.ip', '10.0.0.1'));
+        $this->get($show.'?sort=status&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 254)->where('ipAddresses.data.0.ip', '10.0.0.1')
+            ->where('ipAddresses.data.1.ip', '10.0.0.2'));
+
+        $this->patch($update, [
+            'ip' => '10.0.0.1', 'hostname' => 'router', 'tags' => [['id' => $foreignTag->id, 'color' => 'purple']],
+        ])->assertSessionHasErrors('tags.0.id');
+        $this->assertDatabaseMissing('ip_address_tag', ['ip_address_id' => $ip->id, 'tag_id' => $foreignTag->id]);
+        $this->assertDatabaseHas('tags', ['id' => $foreignTag->id, 'color' => 'gray']);
+        $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'ip_status_id' => $status->id]);
+
+        $tag = $company->tags()->where('name', 'Uffici')->sole();
+        $this->patch($update, [
+            'ip' => '10.0.0.1', 'hostname' => 'router', 'tags' => [['id' => $tag->id, 'color' => '#123456']],
+        ])->assertSessionHasErrors('tags.0.color');
+        $this->assertDatabaseHas('tags', ['id' => $tag->id, 'color' => 'blue']);
+        $this->patch($update, [
+            'ip' => '10.0.0.1', 'hostname' => 'router', 'tags' => [['id' => $tag->id, 'color' => 'green']],
+        ])->assertSessionHasNoErrors();
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.data.0.tags.0.color', 'green'));
+
+        $this->patch($update, [
+            'ip' => '10.0.0.1', 'hostname' => 'router', 'ip_status_id' => null, 'tags' => [],
+        ])->assertSessionHasNoErrors();
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('firstProposableIp', '10.0.0.2')->where('addressCounts.documented', 1)
+            ->where('ipAddresses.data.0.status', null)->has('ipAddresses.data.0.tags', 0));
+    }
 
     public function test_ip_table_search_and_numeric_sort_cover_all_pages_and_stay_within_the_subnet(): void
     {

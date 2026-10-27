@@ -6,6 +6,7 @@ import {
     Layers,
     LayoutGrid,
     Network,
+    Tags,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as companies } from '@/routes/administration/companies';
+import { index as ipStatuses } from '@/routes/administration/ip-statuses';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';
 import type { NavItem } from '@/types';
@@ -98,6 +100,11 @@ export function AppSidebar() {
                                 title: 'Aziende',
                                 href: companies(),
                                 icon: Building2,
+                            },
+                            {
+                                title: 'Stati IP',
+                                href: ipStatuses(),
+                                icon: Tags,
                             },
                         ]}
                     />

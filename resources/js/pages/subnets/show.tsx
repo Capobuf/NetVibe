@@ -5,6 +5,7 @@ import {
     ArrowRight,
     ArrowUp,
     ArrowUpDown,
+    Ban,
     Search,
     X,
 } from 'lucide-react';
@@ -14,6 +15,7 @@ import InputError from '@/components/input-error';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import ExcludedRanges from '@/components/networks/excluded-ranges';
+import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,12 +29,26 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
-import type { ExcludedRange, IpAddress, Subnet, Vlan } from '@/types/network';
+import type {
+    ExcludedRange,
+    IpAddress,
+    IpStatus,
+    Tag,
+    Subnet,
+    Vlan,
+} from '@/types/network';
 
-type IpColumn = TableColumn<'ip' | 'hostname' | 'mac_address' | 'description'>;
+type IpColumn = TableColumn<
+    'ip' | 'hostname' | 'mac_address' | 'description' | 'status' | 'tags'
+>;
 
 type IpRow = Omit<IpAddress, 'id'> & { id: number | null; excluded: boolean };
 
@@ -42,6 +58,8 @@ type Props = {
     subnet: Subnet;
     vlan: Vlan | null;
     excludedRanges: ExcludedRange[];
+    statuses: IpStatus[];
+    tags: Tag[];
     firstProposableIp: string | null;
     addressCounts: { documented: number; excluded: number; proposable: number };
     query: {
@@ -69,6 +87,8 @@ export default function SubnetShow({
     firstProposableIp,
     addressCounts,
     query,
+    statuses,
+    tags,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [columns, setColumns] = useState<IpColumn[]>([
@@ -76,6 +96,8 @@ export default function SubnetShow({
         { id: 'ip', label: 'IP', visible: true },
         { id: 'mac_address', label: 'MAC Address', visible: true },
         { id: 'description', label: 'Descrizione', visible: true },
+        { id: 'status', label: 'Stato', visible: true },
+        { id: 'tags', label: 'Tag', visible: true },
     ]);
     const visibleColumns = columns.filter((column) => column.visible);
     const route = { company: company.id, site: site.id, subnet: subnet.id };
@@ -89,6 +111,8 @@ export default function SubnetShow({
         subnetId: subnet.id,
         context: `${context} · ${subnet.cidr}`,
         excludedRanges,
+        statuses,
+        tags,
     };
 
     return (
@@ -210,7 +234,7 @@ export default function SubnetShow({
                                         className="sr-only"
                                     >
                                         Cerca per IP, hostname, MAC o
-                                        descrizione
+                                        descrizione, stato o tag
                                     </Label>
                                     <div className="flex gap-2">
                                         <Input
@@ -218,7 +242,7 @@ export default function SubnetShow({
                                             id="ip-search"
                                             name="search"
                                             type="search"
-                                            placeholder="Cerca IP, hostname, MAC…"
+                                            placeholder="Cerca IP, hostname, MAC, stato, tag…"
                                             defaultValue={query.search}
                                             maxLength={255}
                                             aria-invalid={Boolean(
@@ -363,33 +387,66 @@ export default function SubnetShow({
                                                         <span>
                                                             {ipAddress.ip}
                                                         </span>
-                                                        <Badge
-                                                            variant={
-                                                                ipAddress.id !==
-                                                                null
-                                                                    ? 'secondary'
-                                                                    : 'outline'
-                                                            }
-                                                            className="font-sans"
-                                                        >
-                                                            {ipAddress.id !==
-                                                            null
-                                                                ? 'Documentato'
-                                                                : ipAddress.excluded
-                                                                  ? 'Escluso'
-                                                                  : 'Proponibile'}
-                                                        </Badge>
-                                                        {ipAddress.id !==
-                                                            null &&
-                                                        ipAddress.excluded ? (
-                                                            <Badge
-                                                                variant="outline"
-                                                                className="font-sans"
-                                                            >
-                                                                Escluso
-                                                            </Badge>
+                                                        {ipAddress.excluded ? (
+                                                            <Tooltip>
+                                                                <TooltipTrigger
+                                                                    asChild
+                                                                >
+                                                                    <span
+                                                                        tabIndex={
+                                                                            0
+                                                                        }
+                                                                        role="img"
+                                                                        aria-label="IP escluso dai suggerimenti"
+                                                                        className="inline-flex rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                    >
+                                                                        <Ban
+                                                                            className="size-3.5"
+                                                                            aria-hidden="true"
+                                                                        />
+                                                                    </span>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent>
+                                                                    Escluso dai
+                                                                    suggerimenti
+                                                                </TooltipContent>
+                                                            </Tooltip>
                                                         ) : null}
                                                     </div>
+                                                ) : column.id === 'status' ? (
+                                                    ipAddress.status ? (
+                                                        <Badge variant="secondary">
+                                                            {
+                                                                ipAddress.status
+                                                                    .name
+                                                            }
+                                                        </Badge>
+                                                    ) : (
+                                                        '—'
+                                                    )
+                                                ) : column.id === 'tags' ? (
+                                                    ipAddress.tags.length ? (
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {ipAddress.tags.map(
+                                                                (tag) => (
+                                                                    <TagBadge
+                                                                        key={
+                                                                            tag.id
+                                                                        }
+                                                                        color={
+                                                                            tag.color
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            tag.name
+                                                                        }
+                                                                    </TagBadge>
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        '—'
+                                                    )
                                                 ) : (
                                                     (ipAddress[column.id] ??
                                                     '—')

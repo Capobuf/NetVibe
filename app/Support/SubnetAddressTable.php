@@ -18,11 +18,27 @@ class SubnetAddressTable
                     $query->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
-                        ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern]);
+                        ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern])
+                        ->orWhereHas('status', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]))
+                        ->orWhereHas('tags', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
                 });
             });
         $textSort = $sort !== null && $sort !== 'ip';
-        $populated = $textSort ? (clone $matching)->whereNotNull($sort) : null;
+        $relatedSort = in_array($sort, ['status', 'tags'], true);
+        $sortColumn = match ($sort) {
+            'status' => 'status_name',
+            'tags' => 'tags_min_name',
+            default => $sort,
+        };
+        if ($sort === 'status') {
+            $matching->withAggregate('status', 'name');
+        } elseif ($sort === 'tags') {
+            $matching->withMin('tags', 'name');
+        }
+        $populated = $textSort ? (clone $matching) : null;
+        if ($populated !== null) {
+            $relatedSort ? $populated->has($sort) : $populated->whereNotNull($sort);
+        }
         $populatedCount = $populated?->count() ?? 0;
 
         // The virtual group includes null metadata; only stored exceptions split its ranges.
@@ -34,7 +50,7 @@ class SubnetAddressTable
         }
         if ($search !== '') {
             $extra = (clone $matching)->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
-                ->when($textSort, fn ($query) => $query->whereNull($sort));
+                ->when($textSort, fn ($query) => $relatedSort ? $query->doesntHave($sort) : $query->whereNull($sort));
             foreach ($extra->pluck('address') as $address) {
                 $exceptions[$address] = true;
             }
@@ -69,7 +85,7 @@ class SubnetAddressTable
             }
             $limit = 50 - count($addresses);
             if ($group === 'populated') {
-                $items = (clone $populated)->orderBy($sort, $direction)->orderBy('address')
+                $items = (clone $populated)->orderBy($sortColumn, $direction)->orderBy('address')
                     ->offset($offset)->limit($limit)->pluck('address')->all();
             } else {
                 $items = self::slice($matcher, $segments, $offset, $limit, ! $textSort && $direction === 'desc');
@@ -81,7 +97,8 @@ class SubnetAddressTable
             }
         }
 
-        $records = $subnet->ipAddresses()->whereIn('address', $addresses)->get()->keyBy('address');
+        $records = $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color'])
+            ->whereIn('address', $addresses)->get()->keyBy('address');
         $excludedRanges = $subnet->excludedRanges;
         $rows = array_map(function ($address) use ($records, $excludedRanges) {
             $record = $records->get($address);
@@ -92,6 +109,8 @@ class SubnetAddressTable
                 'hostname' => $record?->hostname,
                 'mac_address' => $record?->mac_address,
                 'description' => $record?->description,
+                'status' => $record?->status?->only('id', 'name'),
+                'tags' => $record?->tags->map->only('id', 'name', 'color')->all() ?? [],
                 'excluded' => $excludedRanges->contains(fn ($range) => $range->start_address <= $address && $range->end_address >= $address),
             ];
         }, $addresses);

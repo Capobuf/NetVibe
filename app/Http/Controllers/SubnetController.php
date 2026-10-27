@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SubnetRequest;
 use App\Models\Company;
 use App\Models\ExcludedRange;
-use App\Models\IpAddress;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\Ipv4Cidr;
+use App\Support\SubnetAddressTable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -41,17 +41,20 @@ class SubnetController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'sort' => ['nullable', 'in:ip,hostname,mac_address,description'],
             'direction' => ['sometimes', 'in:asc,desc'],
+            'page' => ['sometimes', 'integer', 'min:1', 'max:85899346'],
         ]);
         $search = $options['search'] ?? '';
         $sort = $options['sort'] ?? null;
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
+
+        $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
 
         return Inertia::render('subnets/show', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
             'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id'),
             'vlan' => $subnet->vlan?->only('id', 'tag', 'name'),
-            'excludedRanges' => $subnet->excludedRanges()->orderBy('start_address')->get()
+            'excludedRanges' => $subnet->excludedRanges
                 ->map(fn (ExcludedRange $range) => [
                     'id' => $range->id,
                     'start_ip' => long2ip($range->start_address),
@@ -59,22 +62,8 @@ class SubnetController extends Controller
                 ]),
             'firstProposableIp' => $subnet->firstProposableIp(),
             'query' => compact('search', 'sort', 'direction'),
-            'ipAddresses' => $subnet->ipAddresses()
-                ->when($search !== '', function ($query) use ($search) {
-                    $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
-                    $query->where(function ($query) use ($pattern) {
-                        $query->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])
-                            ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
-                            ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
-                            ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern]);
-                    });
-                })
-                ->orderBy($sort === null || $sort === 'ip' ? 'address' : $sort, $direction)
-                ->orderBy('id')->paginate(50)->withQueryString()
-                ->through(fn (IpAddress $ipAddress) => [
-                    ...$ipAddress->only('id', 'description', 'hostname', 'mac_address'),
-                    'ip' => long2ip($ipAddress->address),
-                ]),
+            'addressCounts' => $subnet->addressCounts(),
+            'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
         ]);
     }
 

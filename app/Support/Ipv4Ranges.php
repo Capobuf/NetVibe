@@ -4,6 +4,14 @@ namespace App\Support;
 
 class Ipv4Ranges
 {
+    /** @return array{0: int, 1: int} */
+    public static function usableBounds(int $network, int $broadcast): array
+    {
+        return $broadcast - $network > 1
+            ? [$network + 1, $broadcast - 1]
+            : [$network, $broadcast];
+    }
+
     /** @param list<array{0: int, 1: int}> $ranges
      * @return list<array{0: int, 1: int}>
      */
@@ -49,9 +57,7 @@ class Ipv4Ranges
     /** @param iterable<array{0: int, 1: int}> $blocked Ranges ordered by start, including documented IPs as single-address ranges. */
     public static function firstAvailable(int $network, int $broadcast, iterable $blocked): ?int
     {
-        $ordinary = $broadcast - $network > 1;
-        $candidate = $ordinary ? $network + 1 : $network;
-        $last = $ordinary ? $broadcast - 1 : $broadcast;
+        [$candidate, $last] = self::usableBounds($network, $broadcast);
         foreach ($blocked as [$start, $end]) {
             if ($start > $candidate || $candidate > $last) {
                 break;

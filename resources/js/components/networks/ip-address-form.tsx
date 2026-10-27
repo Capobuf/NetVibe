@@ -75,12 +75,16 @@ export default function IpAddressForm({
             }}
         >
             <DialogTrigger asChild>
-                {ipAddress && iconTrigger ? (
+                {iconTrigger ? (
                     <IconButton
-                        label={`Apri IP ${ipAddress.ip}`}
+                        label={
+                            ipAddress
+                                ? `Apri IP ${ipAddress.ip}`
+                                : `Documenta IP ${suggestedIp}`
+                        }
                         variant="ghost"
                     >
-                        <ArrowRight />
+                        {ipAddress ? <ArrowRight /> : <Plus />}
                     </IconButton>
                 ) : ipAddress ? (
                     <button

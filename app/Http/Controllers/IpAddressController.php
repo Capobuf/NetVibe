@@ -31,9 +31,11 @@ class IpAddressController extends Controller
         $request->validate(['confirmed' => ['accepted']], [
             'confirmed.accepted' => 'Conferma esplicitamente la liberazione dell’IP e la cancellazione dei suoi dati.',
         ]);
+        $excluded = $subnet->isExcluded($ipAddress->address);
         $ipAddress->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Documentazione dell’IP rimossa.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $excluded
+            ? 'Documentazione rimossa. L’indirizzo resta escluso dai suggerimenti.' : 'Documentazione dell’IP rimossa.']);
 
         return back();
     }
@@ -44,7 +46,7 @@ class IpAddressController extends Controller
         $address = ip2long($data['ip']);
 
         try {
-            DB::transaction(function () use ($subnet, $ipAddress, $data, $address) {
+            $excluded = DB::transaction(function () use ($subnet, $ipAddress, $data, $address) {
                 // Keep the CIDR stable during the write; uniqueness is enforced by the database.
                 $subnet = Subnet::query()->sharedLock()->findOrFail($subnet->id);
                 if ($address < $subnet->network_address || $address > $subnet->broadcast_address) {
@@ -60,6 +62,8 @@ class IpAddressController extends Controller
                     'hostname' => $data['hostname'] ?? null,
                     'mac_address' => $data['mac_address'] ?? null,
                 ])->save();
+
+                return $subnet->isExcluded($address);
             });
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
@@ -68,8 +72,9 @@ class IpAddressController extends Controller
         }
 
         Inertia::flash('toast', [
-            'type' => 'success',
-            'message' => $ipAddress ? 'IP documentato aggiornato.' : 'IP documentato.',
+            'type' => $excluded ? 'warning' : 'success',
+            'message' => $excluded ? 'IP salvato. L’indirizzo appartiene a un intervallo escluso dai suggerimenti.'
+                : ($ipAddress ? 'IP documentato aggiornato.' : 'IP documentato.'),
         ]);
 
         return back();

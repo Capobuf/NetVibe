@@ -17,10 +17,7 @@ import {
 import { Fragment, useState } from 'react';
 import CompanyForm from '@/components/companies/company-form';
 import SiteForm from '@/components/companies/site-form';
-import {
-    TableColumns,
-    type CompanyColumn,
-} from '@/components/companies/table-columns';
+import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { IconButton } from '@/components/icon-button';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +39,8 @@ import {
 import { index, show } from '@/routes/companies';
 import { show as showSite } from '@/routes/companies/sites';
 import type { Company, Site } from '@/types/company';
+
+type CompanyColumn = TableColumn<'name' | 'sites_count'>;
 
 export default function Companies({
     companies,

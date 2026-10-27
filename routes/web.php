@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
@@ -23,6 +24,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('can:administer')->scopeBindings()->group(function () {
+        Route::resource('companies.sites.subnets.excluded-ranges', ExcludedRangeController::class)
+            ->parameters(['excluded-ranges' => 'excludedRange'])->only(['store', 'update']);
+        Route::delete('companies/{company}/sites/{site}/subnets/{subnet}/excluded-ranges', [ExcludedRangeController::class, 'destroy'])
+            ->name('companies.sites.subnets.excluded-ranges.destroy');
         Route::resource('companies.sites.subnets.ip-addresses', IpAddressController::class)
             ->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'update', 'destroy']);
         Route::resource('companies.sites.vlans', VlanController::class)->only(['store', 'update']);

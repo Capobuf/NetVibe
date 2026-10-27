@@ -13,6 +13,44 @@ class IpAddressesTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_ip_table_search_and_numeric_sort_cover_all_pages_and_stay_within_the_subnet(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        foreach (range(2, 52) as $last) {
+            $subnet->ipAddresses()->create(['address' => ip2long("10.0.0.$last"), 'hostname' => "node-$last"]);
+        }
+        $subnet->ipAddresses()->create([
+            'address' => ip2long('10.0.0.200'), 'hostname' => 'target',
+            'description' => 'Carico 50%', 'mac_address' => 'AA:BB:CC:DD:EE:FF',
+        ]);
+        $otherSubnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.1.0/24'));
+        $otherSubnet->ipAddresses()->create(['address' => ip2long('10.0.1.200'), 'hostname' => 'target']);
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('query.sort', null)->where('query.direction', 'asc')
+            ->where('ipAddresses.total', 52)->where('ipAddresses.data.0.ip', '10.0.0.2')
+            ->where('ipAddresses.data.1.ip', '10.0.0.3'));
+        $this->get($show.'?search=target')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.ip', '10.0.0.200'));
+        $this->get($show.'?search=%25')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.hostname', 'target'));
+        $this->get($show.'?search=node&sort=&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('query.sort', null)->where('query.direction', 'asc')
+            ->where('ipAddresses.total', 51)->where('ipAddresses.data.0.ip', '10.0.0.2'));
+        $this->get($show.'?search=10.0.0.&sort=ip&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.data.0.ip', '10.0.0.200')
+            ->where('ipAddresses.data.1.ip', '10.0.0.52')
+            ->where('ipAddresses.next_page_url', function ($url) {
+                parse_str(parse_url($url, PHP_URL_QUERY), $query);
+
+                return $query === ['search' => '10.0.0.', 'sort' => 'ip', 'direction' => 'desc', 'page' => '2'];
+            }));
+    }
+
     public function test_documented_ip_is_unique_and_keeps_its_data_when_moved_until_explicitly_freed(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

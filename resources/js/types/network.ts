@@ -19,3 +19,9 @@ export type IpAddress = {
     hostname: string | null;
     mac_address: string | null;
 };
+
+export type ExcludedRange = {
+    id: number;
+    start_ip: string;
+    end_ip: string;
+};

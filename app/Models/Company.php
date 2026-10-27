@@ -9,6 +9,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['name'])]
 class Company extends Model
 {
+    /** @return HasMany<Tag, $this> */
+    public function tags(): HasMany
+    {
+        return $this->hasMany(Tag::class);
+    }
+
     /** @return HasMany<Site, $this> */
     public function sites(): HasMany
     {

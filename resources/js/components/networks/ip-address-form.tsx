@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import InputError from '@/components/input-error';
 import { IconButton } from '@/components/icon-button';
+import IpMetadataFields from '@/components/networks/ip-metadata-fields';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,7 +27,7 @@ import {
     store,
     update,
 } from '@/routes/companies/sites/subnets/ip-addresses';
-import type { ExcludedRange, IpAddress } from '@/types/network';
+import type { ExcludedRange, IpAddress, IpStatus, Tag } from '@/types/network';
 
 export default function IpAddressForm({
     companyId,
@@ -35,6 +36,8 @@ export default function IpAddressForm({
     context,
     ipAddress,
     excludedRanges,
+    statuses,
+    tags,
     suggestedIp,
     iconTrigger = false,
 }: {
@@ -44,6 +47,8 @@ export default function IpAddressForm({
     context: string;
     ipAddress?: IpAddress;
     excludedRanges: ExcludedRange[];
+    statuses: IpStatus[];
+    tags: Tag[];
     suggestedIp?: string;
     iconTrigger?: boolean;
 }) {
@@ -231,6 +236,14 @@ export default function IpAddressForm({
                                         Compila almeno Hostname o Descrizione.
                                     </p>
                                 </div>
+                                <IpMetadataFields
+                                    statuses={statuses}
+                                    tags={tags}
+                                    ipAddress={ipAddress}
+                                    disabled={processing}
+                                    readOnly={!canEdit}
+                                    errors={errors}
+                                />
                                 {excluded ? (
                                     <Alert>
                                         <TriangleAlert />
@@ -305,9 +318,10 @@ export default function IpAddressForm({
                         <p>
                             Verrà eliminato il record di{' '}
                             <strong>{ipAddress.ip}</strong> con descrizione,
-                            hostname e MAC. Se l’indirizzo è escluso, resterà
-                            escluso dai suggerimenti; potrai comunque
-                            documentarlo manualmente.
+                            hostname, MAC, stato e associazioni ai tag. Se
+                            l’indirizzo è escluso, resterà escluso dai
+                            suggerimenti; potrai comunque documentarlo
+                            manualmente.
                         </p>
                         <p>
                             Questa operazione non modifica alcun dispositivo

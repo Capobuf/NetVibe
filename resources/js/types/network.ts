@@ -18,7 +18,12 @@ export type IpAddress = {
     description: string | null;
     hostname: string | null;
     mac_address: string | null;
+    status: IpStatus | null;
+    tags: Tag[];
 };
+
+export type IpStatus = { id: number; name: string };
+export type Tag = { id: number; name: string; color: string };
 
 export type ExcludedRange = {
     id: number;

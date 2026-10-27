@@ -141,3 +141,33 @@
         @apply bg-background text-foreground;
     }
 }
+
+.tag-badge[data-color='blue'] {
+    --tag-hue: 250;
+}
+.tag-badge[data-color='green'] {
+    --tag-hue: 150;
+}
+.tag-badge[data-color='amber'] {
+    --tag-hue: 90;
+}
+.tag-badge[data-color='orange'] {
+    --tag-hue: 55;
+}
+.tag-badge[data-color='red'] {
+    --tag-hue: 25;
+}
+.tag-badge[data-color='purple'] {
+    --tag-hue: 310;
+}
+
+.tag-badge:not([data-color='gray']) {
+    background-color: oklch(0.95 0.035 var(--tag-hue));
+    color: oklch(0.38 0.14 var(--tag-hue));
+    border-color: color-mix(in oklab, currentColor 20%, transparent);
+}
+
+.dark .tag-badge:not([data-color='gray']) {
+    background-color: oklch(0.28 0.04 var(--tag-hue));
+    color: oklch(0.86 0.08 var(--tag-hue));
+}

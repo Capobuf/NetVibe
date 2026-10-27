@@ -3,6 +3,7 @@
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\IpAddressController;
+use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\VlanController;
@@ -35,6 +36,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+        Route::resource('ip-statuses', IpStatusController::class)
+            ->parameters(['ip-statuses' => 'ipStatus'])->only(['index', 'store', 'update']);
         Route::resource('companies', CompanyController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy'])->scoped();
     });

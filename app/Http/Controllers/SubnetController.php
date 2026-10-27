@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SubnetRequest;
 use App\Models\Company;
 use App\Models\ExcludedRange;
+use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\Ipv4Cidr;
@@ -39,7 +40,7 @@ class SubnetController extends Controller
     {
         $options = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
-            'sort' => ['nullable', 'in:ip,hostname,mac_address,description'],
+            'sort' => ['nullable', 'in:ip,hostname,mac_address,description,status,tags'],
             'direction' => ['sometimes', 'in:asc,desc'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:85899346'],
         ]);
@@ -63,6 +64,8 @@ class SubnetController extends Controller
             'firstProposableIp' => $subnet->firstProposableIp(),
             'query' => compact('search', 'sort', 'direction'),
             'addressCounts' => $subnet->addressCounts(),
+            'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
+            'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
         ]);
     }

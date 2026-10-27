@@ -3,7 +3,6 @@ import { ArrowRight, Check, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import InputError from '@/components/input-error';
-import { IconButton } from '@/components/icon-button';
 import IpMetadataFields from '@/components/networks/ip-metadata-fields';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -18,7 +17,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ipv4Number } from '@/lib/ipv4';
@@ -81,8 +80,10 @@ export default function IpAddressForm({
         >
             <DialogTrigger asChild>
                 {iconTrigger ? (
-                    <IconButton
-                        label={
+                    <Button
+                        type="button"
+                        size="icon"
+                        aria-label={
                             ipAddress
                                 ? `Apri IP ${ipAddress.ip}`
                                 : `Documenta IP ${suggestedIp}`
@@ -90,15 +91,16 @@ export default function IpAddressForm({
                         variant="ghost"
                     >
                         {ipAddress ? <ArrowRight /> : <Plus />}
-                    </IconButton>
+                    </Button>
                 ) : ipAddress ? (
-                    <button
+                    <Button
                         type="button"
-                        className="font-mono font-medium tabular-nums underline-offset-4 hover:underline focus-visible:underline"
+                        variant="link"
+                        className="h-auto p-0 font-mono tabular-nums"
                         aria-label={`Apri IP ${ipAddress.ip}`}
                     >
                         {ipAddress.ip}
-                    </button>
+                    </Button>
                 ) : (
                     <Button variant={suggestedIp ? 'outline' : 'default'}>
                         <Plus data-icon="inline-start" />
@@ -130,7 +132,7 @@ export default function IpAddressForm({
                         className="flex flex-col gap-5"
                     >
                         {({ processing, errors }) => (
-                            <>
+                            <FieldGroup>
                                 {(
                                     [
                                         {
@@ -150,18 +152,23 @@ export default function IpAddressForm({
                                         },
                                     ] as const
                                 ).map((field) => (
-                                    <div
+                                    <Field
                                         key={field.name}
-                                        className="flex flex-col gap-2"
+                                        data-invalid={Boolean(
+                                            errors[field.name],
+                                        )}
+                                        data-disabled={processing}
                                     >
-                                        <Label htmlFor={`${id}-${field.name}`}>
+                                        <FieldLabel
+                                            htmlFor={`${id}-${field.name}`}
+                                        >
                                             {field.label}
                                             {field.name === 'ip' ? (
                                                 <span aria-hidden="true">
                                                     *
                                                 </span>
                                             ) : null}
-                                        </Label>
+                                        </FieldLabel>
                                         <Input
                                             id={`${id}-${field.name}`}
                                             name={field.name}
@@ -203,12 +210,14 @@ export default function IpAddressForm({
                                             id={`${id}-${field.name}-error`}
                                             message={errors[field.name]}
                                         />
-                                    </div>
+                                    </Field>
                                 ))}
-                                <div className="flex flex-col gap-2">
-                                    <Label htmlFor={`${id}-description`}>
+                                <Field
+                                    data-invalid={Boolean(errors.description)}
+                                >
+                                    <FieldLabel htmlFor={`${id}-description`}>
                                         Descrizione
-                                    </Label>
+                                    </FieldLabel>
                                     <Textarea
                                         id={`${id}-description`}
                                         name="description"
@@ -235,7 +244,7 @@ export default function IpAddressForm({
                                     >
                                         Compila almeno Hostname o Descrizione.
                                     </p>
-                                </div>
+                                </Field>
                                 <IpMetadataFields
                                     statuses={statuses}
                                     tags={tags}
@@ -296,7 +305,7 @@ export default function IpAddressForm({
                                         </Button>
                                     ) : null}
                                 </DialogFooter>
-                            </>
+                            </FieldGroup>
                         )}
                     </Form>
                 </div>

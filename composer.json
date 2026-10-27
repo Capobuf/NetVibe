@@ -65,7 +65,7 @@
             "@lint:check",
             "npm run build",
             "npm run types:check",
-            "node --test tests/Frontend/Ipv4RangeSummary.test.ts",
+            "node --test tests/Frontend/*.test.ts",
             "@php artisan test tests/Feature/DatabaseIsolationTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/DashboardTest.php tests/Feature/SuperadminCommandTest.php tests/Feature/CompanySitesTest.php tests/Feature/SiteNetworksTest.php tests/Feature/IpAddressesTest.php tests/Feature/ExcludedRangesTest.php tests/Unit/Ipv4CidrTest.php tests/Unit/Ipv4RangesTest.php tests/Unit/Ipv4SearchTest.php"
         ],
         "types:check": [

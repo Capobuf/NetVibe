@@ -15,7 +15,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
     Select,
     SelectContent,
@@ -86,9 +86,11 @@ export default function SubnetForm({
                     className="flex flex-col gap-5"
                 >
                     {({ processing, errors }) => (
-                        <>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-cidr`}>CIDR IPv4</Label>
+                        <FieldGroup>
+                            <Field data-invalid={Boolean(errors.cidr)}>
+                                <FieldLabel htmlFor={`${id}-cidr`}>
+                                    CIDR IPv4
+                                </FieldLabel>
                                 <Input
                                     id={`${id}-cidr`}
                                     name="cidr"
@@ -113,11 +115,11 @@ export default function SubnetForm({
                                     id={`${id}-cidr-error`}
                                     message={errors.cidr}
                                 />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-name`}>
+                            </Field>
+                            <Field data-invalid={Boolean(errors.name)}>
+                                <FieldLabel htmlFor={`${id}-name`}>
                                     Nome (facoltativo)
-                                </Label>
+                                </FieldLabel>
                                 <Input
                                     id={`${id}-name`}
                                     name="name"
@@ -131,11 +133,11 @@ export default function SubnetForm({
                                     id={`${id}-name-error`}
                                     message={errors.name}
                                 />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-description`}>
+                            </Field>
+                            <Field data-invalid={Boolean(errors.description)}>
+                                <FieldLabel htmlFor={`${id}-description`}>
                                     Descrizione (facoltativa)
-                                </Label>
+                                </FieldLabel>
                                 <Input
                                     id={`${id}-description`}
                                     name="description"
@@ -148,11 +150,11 @@ export default function SubnetForm({
                                     id={`${id}-description-error`}
                                     message={errors.description}
                                 />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={`${id}-vlan`}>
+                            </Field>
+                            <Field data-invalid={Boolean(errors.vlan_id)}>
+                                <FieldLabel htmlFor={`${id}-vlan`}>
                                     VLAN (facoltativa)
-                                </Label>
+                                </FieldLabel>
                                 <Select
                                     value={vlanChoice}
                                     onValueChange={setVlanChoice}
@@ -201,7 +203,7 @@ export default function SubnetForm({
                                     id={`${id}-vlan-error`}
                                     message={errors.vlan_id}
                                 />
-                            </div>
+                            </Field>
                             <fieldset
                                 hidden={vlanChoice !== 'new'}
                                 disabled={vlanChoice !== 'new'}
@@ -215,10 +217,14 @@ export default function SubnetForm({
                                         Verrà creata insieme alla subnet al
                                         salvataggio.
                                     </p>
-                                    <div className="flex flex-col gap-2">
-                                        <Label htmlFor={`${id}-tag`}>
+                                    <Field
+                                        data-invalid={Boolean(
+                                            errors['new_vlan.tag'],
+                                        )}
+                                    >
+                                        <FieldLabel htmlFor={`${id}-tag`}>
                                             ID VLAN
-                                        </Label>
+                                        </FieldLabel>
                                         <Input
                                             id={`${id}-tag`}
                                             name="new_vlan[tag]"
@@ -241,11 +247,15 @@ export default function SubnetForm({
                                             id={`${id}-tag-error`}
                                             message={errors['new_vlan.tag']}
                                         />
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        <Label htmlFor={`${id}-vlan-name`}>
+                                    </Field>
+                                    <Field
+                                        data-invalid={Boolean(
+                                            errors['new_vlan.name'],
+                                        )}
+                                    >
+                                        <FieldLabel htmlFor={`${id}-vlan-name`}>
                                             Nome VLAN (facoltativo)
-                                        </Label>
+                                        </FieldLabel>
                                         <Input
                                             id={`${id}-vlan-name`}
                                             name="new_vlan[name]"
@@ -259,7 +269,7 @@ export default function SubnetForm({
                                             id={`${id}-vlan-name-error`}
                                             message={errors['new_vlan.name']}
                                         />
-                                    </div>
+                                    </Field>
                                 </div>
                             </fieldset>
                             <DialogFooter>
@@ -281,7 +291,7 @@ export default function SubnetForm({
                                     {subnet ? 'Salva subnet' : 'Crea subnet'}
                                 </Button>
                             </DialogFooter>
-                        </>
+                        </FieldGroup>
                     )}
                 </Form>
             </DialogContent>

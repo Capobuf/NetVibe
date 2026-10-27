@@ -33,10 +33,10 @@ class SuperadminCommandTest extends TestCase
         $this->post(route('login.store'), [
             'email' => 'new-owner@example.com',
             'password' => 'second-password',
-        ])->assertRedirect(route('dashboard', absolute: false));
+        ])->assertRedirect(route('companies.index', absolute: false));
 
         $this->assertAuthenticatedAs($user);
-        $this->get(route('dashboard'))->assertOk();
+        $this->get(route('companies.index'))->assertOk();
     }
 
     public function test_command_does_not_overwrite_or_promote_an_existing_user(): void

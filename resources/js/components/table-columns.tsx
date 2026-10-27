@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Columns3, GripVertical } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/icon-button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -11,6 +11,8 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Separator } from '@/components/ui/separator';
 
 export type TableColumn<Id extends string> = {
     id: Id;
@@ -21,10 +23,15 @@ export type TableColumn<Id extends string> = {
 export function TableColumns<Id extends string>({
     columns,
     onChange,
+    separators,
+    onSeparatorsChange,
 }: {
     columns: TableColumn<Id>[];
     onChange: (columns: TableColumn<Id>[]) => void;
+    separators: boolean;
+    onSeparatorsChange: (separators: boolean) => void;
 }) {
+    const separatorsId = useId();
     const dragged = useRef<Id | null>(null);
     const [announcement, setAnnouncement] = useState('');
 
@@ -139,6 +146,19 @@ export function TableColumns<Id extends string>({
                         </div>
                     ))}
                 </fieldset>
+                <Separator />
+                <Field orientation="horizontal">
+                    <Checkbox
+                        id={separatorsId}
+                        checked={separators}
+                        onCheckedChange={(checked) =>
+                            onSeparatorsChange(checked === true)
+                        }
+                    />
+                    <FieldLabel htmlFor={separatorsId}>
+                        Separatori verticali
+                    </FieldLabel>
+                </Field>
                 <p role="status" className="sr-only">
                     {announcement}
                 </p>

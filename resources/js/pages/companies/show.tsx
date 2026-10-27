@@ -1,11 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import {
-    ArrowLeft,
-    ArrowRight,
-    Building2,
-    MapPin,
-    ShieldCheck,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, MapPin } from 'lucide-react';
 import CompanyForm from '@/components/companies/company-form';
 import SiteForm from '@/components/companies/site-form';
 import { IconButton } from '@/components/icon-button';
@@ -18,6 +12,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { index } from '@/routes/administration/companies';
+import { index as administration } from '@/routes/administration';
 import { show as companyShow } from '@/routes/companies';
 import { show as siteShow } from '@/routes/companies/sites';
 import type { Company, Site } from '@/types/company';
@@ -32,17 +27,13 @@ export default function CompanyShow({
     return (
         <>
             <Head title={'Amministrazione · ' + company.name} />
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <div className="flex items-center gap-3">
                     <IconButton label="Torna alle aziende" asChild>
                         <Link href={index()}>
                             <ArrowLeft />
                         </Link>
                     </IconButton>
-                    <Badge variant="secondary">
-                        <ShieldCheck />
-                        Amministrazione
-                    </Badge>
                 </div>
                 <Card>
                     <CardHeader>
@@ -54,9 +45,9 @@ export default function CompanyShow({
                                 <div className="flex min-w-0 flex-col gap-2">
                                     <CardDescription>Azienda</CardDescription>
                                     <CardTitle>
-                                        <h1 className="break-words">
+                                        <h2 className="break-words">
                                             {company.name}
-                                        </h1>
+                                        </h2>
                                     </CardTitle>
                                 </div>
                             </div>
@@ -153,5 +144,8 @@ export default function CompanyShow({
 }
 
 CompanyShow.layout = {
-    breadcrumbs: [{ title: 'Amministrazione · Aziende', href: index() }],
+    breadcrumbs: [
+        { title: 'Amministrazione', href: administration() },
+        { title: 'Aziende', href: index() },
+    ],
 };

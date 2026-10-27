@@ -12,6 +12,13 @@ class CompanySitesTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_administration_opens_the_companies_tab(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+
+        $this->get(route('administration.index'))->assertRedirect('/administration/companies');
+    }
+
     public function test_company_search_and_sort_apply_before_pagination(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
@@ -90,6 +97,7 @@ class CompanySitesTest extends TestCase
         $site = $company->sites()->create(['name' => null]);
         $this->actingAs(User::factory()->create(['is_superadmin' => false]));
 
+        $this->get(route('administration.index'))->assertForbidden();
         $this->get(route('administration.companies.index'))->assertForbidden();
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,

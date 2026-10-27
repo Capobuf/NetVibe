@@ -15,7 +15,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import {
     destroy,
@@ -87,12 +87,16 @@ export default function SiteForm({
                         className="flex flex-col gap-6"
                     >
                         {({ processing, errors }) => (
-                            <>
+                            <FieldGroup>
                                 {nameExistingSite ? (
-                                    <div className="flex flex-col gap-2">
-                                        <Label htmlFor={`${id}-existing`}>
+                                    <Field
+                                        data-invalid={Boolean(
+                                            errors.existing_site_name,
+                                        )}
+                                    >
+                                        <FieldLabel htmlFor={`${id}-existing`}>
                                             Nome della sede esistente
-                                        </Label>
+                                        </FieldLabel>
                                         <Input
                                             id={`${id}-existing`}
                                             name="existing_site_name"
@@ -113,14 +117,14 @@ export default function SiteForm({
                                             id={`${id}-existing-error`}
                                             message={errors.existing_site_name}
                                         />
-                                    </div>
+                                    </Field>
                                 ) : null}
-                                <div className="flex flex-col gap-2">
-                                    <Label htmlFor={id}>
+                                <Field data-invalid={Boolean(errors.name)}>
+                                    <FieldLabel htmlFor={id}>
                                         {site
                                             ? 'Nome sede'
                                             : 'Nome della nuova sede'}
-                                    </Label>
+                                    </FieldLabel>
                                     <Input
                                         id={id}
                                         name="name"
@@ -139,7 +143,7 @@ export default function SiteForm({
                                         id={`${id}-error`}
                                         message={errors.name}
                                     />
-                                </div>
+                                </Field>
                                 <DialogFooter className="flex-row items-center justify-end">
                                     {site ? (
                                         <IconButton
@@ -173,7 +177,7 @@ export default function SiteForm({
                                         {processing ? <Spinner /> : <Check />}
                                     </IconButton>
                                 </DialogFooter>
-                            </>
+                            </FieldGroup>
                         )}
                     </Form>
                 </div>

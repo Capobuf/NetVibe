@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Route;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::redirect('dashboard', '/companies')->name('dashboard');
 
     // shortcut: operational access is shared by verified users until tenant permissions are implemented.
     Route::resource('companies', CompanyController::class)->only(['index', 'show']);
@@ -36,6 +36,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+        Route::redirect('/', '/administration/companies')->name('index');
         Route::resource('ip-statuses', IpStatusController::class)
             ->parameters(['ip-statuses' => 'ipStatus'])->only(['index', 'store', 'update']);
         Route::resource('companies', CompanyController::class)->only(['index', 'show', 'store', 'update', 'destroy']);

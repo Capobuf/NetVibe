@@ -14,7 +14,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import { store, update } from '@/routes/administration/ip-statuses';
 import type { IpStatus } from '@/types/network';
@@ -52,9 +52,9 @@ export default function IpStatusForm({ status }: { status?: IpStatus }) {
                     className="flex flex-col gap-6"
                 >
                     {({ processing, errors }) => (
-                        <>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor={id}>Nome</Label>
+                        <FieldGroup>
+                            <Field data-invalid={Boolean(errors.name)}>
+                                <FieldLabel htmlFor={id}>Nome</FieldLabel>
                                 <Input
                                     id={id}
                                     name="name"
@@ -70,7 +70,7 @@ export default function IpStatusForm({ status }: { status?: IpStatus }) {
                                     id={`${id}-error`}
                                     message={errors.name}
                                 />
-                            </div>
+                            </Field>
                             <DialogFooter>
                                 <DialogClose asChild>
                                     <Button
@@ -90,7 +90,7 @@ export default function IpStatusForm({ status }: { status?: IpStatus }) {
                                     {status ? 'Salva stato' : 'Crea stato'}
                                 </Button>
                             </DialogFooter>
-                        </>
+                        </FieldGroup>
                     )}
                 </Form>
             </DialogContent>

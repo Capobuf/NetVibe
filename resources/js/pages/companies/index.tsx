@@ -1,3 +1,10 @@
+import {
+    Empty,
+    EmptyHeader,
+    EmptyMedia,
+    EmptyTitle,
+    EmptyDescription,
+} from '@/components/ui/empty';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import {
     ArrowDown,
@@ -11,15 +18,21 @@ import {
     MapPin,
     Search,
     Settings2,
-    ShieldCheck,
     X,
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import CompanyForm from '@/components/companies/company-form';
 import SiteForm from '@/components/companies/site-form';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
+import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { IconButton } from '@/components/icon-button';
 import InputError from '@/components/input-error';
+import {
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +49,7 @@ import {
     index as administrationIndex,
     show as administrationShow,
 } from '@/routes/administration/companies';
+import { index as administrationRoot } from '@/routes/administration';
 import { index, show } from '@/routes/companies';
 import { show as showSite } from '@/routes/companies/sites';
 import type { Company, Site } from '@/types/company';
@@ -65,11 +79,13 @@ export default function Companies({
     const { auth } = usePage().props;
     const companyRoute = administration ? administrationShow : show;
     const indexRoute = administration ? administrationIndex : index;
-    const [columns, setColumns] = useState<CompanyColumn[]>([
-        { id: 'name', label: 'Nome azienda', visible: true },
-        { id: 'sites_count', label: 'Sedi', visible: true },
-    ]);
+    const { columns, setColumns, separators, setSeparators } =
+        useTablePreferences<CompanyColumn['id']>('companies', [
+            { id: 'name', label: 'Nome azienda', visible: true },
+            { id: 'sites_count', label: 'Sedi', visible: true },
+        ]);
     const [expanded, setExpanded] = useState<number[]>([]);
+    const Title = administration ? 'h2' : 'h1';
     const visibleColumns = columns.filter((column) => column.visible);
 
     return (
@@ -77,18 +93,12 @@ export default function Companies({
             <Head
                 title={administration ? 'Amministrazione · Aziende' : 'Aziende'}
             />
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
-                <header className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
+                <header className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex min-w-0 flex-col gap-2">
-                        {administration ? (
-                            <Badge variant="secondary">
-                                <ShieldCheck />
-                                Amministrazione
-                            </Badge>
-                        ) : null}
-                        <h1 className="text-2xl font-semibold tracking-tight">
+                        <Title className="text-2xl font-semibold tracking-tight text-balance">
                             Aziende
-                        </h1>
+                        </Title>
                         <p className="text-sm text-muted-foreground">
                             {administration
                                 ? 'Gestisci aziende, anagrafiche e sedi.'
@@ -105,8 +115,8 @@ export default function Companies({
                         </IconButton>
                     ) : null}
                 </header>
-                <div className="flex flex-col gap-3">
-                    <div className="flex items-start justify-between gap-3">
+                <Card className="gap-0 overflow-hidden py-0">
+                    <CardHeader className="py-4">
                         <Form
                             {...indexRoute.form()}
                             options={{
@@ -186,11 +196,14 @@ export default function Companies({
                                 </>
                             )}
                         </Form>
-                        <TableColumns columns={columns} onChange={setColumns} />
-                    </div>
-                    <div className="overflow-hidden rounded-lg border">
-                        <Table aria-label="Aziende e sedi">
-                            <TableHeader>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                        <Table
+                            className="data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            data-separators={separators}
+                            aria-label="Aziende e sedi"
+                        >
+                            <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     <TableHead className="w-12">
                                         <span className="sr-only">
@@ -247,6 +260,12 @@ export default function Companies({
                                     ))}
                                     <TableHead className="w-24 text-right">
                                         <span className="sr-only">Azioni</span>
+                                        <TableColumns
+                                            columns={columns}
+                                            onChange={setColumns}
+                                            separators={separators}
+                                            onSeparatorsChange={setSeparators}
+                                        />
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -257,21 +276,25 @@ export default function Companies({
                                             colSpan={visibleColumns.length + 2}
                                             className="h-40 text-center whitespace-normal"
                                         >
-                                            <div className="flex flex-col items-center gap-2">
-                                                <Building2 className="size-8 text-muted-foreground" />
-                                                <p className="font-medium">
-                                                    {query.search
-                                                        ? 'Nessuna azienda trovata'
-                                                        : 'Nessuna azienda'}
-                                                </p>
-                                                <p className="text-muted-foreground">
-                                                    {query.search
-                                                        ? 'Prova un altro nome o azzera la ricerca.'
-                                                        : administration
-                                                          ? 'Usa il pulsante + per creare la prima azienda.'
-                                                          : 'Le aziende create dall’amministratore compariranno qui.'}
-                                                </p>
-                                            </div>
+                                            <Empty>
+                                                <EmptyHeader>
+                                                    <EmptyMedia variant="icon">
+                                                        <Building2 />
+                                                    </EmptyMedia>
+                                                    <EmptyTitle>
+                                                        {query.search
+                                                            ? 'Nessuna azienda trovata'
+                                                            : 'Nessuna azienda'}
+                                                    </EmptyTitle>
+                                                    <EmptyDescription>
+                                                        {query.search
+                                                            ? 'Prova un altro nome o azzera la ricerca.'
+                                                            : administration
+                                                              ? 'Usa il pulsante + per creare la prima azienda.'
+                                                              : 'Le aziende create dall’amministratore compariranno qui.'}
+                                                    </EmptyDescription>
+                                                </EmptyHeader>
+                                            </Empty>
                                         </TableCell>
                                     </TableRow>
                                 ) : (
@@ -350,14 +373,7 @@ export default function Companies({
                                                                             company.sites_count
                                                                         }
                                                                     </Badge>
-                                                                ) : (
-                                                                    <span
-                                                                        className="text-muted-foreground"
-                                                                        aria-label="Contesto azienda"
-                                                                    >
-                                                                        —
-                                                                    </span>
-                                                                )}
+                                                                ) : null}
                                                             </TableCell>
                                                         ),
                                                     )}
@@ -476,8 +492,8 @@ export default function Companies({
                                 )}
                             </TableBody>
                         </Table>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                    </CardContent>
+                    <CardFooter className="flex-wrap justify-between gap-3 py-4 text-sm text-muted-foreground tabular-nums">
                         <p>
                             {companies.total}{' '}
                             {companies.total === 1 ? 'azienda' : 'aziende'}
@@ -536,11 +552,18 @@ export default function Companies({
                                 )}
                             </nav>
                         ) : null}
-                    </div>
-                </div>
+                    </CardFooter>
+                </Card>
             </div>
         </>
     );
 }
 
-Companies.layout = { breadcrumbs: [{ title: 'Aziende', href: index() }] };
+Companies.layout = ({ administration }: { administration: boolean }) => ({
+    breadcrumbs: administration
+        ? [
+              { title: 'Amministrazione', href: administrationRoot() },
+              { title: 'Aziende', href: administrationIndex() },
+          ]
+        : [{ title: 'Aziende', href: index() }],
+});

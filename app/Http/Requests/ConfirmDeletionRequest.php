@@ -9,6 +9,18 @@ use Illuminate\Validation\ValidationException;
 
 class ConfirmDeletionRequest extends FormRequest
 {
+    /** @param Collection<int, Site> $sites */
+    public function ensureSitesHaveNoNetworks(Collection $sites): void
+    {
+        // shortcut: protect network data until guided container deletion is implemented in NV-13.
+        if (Site::query()->whereKey($sites->modelKeys())
+            ->where(fn ($query) => $query->has('vlans')->orHas('subnets'))->exists()) {
+            throw ValidationException::withMessages([
+                'confirmed' => 'Questo contenitore include VLAN o subnet. La cancellazione con dati di rete non è ancora disponibile; nessun dato è stato eliminato.',
+            ]);
+        }
+    }
+
     /** @return array<string, array<string>> */
     public function rules(): array
     {

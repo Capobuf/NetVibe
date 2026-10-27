@@ -1,5 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Building2, FolderGit2, LayoutGrid } from 'lucide-react';
+import {
+    BookOpen,
+    Building2,
+    FolderGit2,
+    Layers,
+    LayoutGrid,
+    Network,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -15,6 +22,8 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as companies } from '@/routes/administration/companies';
+import { index as subnetIndex } from '@/routes/companies/sites/subnets';
+import { index as vlanIndex } from '@/routes/companies/sites/vlans';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -39,7 +48,14 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const { auth } = usePage().props;
+    const { auth, companyNavigation } = usePage().props;
+    const networkContext =
+        companyNavigation?.currentCompanyId && companyNavigation.currentSiteId
+            ? {
+                  company: companyNavigation.currentCompanyId,
+                  site: companyNavigation.currentSiteId,
+              }
+            : null;
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -57,6 +73,23 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                {networkContext ? (
+                    <NavMain
+                        label="IPAM"
+                        items={[
+                            {
+                                title: 'Subnet',
+                                href: subnetIndex(networkContext),
+                                icon: Network,
+                            },
+                            {
+                                title: 'VLAN',
+                                href: vlanIndex(networkContext),
+                                icon: Layers,
+                            },
+                        ]}
+                    />
+                ) : null}
                 {auth.user?.is_superadmin ? (
                     <NavMain
                         label="Amministrazione"

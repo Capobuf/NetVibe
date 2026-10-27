@@ -45,8 +45,8 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 3. Make only changes necessary for the issue. Do not run repeated tests, linters or audit scripts before/during development.
 4. After implementing or applying feedback, **refresh the actual Docker development instance**, including only required source/asset/dependency/container/migration updates. Preserve its development database and test data. Perform the minimum runtime check needed to know that the preview is accessible.
 5. Explain in Italian what changed, especially in UI, identify the branch, give only verified working page links, and list concrete steps A/B/C (with expected results) for the Product Owner to try. If unavailable, state the limitation; invent no links.
-6. **Owner reviews manually first.** Address feedback in the same branch, refresh Docker, and ask for review again where visible behavior changed.
-7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MySQL testing database. If fixes change UI or behavior, notify the owner and obtain renewed review.
+6. **Owner reviews manually first.** Address feedback in the same branch, refresh Docker, and ask for review again where UI/UX changed.
+7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MySQL testing database. If fixes change UI/UX, notify the owner and obtain renewed review. Fixes that leave the approved UI/UX unchanged do not require renewed approval; complete relevant checks and continue the already authorized workflow.
 8. After approval and successful relevant checks, push, create PR, merge and close the linked issue. **Do not push/open PR/merge/close before approval** unless the Product Owner explicitly asks for GitHub publication as the task's outcome; in that case publish the branch only and do not infer merge approval.
 9. Trivial approved direct-`main` tasks can commit/push without a PR. Never force-push or rewrite `main`.
 

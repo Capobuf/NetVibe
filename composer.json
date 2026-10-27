@@ -65,7 +65,7 @@
             "@lint:check",
             "npm run build",
             "npm run types:check",
-            "@php artisan test tests/Feature/DatabaseIsolationTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/DashboardTest.php tests/Feature/SuperadminCommandTest.php tests/Feature/CompanySitesTest.php"
+            "@php artisan test tests/Feature/DatabaseIsolationTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/DashboardTest.php tests/Feature/SuperadminCommandTest.php tests/Feature/CompanySitesTest.php tests/Feature/SiteNetworksTest.php tests/Unit/Ipv4CidrTest.php"
         ],
         "types:check": [
             "phpstan analyse"

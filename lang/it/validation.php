@@ -1,9 +1,12 @@
 <?php
 
 return [
+    'array' => 'Il campo :attribute deve contenere un elenco valido.',
+    'between' => ['numeric' => 'Il campo :attribute deve essere compreso tra :min e :max.'],
     'confirmed' => 'La conferma del campo :attribute non corrisponde.',
     'current_password' => 'La password attuale non è corretta.',
     'email' => 'Il campo :attribute deve contenere un indirizzo email valido.',
+    'integer' => 'Il campo :attribute deve essere un numero intero.',
     'max' => ['string' => 'Il campo :attribute non può superare :max caratteri.'],
     'min' => ['string' => 'Il campo :attribute deve contenere almeno :min caratteri.'],
     'required' => 'Il campo :attribute è obbligatorio.',

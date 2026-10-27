@@ -1,5 +1,5 @@
 import type { Auth } from '@/types/auth';
-import type { Company } from '@/types/company';
+import type { Company, Site } from '@/types/company';
 
 declare module 'react' {
     interface InputHTMLAttributes<T> {
@@ -15,6 +15,8 @@ declare module '@inertiajs/core' {
             companyNavigation: {
                 companies: Company[];
                 currentCompanyId: number | null;
+                sites: Site[];
+                currentSiteId: number | null;
             } | null;
             sidebarOpen: boolean;
             [key: string]: unknown;

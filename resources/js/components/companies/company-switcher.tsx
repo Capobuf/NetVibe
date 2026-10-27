@@ -28,7 +28,7 @@ export function CompanySwitcher() {
         >
             <SelectTrigger
                 aria-label="Seleziona azienda"
-                className="ml-auto w-56 max-w-[48vw]"
+                className="w-56 max-w-[42vw]"
             >
                 <Building2 />
                 <span className="min-w-0 flex-1 truncate text-left">

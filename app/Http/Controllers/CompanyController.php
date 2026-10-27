@@ -52,15 +52,17 @@ class CompanyController extends Controller
         return to_route('administration.companies.show', $company);
     }
 
-    public function show(Request $request, Company $company, ?Site $site = null): Response
+    public function show(Request $request, Company $company, ?Site $site = null): Response|RedirectResponse
     {
         $sites = $company->sites()->orderBy('id')->get(['id', 'name']);
+
+        if (! $request->routeIs('administration.*')) {
+            return to_route('companies.sites.subnets.index', [$company, $site ?? $sites->firstOrFail()]);
+        }
 
         return Inertia::render('companies/show', [
             'company' => $company->only('id', 'name'),
             'sites' => $sites,
-            'selectedSite' => $site?->only('id', 'name') ?? $sites->firstOrFail()->only('id', 'name'),
-            'administration' => $request->routeIs('administration.*'),
         ]);
     }
 
@@ -81,6 +83,7 @@ class CompanyController extends Controller
             $company = Company::query()->lockForUpdate()->findOrFail($company->id);
             $sites = $company->sites()->lockForUpdate()->get();
             $request->ensureSitesUnchanged($sites);
+            $request->ensureSitesHaveNoNetworks($sites);
 
             $company->sites()->delete();
             $company->delete();

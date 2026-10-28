@@ -28,7 +28,7 @@ export function CompanySwitcher() {
         >
             <SelectTrigger
                 aria-label="Seleziona azienda"
-                className="w-56 max-w-[42vw]"
+                className="min-w-0 flex-1 sm:w-56 sm:flex-none"
             >
                 <Building2 />
                 <span className="min-w-0 flex-1 truncate text-left">

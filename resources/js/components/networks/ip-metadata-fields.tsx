@@ -80,6 +80,7 @@ export default function IpMetadataFields({
     return (
         <>
             <Field
+                className="min-w-0"
                 data-invalid={Boolean(errors.ip_status_id)}
                 data-disabled={disabled || readOnly}
             >
@@ -126,7 +127,9 @@ export default function IpMetadataFields({
                 className="flex min-w-0 flex-col gap-3"
                 disabled={disabled || readOnly}
             >
-                <FieldLegend variant="label">Tag</FieldLegend>
+                <FieldLegend variant="label" className="leading-snug">
+                    Tag
+                </FieldLegend>
                 {selected.map((tag, index) => (
                     <span key={tag.id} hidden>
                         <input
@@ -155,76 +158,6 @@ export default function IpMetadataFields({
                         />
                     </span>
                 ))}
-                <div className="flex flex-wrap gap-2">
-                    {[
-                        ...selected,
-                        ...newTags.map((tag) => ({ ...tag, id: null })),
-                    ].map((tag) => (
-                        <TagBadge
-                            key={tag.id ?? `new-${tag.name}`}
-                            color={tag.color}
-                            className="max-w-full gap-1 break-words whitespace-normal"
-                        >
-                            {tag.name}
-                            {!readOnly ? (
-                                <TagColorPicker
-                                    name={tag.name}
-                                    color={tag.color}
-                                    disabled={disabled}
-                                    onChange={(color) =>
-                                        tag.id === null
-                                            ? setNewTags(
-                                                  newTags.map((item) =>
-                                                      item.name === tag.name
-                                                          ? { ...item, color }
-                                                          : item,
-                                                  ),
-                                              )
-                                            : setSelected(
-                                                  selected.map((item) =>
-                                                      item.id === tag.id
-                                                          ? { ...item, color }
-                                                          : item,
-                                                  ),
-                                              )
-                                    }
-                                />
-                            ) : null}
-                            {!readOnly ? (
-                                <IconButton
-                                    type="button"
-                                    variant="ghost"
-                                    className="size-6"
-                                    label={`Rimuovi tag ${tag.name}`}
-                                    disabled={disabled}
-                                    onClick={() =>
-                                        tag.id === null
-                                            ? setNewTags(
-                                                  newTags.filter(
-                                                      (item) =>
-                                                          item.name !==
-                                                          tag.name,
-                                                  ),
-                                              )
-                                            : setSelected(
-                                                  selected.filter(
-                                                      (item) =>
-                                                          item.id !== tag.id,
-                                                  ),
-                                              )
-                                    }
-                                >
-                                    <X />
-                                </IconButton>
-                            ) : null}
-                        </TagBadge>
-                    ))}
-                    {readOnly && selected.length === 0 ? (
-                        <span className="text-sm text-muted-foreground">
-                            Nessun tag
-                        </span>
-                    ) : null}
-                </div>
                 {!readOnly ? (
                     <>
                         <Label htmlFor={`${id}-tag-search`} className="sr-only">
@@ -300,6 +233,76 @@ export default function IpMetadataFields({
                         ) : null}
                     </>
                 ) : null}
+                <div className="flex flex-wrap gap-2 empty:hidden">
+                    {[
+                        ...selected,
+                        ...newTags.map((tag) => ({ ...tag, id: null })),
+                    ].map((tag) => (
+                        <TagBadge
+                            key={tag.id ?? `new-${tag.name}`}
+                            color={tag.color}
+                            className="max-w-full gap-1 break-words whitespace-normal"
+                        >
+                            {tag.name}
+                            {!readOnly ? (
+                                <TagColorPicker
+                                    name={tag.name}
+                                    color={tag.color}
+                                    disabled={disabled}
+                                    onChange={(color) =>
+                                        tag.id === null
+                                            ? setNewTags(
+                                                  newTags.map((item) =>
+                                                      item.name === tag.name
+                                                          ? { ...item, color }
+                                                          : item,
+                                                  ),
+                                              )
+                                            : setSelected(
+                                                  selected.map((item) =>
+                                                      item.id === tag.id
+                                                          ? { ...item, color }
+                                                          : item,
+                                                  ),
+                                              )
+                                    }
+                                />
+                            ) : null}
+                            {!readOnly ? (
+                                <IconButton
+                                    type="button"
+                                    variant="ghost"
+                                    className="size-6"
+                                    label={`Rimuovi tag ${tag.name}`}
+                                    disabled={disabled}
+                                    onClick={() =>
+                                        tag.id === null
+                                            ? setNewTags(
+                                                  newTags.filter(
+                                                      (item) =>
+                                                          item.name !==
+                                                          tag.name,
+                                                  ),
+                                              )
+                                            : setSelected(
+                                                  selected.filter(
+                                                      (item) =>
+                                                          item.id !== tag.id,
+                                                  ),
+                                              )
+                                    }
+                                >
+                                    <X />
+                                </IconButton>
+                            ) : null}
+                        </TagBadge>
+                    ))}
+                    {readOnly && selected.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">
+                            Nessun tag
+                        </span>
+                    ) : null}
+                </div>
                 <InputError id={`${id}-tag-error`} message={tagError} />
             </FieldSet>
         </>

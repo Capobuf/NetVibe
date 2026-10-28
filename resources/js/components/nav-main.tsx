@@ -31,7 +31,16 @@ export function NavMain({
                             }
                             tooltip={{ children: item.title }}
                         >
-                            <Link href={item.href} prefetch>
+                            <Link
+                                href={item.href}
+                                prefetch
+                                aria-current={
+                                    (item.isActive ??
+                                    isCurrentOrParentUrl(item.href))
+                                        ? 'page'
+                                        : undefined
+                                }
+                            >
                                 {item.icon && <item.icon />}
                                 <span>{item.title}</span>
                             </Link>

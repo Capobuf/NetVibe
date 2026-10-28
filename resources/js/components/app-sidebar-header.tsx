@@ -12,12 +12,12 @@ export function AppSidebarHeader({
 }) {
     return (
         <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3 md:px-6">
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
                 <SidebarTrigger className="-ml-1" />
                 <Separator orientation="vertical" className="h-4" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
-            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+            <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
                 <CompanySwitcher />
                 <SiteSwitcher />
             </div>

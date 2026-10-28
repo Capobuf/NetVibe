@@ -1,8 +1,9 @@
 import { Form } from '@inertiajs/react';
-import { Check, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { IconButton } from '@/components/icon-button';
+import { Button } from '@/components/ui/button';
 import InputError from '@/components/input-error';
 import {
     Dialog,
@@ -47,12 +48,16 @@ export default function SiteForm({
             }}
         >
             <DialogTrigger asChild>
-                <IconButton
-                    label={site ? `Modifica ${site.name}` : 'Aggiungi sede'}
-                    variant={site ? 'outline' : 'default'}
-                >
-                    {site ? <Pencil /> : <Plus />}
-                </IconButton>
+                {site ? (
+                    <IconButton label={`Modifica ${site.name}`}>
+                        <Pencil />
+                    </IconButton>
+                ) : (
+                    <Button>
+                        <Plus />
+                        Aggiungi sede
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
@@ -144,7 +149,7 @@ export default function SiteForm({
                                         message={errors.name}
                                     />
                                 </Field>
-                                <DialogFooter className="flex-row items-center justify-end">
+                                <DialogFooter className="flex-row flex-wrap items-center justify-end">
                                     {site ? (
                                         <IconButton
                                             label="Elimina sede"
@@ -157,25 +162,20 @@ export default function SiteForm({
                                         </IconButton>
                                     ) : null}
                                     <DialogClose asChild>
-                                        <IconButton
-                                            label="Annulla"
+                                        <Button
+                                            type="button"
+                                            variant="outline"
                                             disabled={processing}
                                         >
-                                            <X />
-                                        </IconButton>
+                                            Annulla
+                                        </Button>
                                     </DialogClose>
-                                    <IconButton
-                                        label={
-                                            site
-                                                ? 'Salva sede'
-                                                : 'Aggiungi sede'
-                                        }
-                                        type="submit"
-                                        variant="default"
-                                        disabled={processing}
-                                    >
-                                        {processing ? <Spinner /> : <Check />}
-                                    </IconButton>
+                                    <Button type="submit" disabled={processing}>
+                                        {processing ? <Spinner /> : null}
+                                        {site
+                                            ? 'Salva modifiche'
+                                            : 'Aggiungi sede'}
+                                    </Button>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

@@ -6,6 +6,7 @@ import {
     EmptyDescription,
 } from '@/components/ui/empty';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { useRef, useState } from 'react';
 import {
     ArrowDown,
     ArrowLeft,
@@ -13,6 +14,8 @@ import {
     ArrowUp,
     ArrowUpDown,
     Ban,
+    Network,
+    ArrowUpRight,
     Search,
     X,
 } from 'lucide-react';
@@ -24,14 +27,16 @@ import IpAddressForm from '@/components/networks/ip-address-form';
 import ExcludedRanges from '@/components/networks/excluded-ranges';
 import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
+import SubnetOccupancyChart from '@/components/networks/subnet-occupancy-chart';
+import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
     Card,
     CardContent,
     CardDescription,
-    CardFooter,
     CardHeader,
+    CardFooter,
 } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -104,6 +109,8 @@ export default function SubnetShow({
     tags,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
+    const [selectedIp, setSelectedIp] = useState<IpRow | null>(null);
+    const dialogOpener = useRef<HTMLElement | null>(null);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences<IpColumn['id']>(
             'ip-addresses',
@@ -137,86 +144,93 @@ export default function SubnetShow({
         <>
             <Head title={`${subnet.cidr} · ${context}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex min-w-0 flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <h1 className="font-mono text-2xl font-semibold tracking-tight text-balance tabular-nums">
+                <Card
+                    className="gap-0 overflow-hidden py-0 motion-safe:animate-in motion-safe:duration-500 motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2"
+                    role="region"
+                    aria-labelledby="subnet-title"
+                >
+                    <CardHeader className="gap-6 p-5 sm:p-7">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border bg-muted/50 text-muted-foreground">
+                                    <Network
+                                        className="size-5"
+                                        aria-hidden="true"
+                                    />
+                                </div>
+                                <CardDescription className="break-words">
+                                    {context}
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <ExcludedRanges
+                                    key={subnet.id}
+                                    {...formContext}
+                                    subnetCidr={subnet.cidr}
+                                />
+                                {auth.user.is_superadmin ? (
+                                    <IpAddressForm
+                                        key={`ip-${subnet.id}`}
+                                        {...formContext}
+                                    />
+                                ) : null}
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <h1
+                                id="subnet-title"
+                                className="font-mono text-2xl font-semibold tracking-tight break-all tabular-nums sm:text-3xl xl:text-4xl"
+                            >
                                 {subnet.cidr}
                             </h1>
-                            <Badge variant={vlan ? 'secondary' : 'outline'}>
-                                {vlan
-                                    ? `VLAN ${vlan.tag}${vlan.name ? ` · ${vlan.name}` : ''}`
-                                    : 'Senza VLAN'}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-3">
+                                {subnet.name ? (
+                                    <p className="text-base font-medium break-words">
+                                        {subnet.name}
+                                    </p>
+                                ) : null}
+                                <Badge variant="secondary">
+                                    {vlan
+                                        ? `VLAN ${vlan.tag}${vlan.name ? ` · ${vlan.name}` : ''}`
+                                        : 'Senza VLAN'}
+                                </Badge>
+                            </div>
+                            {subnet.description ? (
+                                <CardDescription className="max-w-3xl break-words">
+                                    {subnet.description}
+                                </CardDescription>
+                            ) : null}
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                            {context}
-                            {subnet.name ? ` · ${subnet.name}` : ''}
-                        </p>
-                        {subnet.description ? (
-                            <p className="max-w-3xl text-sm break-words text-muted-foreground">
-                                {subnet.description}
-                            </p>
-                        ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <ExcludedRanges
-                            key={subnet.id}
-                            {...formContext}
-                            subnetCidr={subnet.cidr}
-                        />
-                        {auth.user.is_superadmin ? (
+                    </CardHeader>
+                    <Separator />
+                    <CardContent className="p-5 sm:p-7">
+                        <SubnetOccupancyChart counts={addressCounts} />
+                    </CardContent>
+                    <Separator />
+                    <CardFooter className="flex-wrap justify-between gap-4 bg-muted/30 px-5 py-4 sm:px-7">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <ArrowUpRight
+                                className="size-5 shrink-0 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            <div className="flex min-w-0 flex-col gap-1">
+                                <p className="text-xs text-muted-foreground">
+                                    Prossimo IP suggerito
+                                </p>
+                                <p className="font-mono text-base font-medium tabular-nums">
+                                    {firstProposableIp ??
+                                        'Nessun IP proponibile'}
+                                </p>
+                            </div>
+                        </div>
+                        {firstProposableIp !== null &&
+                        auth.user.is_superadmin ? (
                             <IpAddressForm
-                                key={`ip-${subnet.id}`}
+                                key={`suggestion-${subnet.id}`}
                                 {...formContext}
+                                suggestedIp={firstProposableIp}
                             />
                         ) : null}
-                    </div>
-                </header>
-                <Card>
-                    <CardContent>
-                        <dl className="grid gap-6 sm:grid-cols-3">
-                            {(
-                                [
-                                    ['documented', 'Documentati'],
-                                    ['excluded', 'Esclusi non documentati'],
-                                    ['proposable', 'Proponibili'],
-                                ] as const
-                            ).map(([key, label]) => (
-                                <div key={key} className="flex flex-col gap-2">
-                                    <dt className="text-sm text-muted-foreground">
-                                        {label}
-                                    </dt>
-                                    <dd className="text-2xl font-semibold tracking-tight tabular-nums">
-                                        {addressCounts[key].toLocaleString(
-                                            'it-IT',
-                                        )}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </CardContent>
-                    <CardFooter>
-                        {firstProposableIp !== null ? (
-                            auth.user.is_superadmin ? (
-                                <IpAddressForm
-                                    key={`suggestion-${subnet.id}`}
-                                    {...formContext}
-                                    suggestedIp={firstProposableIp}
-                                />
-                            ) : (
-                                <p className="text-sm">
-                                    Primo IP proponibile:{' '}
-                                    <span className="font-mono">
-                                        {firstProposableIp}
-                                    </span>
-                                </p>
-                            )
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                Nessun IP proponibile
-                            </p>
-                        )}
                     </CardFooter>
                 </Card>
                 <Card className="gap-0 overflow-hidden py-0">
@@ -264,7 +278,7 @@ export default function SubnetShow({
                                         Cerca per IP, hostname, MAC o
                                         descrizione, stato o tag
                                     </Label>
-                                    <div className="flex gap-2">
+                                    <div className="flex items-center gap-2">
                                         <Input
                                             key={query.search}
                                             id="ip-search"
@@ -330,187 +344,270 @@ export default function SubnetShow({
                     </CardHeader>
                     <CardContent className="px-0">
                         <Table
-                            className="text-center data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            className="text-center [&_td]:px-3 [&_td]:py-1 data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
                             data-separators={separators}
                             aria-label={`Indirizzi nella subnet ${subnet.cidr}`}
                         >
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
-                                    {visibleColumns.map((column) => (
-                                        <TableHead
-                                            key={column.id}
-                                            className="text-center"
-                                            scope="col"
-                                            aria-sort={
-                                                query.sort === column.id
-                                                    ? query.direction === 'asc'
-                                                        ? 'ascending'
-                                                        : 'descending'
-                                                    : 'none'
-                                            }
-                                        >
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                asChild
+                                    {visibleColumns.map(
+                                        (column, columnIndex) => (
+                                            <TableHead
+                                                key={column.id}
+                                                className="h-10 px-3 text-center"
+                                                scope="col"
+                                                aria-sort={
+                                                    query.sort === column.id
+                                                        ? query.direction ===
+                                                          'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
                                             >
-                                                <Link
-                                                    href={show(route, {
-                                                        query:
-                                                            query.sort ===
-                                                                column.id &&
-                                                            query.direction ===
-                                                                'desc'
-                                                                ? {
-                                                                      search: query.search,
-                                                                  }
-                                                                : {
-                                                                      search: query.search,
-                                                                      sort: column.id,
-                                                                      direction:
-                                                                          query.sort ===
-                                                                          column.id
-                                                                              ? 'desc'
-                                                                              : 'asc',
-                                                                  },
-                                                    })}
-                                                    preserveState
-                                                    preserveScroll
-                                                >
-                                                    {column.label}
-                                                    {query.sort !==
-                                                    column.id ? (
-                                                        <ArrowUpDown />
-                                                    ) : query.direction ===
-                                                      'asc' ? (
-                                                        <ArrowUp />
-                                                    ) : (
-                                                        <ArrowDown />
-                                                    )}
-                                                </Link>
-                                            </Button>
-                                        </TableHead>
-                                    ))}
-                                    <TableHead className="w-12 text-center">
-                                        <span className="sr-only">Azioni</span>
-                                        <TableColumns
-                                            columns={columns}
-                                            onChange={setColumns}
-                                            separators={separators}
-                                            onSeparatorsChange={setSeparators}
-                                        />
-                                    </TableHead>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="flex-1"
+                                                        asChild
+                                                    >
+                                                        <Link
+                                                            href={show(route, {
+                                                                query:
+                                                                    query.sort ===
+                                                                        column.id &&
+                                                                    query.direction ===
+                                                                        'desc'
+                                                                        ? {
+                                                                              search: query.search,
+                                                                          }
+                                                                        : {
+                                                                              search: query.search,
+                                                                              sort: column.id,
+                                                                              direction:
+                                                                                  query.sort ===
+                                                                                  column.id
+                                                                                      ? 'desc'
+                                                                                      : 'asc',
+                                                                          },
+                                                            })}
+                                                            preserveState
+                                                            preserveScroll
+                                                        >
+                                                            {column.label}
+                                                            {query.sort !==
+                                                            column.id ? (
+                                                                <ArrowUpDown />
+                                                            ) : query.direction ===
+                                                              'asc' ? (
+                                                                <ArrowUp />
+                                                            ) : (
+                                                                <ArrowDown />
+                                                            )}
+                                                        </Link>
+                                                    </Button>
+                                                    {columnIndex ===
+                                                    visibleColumns.length -
+                                                        1 ? (
+                                                        <TableColumns
+                                                            columns={columns}
+                                                            onChange={
+                                                                setColumns
+                                                            }
+                                                            separators={
+                                                                separators
+                                                            }
+                                                            onSeparatorsChange={
+                                                                setSeparators
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                </div>
+                                            </TableHead>
+                                        ),
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {ipAddresses.data.map((ipAddress) => (
-                                    <TableRow key={ipAddress.ip}>
-                                        {visibleColumns.map((column) => (
-                                            <TableCell
-                                                key={column.id}
-                                                className={
-                                                    column.id === 'ip' ||
-                                                    column.id === 'mac_address'
-                                                        ? 'px-4 font-mono tabular-nums'
-                                                        : 'max-w-lg break-words whitespace-pre-wrap'
-                                                }
-                                            >
-                                                {column.id === 'ip' ? (
-                                                    <div className="flex flex-wrap items-center justify-center gap-2">
-                                                        <span>
-                                                            {ipAddress.ip}
-                                                        </span>
-                                                        {ipAddress.excluded ? (
-                                                            <Tooltip>
-                                                                <TooltipTrigger
-                                                                    asChild
+                                {ipAddresses.data.map((ipAddress) => {
+                                    const canOpen =
+                                        ipAddress.id !== null ||
+                                        auth.user.is_superadmin;
+                                    const openAddress = (
+                                        opener: HTMLElement,
+                                    ) => {
+                                        dialogOpener.current = opener;
+                                        setSelectedIp(ipAddress);
+                                    };
+
+                                    return (
+                                        <TableRow
+                                            key={ipAddress.ip}
+                                            className={
+                                                canOpen
+                                                    ? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
+                                                    : undefined
+                                            }
+                                            tabIndex={canOpen ? 0 : undefined}
+                                            aria-label={
+                                                canOpen
+                                                    ? `${ipAddress.id !== null ? 'Visualizza' : 'Documenta'} IP ${ipAddress.ip}`
+                                                    : undefined
+                                            }
+                                            aria-haspopup={
+                                                canOpen ? 'dialog' : undefined
+                                            }
+                                            onClick={
+                                                canOpen
+                                                    ? (event) =>
+                                                          openAddress(
+                                                              event.currentTarget,
+                                                          )
+                                                    : undefined
+                                            }
+                                            onKeyDown={
+                                                canOpen
+                                                    ? (event) => {
+                                                          if (
+                                                              event.target ===
+                                                                  event.currentTarget &&
+                                                              (event.key ===
+                                                                  'Enter' ||
+                                                                  event.key ===
+                                                                      ' ')
+                                                          ) {
+                                                              event.preventDefault();
+                                                              openAddress(
+                                                                  event.currentTarget,
+                                                              );
+                                                          }
+                                                      }
+                                                    : undefined
+                                            }
+                                        >
+                                            {visibleColumns.map((column) => (
+                                                <TableCell
+                                                    key={column.id}
+                                                    className={
+                                                        column.id === 'ip' ||
+                                                        column.id ===
+                                                            'mac_address'
+                                                            ? 'px-4 font-mono tabular-nums'
+                                                            : 'max-w-lg break-words whitespace-pre-wrap'
+                                                    }
+                                                >
+                                                    {column.id === 'ip' ? (
+                                                        <div className="flex flex-wrap items-center justify-center gap-2">
+                                                            {ipAddress.excluded ? (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger
+                                                                        asChild
+                                                                    >
+                                                                        <span
+                                                                            tabIndex={
+                                                                                0
+                                                                            }
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) =>
+                                                                                event.stopPropagation()
+                                                                            }
+                                                                            role="img"
+                                                                            aria-label="IP escluso dai suggerimenti"
+                                                                            className="inline-flex rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                        >
+                                                                            <Ban
+                                                                                className="size-3.5"
+                                                                                aria-hidden="true"
+                                                                            />
+                                                                        </span>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent>
+                                                                        Escluso
+                                                                        dai
+                                                                        suggerimenti
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            ) : null}
+                                                            {canOpen ? (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="link"
+                                                                    className="h-7 p-0 font-mono tabular-nums"
+                                                                    aria-label={`${ipAddress.id !== null ? 'Visualizza' : 'Documenta'} IP ${ipAddress.ip}`}
+                                                                    aria-haspopup="dialog"
+                                                                    onClick={(
+                                                                        event,
+                                                                    ) => {
+                                                                        event.stopPropagation();
+                                                                        openAddress(
+                                                                            event.currentTarget,
+                                                                        );
+                                                                    }}
                                                                 >
-                                                                    <span
-                                                                        tabIndex={
-                                                                            0
-                                                                        }
-                                                                        role="img"
-                                                                        aria-label="IP escluso dai suggerimenti"
-                                                                        className="inline-flex rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                                    >
-                                                                        <Ban
-                                                                            className="size-3.5"
-                                                                            aria-hidden="true"
-                                                                        />
-                                                                    </span>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent>
-                                                                    Escluso dai
-                                                                    suggerimenti
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        ) : null}
-                                                    </div>
-                                                ) : column.id === 'status' ? (
-                                                    ipAddress.status ? (
-                                                        <Badge variant="secondary">
-                                                            {
-                                                                ipAddress.status
-                                                                    .name
-                                                            }
-                                                        </Badge>
-                                                    ) : (
-                                                        ''
-                                                    )
-                                                ) : column.id === 'tags' ? (
-                                                    ipAddress.tags.length ? (
-                                                        <div className="flex flex-wrap justify-center gap-1">
-                                                            {ipAddress.tags.map(
-                                                                (tag) => (
-                                                                    <TagBadge
-                                                                        key={
-                                                                            tag.id
-                                                                        }
-                                                                        color={
-                                                                            tag.color
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            tag.name
-                                                                        }
-                                                                    </TagBadge>
-                                                                ),
+                                                                    {
+                                                                        ipAddress.ip
+                                                                    }
+                                                                </Button>
+                                                            ) : (
+                                                                <span>
+                                                                    {
+                                                                        ipAddress.ip
+                                                                    }
+                                                                </span>
                                                             )}
                                                         </div>
+                                                    ) : column.id ===
+                                                      'status' ? (
+                                                        ipAddress.status ? (
+                                                            <Badge variant="secondary">
+                                                                {
+                                                                    ipAddress
+                                                                        .status
+                                                                        .name
+                                                                }
+                                                            </Badge>
+                                                        ) : (
+                                                            ''
+                                                        )
+                                                    ) : column.id === 'tags' ? (
+                                                        ipAddress.tags
+                                                            .length ? (
+                                                            <div className="flex flex-wrap justify-center gap-1">
+                                                                {ipAddress.tags.map(
+                                                                    (tag) => (
+                                                                        <TagBadge
+                                                                            key={
+                                                                                tag.id
+                                                                            }
+                                                                            color={
+                                                                                tag.color
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                tag.name
+                                                                            }
+                                                                        </TagBadge>
+                                                                    ),
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            ''
+                                                        )
                                                     ) : (
-                                                        ''
-                                                    )
-                                                ) : (
-                                                    (ipAddress[column.id] ?? '')
-                                                )}
-                                            </TableCell>
-                                        ))}
-                                        <TableCell className="text-center">
-                                            {ipAddress.id !== null ? (
-                                                <IpAddressForm
-                                                    key={`record-${ipAddress.id}`}
-                                                    {...formContext}
-                                                    ipAddress={{
-                                                        ...ipAddress,
-                                                        id: ipAddress.id,
-                                                    }}
-                                                    iconTrigger
-                                                />
-                                            ) : auth.user.is_superadmin ? (
-                                                <IpAddressForm
-                                                    key={`new-${ipAddress.ip}`}
-                                                    {...formContext}
-                                                    suggestedIp={ipAddress.ip}
-                                                    iconTrigger
-                                                />
-                                            ) : null}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                                        (ipAddress[column.id] ??
+                                                        '')
+                                                    )}
+                                                </TableCell>
+                                            ))}
+                                        </TableRow>
+                                    );
+                                })}
                                 {ipAddresses.data.length === 0 ? (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={visibleColumns.length + 1}
+                                            colSpan={visibleColumns.length}
                                             className="h-40 text-center whitespace-normal"
                                         >
                                             <Empty>
@@ -540,7 +637,7 @@ export default function SubnetShow({
                     ipAddresses.current_page > 1 ? (
                         <nav
                             aria-label="Pagine degli indirizzi"
-                            className="flex flex-wrap items-center justify-end gap-3 px-6 py-4 text-sm text-muted-foreground tabular-nums"
+                            className="flex flex-wrap items-center justify-end gap-3 border-t px-4 py-4 text-sm text-muted-foreground tabular-nums sm:px-6"
                         >
                             {ipAddresses.prev_page_url ? (
                                 <IconButton label="Pagina precedente" asChild>
@@ -563,7 +660,7 @@ export default function SubnetShow({
                                     preserveState: true,
                                     preserveScroll: true,
                                 }}
-                                className="flex items-center gap-2"
+                                className="flex flex-wrap items-center gap-2"
                             >
                                 <input
                                     type="hidden"
@@ -618,6 +715,26 @@ export default function SubnetShow({
                     ) : null}
                 </Card>
             </div>
+            {selectedIp ? (
+                <IpAddressForm
+                    key={selectedIp.ip}
+                    {...formContext}
+                    ipAddress={
+                        selectedIp.id !== null
+                            ? { ...selectedIp, id: selectedIp.id }
+                            : undefined
+                    }
+                    suggestedIp={selectedIp.ip}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setSelectedIp(null);
+                    }}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        dialogOpener.current?.focus();
+                    }}
+                />
+            ) : null}
         </>
     );
 }

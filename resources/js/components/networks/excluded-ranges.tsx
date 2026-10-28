@@ -1,5 +1,5 @@
 import { Form, usePage } from '@inertiajs/react';
-import { Plus, TriangleAlert } from 'lucide-react';
+import { SlidersHorizontal, Plus, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -96,7 +96,11 @@ export default function ExcludedRanges({
         >
             <DialogTrigger asChild>
                 <Button variant="outline">
-                    Esclusioni ({excludedRanges.length})
+                    <SlidersHorizontal data-icon="inline-start" />
+                    Esclusioni
+                    <Badge variant="secondary" className="tabular-nums">
+                        {excludedRanges.length}
+                    </Badge>
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">

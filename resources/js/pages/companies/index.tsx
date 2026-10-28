@@ -133,7 +133,7 @@ export default function Companies({
                                     >
                                         Cerca azienda per nome
                                     </Label>
-                                    <div className="flex gap-2">
+                                    <div className="flex items-center gap-2">
                                         <Input
                                             key={query.search}
                                             id="company-search"
@@ -229,17 +229,23 @@ export default function Companies({
                                             >
                                                 <Link
                                                     href={indexRoute({
-                                                        query: {
-                                                            search: query.search,
-                                                            sort: column.id,
-                                                            direction:
-                                                                query.sort ===
-                                                                    column.id &&
-                                                                query.direction ===
-                                                                    'asc'
-                                                                    ? 'desc'
-                                                                    : 'asc',
-                                                        },
+                                                        query:
+                                                            query.sort ===
+                                                                column.id &&
+                                                            query.direction ===
+                                                                'desc'
+                                                                ? {
+                                                                      search: query.search,
+                                                                  }
+                                                                : {
+                                                                      search: query.search,
+                                                                      sort: column.id,
+                                                                      direction:
+                                                                          query.sort ===
+                                                                          column.id
+                                                                              ? 'desc'
+                                                                              : 'asc',
+                                                                  },
                                                     })}
                                                     preserveState
                                                     preserveScroll
@@ -290,7 +296,7 @@ export default function Companies({
                                                         {query.search
                                                             ? 'Prova un altro nome o azzera la ricerca.'
                                                             : administration
-                                                              ? 'Usa il pulsante + per creare la prima azienda.'
+                                                              ? 'Crea la prima azienda con “Nuova azienda”.'
                                                               : 'Le aziende create dall’amministratore compariranno qui.'}
                                                     </EmptyDescription>
                                                 </EmptyHeader>
@@ -493,7 +499,7 @@ export default function Companies({
                             </TableBody>
                         </Table>
                     </CardContent>
-                    <CardFooter className="flex-wrap justify-between gap-3 py-4 text-sm text-muted-foreground tabular-nums">
+                    <CardFooter className="flex-wrap justify-between gap-3 border-t py-4 text-sm text-muted-foreground tabular-nums">
                         <p>
                             {companies.total}{' '}
                             {companies.total === 1 ? 'azienda' : 'aziende'}

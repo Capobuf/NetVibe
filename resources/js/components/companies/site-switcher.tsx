@@ -36,7 +36,7 @@ export function SiteSwitcher() {
         >
             <SelectTrigger
                 aria-label="Seleziona sede"
-                className="w-44 max-w-[42vw]"
+                className="min-w-0 flex-1 sm:w-44 sm:flex-none"
             >
                 <MapPin />
                 <span className="min-w-0 flex-1 truncate text-left">

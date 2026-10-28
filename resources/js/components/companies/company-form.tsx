@@ -1,8 +1,9 @@
 import { Form } from '@inertiajs/react';
-import { Building2, Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { IconButton } from '@/components/icon-button';
+import { Button } from '@/components/ui/button';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -39,14 +40,16 @@ export default function CompanyForm({
             }}
         >
             <DialogTrigger asChild>
-                <IconButton
-                    label={
-                        company ? `Modifica ${company.name}` : 'Nuova azienda'
-                    }
-                    variant={company ? 'outline' : 'default'}
-                >
-                    {company ? <Pencil /> : <Plus />}
-                </IconButton>
+                {company ? (
+                    <IconButton label={`Modifica ${company.name}`}>
+                        <Pencil />
+                    </IconButton>
+                ) : (
+                    <Button>
+                        <Plus />
+                        Nuova azienda
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
@@ -98,7 +101,7 @@ export default function CompanyForm({
                                         message={errors.name}
                                     />
                                 </Field>
-                                <DialogFooter className="flex-row items-center justify-end">
+                                <DialogFooter className="flex-row flex-wrap items-center justify-end">
                                     {company ? (
                                         <IconButton
                                             label="Elimina azienda"
@@ -111,25 +114,20 @@ export default function CompanyForm({
                                         </IconButton>
                                     ) : null}
                                     <DialogClose asChild>
-                                        <IconButton
-                                            label="Annulla"
+                                        <Button
+                                            type="button"
+                                            variant="outline"
                                             disabled={processing}
                                         >
-                                            <X />
-                                        </IconButton>
+                                            Annulla
+                                        </Button>
                                     </DialogClose>
-                                    <IconButton
-                                        label={
-                                            company
-                                                ? 'Salva azienda'
-                                                : 'Crea azienda'
-                                        }
-                                        type="submit"
-                                        variant="default"
-                                        disabled={processing}
-                                    >
-                                        {processing ? <Spinner /> : <Check />}
-                                    </IconButton>
+                                    <Button type="submit" disabled={processing}>
+                                        {processing ? <Spinner /> : null}
+                                        {company
+                                            ? 'Salva modifiche'
+                                            : 'Crea azienda'}
+                                    </Button>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

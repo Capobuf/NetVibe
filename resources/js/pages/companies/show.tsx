@@ -126,7 +126,7 @@ export default function CompanyShow({
                     </section>
                 ) : (
                     <Card>
-                        <CardHeader className="flex-row items-center justify-between gap-4">
+                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
                             <div className="flex flex-col gap-2">
                                 <CardTitle>Organizzazione</CardTitle>
                                 <CardDescription>

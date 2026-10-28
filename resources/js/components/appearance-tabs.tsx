@@ -1,14 +1,15 @@
 import type { LucideIcon } from 'lucide-react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import type { HTMLAttributes } from 'react';
 import type { Appearance } from '@/hooks/use-appearance';
 import { useAppearance } from '@/hooks/use-appearance';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 
 export default function AppearanceToggleTab({
     className = '',
-    ...props
-}: HTMLAttributes<HTMLDivElement>) {
+}: {
+    className?: string;
+}) {
     const { appearance, updateAppearance } = useAppearance();
 
     const tabs: { value: Appearance; icon: LucideIcon; label: string }[] = [
@@ -18,28 +19,28 @@ export default function AppearanceToggleTab({
     ];
 
     return (
-        <div
-            className={cn(
-                'inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-neutral-800',
-                className,
-            )}
-            {...props}
+        <ToggleGroup
+            type="single"
+            variant="outline"
+            size="lg"
+            value={appearance}
+            onValueChange={(value) => {
+                if (value === 'light' || value === 'dark' || value === 'system')
+                    updateAppearance(value);
+            }}
+            aria-label="Tema dell’interfaccia"
+            className={cn('w-full sm:w-fit', className)}
         >
             {tabs.map(({ value, icon: Icon, label }) => (
-                <button
+                <ToggleGroupItem
                     key={value}
-                    onClick={() => updateAppearance(value)}
-                    className={cn(
-                        'flex items-center rounded-md px-3.5 py-1.5 transition-colors',
-                        appearance === value
-                            ? 'bg-white shadow-xs dark:bg-neutral-700 dark:text-neutral-100'
-                            : 'text-neutral-500 hover:bg-neutral-200/60 hover:text-black dark:text-neutral-400 dark:hover:bg-neutral-700/60',
-                    )}
+                    value={value}
+                    className="flex-1 px-3 sm:flex-none"
                 >
-                    <Icon className="-ml-1 h-4 w-4" />
-                    <span className="ml-1.5 text-sm">{label}</span>
-                </button>
+                    <Icon aria-hidden="true" />
+                    {label}
+                </ToggleGroupItem>
             ))}
-        </div>
+        </ToggleGroup>
     );
 }

@@ -5,12 +5,13 @@ import {
     EmptyTitle,
 } from '@/components/ui/empty';
 import { Head } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, Tags } from 'lucide-react';
+import { Search, Tags } from 'lucide-react';
 import { useState } from 'react';
 import IpStatusForm from '@/components/networks/ip-status-form';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
-import { Button } from '@/components/ui/button';
+import { TableSortHead } from '@/components/table-sort-head';
+import { sortTableRows, type TableSort } from '@/lib/table-sort';
 import {
     InputGroup,
     InputGroupAddon,
@@ -35,10 +36,7 @@ type Props = { statuses: (IpStatus & { ip_addresses_count: number })[] };
 
 export default function IpStatusIndex({ statuses }: Props) {
     const [search, setSearch] = useState('');
-    const [sort, setSort] = useState<{
-        column: StatusColumn['id'];
-        direction: 'asc' | 'desc';
-    } | null>(null);
+    const [sort, setSort] = useState<TableSort<StatusColumn['id']>>(null);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences<StatusColumn['id']>('ip-statuses', [
             { id: 'name', label: 'Stato', visible: true },
@@ -56,18 +54,11 @@ export default function IpStatusIndex({ statuses }: Props) {
                 .includes(search.trim().toLocaleLowerCase()) ||
             String(status.ip_addresses_count).includes(search.trim()),
     );
-    const rows = sort
-        ? filtered.toSorted((a, b) => {
-              const comparison =
-                  sort.column === 'name'
-                      ? a.name.localeCompare(b.name, 'it')
-                      : a.ip_addresses_count - b.ip_addresses_count;
-              return (
-                  comparison * (sort.direction === 'asc' ? 1 : -1) ||
-                  a.id - b.id
-              );
-          })
-        : filtered;
+    const rows = sortTableRows(
+        filtered,
+        sort,
+        (status, column) => status[column],
+    );
 
     return (
         <>
@@ -98,7 +89,10 @@ export default function IpStatusIndex({ statuses }: Props) {
                                 <Search aria-hidden="true" />
                             </InputGroupAddon>
                         </InputGroup>
-                        <p className="text-sm text-muted-foreground tabular-nums">
+                        <p
+                            role="status"
+                            className="text-sm text-muted-foreground tabular-nums"
+                        >
                             {rows.length} di {statuses.length} stati
                         </p>
                     </CardHeader>
@@ -111,50 +105,12 @@ export default function IpStatusIndex({ statuses }: Props) {
                             <TableHeader className="bg-muted/50">
                                 <TableRow>
                                     {visibleColumns.map((column) => (
-                                        <TableHead
+                                        <TableSortHead
                                             key={column.id}
-                                            scope="col"
-                                            aria-sort={
-                                                sort?.column === column.id
-                                                    ? sort.direction === 'asc'
-                                                        ? 'ascending'
-                                                        : 'descending'
-                                                    : 'none'
-                                            }
-                                        >
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    setSort(
-                                                        sort?.column !==
-                                                            column.id
-                                                            ? {
-                                                                  column: column.id,
-                                                                  direction:
-                                                                      'asc',
-                                                              }
-                                                            : sort.direction ===
-                                                                'asc'
-                                                              ? {
-                                                                    column: column.id,
-                                                                    direction:
-                                                                        'desc',
-                                                                }
-                                                              : null,
-                                                    )
-                                                }
-                                            >
-                                                {column.label}
-                                                {sort?.column !== column.id ? (
-                                                    <ArrowUpDown />
-                                                ) : sort.direction === 'asc' ? (
-                                                    <ArrowUp />
-                                                ) : (
-                                                    <ArrowDown />
-                                                )}
-                                            </Button>
-                                        </TableHead>
+                                            column={column}
+                                            sort={sort}
+                                            onSort={setSort}
+                                        />
                                     ))}
                                     <TableHead className="w-12 text-right">
                                         <span className="sr-only">Azioni</span>

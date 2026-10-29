@@ -1,7 +1,7 @@
 import { Form } from '@inertiajs/react';
 import { MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
-import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
+import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
 import InputError from '@/components/input-error';
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import {
+    deletionImpact,
     destroy,
     store,
     update,
@@ -182,12 +183,16 @@ export default function SiteForm({
                     </Form>
                 </div>
                 {deleting && site ? (
-                    <DeletionConfirmation
+                    <GuidedDeletion
                         action={destroy.form({
                             company: company.id,
                             site: site.id,
                         })}
-                        sites={sites}
+                        kind="site"
+                        previewUrl={deletionImpact.url({
+                            company: company.id,
+                            site: site.id,
+                        })}
                         onCancel={() => {
                             setDeleting(false);
                             requestAnimationFrame(() =>
@@ -195,24 +200,7 @@ export default function SiteForm({
                             );
                         }}
                         onSuccess={() => setOpen(false)}
-                    >
-                        <p>
-                            La sede <strong>{site.name}</strong> di{' '}
-                            <strong>{company.name}</strong> verrà eliminata
-                            definitivamente.
-                        </p>
-                        <p>
-                            {sites.length === 2
-                                ? 'L’altra sede e l’azienda saranno conservate.'
-                                : `Le altre ${sites.length - 1} sedi e l’azienda saranno conservate.`}
-                        </p>
-                        {sites.length === 2 ? (
-                            <p>
-                                Rimarrà una sola sede: lavorerai direttamente
-                                nel contesto azienda.
-                            </p>
-                        ) : null}
-                    </DeletionConfirmation>
+                    />
                 ) : null}
             </DialogContent>
         </Dialog>

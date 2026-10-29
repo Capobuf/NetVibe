@@ -38,14 +38,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('companies.sites.subnets.excluded-ranges.destroy');
         Route::resource('companies.sites.subnets.ip-addresses', IpAddressController::class)
             ->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'update', 'destroy']);
-        Route::resource('companies.sites.vlans', VlanController::class)->only(['store', 'update']);
-        Route::resource('companies.sites.subnets', SubnetController::class)->only(['store', 'update']);
+        Route::get('companies/{company}/sites/{site}/vlans/{vlan}/deletion-impact', [VlanController::class, 'deletionImpact'])
+            ->name('companies.sites.vlans.deletion-impact');
+        Route::get('companies/{company}/sites/{site}/subnets/{subnet}/deletion-impact', [SubnetController::class, 'deletionImpact'])
+            ->name('companies.sites.subnets.deletion-impact');
+        Route::resource('companies.sites.vlans', VlanController::class)->only(['store', 'update', 'destroy']);
+        Route::resource('companies.sites.subnets', SubnetController::class)->only(['store', 'update', 'destroy']);
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
         Route::redirect('/', '/administration/companies')->name('index');
+        Route::get('ip-statuses/{ipStatus}/deletion-impact', [IpStatusController::class, 'deletionImpact'])->name('ip-statuses.deletion-impact');
+        Route::get('companies/{company}/deletion-impact', [CompanyController::class, 'deletionImpact'])->name('companies.deletion-impact');
+        Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])
+            ->scopeBindings()->name('companies.sites.deletion-impact');
         Route::resource('ip-statuses', IpStatusController::class)
-            ->parameters(['ip-statuses' => 'ipStatus'])->only(['index', 'store', 'update']);
+            ->parameters(['ip-statuses' => 'ipStatus'])->only(['index', 'store', 'update', 'destroy']);
         Route::resource('companies', CompanyController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy'])->scoped();
     });

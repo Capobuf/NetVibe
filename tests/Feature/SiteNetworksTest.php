@@ -56,7 +56,7 @@ class SiteNetworksTest extends TestCase
         $this->assertDatabaseCount('vlans', 2);
     }
 
-    public function test_vlan_uniqueness_context_and_container_deletion_protect_network_data(): void
+    public function test_vlan_uniqueness_context_and_deletion_without_preview_protect_network_data(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
@@ -86,8 +86,8 @@ class SiteNetworksTest extends TestCase
         $this->assertDatabaseCount('subnets', 0);
 
         $this->delete(route('administration.companies.destroy', $company), [
-            'confirmed' => true, 'site_ids' => [$site->id],
-        ])->assertSessionHasErrors('confirmed');
+            'confirmed' => true,
+        ])->assertSessionHasErrors('impact_token');
         $this->assertModelExists($company);
         $this->assertModelExists($site);
         $this->assertModelExists($vlan);

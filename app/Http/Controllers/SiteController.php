@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Models\Company;
 use App\Models\Site;
+use App\Support\DeletionImpact;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,22 +61,27 @@ class SiteController extends Controller
         return to_route('administration.companies.show', $company);
     }
 
+    public function deletionImpact(Company $company, Site $site): JsonResponse
+    {
+        return response()->json(DB::transaction(fn () => DeletionImpact::preview(DeletionImpact::networks($company, $site)), 3));
+    }
+
     public function destroy(ConfirmDeletionRequest $request, Company $company, Site $site): RedirectResponse
     {
         DB::transaction(function () use ($request, $company, $site) {
-            $company = Company::query()->lockForUpdate()->findOrFail($company->id);
-            $sites = $company->sites()->lockForUpdate()->get();
-            $request->ensureSitesUnchanged($sites);
-            $request->ensureSitesHaveNoNetworks($sites->where('id', $site->id));
+            $impact = DeletionImpact::networks($company, $site);
+            $request->ensureUnchanged($impact);
 
-            if ($sites->count() === 1) {
+            if (count($impact['sites']) === 1) {
                 throw ValidationException::withMessages([
                     'confirmed' => 'L’azienda deve conservare una sede. Per rimuovere tutto, elimina l’azienda dal suo modale di modifica.',
                 ]);
             }
 
+            DeletionImpact::deleteSubnets(array_column($impact['subnets'], 'id'));
+            $site->vlans()->delete();
             $company->sites()->findOrFail($site->id)->delete();
-        });
+        }, 3);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sede eliminata.']);
 

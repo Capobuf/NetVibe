@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\IpAddressRequest;
 use App\Models\Company;
 use App\Models\IpAddress;
+use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -47,6 +48,10 @@ class IpAddressController extends Controller
 
         try {
             $excluded = DB::transaction(function () use ($company, $subnet, $ipAddress, $data, $address) {
+                // Keep a chosen status alive until the IP write commits.
+                if (isset($data['ip_status_id']) && ! IpStatus::query()->whereKey($data['ip_status_id'])->sharedLock()->first()) {
+                    throw ValidationException::withMessages(['ip_status_id' => 'Lo stato scelto è stato eliminato. Scegli un altro stato.']);
+                }
                 // Serialize tag creation with company deletion and other tag writers.
                 $company = Company::query()->lockForUpdate()->findOrFail($company->id);
                 // Keep the CIDR stable during the write; uniqueness is enforced by the database.
@@ -77,7 +82,7 @@ class IpAddressController extends Controller
                 $record->tags()->sync(array_unique($tagIds));
 
                 return $subnet->isExcluded($address);
-            });
+            }, 3);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
                 'ip' => 'Questo indirizzo è già documentato nella subnet. Apri il record esistente oppure scegli un altro IP.',

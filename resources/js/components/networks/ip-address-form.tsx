@@ -426,7 +426,6 @@ export default function IpAddressForm({
                             ...route,
                             ipAddress: ipAddress.id,
                         })}
-                        sites={[]}
                         onCancel={() => {
                             setDeleting(false);
                             requestAnimationFrame(() =>

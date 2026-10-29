@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\SubnetRequest;
 use App\Models\Company;
 use App\Models\ExcludedRange;
 use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
+use App\Support\DeletionImpact;
 use App\Support\Ipv4Cidr;
 use App\Support\SubnetAddressTable;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +88,24 @@ class SubnetController extends Controller
     public function update(SubnetRequest $request, Company $company, Site $site, Subnet $subnet): RedirectResponse
     {
         return $this->save($request, $site, $subnet);
+    }
+
+    public function deletionImpact(Company $company, Site $site, Subnet $subnet): JsonResponse
+    {
+        return response()->json(DB::transaction(fn () => DeletionImpact::preview(DeletionImpact::networks($company, $site, $subnet)), 3));
+    }
+
+    public function destroy(ConfirmDeletionRequest $request, Company $company, Site $site, Subnet $subnet): RedirectResponse
+    {
+        DB::transaction(function () use ($request, $company, $site, $subnet) {
+            $impact = DeletionImpact::networks($company, $site, $subnet);
+            $request->ensureUnchanged($impact);
+            DeletionImpact::deleteSubnets([$subnet->id]);
+        }, 3);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Subnet e documentazione associate eliminate.']);
+
+        return to_route('companies.sites.subnets.index', [$company, $site]);
     }
 
     private function save(SubnetRequest $request, Site $site, ?Subnet $subnet = null): RedirectResponse

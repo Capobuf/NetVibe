@@ -101,7 +101,7 @@ class CompanySitesTest extends TestCase
         $this->get(route('administration.companies.index'))->assertForbidden();
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,
-            'site_ids' => [$site->id],
+            'impact_token' => str_repeat('0', 64),
         ])->assertForbidden();
 
         $this->assertModelExists($company);
@@ -112,24 +112,27 @@ class CompanySitesTest extends TestCase
     {
         $company = Company::create(['name' => 'Alfa']);
         $first = $company->sites()->create(['name' => 'Torino']);
-        $second = $company->sites()->create(['name' => 'Roma']);
         $otherCompany = Company::create(['name' => 'Beta']);
         $otherSite = $otherCompany->sites()->create(['name' => null]);
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
+        $token = $this->getJson(route('administration.companies.deletion-impact', $company))->assertOk()->json('impact_token');
+        $second = $company->sites()->create(['name' => 'Roma']);
+
         $this->delete(route('administration.companies.destroy', $company), [
-            'site_ids' => [$first->id, $second->id],
+            'impact_token' => $token,
         ])->assertSessionHasErrors('confirmed');
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,
-            'site_ids' => [$first->id],
-        ])->assertSessionHasErrors('confirmed');
+            'impact_token' => $token,
+        ])->assertSessionHasErrors('impact_token');
         $this->assertModelExists($company);
         $this->assertDatabaseCount('sites', 3);
+        $token = $this->getJson(route('administration.companies.deletion-impact', $company))->assertOk()->json('impact_token');
 
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,
-            'site_ids' => [$first->id, $second->id],
+            'impact_token' => $token,
         ])->assertRedirect(route('administration.companies.index'));
 
         $this->assertModelMissing($company);
@@ -146,17 +149,19 @@ class CompanySitesTest extends TestCase
         $second = $company->sites()->create(['name' => 'Roma']);
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
+        $token = $this->getJson(route('administration.companies.sites.deletion-impact', [$company, $second]))->assertOk()->json('impact_token');
         $this->delete(route('administration.companies.sites.destroy', [$company, $second]), [
             'confirmed' => true,
-            'site_ids' => [$first->id, $second->id],
+            'impact_token' => $token,
         ])->assertRedirect(route('administration.companies.show', $company));
 
         $this->assertModelMissing($second);
         $this->assertModelExists($first);
 
+        $token = $this->getJson(route('administration.companies.sites.deletion-impact', [$company, $first]))->assertOk()->json('impact_token');
         $this->delete(route('administration.companies.sites.destroy', [$company, $first]), [
             'confirmed' => true,
-            'site_ids' => [$first->id],
+            'impact_token' => $token,
         ])->assertSessionHasErrors('confirmed');
 
         $this->assertDatabaseCount('sites', 1);

@@ -19,22 +19,38 @@ import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import {
+    deletionImpact as adminDeletionImpact,
+    destroy as adminDestroy,
+    store as adminStore,
+    update as adminUpdate,
+} from '@/routes/administration/companies/sites';
+import {
     deletionImpact,
     destroy,
     store,
     update,
-} from '@/routes/administration/companies/sites';
+} from '@/routes/companies/sites';
 import type { Company, Site } from '@/types/company';
 
 export default function SiteForm({
     company,
     sites,
     site,
+    administration = true,
 }: {
     company: Company;
     sites: Site[];
     site?: Site;
+    administration?: boolean;
 }) {
+    const actions = administration
+        ? {
+              deletionImpact: adminDeletionImpact,
+              destroy: adminDestroy,
+              store: adminStore,
+              update: adminUpdate,
+          }
+        : { deletionImpact, destroy, store, update };
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const id = useId();
@@ -83,11 +99,11 @@ export default function SiteForm({
                 <div hidden={deleting}>
                     <Form
                         {...(site
-                            ? update.form({
+                            ? actions.update.form({
                                   company: company.id,
                                   site: site.id,
                               })
-                            : store.form(company.id))}
+                            : actions.store.form(company.id))}
                         onSuccess={() => setOpen(false)}
                         options={{ preserveScroll: true }}
                         className="flex flex-col gap-6"
@@ -184,12 +200,12 @@ export default function SiteForm({
                 </div>
                 {deleting && site ? (
                     <GuidedDeletion
-                        action={destroy.form({
+                        action={actions.destroy.form({
                             company: company.id,
                             site: site.id,
                         })}
                         kind="site"
-                        previewUrl={deletionImpact.url({
+                        previewUrl={actions.deletionImpact.url({
                             company: company.id,
                             site: site.id,
                         })}

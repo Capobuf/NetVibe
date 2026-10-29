@@ -44,7 +44,7 @@ class SiteController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sede aggiunta.']);
 
-        return to_route('administration.companies.show', $company);
+        return to_route($request->routeIs('administration.*') ? 'administration.companies.show' : 'companies.settings.show', $company);
     }
 
     public function update(Request $request, Company $company, Site $site): RedirectResponse
@@ -58,7 +58,7 @@ class SiteController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sede aggiornata.']);
 
-        return to_route('administration.companies.show', $company);
+        return to_route($request->routeIs('administration.*') ? 'administration.companies.show' : 'companies.settings.show', $company);
     }
 
     public function deletionImpact(Company $company, Site $site): JsonResponse
@@ -74,7 +74,7 @@ class SiteController extends Controller
 
             if (count($impact['sites']) === 1) {
                 throw ValidationException::withMessages([
-                    'confirmed' => 'L’azienda deve conservare una sede. Per rimuovere tutto, elimina l’azienda dal suo modale di modifica.',
+                    'confirmed' => 'L’azienda deve conservare una sede.',
                 ]);
             }
 
@@ -85,6 +85,6 @@ class SiteController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Sede eliminata.']);
 
-        return to_route('administration.companies.show', $company);
+        return to_route($request->routeIs('administration.*') ? 'administration.companies.show' : 'companies.settings.show', $company);
     }
 }

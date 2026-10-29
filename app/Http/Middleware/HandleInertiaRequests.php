@@ -37,21 +37,23 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $company = $request->route('company');
+        $canAccessCompany = $company instanceof Company && $request->user()?->can('access-company', $company);
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'canEditIpam' => $canAccessCompany,
             ],
-            'companyNavigation' => fn () => $request->user()?->hasVerifiedEmail() && $request->user()->can('administer') ? [
-                'companies' => Company::query()->orderBy('name')->orderBy('id')->get(['id', 'name']),
-                'currentCompanyId' => $request->route('company') instanceof Company
-                    ? $request->route('company')->id
-                    : null,
-                'sites' => $request->route('company') instanceof Company
-                    ? $request->route('company')->sites()->orderBy('id')->get(['id', 'name'])
+            'companyNavigation' => fn () => $request->user()?->hasVerifiedEmail() ? [
+                'companies' => Company::query()->accessibleTo($request->user())->orderBy('name')->orderBy('id')->get(['id', 'name']),
+                'currentCompanyId' => $canAccessCompany ? $company->id : null,
+                'sites' => $canAccessCompany
+                    ? $company->sites()->orderBy('id')->get(['id', 'name'])
                     : [],
-                'currentSiteId' => $request->route('site') instanceof Site
+                'currentSiteId' => $canAccessCompany && $request->route('site') instanceof Site
                     ? $request->route('site')->id
                     : null,
             ] : null,

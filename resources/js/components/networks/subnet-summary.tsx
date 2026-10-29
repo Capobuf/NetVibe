@@ -47,7 +47,7 @@ export default function SubnetSummary({
                 <h2 id="subnet-summary-title" className="font-semibold">
                     Riepilogo
                 </h2>
-                {auth.user.is_superadmin ? (
+                {auth.canEditIpam ? (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <IconButton
@@ -111,7 +111,7 @@ export default function SubnetSummary({
                             className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] items-start gap-4"
                         >
                             <dt className="min-w-0 text-sm font-medium">
-                                {auth.user.is_superadmin ? (
+                                {auth.canEditIpam ? (
                                     <Button
                                         type="button"
                                         variant="ghost"

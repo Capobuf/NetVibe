@@ -120,7 +120,7 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
                             {context}
                         </p>
                     </div>
-                    {auth.user.is_superadmin ? (
+                    {auth.canEditIpam ? (
                         <SubnetForm {...formContext} />
                     ) : null}
                 </header>
@@ -282,7 +282,7 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
                                                 </TableCell>
                                             ))}
                                             <TableCell className="text-right">
-                                                {auth.user.is_superadmin ? (
+                                                {auth.canEditIpam ? (
                                                     <SubnetForm
                                                         {...formContext}
                                                         subnet={subnet}

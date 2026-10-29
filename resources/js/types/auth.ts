@@ -13,6 +13,7 @@ export type User = {
 
 export type Auth = {
     user: User;
+    canEditIpam: boolean;
 };
 
 export type Passkey = {

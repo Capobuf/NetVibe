@@ -63,7 +63,7 @@ export default function IpAddressForm({
     onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
 }) {
     const { auth } = usePage().props;
-    const canEdit = auth.user.is_superadmin;
+    const canEdit = auth.canEditIpam;
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
     const setOpen = onOpenChange ?? setInternalOpen;

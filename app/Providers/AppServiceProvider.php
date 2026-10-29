@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Company;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -25,7 +26,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::define('administer', fn (User $user): bool => $user->is_superadmin);
+        Gate::define('administer', fn (User $user): bool => $user->is_superadmin === true);
+        Gate::define('access-company', fn (User $user, Company $company): bool => Company::query()->accessibleTo($user)->whereKey($company->id)->exists());
 
         $this->configureDefaults();
     }

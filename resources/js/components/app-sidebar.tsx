@@ -16,6 +16,8 @@ import { home } from '@/routes';
 import { index as administration } from '@/routes/administration';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';
+import { show as companyShow } from '@/routes/companies';
+import { show as companySettings } from '@/routes/companies/settings';
 export function AppSidebar() {
     const { auth, companyNavigation } = usePage().props;
     const networkContext =
@@ -54,6 +56,31 @@ export function AppSidebar() {
                                 title: 'VLAN',
                                 href: vlanIndex(networkContext),
                                 icon: Layers,
+                            },
+                        ]}
+                    />
+                ) : null}
+                {companyNavigation?.currentCompanyId ? (
+                    <NavMain
+                        label="Azienda"
+                        items={[
+                            ...(!networkContext
+                                ? [
+                                      {
+                                          title: 'IPAM',
+                                          href: companyShow(
+                                              companyNavigation.currentCompanyId,
+                                          ),
+                                          icon: Network,
+                                      },
+                                  ]
+                                : []),
+                            {
+                                title: 'Impostazioni',
+                                href: companySettings(
+                                    companyNavigation.currentCompanyId,
+                                ),
+                                icon: Settings2,
                             },
                         ]}
                     />

@@ -15,56 +15,69 @@ import { index } from '@/routes/administration/companies';
 import { index as administration } from '@/routes/administration';
 import { show as companyShow } from '@/routes/companies';
 import { show as siteShow } from '@/routes/companies/sites';
+import { show as settingsShow } from '@/routes/companies/settings';
 import type { Company, Site } from '@/types/company';
 
 export default function CompanyShow({
     company,
     sites,
+    administration: isAdministration,
 }: {
     company: Company;
     sites: Site[];
+    administration: boolean;
 }) {
     return (
         <>
-            <Head title={'Amministrazione · ' + company.name} />
+            <Head
+                title={`${isAdministration ? 'Amministrazione' : 'Sedi'} · ${company.name}`}
+            />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
-                <div className="flex items-center gap-3">
-                    <IconButton label="Torna alle aziende" asChild>
-                        <Link href={index()}>
-                            <ArrowLeft />
-                        </Link>
-                    </IconButton>
-                </div>
-                <Card>
-                    <CardHeader>
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div className="flex min-w-0 items-center gap-4">
-                                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted">
-                                    <Building2 className="size-6 text-muted-foreground" />
+                {isAdministration ? (
+                    <div className="flex items-center gap-3">
+                        <IconButton label="Torna alle aziende" asChild>
+                            <Link href={index()}>
+                                <ArrowLeft />
+                            </Link>
+                        </IconButton>
+                    </div>
+                ) : null}
+                {isAdministration ? (
+                    <Card>
+                        <CardHeader>
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div className="flex min-w-0 items-center gap-4">
+                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted">
+                                        <Building2 className="size-6 text-muted-foreground" />
+                                    </div>
+                                    <div className="flex min-w-0 flex-col gap-2">
+                                        <CardDescription>
+                                            Azienda
+                                        </CardDescription>
+                                        <CardTitle>
+                                            <h2 className="break-words">
+                                                {company.name}
+                                            </h2>
+                                        </CardTitle>
+                                    </div>
                                 </div>
-                                <div className="flex min-w-0 flex-col gap-2">
-                                    <CardDescription>Azienda</CardDescription>
-                                    <CardTitle>
-                                        <h2 className="break-words">
-                                            {company.name}
-                                        </h2>
-                                    </CardTitle>
+                                <div className="flex items-center gap-2">
+                                    <CompanyForm
+                                        company={{ ...company, sites }}
+                                    />
+                                    <IconButton
+                                        label="Apri subnet dell’azienda"
+                                        asChild
+                                    >
+                                        <Link href={companyShow(company.id)}>
+                                            <ArrowRight />
+                                        </Link>
+                                    </IconButton>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <CompanyForm company={{ ...company, sites }} />
-                                <IconButton
-                                    label="Apri subnet dell’azienda"
-                                    asChild
-                                >
-                                    <Link href={companyShow(company.id)}>
-                                        <ArrowRight />
-                                    </Link>
-                                </IconButton>
-                            </div>
-                        </div>
-                    </CardHeader>
-                </Card>
+                        </CardHeader>
+                    </Card>
+                ) : null}
                 {sites.length > 1 ? (
                     <section
                         className="flex flex-col gap-4"
@@ -83,7 +96,11 @@ export default function CompanyShow({
                                     {sites.length}
                                 </Badge>
                             </div>
-                            <SiteForm company={company} sites={sites} />
+                            <SiteForm
+                                company={company}
+                                sites={sites}
+                                administration={isAdministration}
+                            />
                         </header>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {sites.map((site) => (
@@ -103,6 +120,7 @@ export default function CompanyShow({
                                             company={company}
                                             sites={sites}
                                             site={site}
+                                            administration={isAdministration}
                                         />
                                         <IconButton
                                             label={
@@ -134,7 +152,11 @@ export default function CompanyShow({
                                     Aggiungi altre sedi quando necessario.
                                 </CardDescription>
                             </div>
-                            <SiteForm company={company} sites={sites} />
+                            <SiteForm
+                                company={company}
+                                sites={sites}
+                                administration={isAdministration}
+                            />
                         </CardHeader>
                     </Card>
                 )}
@@ -143,9 +165,20 @@ export default function CompanyShow({
     );
 }
 
-CompanyShow.layout = {
-    breadcrumbs: [
-        { title: 'Amministrazione', href: administration() },
-        { title: 'Aziende', href: index() },
-    ],
-};
+CompanyShow.layout = ({
+    company,
+    administration: isAdministration,
+}: {
+    company: Company;
+    administration: boolean;
+}) => ({
+    breadcrumbs: isAdministration
+        ? [
+              { title: 'Amministrazione', href: administration() },
+              { title: 'Aziende', href: index() },
+          ]
+        : [
+              { title: company.name, href: companyShow(company.id) },
+              { title: 'Impostazioni', href: settingsShow(company.id) },
+          ],
+});

@@ -1,16 +1,19 @@
 import { router } from '@inertiajs/react';
-import { Building2, Tags } from 'lucide-react';
+import { Building2, Tags, Users } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { index as companies } from '@/routes/administration/companies';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
+import { index as users } from '@/routes/administration/users';
 
 export default function AdministrationLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const tab = isCurrentOrParentUrl(ipStatuses())
         ? 'ip-statuses'
-        : 'companies';
+        : isCurrentOrParentUrl(users())
+          ? 'users'
+          : 'companies';
 
     return (
         <section
@@ -28,7 +31,11 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                 activationMode="manual"
                 onValueChange={(value) =>
                     router.visit(
-                        value === 'companies' ? companies() : ipStatuses(),
+                        value === 'companies'
+                            ? companies()
+                            : value === 'users'
+                              ? users()
+                              : ipStatuses(),
                     )
                 }
                 className="min-w-0 gap-0"
@@ -41,6 +48,10 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                     <TabsTrigger value="ip-statuses">
                         <Tags />
                         Stati IP
+                    </TabsTrigger>
+                    <TabsTrigger value="users">
+                        <Users />
+                        Utenti
                     </TabsTrigger>
                 </TabsList>
                 <TabsContent value={tab} className="min-w-0">

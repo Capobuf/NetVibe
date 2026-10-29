@@ -106,7 +106,7 @@ export default function VlanIndex({ company, site, vlans }: Props) {
                             {context}
                         </p>
                     </div>
-                    {auth.user.is_superadmin ? (
+                    {auth.canEditIpam ? (
                         <VlanForm {...formContext} />
                     ) : null}
                 </header>
@@ -243,7 +243,7 @@ export default function VlanIndex({ company, site, vlans }: Props) {
                                                             <ArrowRight />
                                                         </Link>
                                                     </IconButton>
-                                                    {auth.user.is_superadmin ? (
+                                                    {auth.canEditIpam ? (
                                                         <VlanForm
                                                             {...formContext}
                                                             vlan={vlan}

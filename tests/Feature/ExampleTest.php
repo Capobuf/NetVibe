@@ -24,11 +24,11 @@ class ExampleTest extends TestCase
         $this->get(route('home'))->assertRedirect(route('companies.index'));
     }
 
-    public function test_home_redirects_other_users_to_their_profile(): void
+    public function test_home_redirects_company_users_to_companies(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => false]));
 
-        $this->get(route('home'))->assertRedirect(route('profile.edit'));
+        $this->get(route('home'))->assertRedirect(route('companies.index'));
     }
 
     public function test_home_requires_email_verification(): void

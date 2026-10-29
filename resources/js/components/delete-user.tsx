@@ -24,7 +24,7 @@ export default function DeleteUser() {
             <Heading
                 variant="small"
                 title="Elimina account"
-                description="Elimina il tuo account e tutti i dati associati"
+                description="Elimina il tuo account da tutte le aziende"
             />
             <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10">
                 <div className="relative space-y-0.5 text-red-600 dark:text-red-100">
@@ -48,7 +48,7 @@ export default function DeleteUser() {
                             Vuoi davvero eliminare il tuo account?
                         </DialogTitle>
                         <DialogDescription>
-                            Tutti i dati associati all’account saranno eliminati definitivamente. Inserisci la password per confermare l’eliminazione.
+                            Il tuo account e tutte le associazioni alle aziende saranno eliminati definitivamente. I dati IPAM saranno conservati. Inserisci la password per confermare.
                         </DialogDescription>
 
                         <Form
@@ -79,6 +79,7 @@ export default function DeleteUser() {
                                         />
 
                                         <InputError message={errors.password} />
+                                        <InputError message={errors.user} />
                                     </div>
 
                                     <DialogFooter className="gap-2">

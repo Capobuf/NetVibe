@@ -33,7 +33,6 @@ class IpSearchController extends Controller
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
 
-        // shortcut: verified users share operational access until tenant permissions are implemented.
         $results = IpAddress::query()
             ->join('subnets', 'subnets.id', '=', 'ip_addresses.subnet_id')
             ->join('sites', 'sites.id', '=', 'subnets.site_id')

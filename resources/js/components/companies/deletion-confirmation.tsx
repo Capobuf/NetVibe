@@ -18,6 +18,7 @@ export function DeletionConfirmation({
     confirmationKey,
     fields,
     submitLabel,
+    cancelLabel = 'Torna alla modifica',
     disabled = false,
     onError,
     onCancel,
@@ -29,6 +30,7 @@ export function DeletionConfirmation({
     confirmationKey?: string;
     fields?: (processing: boolean) => ReactNode;
     submitLabel?: string;
+    cancelLabel?: string;
     disabled?: boolean;
     onError?: () => void;
     onCancel: () => void;
@@ -78,7 +80,7 @@ export function DeletionConfirmation({
                     />
                     <DialogFooter className="flex-row items-center justify-end">
                         <IconButton
-                            label="Torna alla modifica"
+                            label={cancelLabel}
                             onClick={onCancel}
                             disabled={processing}
                         >

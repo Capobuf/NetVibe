@@ -124,7 +124,7 @@ export default function ExcludedRanges({
                                     <TableRow>
                                         <TableHead>Da IPv4</TableHead>
                                         <TableHead>A IPv4</TableHead>
-                                        {auth.user.is_superadmin ? (
+                                        {auth.canEditIpam ? (
                                             <TableHead>
                                                 <span className="sr-only">
                                                     Azioni
@@ -142,7 +142,7 @@ export default function ExcludedRanges({
                                             <TableCell className="font-mono">
                                                 {range.end_ip}
                                             </TableCell>
-                                            {auth.user.is_superadmin ? (
+                                            {auth.canEditIpam ? (
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
                                                         <Button
@@ -191,7 +191,7 @@ export default function ExcludedRanges({
                                         <TableRow>
                                             <TableCell
                                                 colSpan={
-                                                    auth.user.is_superadmin
+                                                    auth.canEditIpam
                                                         ? 3
                                                         : 2
                                                 }
@@ -208,7 +208,7 @@ export default function ExcludedRanges({
                             <DialogClose asChild>
                                 <Button variant="outline">Chiudi</Button>
                             </DialogClose>
-                            {auth.user.is_superadmin ? (
+                            {auth.canEditIpam ? (
                                 <Button
                                     onClick={() => {
                                         setStartIp(ipPrefix);

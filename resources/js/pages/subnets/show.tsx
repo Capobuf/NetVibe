@@ -175,7 +175,7 @@ export default function SubnetShow({
                                     {...formContext}
                                     subnetCidr={subnet.cidr}
                                 />
-                                {auth.user.is_superadmin ? (
+                                {auth.canEditIpam ? (
                                     <IpAddressForm
                                         key={`ip-${subnet.id}`}
                                         {...formContext}
@@ -237,7 +237,7 @@ export default function SubnetShow({
                             </div>
                         </div>
                         {firstProposableIp !== null &&
-                        auth.user.is_superadmin ? (
+                        auth.canEditIpam ? (
                             <IpAddressForm
                                 key={`suggestion-${subnet.id}`}
                                 {...formContext}
@@ -446,7 +446,7 @@ export default function SubnetShow({
                                 {ipAddresses.data.map((ipAddress) => {
                                     const canOpen =
                                         ipAddress.id !== null ||
-                                        auth.user.is_superadmin;
+                                        auth.canEditIpam;
                                     const openAddress = (
                                         opener: HTMLElement,
                                     ) => {

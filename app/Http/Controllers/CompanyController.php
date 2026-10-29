@@ -28,7 +28,7 @@ class CompanyController extends Controller
         $direction = $options['direction'] ?? 'asc';
 
         return Inertia::render('companies/index', [
-            'companies' => Company::query()->select('id', 'name')->withCount('sites')
+            'companies' => Company::query()->accessibleTo($request->user())->select('id', 'name')->withCount('sites')
                 ->with(['sites' => fn ($query) => $query->orderBy('id')->select('id', 'company_id', 'name')])
                 ->when($search !== '', fn ($query) => $query->whereRaw(
                     "name LIKE ? ESCAPE '!'",
@@ -58,13 +58,14 @@ class CompanyController extends Controller
     {
         $sites = $company->sites()->orderBy('id')->get(['id', 'name']);
 
-        if (! $request->routeIs('administration.*')) {
+        if (! $request->routeIs('administration.*', 'companies.settings.*')) {
             return to_route('companies.sites.subnets.index', [$company, $site ?? $sites->firstOrFail()]);
         }
 
         return Inertia::render('companies/show', [
             'company' => $company->only('id', 'name'),
             'sites' => $sites,
+            'administration' => $request->routeIs('administration.*'),
         ]);
     }
 

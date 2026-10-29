@@ -91,16 +91,16 @@ class CompanySitesTest extends TestCase
         ]);
     }
 
-    public function test_non_superadmins_can_access_settings_without_company_data_but_cannot_access_ipam(): void
+    public function test_unassigned_users_cannot_access_company_data(): void
     {
         $company = Company::create(['name' => 'Alfa']);
         $site = $company->sites()->create(['name' => null]);
         $this->actingAs(User::factory()->create(['is_superadmin' => false]));
 
         $this->get(route('profile.edit'))->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('settings/profile')->where('companyNavigation', null));
+            ->component('settings/profile')->has('companyNavigation.companies', 0));
         $this->get(route('appearance.edit'))->assertOk();
-        $this->get(route('companies.index'))->assertForbidden();
+        $this->get(route('companies.index'))->assertInertia(fn (Assert $page) => $page->where('companies.total', 0));
         $this->get(route('companies.show', $company))->assertForbidden();
         $this->get(route('companies.sites.show', [$company, $site]))->assertForbidden();
         $this->get(route('administration.index'))->assertForbidden();

@@ -36,7 +36,7 @@ docker run --rm -e COMPOSER_ALLOW_SUPERUSER=1 \
 
 `key:generate` serve solo alla prima installazione: non rigenerare la chiave di un’istanza con dati. PHP deve poter scrivere in `storage` e `bootstrap/cache`; la build deve poter scrivere nelle directory generate e in `node_modules`. Evita di alternare root e l’utente Sail per installazioni e build.
 
-Apri l’`APP_URL` configurato e accedi con l’account superadmin predisposto dal comando. Dopo l’accesso si apre l’elenco aziende; gli account non superadmin accedono alle impostazioni personali.
+Apri l’`APP_URL` configurato e accedi con l’account superadmin predisposto dal comando. Dopo l’accesso si apre l’elenco delle aziende accessibili: tutte per i Superadmin, soltanto quelle associate per gli utenti aziendali.
 
 Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=log`): i link di verifica email e recupero password si trovano nel log. Non viene inviata posta reale. Le passkey richiedono un contesto sicuro supportato dal browser (HTTPS oppure localhost).
 
@@ -44,7 +44,11 @@ Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=lo
 
 `SUPERADMIN_EMAIL` e `SUPERADMIN_PASSWORD` nel `.env` alimentano il comando `netvibe:superadmin` tramite `config/superadmin.php`, senza credenziali predefinite nel codice. Nell'ambiente di sviluppo entrambi valgono `admin@netvibe.test`: il login usa l'email come identificativo. Questi valori semplici sono esclusivamente per sviluppo.
 
-Il comando crea un account con email già verificata e password salvata come hash. Alle esecuzioni successive aggiorna lo stesso account anche se cambia l'email; rifiuta email già appartenenti ad altri utenti. In attesa della gestione centralizzata di utenti e ruoli, l’accesso IPAM, incluse consultazione e ricerca, è riservato agli account `is_superadmin` tramite il Gate `administer`. Non sono implementati permessi per azienda.
+Il comando crea un account con email già verificata e password salvata come hash. Alle esecuzioni successive aggiorna il primo Superadmin anche se cambia l'email; rifiuta email già appartenenti ad altri utenti. Il Gate `administer` riserva l’amministrazione globale ai Superadmin; il Gate `access-company` autorizza l’IPAM e la gestione sedi per le aziende associate all’utente.
+
+Da **Amministrazione → Utenti** i Superadmin invitano altri Superadmin e gestiscono gli account. Da **Azienda → Impostazioni → Utenti** invitano utenti aziendali: un’email esistente viene associata senza duplicare l’account. Gli inviti nuovi usano i token del reset password Fortify; dopo aver impostato la password, l’utente accede e completa la verifica email esistente. Il nome iniziale coincide con l’email ed è modificabile dal profilo. In sviluppo i messaggi sono nel log; se il link scade o l’invio fallisce, è disponibile «Password dimenticata?» nella pagina di accesso.
+
+«Elimina utente» cancella l’intero account e tutte le associazioni, anche dalla pagina aziendale, conservando i dati IPAM. L’ultimo Superadmin è protetto anche dall’autoeliminazione.
 
 Per applicare modifiche alle credenziali nel `.env`:
 

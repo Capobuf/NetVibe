@@ -1,6 +1,7 @@
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { CompanySwitcher } from '@/components/companies/company-switcher';
 import { SiteSwitcher } from '@/components/companies/site-switcher';
+import { GlobalSearch } from '@/components/global-search';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
@@ -17,9 +18,12 @@ export function AppSidebarHeader({
                 <Separator orientation="vertical" className="h-4" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
-            <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-                <CompanySwitcher />
-                <SiteSwitcher />
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center xl:ml-auto xl:w-auto">
+                <GlobalSearch />
+                <div className="flex min-w-0 items-center gap-2">
+                    <CompanySwitcher />
+                    <SiteSwitcher />
+                </div>
             </div>
         </header>
     );

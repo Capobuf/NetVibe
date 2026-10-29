@@ -82,6 +82,7 @@ type Props = {
     excludedRanges: ExcludedRange[];
     statuses: IpStatus[];
     tags: Tag[];
+    initialIpAddress: IpRow | null;
     firstProposableIp: string | null;
     addressCounts: { documented: number; excluded: number; proposable: number };
     query: {
@@ -112,9 +113,10 @@ export default function SubnetShow({
     query,
     statuses,
     tags,
+    initialIpAddress,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
-    const [selectedIp, setSelectedIp] = useState<IpRow | null>(null);
+    const [selectedIp, setSelectedIp] = useState<IpRow | null>(initialIpAddress);
     const dialogOpener = useRef<HTMLElement | null>(null);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences<IpColumn['id']>(
@@ -184,6 +186,7 @@ export default function SubnetShow({
                         <div className="flex flex-col gap-3">
                             <h1
                                 id="subnet-title"
+                                tabIndex={-1}
                                 className="font-mono text-2xl font-semibold tracking-tight break-all tabular-nums sm:text-3xl xl:text-4xl"
                             >
                                 {subnet.cidr}
@@ -737,7 +740,10 @@ export default function SubnetShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        dialogOpener.current?.focus();
+                        (
+                            dialogOpener.current ??
+                            document.getElementById('subnet-title')
+                        )?.focus();
                     }}
                 />
             ) : null}

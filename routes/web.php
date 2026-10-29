@@ -3,6 +3,7 @@
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\IpAddressController;
+use App\Http\Controllers\IpSearchController;
 use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
@@ -16,11 +17,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::redirect('dashboard', '/companies')->name('dashboard');
 
     // shortcut: operational access is shared by verified users until tenant permissions are implemented.
+    Route::redirect('search', '/companies');
     Route::resource('companies', CompanyController::class)->only(['index', 'show']);
     Route::get('companies/{company}/sites/{site}', [CompanyController::class, 'show'])
         ->scopeBindings()->name('companies.sites.show');
 
     Route::scopeBindings()->group(function () {
+        Route::get('companies/{company}/sites/{site}/search', [IpSearchController::class, 'index'])
+            ->name('companies.sites.search.index');
         Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);
         Route::resource('companies.sites.vlans', VlanController::class)->only(['index']);
     });

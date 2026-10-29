@@ -10,10 +10,12 @@ import {
 } from '@/components/ui/select';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';
+import { index as searchIndex } from '@/routes/companies/sites/search';
 
 export function SiteSwitcher() {
     const {
         component,
+        url,
         props: { companyNavigation },
     } = usePage();
     if (
@@ -25,13 +27,30 @@ export function SiteSwitcher() {
     }
 
     const company = companyNavigation.currentCompanyId;
-    const index = component === 'vlans/index' ? vlanIndex : subnetIndex;
+    const index =
+        component === 'search/index'
+            ? searchIndex
+            : component === 'vlans/index'
+              ? vlanIndex
+              : subnetIndex;
 
     return (
         <Select
             value={String(companyNavigation.currentSiteId)}
             onValueChange={(value) =>
-                router.visit(index({ company, site: Number(value) }))
+                router.visit(
+                    index(
+                        { company, site: Number(value) },
+                        component === 'search/index'
+                            ? {
+                                  query: Object.fromEntries(
+                                      new URL(url, window.location.origin)
+                                          .searchParams,
+                                  ),
+                              }
+                            : undefined,
+                    ),
+                )
             }
         >
             <SelectTrigger

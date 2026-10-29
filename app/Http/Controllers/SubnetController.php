@@ -43,12 +43,16 @@ class SubnetController extends Controller
             'sort' => ['nullable', 'in:ip,hostname,mac_address,description,status,tags'],
             'direction' => ['sometimes', 'in:asc,desc'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:85899346'],
+            'ip_address' => ['sometimes', 'integer', 'min:1'],
         ]);
         $search = $options['search'] ?? '';
         $sort = $options['sort'] ?? null;
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
 
         $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
+        $selected = isset($options['ip_address'])
+            ? $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color'])->find($options['ip_address'])
+            : null;
 
         return Inertia::render('subnets/show', [
             'company' => $company->only('id', 'name'),
@@ -68,6 +72,13 @@ class SubnetController extends Controller
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
+            'initialIpAddress' => $selected ? [
+                ...$selected->only('id', 'hostname', 'mac_address', 'description'),
+                'ip' => long2ip($selected->address),
+                'status' => $selected->status?->only('id', 'name'),
+                'tags' => $selected->tags->map->only('id', 'name', 'color'),
+                'excluded' => $subnet->isExcluded($selected->address),
+            ] : null,
         ]);
     }
 

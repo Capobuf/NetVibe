@@ -30,7 +30,7 @@ export function SiteSwitcher() {
     const index =
         component === 'search/index'
             ? searchIndex
-            : component === 'vlans/index'
+            : component.startsWith('vlans/')
               ? vlanIndex
               : subnetIndex;
 

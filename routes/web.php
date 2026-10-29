@@ -7,6 +7,7 @@ use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpSearchController;
 use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\SmtpSettingController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\UserController;
@@ -60,6 +61,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
+        Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');
+        Route::put('email', [SmtpSettingController::class, 'update'])->name('email.update');
+        Route::post('email/test', [SmtpSettingController::class, 'sendTest'])->middleware('throttle:smtp-test')->name('email.test');
         Route::redirect('/', '/administration/companies')->name('index');
         Route::get('ip-statuses/{ipStatus}/deletion-impact', [IpStatusController::class, 'deletionImpact'])->name('ip-statuses.deletion-impact');
         Route::get('companies/{company}/deletion-impact', [CompanyController::class, 'deletionImpact'])->name('companies.deletion-impact');

@@ -38,7 +38,9 @@ docker run --rm -e COMPOSER_ALLOW_SUPERUSER=1 \
 
 Apri l’`APP_URL` configurato e accedi con l’account superadmin predisposto dal comando. Dopo l’accesso si apre l’elenco delle aziende accessibili: tutte per i Superadmin, soltanto quelle associate per gli utenti aziendali.
 
-Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=log`): i link di verifica email e recupero password si trovano nel log. Non viene inviata posta reale. Le passkey richiedono un contesto sicuro supportato dal browser (HTTPS oppure localhost).
+Senza impostazioni SMTP salvate, le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=log`): i link di verifica email e recupero password si trovano nel log. Le passkey richiedono un contesto sicuro supportato dal browser (HTTPS oppure localhost).
+
+Da **Amministrazione → Email** il Superadmin configura il server SMTP globale, il trasporto (nessuna cifratura, STARTTLS obbligatorio o SSL/TLS), le credenziali facoltative e il mittente. Dopo il salvataggio tutte le email Laravel, inclusi inviti, verifica e recupero password, usano queste impostazioni anche con la configurazione applicativa in cache. La password è cifrata con la chiave applicativa e non viene restituita al browser: lasciare vuoto il campo la conserva; inserirne una nuova la sostituisce. La prova usa i dati salvati ed è limitata a tre tentativi al minuto per Superadmin. Il successo indica l’accettazione del server SMTP, non la consegna nella casella del destinatario.
 
 ## Account superadmin
 
@@ -46,7 +48,7 @@ Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=lo
 
 Il comando crea un account con email già verificata e password salvata come hash. Alle esecuzioni successive aggiorna il primo Superadmin anche se cambia l'email; rifiuta email già appartenenti ad altri utenti. Il Gate `administer` riserva l’amministrazione globale ai Superadmin; il Gate `access-company` autorizza l’IPAM e la gestione sedi per le aziende associate all’utente.
 
-Da **Amministrazione → Utenti** i Superadmin invitano altri Superadmin e gestiscono gli account. Da **Azienda → Impostazioni → Utenti** invitano utenti aziendali: un’email esistente viene associata senza duplicare l’account. Gli inviti nuovi usano i token del reset password Fortify; dopo aver impostato la password, l’utente accede e completa la verifica email esistente. Il nome iniziale coincide con l’email ed è modificabile dal profilo. In sviluppo i messaggi sono nel log; se il link scade o l’invio fallisce, è disponibile «Password dimenticata?» nella pagina di accesso.
+Da **Amministrazione → Utenti** i Superadmin invitano altri Superadmin e gestiscono gli account. Da **Azienda → Impostazioni → Utenti** invitano utenti aziendali: un’email esistente viene associata senza duplicare l’account. Gli inviti nuovi usano i token del reset password Fortify; dopo aver impostato la password, l’utente accede e completa la verifica email esistente. Il nome iniziale coincide con l’email ed è modificabile dal profilo. Se il link scade o l’invio fallisce, è disponibile «Password dimenticata?» nella pagina di accesso.
 
 «Elimina utente» cancella l’intero account e tutte le associazioni, anche dalla pagina aziendale, conservando i dati IPAM. L’ultimo Superadmin è protetto anche dall’autoeliminazione.
 

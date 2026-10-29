@@ -1,19 +1,22 @@
 import { router } from '@inertiajs/react';
-import { Building2, Tags, Users } from 'lucide-react';
+import { Building2, Mail, Tags, Users } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { index as companies } from '@/routes/administration/companies';
+import { edit as email } from '@/routes/administration/email';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
 import { index as users } from '@/routes/administration/users';
 
 export default function AdministrationLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const tab = isCurrentOrParentUrl(ipStatuses())
-        ? 'ip-statuses'
-        : isCurrentOrParentUrl(users())
-          ? 'users'
-          : 'companies';
+    const tab = isCurrentOrParentUrl(email())
+        ? 'email'
+        : isCurrentOrParentUrl(ipStatuses())
+          ? 'ip-statuses'
+          : isCurrentOrParentUrl(users())
+            ? 'users'
+            : 'companies';
 
     return (
         <section
@@ -31,29 +34,37 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                 activationMode="manual"
                 onValueChange={(value) =>
                     router.visit(
-                        value === 'companies'
-                            ? companies()
-                            : value === 'users'
-                              ? users()
-                              : ipStatuses(),
+                        value === 'email'
+                            ? email()
+                            : value === 'companies'
+                              ? companies()
+                              : value === 'users'
+                                ? users()
+                                : ipStatuses(),
                     )
                 }
                 className="min-w-0 gap-0"
             >
-                <TabsList aria-label="Amministrazione" className="mx-4 md:mx-6">
-                    <TabsTrigger value="companies">
-                        <Building2 />
-                        Aziende
-                    </TabsTrigger>
-                    <TabsTrigger value="ip-statuses">
-                        <Tags />
-                        Stati IP
-                    </TabsTrigger>
-                    <TabsTrigger value="users">
-                        <Users />
-                        Utenti
-                    </TabsTrigger>
-                </TabsList>
+                <div className="overflow-x-auto px-4 py-1 md:px-6">
+                    <TabsList aria-label="Amministrazione">
+                        <TabsTrigger value="companies">
+                            <Building2 />
+                            Aziende
+                        </TabsTrigger>
+                        <TabsTrigger value="ip-statuses">
+                            <Tags />
+                            Stati IP
+                        </TabsTrigger>
+                        <TabsTrigger value="users">
+                            <Users />
+                            Utenti
+                        </TabsTrigger>
+                        <TabsTrigger value="email">
+                            <Mail />
+                            Email
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
                 <TabsContent value={tab} className="min-w-0">
                     {children}
                 </TabsContent>

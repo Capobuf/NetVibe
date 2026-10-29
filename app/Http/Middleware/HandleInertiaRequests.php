@@ -43,7 +43,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'companyNavigation' => fn () => $request->user()?->hasVerifiedEmail() ? [
+            'companyNavigation' => fn () => $request->user()?->hasVerifiedEmail() && $request->user()->can('administer') ? [
                 'companies' => Company::query()->orderBy('name')->orderBy('id')->get(['id', 'name']),
                 'currentCompanyId' => $request->route('company') instanceof Company
                     ? $request->route('company')->id

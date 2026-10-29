@@ -14,7 +14,7 @@ import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
 import InputError from '@/components/input-error';
 import IpMetadataFields from '@/components/networks/ip-metadata-fields';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -232,12 +232,6 @@ export default function IpAddressForm({
                                             <AlertTitle>
                                                 IP in un intervallo escluso
                                             </AlertTitle>
-                                            <AlertDescription>
-                                                Puoi documentarlo manualmente.
-                                                L’esclusione riguarda solo i
-                                                suggerimenti e non impedisce il
-                                                salvataggio.
-                                            </AlertDescription>
                                         </Alert>
                                     ) : null}
                                     <div className="grid gap-7 sm:grid-cols-2">
@@ -439,12 +433,7 @@ export default function IpAddressForm({
                             <strong>{ipAddress.ip}</strong> con descrizione,
                             hostname, MAC, stato e associazioni ai tag. Se
                             l’indirizzo è escluso, resterà escluso dai
-                            suggerimenti; potrai comunque documentarlo
-                            manualmente.
-                        </p>
-                        <p>
-                            Questa operazione non modifica alcun dispositivo
-                            sulla rete.
+                            suggerimenti.
                         </p>
                     </DeletionConfirmation>
                 ) : null}

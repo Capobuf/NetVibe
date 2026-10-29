@@ -1,11 +1,10 @@
 import { Form } from '@inertiajs/react';
 import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
-import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
+import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
 import InputError from '@/components/input-error';
-import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogClose,
@@ -19,7 +18,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
-import { destroy, store, update } from '@/routes/administration/companies';
+import {
+    deletionImpact,
+    destroy,
+    store,
+    update,
+} from '@/routes/administration/companies';
 import type { Company, Site } from '@/types/company';
 
 export default function CompanyForm({
@@ -134,9 +138,10 @@ export default function CompanyForm({
                     </Form>
                 </div>
                 {deleting && company ? (
-                    <DeletionConfirmation
+                    <GuidedDeletion
                         action={destroy.form(company.id)}
-                        sites={company.sites}
+                        kind="company"
+                        previewUrl={deletionImpact.url(company.id)}
                         onCancel={() => {
                             setDeleting(false);
                             requestAnimationFrame(() =>
@@ -144,30 +149,7 @@ export default function CompanyForm({
                             );
                         }}
                         onSuccess={() => setOpen(false)}
-                    >
-                        <p>
-                            L’azienda <strong>{company.name}</strong> e la sua
-                            anagrafica verranno eliminate.
-                        </p>
-                        {company.sites.length > 1 ? (
-                            <>
-                                <p>
-                                    Verranno eliminate anche tutte le{' '}
-                                    {company.sites.length} sedi:
-                                </p>
-                                <ul className="flex flex-wrap gap-2">
-                                    {company.sites.map((site) => (
-                                        <li key={site.id}>
-                                            <Badge variant="secondary">
-                                                {site.name}
-                                            </Badge>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </>
-                        ) : null}
-                        <p>Questa operazione non può essere annullata.</p>
-                    </DeletionConfirmation>
+                    />
                 ) : null}
             </DialogContent>
         </Dialog>

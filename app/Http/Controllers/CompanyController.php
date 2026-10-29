@@ -6,6 +6,8 @@ use App\Http\Requests\CompanyRequest;
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Models\Company;
 use App\Models\Site;
+use App\Support\DeletionImpact;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -77,17 +79,21 @@ class CompanyController extends Controller
         return back();
     }
 
+    public function deletionImpact(Company $company): JsonResponse
+    {
+        return response()->json(DB::transaction(fn () => DeletionImpact::preview(DeletionImpact::networks($company)), 3));
+    }
+
     public function destroy(ConfirmDeletionRequest $request, Company $company): RedirectResponse
     {
         DB::transaction(function () use ($request, $company) {
-            $company = Company::query()->lockForUpdate()->findOrFail($company->id);
-            $sites = $company->sites()->lockForUpdate()->get();
-            $request->ensureSitesUnchanged($sites);
-            $request->ensureSitesHaveNoNetworks($sites);
-
+            $impact = DeletionImpact::networks($company);
+            $request->ensureUnchanged($impact);
+            DeletionImpact::deleteSubnets(array_column($impact['subnets'], 'id'));
+            DB::table('vlans')->whereIn('site_id', array_column($impact['sites'], 'id'))->delete();
             $company->sites()->delete();
             $company->delete();
-        });
+        }, 3);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Azienda eliminata.']);
 

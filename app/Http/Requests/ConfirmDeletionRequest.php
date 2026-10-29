@@ -2,49 +2,35 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Site;
-use Illuminate\Database\Eloquent\Collection;
+use App\Support\DeletionImpact;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\ValidationException;
 
 class ConfirmDeletionRequest extends FormRequest
 {
-    /** @param Collection<int, Site> $sites */
-    public function ensureSitesHaveNoNetworks(Collection $sites): void
-    {
-        // shortcut: protect network data until guided container deletion is implemented in NV-13.
-        if (Site::query()->whereKey($sites->modelKeys())
-            ->where(fn ($query) => $query->has('vlans')->orHas('subnets'))->exists()) {
-            throw ValidationException::withMessages([
-                'confirmed' => 'Questo contenitore include VLAN o subnet. La cancellazione con dati di rete non è ancora disponibile; nessun dato è stato eliminato.',
-            ]);
-        }
-    }
-
     /** @return array<string, array<string>> */
     public function rules(): array
     {
         return [
             'confirmed' => ['accepted'],
-            'site_ids' => ['required', 'array', 'list'],
-            'site_ids.*' => ['integer', 'distinct'],
+            'impact_token' => ['required', 'string', 'size:64'],
         ];
     }
 
     /** @return array<string, string> */
     public function messages(): array
     {
-        return ['confirmed.accepted' => 'Conferma di aver letto l’impatto della cancellazione.'];
+        return [
+            'confirmed.accepted' => 'Conferma di aver letto l’impatto della cancellazione.',
+            'impact_token.required' => 'Carica l’anteprima prima di confermare l’eliminazione.',
+        ];
     }
 
-    /** @param Collection<int, Site> $sites */
-    public function ensureSitesUnchanged(Collection $sites): void
+    public function ensureUnchanged(array $impact): void
     {
-        $expectedIds = $this->validated('site_ids');
-
-        if ($sites->count() !== count($expectedIds) || array_diff($sites->modelKeys(), $expectedIds)) {
+        if (! hash_equals(DeletionImpact::token($impact), $this->validated('impact_token'))) {
             throw ValidationException::withMessages([
-                'confirmed' => 'Le sedi sono cambiate. Chiudi e ricarica la pagina per verificare il nuovo impatto.',
+                'impact_token' => 'I dati sono cambiati. Aggiorna l’anteprima e verifica il nuovo impatto prima di confermare.',
             ]);
         }
     }

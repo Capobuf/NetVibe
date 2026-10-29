@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\Company;
+use App\Models\IpStatus;
+use App\Models\Site;
+use App\Models\Subnet;
+use App\Models\Vlan;
+use Illuminate\Support\Facades\DB;
+
+class DeletionImpact
+{
+    // Preview and confirmation read the same locked records inside a transaction.
+    public static function networks(Company $company, ?Site $site = null, ?Subnet $subnet = null, ?Vlan $vlan = null): array
+    {
+        $company = Company::query()->lockForUpdate()->findOrFail($company->id);
+        $sites = $company->sites()->orderBy('id')->lockForUpdate()->get();
+        $siteIds = $site ? [$sites->findOrFail($site->id)->id] : $sites->modelKeys();
+        $vlans = Vlan::query()->whereIn('site_id', $siteIds)
+            ->when($vlan, fn ($query) => $query->whereKey($vlan->id))
+            ->when($subnet, fn ($query) => $query->whereRaw('1 = 0'))
+            ->orderBy('id')->lockForUpdate()->get();
+        $subnets = Subnet::query()->whereIn('site_id', $siteIds)
+            ->when($subnet, fn ($query) => $query->whereKey($subnet->id))
+            ->when($vlan, fn ($query) => $query->where('vlan_id', $vlan->id))
+            ->orderBy('id')->lockForUpdate()->get();
+
+        abort_if(($subnet && $subnets->isEmpty()) || ($vlan && $vlans->isEmpty()), 404);
+
+        $ips = DB::table('ip_addresses')->whereIn('subnet_id', $subnets->modelKeys())->orderBy('id')->lockForUpdate()->get();
+        $ranges = DB::table('excluded_ranges')->whereIn('subnet_id', $subnets->modelKeys())->orderBy('id')->lockForUpdate()->get();
+        $summaries = DB::table('subnet_summary_entries')->whereIn('subnet_id', $subnets->modelKeys())->orderBy('id')->lockForUpdate()->get();
+        $links = DB::table('ip_address_tag')->whereIn('ip_address_id', $ips->pluck('id'))
+            ->orderBy('ip_address_id')->orderBy('tag_id')->lockForUpdate()->get();
+        $tags = $company->tags()->when($site, fn ($query) => $query->whereIn('id', $links->pluck('tag_id')))
+            ->orderBy('id')->lockForUpdate()->get();
+
+        return [
+            'scope' => ['company' => $company->id, 'site' => $site?->id, 'subnet' => $subnet?->id, 'vlan' => $vlan?->id],
+            'company' => $company->only('id', 'name'),
+            'sites' => $sites->map->only('id', 'name')->all(),
+            'vlans' => $vlans->toArray(),
+            'subnets' => $subnets->toArray(),
+            'ips' => $ips->map(fn ($ip) => [...(array) $ip, 'ip' => long2ip($ip->address)])->all(),
+            'ranges' => $ranges->map(fn ($range) => [...(array) $range,
+                'start_ip' => long2ip($range->start_address), 'end_ip' => long2ip($range->end_address),
+            ])->all(),
+            'summaries' => $summaries->map(fn ($entry) => [...(array) $entry, 'values' => json_decode($entry->values, true)])->all(),
+            'tags' => $tags->toArray(),
+            'tag_links' => $links->all(),
+        ];
+    }
+
+    public static function status(IpStatus $status): array
+    {
+        $status = IpStatus::query()->lockForUpdate()->findOrFail($status->id);
+        $ips = DB::table('ip_addresses')->where('ip_status_id', $status->id)->orderBy('id')->lockForUpdate()->get();
+        $contexts = DB::table('subnets')->join('sites', 'sites.id', '=', 'subnets.site_id')
+            ->join('companies', 'companies.id', '=', 'sites.company_id')
+            ->whereIn('subnets.id', $ips->pluck('subnet_id'))->orderBy('subnets.id')
+            ->get(['subnets.id', 'subnets.cidr', 'sites.name as site_name', 'companies.id as company_id', 'companies.name as company_name'])
+            ->keyBy('id');
+        $links = DB::table('ip_address_tag')->whereIn('ip_address_id', $ips->pluck('id'))
+            ->orderBy('ip_address_id')->orderBy('tag_id')->lockForUpdate()->get();
+
+        return [
+            'status' => $status->only('id', 'name'),
+            'ips' => $ips->map(fn ($ip) => [...(array) $ip,
+                'ip' => long2ip($ip->address), 'context' => $contexts[$ip->subnet_id],
+            ])->all(),
+            'tag_links' => $links->all(),
+        ];
+    }
+
+    public static function token(array $impact): string
+    {
+        // Authenticate reviewed data, including identities when counts stay unchanged.
+        return hash_hmac('sha256', json_encode($impact, JSON_THROW_ON_ERROR), config('app.key'));
+    }
+
+    public static function preview(array $impact): array
+    {
+        return [...$impact, 'impact_token' => self::token($impact)];
+    }
+
+    public static function deleteSubnets(array $ids): void
+    {
+        DB::table('ip_addresses')->whereIn('subnet_id', $ids)->delete();
+        DB::table('excluded_ranges')->whereIn('subnet_id', $ids)->delete();
+        DB::table('subnet_summary_entries')->whereIn('subnet_id', $ids)->delete();
+        Subnet::query()->whereKey($ids)->delete();
+    }
+}

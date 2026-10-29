@@ -23,13 +23,27 @@ class VlanController extends Controller
         return Inertia::render('vlans/index', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
-            'vlans' => $site->vlans()->select('id', 'tag', 'name')->withCount('subnets')->orderBy('tag')->get(),
+            'vlans' => $site->vlans()->select('id', 'tag', 'name')->withCount('subnets')
+                ->with(['subnets' => fn ($query) => $query->where('site_id', $site->id)
+                    ->orderBy('network_address')->select('id', 'vlan_id', 'cidr', 'name', 'description')])
+                ->orderBy('tag')->get(),
         ]);
     }
 
     public function store(VlanRequest $request, Company $company, Site $site): RedirectResponse
     {
         return $this->save($request, $site);
+    }
+
+    public function show(Company $company, Site $site, Vlan $vlan): Response
+    {
+        return Inertia::render('vlans/show', [
+            'company' => $company->only('id', 'name'),
+            'site' => $site->only('id', 'name'),
+            'vlan' => $vlan->only('id', 'tag', 'name'),
+            'subnets' => $site->subnets()->where('vlan_id', $vlan->id)
+                ->orderBy('network_address')->get(['id', 'cidr', 'name', 'description', 'vlan_id']),
+        ]);
     }
 
     public function update(VlanRequest $request, Company $company, Site $site, Vlan $vlan): RedirectResponse

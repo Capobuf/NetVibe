@@ -11,9 +11,8 @@ use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
-
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::redirect('/', '/companies')->name('home');
     Route::redirect('dashboard', '/companies')->name('dashboard');
 
     // shortcut: operational access is shared by verified users until tenant permissions are implemented.
@@ -26,7 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/sites/{site}/search', [IpSearchController::class, 'index'])
             ->name('companies.sites.search.index');
         Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);
-        Route::resource('companies.sites.vlans', VlanController::class)->only(['index']);
+        Route::resource('companies.sites.vlans', VlanController::class)->only(['index', 'show']);
     });
 
     Route::middleware('can:administer')->scopeBindings()->group(function () {

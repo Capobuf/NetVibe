@@ -238,13 +238,13 @@ export default function ExcludedRanges({
                     >
                         {({ errors, processing }) => (
                             <>
-                                <p className="text-sm text-muted-foreground">
-                                    {mode === 'remove'
-                                        ? 'Puoi indicare l’intero intervallo o solo la porzione da rimuovere. Le parti esterne resteranno escluse.'
-                                        : mode === 'edit'
-                                          ? 'I nuovi estremi sostituiscono quelli attuali. Gli IP lasciati fuori non saranno più esclusi da questo intervallo.'
-                                          : 'Il primo e l’ultimo IP sono inclusi.'}
-                                </p>
+                                {mode !== 'add' ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {mode === 'remove'
+                                            ? 'Puoi indicare l’intero intervallo o solo la porzione da rimuovere. Le parti esterne resteranno escluse.'
+                                            : 'I nuovi estremi sostituiscono quelli attuali. Gli IP lasciati fuori non saranno più esclusi da questo intervallo.'}
+                                    </p>
+                                ) : null}
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="flex flex-col gap-2">
                                         <Label htmlFor={`${id}-start`}>

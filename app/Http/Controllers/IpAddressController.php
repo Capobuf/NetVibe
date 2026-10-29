@@ -8,6 +8,7 @@ use App\Models\IpAddress;
 use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
+use App\Support\Ipv4Ranges;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,8 +57,9 @@ class IpAddressController extends Controller
                 $company = Company::query()->lockForUpdate()->findOrFail($company->id);
                 // Keep the CIDR stable during the write; uniqueness is enforced by the database.
                 $subnet = Subnet::query()->sharedLock()->findOrFail($subnet->id);
-                if ($address < $subnet->network_address || $address > $subnet->broadcast_address) {
-                    throw ValidationException::withMessages(['ip' => "L’indirizzo deve appartenere alla subnet {$subnet->cidr}."]);
+                [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
+                if ($address < $first || $address > $last) {
+                    throw ValidationException::withMessages(['ip' => "Inserisci un indirizzo host utilizzabile nella subnet {$subnet->cidr}, da ".long2ip($first).' a '.long2ip($last).'.']);
                 }
 
                 $record = $ipAddress

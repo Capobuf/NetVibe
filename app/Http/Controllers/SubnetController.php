@@ -11,6 +11,7 @@ use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\DeletionImpact;
 use App\Support\Ipv4Cidr;
+use App\Support\Ipv4Ranges;
 use App\Support\SubnetAddressTable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -126,12 +127,13 @@ class SubnetController extends Controller
                         'cidr' => 'Il nuovo CIDR lascerebbe fuori intervalli esclusi. Rimuovi prima le esclusioni interessate.',
                     ]);
                 }
-                if ($subnet && $record->ipAddresses()->where(function ($query) use ($range) {
-                    $query->where('address', '<', $range['network_address'])
-                        ->orWhere('address', '>', $range['broadcast_address']);
+                [$first, $last] = Ipv4Ranges::usableBounds($range['network_address'], $range['broadcast_address']);
+                if ($subnet && $record->ipAddresses()->where(function ($query) use ($first, $last) {
+                    $query->where('address', '<', $first)
+                        ->orWhere('address', '>', $last);
                 })->exists()) {
                     throw ValidationException::withMessages([
-                        'cidr' => 'Il nuovo CIDR lascerebbe fuori IP documentati. Modifica o libera prima gli indirizzi interessati.',
+                        'cidr' => 'Il nuovo CIDR lascerebbe IP documentati fuori dagli indirizzi host utilizzabili. Modifica o libera prima gli indirizzi interessati.',
                     ]);
                 }
                 $overlap = $site->subnets()

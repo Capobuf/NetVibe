@@ -72,7 +72,7 @@ class IpAddressesTest extends TestCase
 
     public function test_ip_table_search_and_numeric_sort_cover_all_pages_and_stay_within_the_subnet(): void
     {
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
         $site = $company->sites()->create(['name' => null]);
         $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
@@ -115,7 +115,7 @@ class IpAddressesTest extends TestCase
 
     public function test_virtual_rows_and_metadata_matches_share_global_sorting_without_duplicates(): void
     {
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
         $site = $company->sites()->create(['name' => null]);
         $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/29'));
@@ -191,9 +191,20 @@ class IpAddressesTest extends TestCase
 
         $this->post($store, ['ip' => '192.168.1.200'])->assertSessionHasErrors('description');
         $this->post($store, ['ip' => '192.168.2.200', 'hostname' => 'server'])->assertSessionHasErrors('ip');
+        foreach (['192.168.1.0', '192.168.1.255'] as $address) {
+            $this->post($store, ['ip' => $address, 'hostname' => 'server'])->assertSessionHasErrors([
+                'ip' => 'Inserisci un indirizzo host utilizzabile nella subnet 192.168.1.0/24, da 192.168.1.1 a 192.168.1.254.',
+            ]);
+        }
         $this->assertDatabaseCount('ip_addresses', 0);
         $this->post($store, ['ip' => '192.168.1.200', 'hostname' => 'server'])->assertSessionHasNoErrors();
         $ip = $subnet->ipAddresses()->sole();
+        foreach (['192.168.1.0', '192.168.1.255'] as $address) {
+            $this->patch(route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ip]), [
+                'ip' => $address, 'hostname' => 'changed',
+            ])->assertSessionHasErrors('ip');
+        }
+        $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'address' => ip2long('192.168.1.200'), 'hostname' => 'server']);
         $this->post(route('companies.sites.subnets.ip-addresses.store', [$otherCompany, $otherSite, $otherSubnet]), [
             'ip' => '192.168.1.200', 'description' => 'Altro cliente',
         ])->assertSessionHasNoErrors();
@@ -217,5 +228,62 @@ class IpAddressesTest extends TestCase
         ])->assertForbidden();
         $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'address' => 3232235976, 'hostname' => 'server']);
         $this->assertDatabaseCount('ip_addresses', 2);
+    }
+
+    public function test_31_and_32_addresses_can_be_created_and_updated(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+
+        foreach (['192.0.2.0/31' => ['192.0.2.0', '192.0.2.1'], '192.0.2.10/32' => ['192.0.2.10']] as $cidr => $addresses) {
+            $subnet = $site->subnets()->create(Ipv4Cidr::parse($cidr));
+            foreach ($addresses as $address) {
+                $this->post(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), [
+                    'ip' => $address, 'hostname' => 'node',
+                ])->assertSessionHasNoErrors();
+                $ip = $subnet->ipAddresses()->where('address', ip2long($address))->sole();
+                $this->patch(route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ip]), [
+                    'ip' => $address, 'hostname' => 'updated',
+                ])->assertSessionHasNoErrors();
+                $this->assertDatabaseHas('ip_addresses', [
+                    'id' => $ip->id, 'address' => ip2long($address), 'hostname' => 'updated',
+                ]);
+            }
+            $this->get(route('companies.sites.subnets.show', [$company, $site, $subnet]))
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('ipAddresses.total', count($addresses))
+                    ->where('addressCounts.documented', count($addresses))
+                    ->where('addressCounts.proposable', 0));
+        }
+    }
+
+    public function test_cidr_changes_preserve_usable_documented_ips_including_31_and_32(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('192.0.2.0/24'));
+        $ip = $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.127'), 'hostname' => 'node']);
+        $update = route('companies.sites.subnets.update', [$company, $site, $subnet]);
+        $updateIp = route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ip]);
+
+        foreach (['192.0.2.127' => '192.0.2.0/25', '192.0.2.128' => '192.0.2.128/25'] as $address => $cidr) {
+            $this->patch($updateIp, ['ip' => $address, 'hostname' => 'node'])->assertSessionHasNoErrors();
+            $this->patch($update, ['cidr' => $cidr])->assertSessionHasErrors([
+                'cidr' => 'Il nuovo CIDR lascerebbe IP documentati fuori dagli indirizzi host utilizzabili. Modifica o libera prima gli indirizzi interessati.',
+            ]);
+            $this->assertDatabaseHas('subnets', ['id' => $subnet->id, 'cidr' => '192.0.2.0/24']);
+            $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'address' => ip2long($address), 'hostname' => 'node']);
+        }
+
+        foreach (['192.0.2.128/31', '192.0.2.128/32'] as $cidr) {
+            $this->patch($update, ['cidr' => $cidr])->assertSessionHasNoErrors();
+            $this->assertDatabaseHas('subnets', ['id' => $subnet->id, 'cidr' => $cidr]);
+            $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'address' => ip2long('192.0.2.128'), 'hostname' => 'node']);
+        }
+        $this->patch($update, ['cidr' => '192.0.2.128/30'])->assertSessionHasErrors('cidr');
+        $this->assertDatabaseHas('subnets', ['id' => $subnet->id, 'cidr' => '192.0.2.128/32']);
+        $this->assertDatabaseCount('ip_addresses', 1);
     }
 }

@@ -41,6 +41,12 @@ class SiteNetworksTest extends TestCase
         $this->get($url)->assertRedirect(route('verification.notice'));
 
         $this->actingAs(User::factory()->create(['is_superadmin' => false]));
+        $this->get($url)->assertForbidden();
+        $this->get(route('companies.sites.vlans.index', [$company, $site]))->assertForbidden();
+        $this->get(route('companies.sites.subnets.index', [$company, $site]))->assertForbidden();
+        $this->get(route('companies.sites.subnets.show', [$company, $site, $subnet]))->assertForbidden();
+
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $this->get(route('companies.sites.vlans.index', [$company, $site]))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('vlans/index')
                 ->has('vlans', 3)->where('vlans.0.id', $vlan->id)

@@ -17,11 +17,18 @@ class ExampleTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
-    public function test_home_redirects_authenticated_users_to_companies(): void
+    public function test_home_redirects_superadmins_to_companies(): void
     {
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
-        $this->get(route('home'))->assertRedirect('/companies');
+        $this->get(route('home'))->assertRedirect(route('companies.index'));
+    }
+
+    public function test_home_redirects_other_users_to_their_profile(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => false]));
+
+        $this->get(route('home'))->assertRedirect(route('profile.edit'));
     }
 
     public function test_home_requires_email_verification(): void

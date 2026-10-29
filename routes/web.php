@@ -9,13 +9,15 @@ use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\VlanController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::redirect('/', '/companies')->name('home');
-    Route::redirect('dashboard', '/companies')->name('dashboard');
+    Route::get('/', fn (Request $request) => to_route($request->user()->can('administer') ? 'companies.index' : 'profile.edit'))->name('home');
+    Route::redirect('dashboard', '/')->name('dashboard');
+});
 
-    // shortcut: operational access is shared by verified users until tenant permissions are implemented.
+Route::middleware(['auth', 'verified', 'can:administer'])->group(function () {
     Route::redirect('search', '/companies');
     Route::resource('companies', CompanyController::class)->only(['index', 'show']);
     Route::get('companies/{company}/sites/{site}', [CompanyController::class, 'show'])
@@ -28,7 +30,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.vlans', VlanController::class)->only(['index', 'show']);
     });
 
-    Route::middleware('can:administer')->scopeBindings()->group(function () {
+    Route::scopeBindings()->group(function () {
         Route::resource('companies.sites.subnets.summary-entries', SubnetSummaryEntryController::class)
             ->parameters(['summary-entries' => 'summaryEntry'])->only(['store', 'update', 'destroy']);
         Route::resource('companies.sites.subnets.excluded-ranges', ExcludedRangeController::class)
@@ -45,7 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.subnets', SubnetController::class)->only(['store', 'update', 'destroy']);
     });
 
-    Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+    Route::prefix('administration')->name('administration.')->group(function () {
         Route::redirect('/', '/administration/companies')->name('index');
         Route::get('ip-statuses/{ipStatus}/deletion-impact', [IpStatusController::class, 'deletionImpact'])->name('ip-statuses.deletion-impact');
         Route::get('companies/{company}/deletion-impact', [CompanyController::class, 'deletionImpact'])->name('companies.deletion-impact');

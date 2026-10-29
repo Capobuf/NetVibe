@@ -1,6 +1,6 @@
 # NetVibe
 
-NetVibe è un IPAM IPv4 per MSP. Questa base installa lo starter ufficiale Laravel React con autenticazione e impostazioni account; non implementa ancora funzionalità IPAM.
+NetVibe è un IPAM IPv4 per MSP, utilizzabile senza integrazioni. Gestisce aziende e sedi, VLAN facoltative, subnet, indirizzi documentati con stato e tag, intervalli esclusi dai suggerimenti e riepiloghi subnet. Include la tabella virtuale paginata degli IP utilizzabili, il suggerimento del primo IP disponibile, la ricerca aziendale e le anteprime delle cancellazioni.
 
 - [Specifica canonica](docs/specification/NETVIBE_SPEC.md)
 - [Indice documentazione e baseline tecnica in bozza](docs/README.md)
@@ -10,7 +10,7 @@ NetVibe è un IPAM IPv4 per MSP. Questa base installa lo starter ufficiale Larav
 
 Starter [laravel/react-starter-kit](https://github.com/laravel/react-starter-kit/tree/dbd4817d2d2936be14bc1ca7c94692fcef20b6b1), commit `dbd4817d2d2936be14bc1ca7c94692fcef20b6b1`. I lockfile fissano le dipendenze risolte: Laravel 13, React 19, Inertia 3, Tailwind 4, shadcn/ui, Fortify e PHPUnit. La build resta quella ufficiale Vite Plus; Wayfinder genera le funzioni per le route.
 
-Sail esegue solo PHP 8.4 e MySQL 8.4. Gli asset sono statici, SSR è disabilitato e la coda è sincrona: non servono processi Node, Redis o worker permanenti. Le funzionalità di autenticazione predefinite dello starter sono mantenute, inclusa la verifica email.
+Sail esegue solo PHP 8.4 e MySQL 8.4. Gli asset sono statici, SSR è disabilitato e la coda è sincrona: non servono processi Node, Redis o worker permanenti. Autenticazione e impostazioni personali restano disponibili, inclusa la verifica email; la registrazione pubblica è disabilitata.
 
 ## Primo avvio con Docker
 
@@ -36,15 +36,15 @@ docker run --rm -e COMPOSER_ALLOW_SUPERUSER=1 \
 
 `key:generate` serve solo alla prima installazione: non rigenerare la chiave di un’istanza con dati. PHP deve poter scrivere in `storage` e `bootstrap/cache`; la build deve poter scrivere nelle directory generate e in `node_modules`. Evita di alternare root e l’utente Sail per installazioni e build.
 
-Apri l’`APP_URL` configurato e scegli **Registrati** o **Accedi**. Il kit mantiene la pagina iniziale Laravel e una dashboard con segnaposto: sono la base per la successiva progettazione IPAM.
+Apri l’`APP_URL` configurato e accedi con l’account superadmin predisposto dal comando. Dopo l’accesso si apre l’elenco aziende; gli account non superadmin accedono alle impostazioni personali.
 
-Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=log`): dopo la registrazione, apri il link di verifica riportato nel log. Non viene inviata posta reale. Le passkey richiedono un contesto sicuro supportato dal browser (HTTPS oppure localhost).
+Le email di sviluppo sono scritte in `storage/logs/laravel.log` (`MAIL_MAILER=log`): i link di verifica email e recupero password si trovano nel log. Non viene inviata posta reale. Le passkey richiedono un contesto sicuro supportato dal browser (HTTPS oppure localhost).
 
 ## Account superadmin
 
 `SUPERADMIN_EMAIL` e `SUPERADMIN_PASSWORD` nel `.env` alimentano il comando `netvibe:superadmin` tramite `config/superadmin.php`, senza credenziali predefinite nel codice. Nell'ambiente di sviluppo entrambi valgono `admin@netvibe.test`: il login usa l'email come identificativo. Questi valori semplici sono esclusivamente per sviluppo.
 
-Il comando crea un account con email già verificata e password salvata come hash. Alle esecuzioni successive aggiorna lo stesso account anche se cambia l'email; rifiuta email già appartenenti ad altri utenti. Il flag interno `is_superadmin` non è assegnabile dalla registrazione pubblica. Questa base non implementa ancora permessi sui moduli IPAM.
+Il comando crea un account con email già verificata e password salvata come hash. Alle esecuzioni successive aggiorna lo stesso account anche se cambia l'email; rifiuta email già appartenenti ad altri utenti. In attesa della gestione centralizzata di utenti e ruoli, l’accesso IPAM, incluse consultazione e ricerca, è riservato agli account `is_superadmin` tramite il Gate `administer`. Non sono implementati permessi per azienda.
 
 Per applicare modifiche alle credenziali nel `.env`:
 
@@ -80,7 +80,7 @@ Dopo l’approvazione del Product Owner:
 
 Se il controllo segnala configurazione in cache, fermati e rimuovi esplicitamente la cache con `./vendor/bin/sail artisan config:clear`, poi ricontrolla la destinazione. Gli script SQL di inizializzazione vengono eseguiti solo alla creazione del volume: non cancellare un volume esistente per applicarli.
 
-La CI esegue Pint, build, TypeScript e gli stessi test mirati su un MySQL temporaneo separato. Nessun E2E, coverage gate o analisi PHPStan aggiuntiva nella CI.
+La CI esegue Pint, build, TypeScript, test frontend e test mirati di autenticazione e IPAM su un MySQL temporaneo separato. Nessun E2E, coverage gate o analisi PHPStan aggiuntiva nella CI.
 
 ## Strumenti per gli agenti
 

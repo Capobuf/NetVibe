@@ -55,6 +55,7 @@ class SubnetController extends Controller
             'site' => $site->only('id', 'name'),
             'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id'),
             'vlan' => $subnet->vlan?->only('id', 'tag', 'name'),
+            'summaryEntries' => $subnet->summaryEntries()->orderBy('id')->get(['id', 'name', 'values']),
             'excludedRanges' => $subnet->excludedRanges
                 ->map(fn (ExcludedRange $range) => [
                     'id' => $range->id,

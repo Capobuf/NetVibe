@@ -23,6 +23,7 @@ export type IpAddress = {
 };
 
 export type IpStatus = { id: number; name: string };
+export type SubnetSummaryEntry = { id: number; name: string; values: string[] };
 export type Tag = { id: number; name: string; color: string };
 
 export type ExcludedRange = {

@@ -33,7 +33,7 @@ class SuperadminCommandTest extends TestCase
         $this->post(route('login.store'), [
             'email' => 'new-owner@example.com',
             'password' => 'second-password',
-        ])->assertRedirect(route('companies.index', absolute: false));
+        ])->assertRedirect(route('home', absolute: false));
 
         $this->assertAuthenticatedAs($user);
         $this->get(route('companies.index'))->assertOk();

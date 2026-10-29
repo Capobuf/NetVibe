@@ -11,6 +11,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['cidr', 'network_address', 'broadcast_address', 'name', 'description', 'vlan_id'])]
 class Subnet extends Model
 {
+    /** @return HasMany<SubnetSummaryEntry, $this> */
+    public function summaryEntries(): HasMany
+    {
+        return $this->hasMany(SubnetSummaryEntry::class);
+    }
+
     /** @return HasMany<ExcludedRange, $this> */
     public function excludedRanges(): HasMany
     {

@@ -6,6 +6,7 @@ use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SubnetController;
+use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +26,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('can:administer')->scopeBindings()->group(function () {
+        Route::resource('companies.sites.subnets.summary-entries', SubnetSummaryEntryController::class)
+            ->parameters(['summary-entries' => 'summaryEntry'])->only(['store', 'update', 'destroy']);
         Route::resource('companies.sites.subnets.excluded-ranges', ExcludedRangeController::class)
             ->parameters(['excluded-ranges' => 'excludedRange'])->only(['store', 'update']);
         Route::delete('companies/{company}/sites/{site}/subnets/{subnet}/excluded-ranges', [ExcludedRangeController::class, 'destroy'])

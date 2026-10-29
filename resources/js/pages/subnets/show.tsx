@@ -20,6 +20,7 @@ import {
     X,
 } from 'lucide-react';
 import { IconButton } from '@/components/icon-button';
+import { CopyValue } from '@/components/copy-value';
 import InputError from '@/components/input-error';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
@@ -28,6 +29,7 @@ import ExcludedRanges from '@/components/networks/excluded-ranges';
 import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
 import SubnetOccupancyChart from '@/components/networks/subnet-occupancy-chart';
+import SubnetSummary from '@/components/networks/subnet-summary';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +63,7 @@ import type {
     IpStatus,
     Tag,
     Subnet,
+    SubnetSummaryEntry,
     Vlan,
 } from '@/types/network';
 
@@ -74,6 +77,7 @@ type Props = {
     company: Company;
     site: Site;
     subnet: Subnet;
+    summaryEntries: SubnetSummaryEntry[];
     vlan: Vlan | null;
     excludedRanges: ExcludedRange[];
     statuses: IpStatus[];
@@ -99,6 +103,7 @@ export default function SubnetShow({
     company,
     site,
     subnet,
+    summaryEntries,
     vlan,
     ipAddresses,
     excludedRanges,
@@ -203,7 +208,12 @@ export default function SubnetShow({
                         </div>
                     </CardHeader>
                     <Separator />
-                    <CardContent className="p-5 sm:p-7">
+                    <CardContent className="grid items-center gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-10">
+                        <SubnetSummary
+                            key={subnet.id}
+                            route={route}
+                            entries={summaryEntries}
+                        />
                         <SubnetOccupancyChart counts={addressCounts} />
                     </CardContent>
                     <Separator />
@@ -530,34 +540,30 @@ export default function SubnetShow({
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             ) : null}
-                                                            {canOpen ? (
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="link"
-                                                                    className="h-7 p-0 font-mono tabular-nums"
-                                                                    aria-label={`${ipAddress.id !== null ? 'Visualizza' : 'Documenta'} IP ${ipAddress.ip}`}
-                                                                    aria-haspopup="dialog"
-                                                                    onClick={(
-                                                                        event,
-                                                                    ) => {
-                                                                        event.stopPropagation();
-                                                                        openAddress(
-                                                                            event.currentTarget,
-                                                                        );
-                                                                    }}
-                                                                >
-                                                                    {
-                                                                        ipAddress.ip
-                                                                    }
-                                                                </Button>
-                                                            ) : (
-                                                                <span>
-                                                                    {
-                                                                        ipAddress.ip
-                                                                    }
-                                                                </span>
-                                                            )}
+                                                            <CopyValue
+                                                                value={
+                                                                    ipAddress.ip
+                                                                }
+                                                                className="py-1 font-mono tabular-nums"
+                                                            />
                                                         </div>
+                                                    ) : column.id ===
+                                                          'hostname' ||
+                                                      column.id ===
+                                                          'mac_address' ? (
+                                                        ipAddress[column.id] ? (
+                                                            <CopyValue
+                                                                value={
+                                                                    ipAddress[
+                                                                        column
+                                                                            .id
+                                                                    ] ?? ''
+                                                                }
+                                                                className="py-1"
+                                                            />
+                                                        ) : (
+                                                            ''
+                                                        )
                                                     ) : column.id ===
                                                       'status' ? (
                                                         ipAddress.status ? (

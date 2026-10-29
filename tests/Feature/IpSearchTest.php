@@ -41,7 +41,7 @@ class IpSearchTest extends TestCase
         $this->get($search)->assertRedirect(route('verification.notice'));
         $this->actingAs(User::factory()->create(['is_superadmin' => false]));
         $this->get($search.'?search=10.0.0.200')->assertForbidden();
-        $this->get('/search?search=10.0.0.200')->assertForbidden();
+        $this->get('/search?search=10.0.0.200')->assertRedirect('/companies');
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
         $this->get($search.'?search=10.0.0.200')->assertInertia(fn (Assert $page) => $page

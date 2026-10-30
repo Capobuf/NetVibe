@@ -1,7 +1,9 @@
-import { Circle, Group, Line, Rect, Text } from 'react-konva';
+import { Group, Line, Path, Rect, Text } from 'react-konva';
+import { connectorShapes } from '@/lib/hardware-editor/connector-shapes';
 import {
-    connectorTypes,
     portBounds,
+    portBodyBounds,
+    portLabelLayout,
     type Port,
 } from '@/lib/hardware-editor/document';
 
@@ -11,39 +13,19 @@ export function PortSymbol({
     numbering,
     preview,
     zoom,
-    dark,
 }: {
     port: Port;
     selected: boolean;
     numbering: boolean;
     preview?: string;
     zoom: number;
-    dark: boolean;
 }) {
-    const { width: w, height: h } = connectorTypes[port.type];
-    const ethernet = port.type === 'rj45' || port.type === 'console';
+    const shape = connectorShapes[port.type];
     const b = portBounds(port);
-    const ink = dark ? '#edf0f4' : '#263344';
-    const accent = '#3b82f6';
     const label = preview ?? port.label;
-    const labelWidth = Math.max(40, label.length * 7.5);
-    const labelHeight = 15;
-    const pos =
-        preview !== undefined && port.labelPosition === 'hidden'
-            ? 'bottom'
-            : port.labelPosition;
-    const labelX =
-        pos === 'left'
-            ? -b.width / 2 - labelWidth - 7
-            : pos === 'right'
-              ? b.width / 2 + 7
-              : -labelWidth / 2;
-    const labelY =
-        pos === 'top'
-            ? -b.height / 2 - labelHeight - 6
-            : pos === 'bottom'
-              ? b.height / 2 + 6
-              : -labelHeight / 2;
+    const layout = portLabelLayout(port, label);
+    const ethernet = port.type === 'rj45' || port.type === 'console';
+    const body = portBodyBounds(port);
     return (
         <Group x={port.x} y={port.y} name="port" id={port.id}>
             <Rect
@@ -53,7 +35,9 @@ export function PortSymbol({
                 height={b.height + 8}
                 cornerRadius={4}
                 fill="transparent"
-                stroke={selected ? accent : numbering ? '#38bdf8' : undefined}
+                stroke={
+                    selected ? '#3b82f6' : numbering ? '#38bdf8' : undefined
+                }
                 strokeWidth={1.5 / zoom}
             />
             <Group
@@ -63,119 +47,70 @@ export function PortSymbol({
                 scaleX={port.scale}
                 scaleY={port.scale}
             >
-                {ethernet ? (
-                    <Line
-                        points={[
-                            -w / 2,
-                            -h / 2,
-                            w / 2,
-                            -h / 2,
-                            w / 2,
-                            h / 2 - 6,
-                            6,
-                            h / 2 - 6,
-                            6,
-                            h / 2,
-                            -6,
-                            h / 2,
-                            -6,
-                            h / 2 - 6,
-                            -w / 2,
-                            h / 2 - 6,
-                        ]}
-                        closed
-                        fill="#17202c"
+                <Path
+                    data={shape.outline}
+                    fill="#17202c"
+                    stroke={port.borderColor}
+                    strokeWidth={1.5}
+                    lineJoin="round"
+                />
+                {shape.detail && (
+                    <Path
+                        data={shape.detail}
+                        fill={
+                            port.type === 'dc' ||
+                            port.type === 'ac' ||
+                            port.type === 'acC19'
+                                ? port.borderColor
+                                : undefined
+                        }
                         stroke={port.borderColor}
                         strokeWidth={1.5}
                         lineJoin="round"
                     />
-                ) : port.type === 'dc' ? (
-                    <>
-                        <Circle
-                            radius={w / 2}
-                            fill="#17202c"
-                            stroke={port.borderColor}
-                            strokeWidth={1.5}
-                        />
-                        <Circle radius={2.5} fill="#8998aa" />
-                    </>
-                ) : port.type === 'ac' ? (
-                    <Line
-                        points={[
-                            -w / 2,
-                            -h / 2 + 8,
-                            -w / 2 + 8,
-                            -h / 2,
-                            w / 2 - 8,
-                            -h / 2,
-                            w / 2,
-                            -h / 2 + 8,
-                            w / 2,
-                            h / 2,
-                            -w / 2,
-                            h / 2,
-                        ]}
-                        closed
-                        fill="#17202c"
-                        stroke={port.borderColor}
-                        strokeWidth={1.5}
-                        lineJoin="round"
-                    />
-                ) : (
-                    <>
-                        <Rect
-                            x={-w / 2}
-                            y={-h / 2}
-                            width={w}
-                            height={h}
-                            cornerRadius={port.type === 'usbC' ? h / 2 : 2}
-                            fill="#17202c"
-                            stroke={port.borderColor}
-                            strokeWidth={1.5}
-                        />
-                        {(port.type === 'usbA' || port.type === 'usbC') && (
-                            <Line
-                                points={[-w / 2 + 5, 0, w / 2 - 5, 0]}
-                                stroke={
-                                    port.type === 'usbA' ? '#5b95d9' : '#8998aa'
-                                }
-                                strokeWidth={2}
-                            />
-                        )}
-                    </>
                 )}
             </Group>
-            {port.poe && (
+            {label &&
+                (port.labelPosition !== 'hidden' || preview !== undefined) && (
+                    <Group opacity={port.opacity}>
+                        <Rect
+                            x={layout.x}
+                            y={layout.y}
+                            width={layout.width}
+                            height={layout.height}
+                            fill="#17202c"
+                            cornerRadius={port.scale}
+                        />
+                        <Text
+                            listening={false}
+                            x={layout.x}
+                            y={layout.y}
+                            width={layout.width}
+                            height={layout.height}
+                            fontSize={layout.fontSize}
+                            text={layout.text}
+                            fontFamily="ui-monospace, monospace"
+                            align="center"
+                            verticalAlign="middle"
+                            wrap="none"
+                            fill={port.borderColor}
+                        />
+                    </Group>
+                )}
+            {ethernet && port.poe && (
                 <Line
-                    opacity={port.opacity}
                     listening={false}
-                    points={[
-                        b.width / 2 + 5,
-                        -b.height / 2 - 5,
-                        b.width / 2 + 1,
-                        -b.height / 2 + 1,
-                        b.width / 2 + 5,
-                        -b.height / 2 + 1,
-                        b.width / 2 + 2,
-                        -b.height / 2 + 6,
-                    ]}
-                    stroke={ink}
-                    strokeWidth={1.4}
-                />
-            )}
-            {pos !== 'hidden' && label && (
-                <Text
                     opacity={port.opacity}
-                    listening={false}
-                    x={labelX}
-                    y={labelY}
-                    width={labelWidth}
-                    height={labelHeight}
-                    text={label}
-                    fontFamily="Instrument Sans, sans-serif"
-                    fontSize={12}
-                    align="center"
-                    fill={preview !== undefined ? accent : ink}
+                    x={body.x - port.x + body.width - 5 * port.scale}
+                    y={body.y - port.y + 5 * port.scale}
+                    scaleX={port.scale * 0.35}
+                    scaleY={port.scale * 0.35}
+                    points={[2, -9, -5, 0, 0, 0, -2, 7, 5, -3, 1, -3]}
+                    closed
+                    fill={port.borderColor}
+                    stroke={port.borderColor}
+                    strokeWidth={0.6}
+                    lineJoin="round"
                 />
             )}
         </Group>

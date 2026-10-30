@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseCustomColors } from '../../resources/js/lib/hardware-editor/colors.ts';
 import {
     arrangePorts,
     blankDocument,
@@ -9,6 +10,7 @@ import {
     reshapeBlock,
     boundsOf,
     faceLayers,
+    categorizedLayers,
     reorderLayers,
     cropImage,
     imageBounds,
@@ -19,9 +21,177 @@ import {
     makePort,
     numberingLabels,
     portBounds,
+    portLabelLayout,
+    portLabelPosition,
     outsideShell,
     snapDelta,
 } from '../../resources/js/lib/hardware-editor/document.ts';
+
+test('internal labels fit narrow and rotated ports and scale with their symbols', () => {
+    const port = makePort('usbMicroB', { x: 100, y: 200 });
+    for (const rotation of [0, 90]) {
+        for (const labelPosition of [
+            'center',
+            'top',
+            'bottom',
+            'left',
+            'right',
+        ] as const) {
+            const current = { ...port, rotation, labelPosition };
+            const box = portBounds(current);
+            const label = portLabelLayout(current, 'console12');
+            assert.ok(
+                label.x >= -box.width / 2 &&
+                    label.x + label.width <= box.width / 2,
+            );
+            assert.ok(
+                label.y >= -box.height / 2 &&
+                    label.y + label.height <= box.height / 2,
+            );
+            assert.ok(label.fontSize > 0);
+            const larger = portLabelLayout(
+                { ...current, scale: 2 },
+                'console12',
+            );
+            assert.equal(larger.fontSize, label.fontSize * 2);
+            assert.equal(larger.width, label.width * 2);
+        }
+    }
+    const rj45 = makePort('rj45', { x: 0, y: 0 });
+    assert.equal(rj45.labelPosition, 'center');
+    for (const type of ['rj45', 'console'] as const) {
+        for (const [rotation, x, y] of [
+            [0, 0, -3],
+            [90, 3, 0],
+            [180, 0, 3],
+            [270, -3, 0],
+        ]) {
+            for (const scale of [1, 2]) {
+                const port = { ...rj45, type, x: 100, y: 200, rotation, scale };
+                const label = portLabelLayout(port, '24');
+                assert.ok(
+                    Math.abs(label.x + label.width / 2 - x * scale) < 1e-10,
+                );
+                assert.ok(
+                    Math.abs(label.y + label.height / 2 - y * scale) < 1e-10,
+                );
+            }
+        }
+    }
+});
+
+test('power labels stay outside the selected side even after rotation', () => {
+    for (const type of ['ac', 'acC19', 'acC7', 'acC5', 'dc'] as const) {
+        const port = makePort(type, { x: 100, y: 200 });
+        assert.equal(portLabelPosition(port), 'bottom');
+        assert.equal(
+            portLabelPosition({ ...port, labelPosition: 'center' }),
+            'bottom',
+        );
+        for (const rotation of [0, 90]) {
+            const current = { ...port, rotation };
+            const box = portBounds(current);
+            const top = portLabelLayout(
+                { ...current, labelPosition: 'top' },
+                'PSU 1',
+            );
+            const bottom = portLabelLayout(current, 'PSU 1');
+            const left = portLabelLayout(
+                { ...current, labelPosition: 'left' },
+                'PSU 1',
+            );
+            const right = portLabelLayout(
+                { ...current, labelPosition: 'right' },
+                'PSU 1',
+            );
+            assert.ok(top.y + top.height < -box.height / 2);
+            assert.ok(bottom.y > box.height / 2);
+            assert.ok(left.x + left.width < -box.width / 2);
+            assert.ok(right.x > box.width / 2);
+            assert.equal(bottom.fontSize, 12);
+        }
+    }
+});
+
+test('long labels stop shrinking and are marked for ellipsis without changing the stored text', () => {
+    const port = {
+        ...makePort('rj45', { x: 0, y: 0 }),
+        label: 'uplink-distribution-switch-01',
+    };
+    const short = portLabelLayout(port, '24');
+    const long = portLabelLayout(port, port.label);
+    const longer = portLabelLayout(port, port.label.repeat(2));
+    assert.equal(short.truncated, false);
+    assert.equal(short.text, '24');
+    assert.equal(long.truncated, true);
+    assert.equal(long.text, 'u…01');
+    assert.equal(long.fontSize, 8);
+    assert.equal(longer.fontSize, long.fontSize);
+    assert.equal(longer.width, long.width);
+    assert.equal(port.label, 'uplink-distribution-switch-01');
+});
+
+test('middle abbreviation keeps both ends on external labels and fits narrow ports', () => {
+    const power = makePort('ac', { x: 0, y: 0 });
+    const label = portLabelLayout(power, 'alimentazione-primaria-01');
+    assert.equal(label.text, 'alim…ia-01');
+    const small = portLabelLayout(
+        { ...makePort('usbMicroB', { x: 0, y: 0 }), rotation: 90 },
+        'console12',
+    );
+    assert.equal(small.text, '…');
+    const scaled = portLabelLayout(
+        { ...power, scale: 2 },
+        'alimentazione-primaria-01',
+    );
+    assert.equal(scaled.text, label.text);
+});
+
+test('connector categories preserve mixed groups and document stacking order', () => {
+    const face = blankDocument().faces.front;
+    face.ports = [
+        { ...makePort('rj45', { x: 20, y: 20 }), id: 'ether' },
+        { ...makePort('console', { x: 40, y: 20 }), id: 'serial' },
+        { ...makePort('sfp', { x: 60, y: 20 }), id: 'fiber', group: 'mixed' },
+        { ...makePort('dc', { x: 80, y: 20 }), id: 'power', group: 'mixed' },
+        { ...makePort('acC7', { x: 100, y: 20 }), id: 'ac' },
+    ];
+    face.order = ['ether', 'serial', 'fiber', 'power', 'ac'];
+    const before = structuredClone(face);
+    const categories = categorizedLayers(face);
+    assert.deepEqual(
+        categories.map((category) => category.id),
+        ['ac', 'mixed', 'rj45'],
+    );
+    assert.deepEqual(
+        categories.find((category) => category.id === 'mixed')!.layers,
+        [{ id: 'group:mixed', ids: ['fiber', 'power'] }],
+    );
+    assert.deepEqual(
+        categories
+            .find((category) => category.id === 'rj45')!
+            .layers.map((layer) => layer.id),
+        ['serial', 'ether'],
+    );
+    assert.deepEqual(face, before);
+});
+
+test('saved custom palette validates input and excludes duplicates and preset colors', () => {
+    assert.deepEqual(parseCustomColors(null), []);
+    assert.deepEqual(parseCustomColors('["#ABCDEF", "#abcdef", "#3b82f6"]'), [
+        '#abcdef',
+    ]);
+    for (const raw of [
+        '{}',
+        '[null]',
+        '["red"]',
+        '["#123"]',
+        '[12]',
+        'invalid',
+    ]) {
+        assert.throws(() => parseCustomColors(raw));
+    }
+});
 
 test('automatic paste preserves grouped symbols and avoids occupied bounds on repeated pastes', () => {
     const doc = blankDocument();

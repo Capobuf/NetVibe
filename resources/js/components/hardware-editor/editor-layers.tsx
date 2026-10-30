@@ -16,6 +16,16 @@ import {
     Unlock,
     X,
 } from 'lucide-react';
+import { useState } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import { Choice } from './editor-fields';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -33,6 +43,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     connectorTypes,
+    connectorCategories,
+    categorizedLayers,
+    type ConnectorCategory,
+    type FaceLayer,
     type LayerOrderAction,
     type LayerState,
 } from '@/lib/hardware-editor/document';
@@ -195,6 +209,70 @@ export function EditorLayers({
             ? `${p.label} · ${connectorTypes[p.type].name}`
             : `${connectorTypes[p.type].name} · ${e.ports.indexOf(p) + 1}`;
     };
+    const [grouping, setGrouping] = useState(false);
+    const [category, setCategory] = useState<ConnectorCategory>('rj45');
+    const categoryPorts = e.ports.filter(
+        (p) => connectorTypes[p.type].category === category,
+    );
+    const categoryChoices = Object.fromEntries(
+        Object.entries(connectorCategories).filter(([key]) =>
+            e.ports.some((p) => connectorTypes[p.type].category === key),
+        ),
+    );
+    function renderLayer(layer: FaceLayer) {
+        const ports = layer.ids.map((id) => e.ports.find((p) => p.id === id)!);
+        const selection: Selection = {
+            kind: 'ports',
+            ids: layer.ids,
+        };
+        if (!ports[0].group)
+            return (
+                <LayerRow
+                    key={layer.id}
+                    editor={e}
+                    name={portName(ports[0].id)}
+                    icon={Plug}
+                    selection={selection}
+                    state={ports[0]}
+                />
+            );
+        return (
+            <Collapsible key={layer.id}>
+                <LayerRow
+                    editor={e}
+                    name={`Gruppo · ${ports.length} porte`}
+                    icon={Group}
+                    selection={selection}
+                    state={{
+                        hidden: ports.every((p) => p.hidden),
+                        locked: ports.some((p) => p.locked),
+                    }}
+                />
+                <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="ml-2 gap-1">
+                        <ChevronDown />
+                        Porte del gruppo
+                    </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    {[...ports].reverse().map((p) => (
+                        <LayerRow
+                            key={p.id}
+                            editor={e}
+                            name={portName(p.id)}
+                            icon={Plug}
+                            child
+                            selection={{
+                                kind: 'ports',
+                                ids: [p.id],
+                            }}
+                            state={p}
+                        />
+                    ))}
+                </CollapsibleContent>
+            </Collapsible>
+        );
+    }
     return (
         <TooltipProvider delayDuration={700} skipDelayDuration={0}>
             <div className="flex h-full flex-col">
@@ -203,6 +281,29 @@ export function EditorLayers({
                         <Layers className="size-4" />
                         Livelli
                     </h2>
+                    <IconButton
+                        label="Raggruppa per categoria"
+                        variant="ghost"
+                        disabled={disabled || e.ports.length < 2}
+                        onClick={() => {
+                            setCategory(
+                                (Object.keys(categoryChoices).find(
+                                    (key) =>
+                                        e.ports.filter(
+                                            (p) =>
+                                                connectorTypes[p.type]
+                                                    .category === key,
+                                        ).length > 1,
+                                ) ??
+                                    Object.keys(
+                                        categoryChoices,
+                                    )[0]) as ConnectorCategory,
+                            );
+                            setGrouping(true);
+                        }}
+                    >
+                        <Group />
+                    </IconButton>
                     <IconButton
                         label="Chiudi livelli"
                         variant="ghost"
@@ -218,79 +319,44 @@ export function EditorLayers({
                     disabled={disabled}
                     className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2 disabled:opacity-50"
                 >
-                    {[...e.layers].reverse().map((layer) => {
-                        if (layer.id === 'image')
-                            return (
-                                picture && (
-                                    <LayerRow
-                                        key="image"
-                                        editor={e}
-                                        name="Immagine"
-                                        icon={Image}
-                                        selection={{ kind: 'image', ids: [] }}
-                                        state={picture}
-                                    />
-                                )
-                            );
-                        const ports = layer.ids.map((id) =>
-                            e.ports.find((p) => p.id === id)!,
-                        );
-                        const selection: Selection = {
-                            kind: 'ports',
-                            ids: layer.ids,
-                        };
-                        if (!ports[0].group)
-                            return (
-                                <LayerRow
-                                    key={layer.id}
-                                    editor={e}
-                                    name={portName(ports[0].id)}
-                                    icon={Plug}
-                                    selection={selection}
-                                    state={ports[0]}
-                                />
-                            );
-                        return (
-                            <Collapsible key={layer.id}>
-                                <LayerRow
-                                    editor={e}
-                                    name={`Gruppo · ${ports.length} porte`}
-                                    icon={Group}
-                                    selection={selection}
-                                    state={{
-                                        hidden: ports.every((p) => p.hidden),
-                                        locked: ports.some((p) => p.locked),
-                                    }}
-                                />
-                                <CollapsibleTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="ml-2 gap-1"
-                                    >
-                                        <ChevronDown />
-                                        Porte del gruppo
-                                    </Button>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent>
-                                    {[...ports].reverse().map((p) => (
-                                        <LayerRow
-                                            key={p.id}
-                                            editor={e}
-                                            name={portName(p.id)}
-                                            icon={Plug}
-                                            child
-                                            selection={{
-                                                kind: 'ports',
-                                                ids: [p.id],
-                                            }}
-                                            state={p}
-                                        />
-                                    ))}
-                                </CollapsibleContent>
-                            </Collapsible>
-                        );
-                    })}
+                    {picture && (
+                        <LayerRow
+                            editor={e}
+                            name="Immagine"
+                            icon={Image}
+                            selection={{ kind: 'image', ids: [] }}
+                            state={picture}
+                        />
+                    )}
+                    {categorizedLayers(e.doc.faces[e.face]).map((section) => (
+                        <Collapsible
+                            key={section.id}
+                            defaultOpen
+                            className="rounded-md border"
+                        >
+                            <CollapsibleTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    className="w-full justify-start"
+                                >
+                                    <ChevronDown />
+                                    <span className="min-w-0 flex-1 truncate text-left">
+                                        {section.name}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground tabular-nums">
+                                        {section.layers.reduce(
+                                            (count, layer) =>
+                                                count + layer.ids.length,
+                                            0,
+                                        )}
+                                    </span>
+                                </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                {section.layers.map(renderLayer)}
+                            </CollapsibleContent>
+                        </Collapsible>
+                    ))}
                     <LayerRow
                         editor={e}
                         name="Scocca"
@@ -300,6 +366,61 @@ export function EditorLayers({
                     />
                 </fieldset>
             </div>
+            <Dialog open={grouping} onOpenChange={setGrouping}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Raggruppa per categoria</DialogTitle>
+                        <DialogDescription>
+                            {categoryPorts.length} porte sul{' '}
+                            {e.face === 'front' ? 'frontale' : 'retro'}.
+                            {categoryPorts.some((p) => p.group) &&
+                                ' Le porte saranno spostate dai gruppi attuali nel nuovo gruppo.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Choice
+                        label="Categoria"
+                        value={category}
+                        choices={categoryChoices}
+                        onChange={(value) =>
+                            setCategory(value as ConnectorCategory)
+                        }
+                    />
+                    <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto rounded-md border p-3">
+                        {categoryPorts.map((p) => (
+                            <li
+                                key={p.id}
+                                className="flex items-center gap-2 text-sm"
+                            >
+                                <span
+                                    className="size-3 shrink-0 rounded-full border"
+                                    style={{ backgroundColor: p.borderColor }}
+                                />
+                                <span className="truncate">
+                                    {portName(p.id)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setGrouping(false)}
+                        >
+                            Annulla
+                        </Button>
+                        <Button
+                            disabled={disabled || categoryPorts.length < 2}
+                            onClick={() => {
+                                e.groupPorts(categoryPorts.map((p) => p.id));
+                                setGrouping(false);
+                            }}
+                        >
+                            <Group />
+                            Raggruppa {categoryPorts.length} porte
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </TooltipProvider>
     );
 }

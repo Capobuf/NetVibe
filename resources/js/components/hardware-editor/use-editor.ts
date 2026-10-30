@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { parseCustomColors } from '@/lib/hardware-editor/colors';
 import {
     arrangePorts,
+    connectorTypes,
     arrangementUnits,
     faceLayers,
     reorderLayers,
@@ -70,7 +72,9 @@ export function useEditor(userId: number) {
         null,
     );
     const savingRef = useRef(false);
-    const clipboard = useRef<Port[] | null>(null);
+    const [customColors, setCustomColors] = useState<string[]>([]);
+    const [paletteReady, setPaletteReady] = useState(false);
+    const [clipboard, setClipboard] = useState<Port[] | null>(null);
     const pastePoint = useRef<Point | undefined>(undefined);
     const doc = history.current;
     const dirty = saved !== doc;
@@ -96,7 +100,7 @@ export function useEditor(userId: number) {
             : null;
 
     useEffect(() => {
-        clipboard.current = null;
+        setClipboard(null);
         pastePoint.current = undefined;
         let cancelled = false;
         async function restore() {
@@ -131,6 +135,38 @@ export function useEditor(userId: number) {
             cancelled = true;
         };
     }, [userId]);
+
+    useEffect(() => {
+        setPaletteReady(false);
+        setCustomColors([]);
+        try {
+            setCustomColors(
+                parseCustomColors(
+                    localStorage.getItem(`netvibe:port-colors:${userId}`),
+                ),
+            );
+            setPaletteReady(true);
+        } catch {
+            toast.error(
+                'Impossibile leggere i colori salvati. Verifica i dati del sito nel browser e ricarica.',
+            );
+        }
+    }, [userId]);
+    function saveCustomColors(colors: string[]) {
+        if (!paletteReady) return;
+        try {
+            const next = parseCustomColors(JSON.stringify(colors));
+            localStorage.setItem(
+                `netvibe:port-colors:${userId}`,
+                JSON.stringify(next),
+            );
+            setCustomColors(next);
+        } catch {
+            toast.error(
+                'Impossibile salvare la palette. Consenti il salvataggio dei dati del sito nel browser.',
+            );
+        }
+    }
 
     useEffect(() => {
         pastePoint.current = undefined;
@@ -286,6 +322,24 @@ export function useEditor(userId: number) {
             ),
         );
     }
+    function setRj45Function(type: 'rj45' | 'console') {
+        setPortList(
+            ports.map((p) =>
+                selection.ids.includes(p.id) &&
+                (p.type === 'rj45' || p.type === 'console')
+                    ? {
+                          ...p,
+                          type,
+                          poe: type === 'rj45' && p.poe,
+                          borderColor:
+                              p.borderColor === connectorTypes[p.type].color
+                                  ? connectorTypes[type].color
+                                  : p.borderColor,
+                      }
+                    : p,
+            ),
+        );
+    }
     function patchImage(patch: Partial<PanelImage>) {
         const image = doc.faces[face].image;
         if (image)
@@ -346,7 +400,7 @@ export function useEditor(userId: number) {
     }
     function copy() {
         if (!selected.length) return false;
-        clipboard.current = selected.map((port) => ({ ...port }));
+        setClipboard(selected.map((port) => ({ ...port })));
         pastePoint.current = undefined;
         return true;
     }
@@ -368,13 +422,8 @@ export function useEditor(userId: number) {
         return true;
     }
     function paste() {
-        if (!clipboard.current) return false;
-        const copies = pastePorts(
-            doc,
-            face,
-            clipboard.current,
-            pastePoint.current,
-        );
+        if (!clipboard) return false;
+        const copies = pastePorts(doc, face, clipboard, pastePoint.current);
         if (!commit(updatePorts(doc, face, [...ports, ...copies])))
             return false;
         pastePoint.current = undefined;
@@ -385,8 +434,16 @@ export function useEditor(userId: number) {
     function setPastePoint(point: Point) {
         pastePoint.current = point;
     }
-    function groupPorts() {
-        patchPorts({ group: newId() });
+    function groupPorts(ids = selection.ids) {
+        if (ids.length < 2) return;
+        const group = newId();
+        if (
+            !setPortList(
+                ports.map((p) => (ids.includes(p.id) ? { ...p, group } : p)),
+            )
+        )
+            return;
+        setSelection({ kind: 'ports', ids });
         setEnteredGroup(null);
     }
     function ungroup() {
@@ -415,11 +472,11 @@ export function useEditor(userId: number) {
         );
         setPortList(ports.map((p) => arranged.get(p.id) ?? p));
     }
-    function rotate() {
+    function rotate(degrees: 90 | 180 = 90) {
         setPortList(
             ports.map((p) =>
                 selection.ids.includes(p.id) && !portLocked(p)
-                    ? { ...p, rotation: (p.rotation + 90) % 360 }
+                    ? { ...p, rotation: (p.rotation + degrees) % 360 }
                     : p,
             ),
         );
@@ -625,6 +682,9 @@ export function useEditor(userId: number) {
         opacityPreview,
         setOpacityPreview,
         borderColorPreview,
+        customColors,
+        paletteReady,
+        saveCustomColors,
         setBorderColorPreview,
         face,
         setFace,
@@ -650,6 +710,7 @@ export function useEditor(userId: number) {
         redo,
         setPortList,
         patchPorts,
+        setRj45Function,
         patchImage,
         fitImage,
         remove,
@@ -657,6 +718,7 @@ export function useEditor(userId: number) {
         copy,
         cut,
         paste,
+        canPaste: clipboard !== null,
         setPastePoint,
         groupPorts,
         ungroup,

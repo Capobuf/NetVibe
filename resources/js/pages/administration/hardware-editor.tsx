@@ -720,6 +720,10 @@ export default function HardwareEditor() {
                                 <EditorContextMenu
                                     editor={e}
                                     add={(type) => add(type, contextPoint)}
+                                    paste={() => {
+                                        e.setPastePoint(contextPoint);
+                                        e.paste();
+                                    }}
                                     properties={properties}
                                     label={label}
                                     image={image}

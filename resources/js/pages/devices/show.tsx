@@ -1,20 +1,14 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
-import {
-    ArrowLeft,
-    Trash2,
-    Unlink,
-    Network,
-    Zap,
-    Pencil,
-    X,
-} from 'lucide-react';
+import { ArrowLeft, Trash2, Unlink, Pencil, X } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceTable } from '@/components/devices/device-table';
 import {
     PanelViewer,
     type PortAnchor,
 } from '@/components/devices/panel-viewer';
+import { NewIpMenu } from '@/components/devices/new-ip-menu';
+import { InterfaceDetails } from '@/components/devices/interface-details';
 import { InterfaceForm } from '@/components/devices/interface-form';
 import {
     LinkIpForm,
@@ -44,19 +38,12 @@ import {
     PopoverTitle,
 } from '@/components/ui/popover';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
     index,
     show,
     destroy,
     deletionImpact,
 } from '@/routes/companies/sites/devices';
-import { destroy as unlink } from '@/routes/companies/sites/devices/ip-addresses';
+import { ReleaseIp } from '@/components/devices/release-ip';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { connectorTypes, type Port } from '@/lib/hardware-editor/document';
 import { interfaceName, type Device, type Manufacturer } from '@/types/device';
@@ -80,6 +67,7 @@ type Props = {
     device: Device;
     manufacturers: Manufacturer[];
     assetUrls: Record<string, string>;
+    initialInterfaceId: number | null;
     ips: LinkedIp[];
     availableIps: AvailableIp[];
     subnets: (Subnet & { excludedRanges: ExcludedRange[] })[];
@@ -97,20 +85,48 @@ export default function DeviceShow({
     subnets,
     statuses,
     tags,
+    initialInterfaceId,
 }: Props) {
     const { companyNavigation } = usePage().props;
     const [deleting, setDeleting] = useState(false);
+    const [releasingIp, setReleasingIp] = useState<{
+        id: number;
+        ip: string;
+    } | null>(null);
+    const releaseFocus = useRef<HTMLElement | null>(null);
+    function releaseIp(ip: { id: number; ip: string }, trigger: HTMLElement) {
+        releaseFocus.current = trigger;
+        setReleasingIp(ip);
+        setPortOpen(false);
+    }
     const [port, setPort] = useState<Port | null>(null);
     const [portOpen, setPortOpen] = useState(false);
     const portAnchor = useRef<PortAnchor | null>(null);
     const portFocus = useRef<HTMLElement | null>(null);
     const portTitleId = useId();
-    const [interfaceId, setInterfaceId] = useState<number | null>(null);
+    const initialInterface = device.interfaces.find(
+        (item) => item.id === initialInterfaceId,
+    );
+    const initialPort = device.model?.panel
+        ? [
+              ...device.model.panel.faces.front.ports,
+              ...device.model.panel.faces.rear.ports,
+          ].find(
+              (port) =>
+                  port.id === initialInterface?.connector_id && !port.hidden,
+          )
+        : undefined;
+    const [interfaceId, setInterfaceId] = useState<number | null>(
+        initialPort ? null : initialInterfaceId,
+    );
+    const [documentingInterfaceId, setDocumentingInterfaceId] = useState<
+        number | undefined
+    >();
     const [documentingSubnet, setDocumentingSubnet] = useState<
         Props['subnets'][number] | null
     >(null);
     const returnFocus = useRef<HTMLElement | null>(null);
-    const documentIpTrigger = useRef<HTMLButtonElement>(null);
+    const documentIpTrigger = useRef<HTMLButtonElement | null>(null);
     const editingInterface = device.interfaces.find(
         (item) => item.id === interfaceId,
     );
@@ -222,6 +238,7 @@ export default function DeviceShow({
                 </header>
                 {panel && (
                     <PanelViewer
+                        initialPortId={initialPort?.id}
                         panel={panel}
                         assetUrls={assetUrls}
                         onPort={(port, anchor) => {
@@ -256,42 +273,14 @@ export default function DeviceShow({
                                 ports={ports}
                                 ips={availableIps}
                             />
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm">
-                                        <Network data-icon="inline-start" />
-                                        Documenta nuovo IP
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuGroup>
-                                        {subnets.map((subnet) => (
-                                            <DropdownMenuItem
-                                                key={subnet.id}
-                                                asChild
-                                            >
-                                                <Link
-                                                    href={subnetShow({
-                                                        company: company.id,
-                                                        site: site.id,
-                                                        subnet: subnet.id,
-                                                    })}
-                                                >
-                                                    {subnet.cidr}
-                                                    {subnet.name
-                                                        ? ` · ${subnet.name}`
-                                                        : ''}
-                                                </Link>
-                                            </DropdownMenuItem>
-                                        ))}
-                                        {!subnets.length && (
-                                            <DropdownMenuItem disabled>
-                                                Nessuna subnet nella sede
-                                            </DropdownMenuItem>
-                                        )}
-                                    </DropdownMenuGroup>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <NewIpMenu
+                                subnets={subnets}
+                                onSelect={(subnet, trigger) => {
+                                    documentIpTrigger.current = trigger;
+                                    setDocumentingInterfaceId(undefined);
+                                    setDocumentingSubnet(subnet);
+                                }}
+                            />
                         </div>
                     </div>
                     <TabsContent value="interfaces" className="pt-4">
@@ -429,15 +418,9 @@ export default function DeviceShow({
                             }
                             actions={(ip) => (
                                 <IconButton
-                                    label={`Scollega ${ip.ip}`}
-                                    onClick={() =>
-                                        router.delete(
-                                            unlink.url({
-                                                ...route,
-                                                ipAddress: ip.id,
-                                            }),
-                                            { preserveScroll: true },
-                                        )
+                                    label={`Scollega e libera ${ip.ip}`}
+                                    onClick={(event) =>
+                                        releaseIp(ip, event.currentTarget)
                                     }
                                 >
                                     <Unlink />
@@ -454,7 +437,7 @@ export default function DeviceShow({
                     key={editingInterface.id}
                     item={editingInterface}
                     ports={ports}
-                    linkedIps={interfaceIps.map((ip) => ip.ip)}
+                    linkedIps={interfaceIps}
                     open
                     description={`${device.name} · ${editingInterface.kind === 'logical' ? 'Interfaccia logica' : 'Interfaccia fisica'}`}
                     onOpenChange={(open) => {
@@ -482,48 +465,16 @@ export default function DeviceShow({
                                     ips={availableIps}
                                     initialInterface={editingInterface.id}
                                 />
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            ref={documentIpTrigger}
-                                            variant="outline"
-                                            size="sm"
-                                        >
-                                            <Network data-icon="inline-start" />
-                                            Documenta nuovo IP
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        onCloseAutoFocus={(event) => {
-                                            if (documentingSubnet)
-                                                event.preventDefault();
-                                        }}
-                                    >
-                                        <DropdownMenuGroup>
-                                            {subnets.map((subnet) => (
-                                                <DropdownMenuItem
-                                                    key={subnet.id}
-                                                    onSelect={() =>
-                                                        setDocumentingSubnet(
-                                                            subnet,
-                                                        )
-                                                    }
-                                                >
-                                                    {subnet.cidr}
-                                                    {subnet.name
-                                                        ? ` · ${subnet.name}`
-                                                        : ''}
-                                                </DropdownMenuItem>
-                                            ))}
-                                            {!subnets.length && (
-                                                <DropdownMenuItem disabled>
-                                                    Nessuna subnet nella sede
-                                                </DropdownMenuItem>
-                                            )}
-                                        </DropdownMenuGroup>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                <NewIpMenu
+                                    subnets={subnets}
+                                    onSelect={(subnet, trigger) => {
+                                        documentIpTrigger.current = trigger;
+                                        setDocumentingInterfaceId(
+                                            editingInterface.id,
+                                        );
+                                        setDocumentingSubnet(subnet);
+                                    }}
+                                />
                             </div>
                         </div>
                         {interfaceIps.length ? (
@@ -548,15 +499,11 @@ export default function DeviceShow({
                                             </p>
                                         </div>
                                         <IconButton
-                                            label={`Scollega ${ip.ip}`}
-                                            variant="ghost"
-                                            onClick={() =>
-                                                router.delete(
-                                                    unlink.url({
-                                                        ...route,
-                                                        ipAddress: ip.id,
-                                                    }),
-                                                    { preserveScroll: true },
+                                            label={`Scollega e libera ${ip.ip}`}
+                                            onClick={(event) =>
+                                                releaseIp(
+                                                    ip,
+                                                    event.currentTarget,
                                                 )
                                             }
                                         >
@@ -601,7 +548,7 @@ export default function DeviceShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        if (!interfaceId)
+                        if (!interfaceId && !documentingSubnet && !releasingIp)
                             portFocus.current?.focus({ preventScroll: true });
                     }}
                 >
@@ -627,43 +574,18 @@ export default function DeviceShow({
                             </Button>
                         </PopoverHeader>
                         {port && (
-                            <div className="flex flex-col gap-4">
-                                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-                                    <dt className="text-muted-foreground">
-                                        Connettore
-                                    </dt>
-                                    <dd>{connectorTypes[port.type].name}</dd>
-                                    {port.poe && (
+                            <InterfaceDetails
+                                company={company.id}
+                                site={site.id}
+                                item={selected}
+                                port={port}
+                                ips={ips.filter(
+                                    (ip) =>
+                                        ip.device_interface_id === selected?.id,
+                                )}
+                                actions={
+                                    selected && (
                                         <>
-                                            <dt className="text-muted-foreground">
-                                                Capacità
-                                            </dt>
-                                            <dd className="flex items-center gap-1">
-                                                <Zap className="size-4" />
-                                                PoE
-                                            </dd>
-                                        </>
-                                    )}
-                                    {selected && (
-                                        <>
-                                            <dt className="text-muted-foreground">
-                                                Alias locale
-                                            </dt>
-                                            <dd className="break-words">
-                                                {selected.name || '—'}
-                                            </dd>
-                                            <dt className="text-muted-foreground">
-                                                MAC interfaccia
-                                            </dt>
-                                            <dd className="font-mono break-all">
-                                                {selected.mac_address || '—'}
-                                            </dd>
-                                        </>
-                                    )}
-                                </dl>
-                                {selected && (
-                                    <>
-                                        <div className="flex flex-wrap gap-2">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -678,74 +600,67 @@ export default function DeviceShow({
                                                 <Pencil data-icon="inline-start" />
                                                 Modifica interfaccia
                                             </Button>
-                                        </div>
-                                        <div className="flex flex-col gap-3">
-                                            {ips
-                                                .filter(
-                                                    (ip) =>
-                                                        ip.device_interface_id ===
+                                            <NewIpMenu
+                                                subnets={subnets}
+                                                onSelect={(subnet) => {
+                                                    documentIpTrigger.current =
+                                                        null;
+                                                    setDocumentingInterfaceId(
                                                         selected.id,
-                                                )
-                                                .map((ip) => (
-                                                    <div
-                                                        key={ip.id}
-                                                        className="flex items-center justify-between gap-2 rounded-lg border p-3"
-                                                    >
-                                                        <div>
-                                                            <TextLink
-                                                                href={ipUrl(ip)}
-                                                                className="font-mono"
-                                                            >
-                                                                {ip.ip}
-                                                            </TextLink>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {ip.subnet.cidr}
-                                                                {ip.hostname
-                                                                    ? ` · ${ip.hostname}`
-                                                                    : ''}
-                                                            </p>
-                                                        </div>
-                                                        <IconButton
-                                                            label={`Scollega ${ip.ip}`}
-                                                            onClick={() =>
-                                                                router.delete(
-                                                                    unlink.url({
-                                                                        ...route,
-                                                                        ipAddress:
-                                                                            ip.id,
-                                                                    }),
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                        >
-                                                            <Unlink />
-                                                        </IconButton>
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    </>
+                                                    );
+                                                    setDocumentingSubnet(
+                                                        subnet,
+                                                    );
+                                                    setPortOpen(false);
+                                                }}
+                                            />
+                                        </>
+                                    )
+                                }
+                                ipActions={(ip) => (
+                                    <IconButton
+                                        label={`Scollega e libera ${ip.ip}`}
+                                        onClick={(event) =>
+                                            releaseIp(ip, event.currentTarget)
+                                        }
+                                    >
+                                        <Unlink />
+                                    </IconButton>
                                 )}
-                            </div>
+                            />
                         )}
                     </div>
                     <PopoverArrow />
                 </PopoverContent>
             </Popover>
-            {documentingSubnet && editingInterface && (
+            {releasingIp && (
+                <ReleaseIp
+                    {...route}
+                    ip={releasingIp}
+                    onClose={() => setReleasingIp(null)}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        (releaseFocus.current?.isConnected
+                            ? releaseFocus.current
+                            : portFocus.current
+                        )?.focus();
+                    }}
+                />
+            )}
+            {documentingSubnet && (
                 <IpAddressForm
                     key={documentingSubnet.id}
                     companyId={company.id}
                     siteId={site.id}
                     subnetId={documentingSubnet.id}
+                    devices={[device]}
                     excludedRanges={documentingSubnet.excludedRanges}
                     statuses={statuses}
                     tags={tags}
                     assignment={{
                         deviceId: device.id,
-                        interfaceId: editingInterface.id,
-                        label: `${device.name} · ${interfaceName(editingInterface, ports)} · ${documentingSubnet.cidr}`,
+                        interfaceId: documentingInterfaceId,
+                        label: `${device.name} · ${documentingSubnet.cidr}`,
                     }}
                     open
                     onOpenChange={(open) => {
@@ -753,7 +668,9 @@ export default function DeviceShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        documentIpTrigger.current?.focus();
+                        (
+                            documentIpTrigger.current ?? portFocus.current
+                        )?.focus();
                     }}
                 />
             )}

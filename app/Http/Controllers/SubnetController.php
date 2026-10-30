@@ -10,6 +10,7 @@ use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\DeletionImpact;
+use App\Support\DeviceAssignment;
 use App\Support\Ipv4Cidr;
 use App\Support\Ipv4Ranges;
 use App\Support\SubnetAddressTable;
@@ -44,7 +45,7 @@ class SubnetController extends Controller
     {
         $options = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
-            'sort' => ['nullable', 'in:ip,hostname,mac_address,description,status,tags'],
+            'sort' => ['nullable', 'in:ip,hostname,mac_address,description,status,tags,device'],
             'direction' => ['sometimes', 'in:asc,desc'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:85899346'],
             'ip_address' => ['sometimes', 'integer', 'min:1'],
@@ -55,7 +56,7 @@ class SubnetController extends Controller
 
         $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
         $selected = isset($options['ip_address'])
-            ? $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
+            ? $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
             : null;
 
         return Inertia::render('subnets/show', [
@@ -78,7 +79,7 @@ class SubnetController extends Controller
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
             'initialIpAddress' => $selected ? [
-                ...$selected->only('id', 'hostname', 'mac_address', 'description'),
+                ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label'),
                 'ip' => long2ip($selected->address),
                 'device_id' => $selected->device_id, 'device_interface_id' => $selected->device_interface_id,
                 'device' => $selected->device, 'device_interface' => $selected->deviceInterface,

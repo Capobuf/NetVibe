@@ -1,3 +1,4 @@
+import { MacConfirmation } from '@/components/devices/mac-confirmation';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
 import { Link2 } from 'lucide-react';
@@ -29,6 +30,7 @@ export type AvailableIp = {
     id: number;
     ip: string;
     hostname: string | null;
+    mac_address: string | null;
     description: string | null;
     subnet: { id: number; cidr: string };
 };
@@ -218,6 +220,7 @@ export function LinkIpForm({
                                     />
                                 </Field>
                             )}
+                            <MacConfirmation errors={errors} />
                             <DialogFooter>
                                 <DialogClose asChild>
                                     <Button type="button" variant="outline">
@@ -225,7 +228,9 @@ export function LinkIpForm({
                                     </Button>
                                 </DialogClose>
                                 <Button disabled={processing || !selection}>
-                                    Collega
+                                    {errors.mac_confirmation
+                                        ? 'Sostituisci MAC'
+                                        : 'Collega'}
                                 </Button>
                             </DialogFooter>
                         </FieldGroup>

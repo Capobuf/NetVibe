@@ -1,3 +1,4 @@
+import { MacConfirmation } from '@/components/devices/mac-confirmation';
 import { Form } from '@inertiajs/react';
 import { useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
@@ -50,7 +51,7 @@ export function InterfaceForm({
     device: number;
     item?: DeviceInterface;
     ports: Port[];
-    linkedIps?: string[];
+    linkedIps?: { id: number; ip: string }[];
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
@@ -59,11 +60,13 @@ export function InterfaceForm({
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
+    const [confirmingMac, setConfirmingMac] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const id = useId();
     function setOpen(value: boolean) {
         (onOpenChange ?? setInternalOpen)(value);
         setRemoving(false);
+        setConfirmingMac(false);
     }
     const [removing, setRemoving] = useState(false);
     const route = { company, site, device };
@@ -107,11 +110,28 @@ export function InterfaceForm({
                         action={destroy.form({ ...route, interface: item.id })}
                         onCancel={() => setRemoving(false)}
                         onSuccess={() => setOpen(false)}
+                        submitLabel="Elimina interfaccia e libera IP"
+                        confirmationKey={JSON.stringify(linkedIps)}
+                        fields={() =>
+                            linkedIps.map((ip) => (
+                                <input
+                                    key={ip.id}
+                                    type="hidden"
+                                    name="ip_ids[]"
+                                    value={ip.id}
+                                />
+                            ))
+                        }
                     >
                         <p>
-                            L’interfaccia verrà eliminata. Gli IP{' '}
-                            {linkedIps.join(', ') || 'eventualmente collegati'}{' '}
-                            saranno scollegati e conservati nell’IPAM.
+                            L’interfaccia verrà eliminata insieme ai{' '}
+                            {linkedIps.length} record IP collegati
+                            {linkedIps.length > 0 &&
+                                ` (${linkedIps.map((ip) => ip.ip).join(', ')})`}
+                            . Verranno rimossi hostname, descrizione, MAC, stato
+                            e associazioni ai tag di questi IP. Gli indirizzi
+                            torneranno liberi; quelli esclusi resteranno esclusi
+                            dai suggerimenti.
                         </p>
                     </DeletionConfirmation>
                 ) : (
@@ -121,6 +141,9 @@ export function InterfaceForm({
                             errorBag="interface"
                             onStart={() => setSubmitting(true)}
                             onFinish={() => setSubmitting(false)}
+                            onError={(errors) =>
+                                setConfirmingMac(!!errors.mac_confirmation)
+                            }
                             {...(item
                                 ? update.form({ ...route, interface: item.id })
                                 : store.form(route))}
@@ -214,6 +237,9 @@ export function InterfaceForm({
                                             message={errors.mac_address}
                                         />
                                     </Field>
+                                    <div className="sm:col-span-2">
+                                        <MacConfirmation errors={errors} />
+                                    </div>
                                 </FieldGroup>
                             )}
                         </Form>
@@ -245,7 +271,7 @@ export function InterfaceForm({
                                 form={`${id}-form`}
                                 disabled={submitting}
                             >
-                                Salva
+                                {confirmingMac ? 'Sostituisci MAC' : 'Salva'}
                             </Button>
                         </DialogFooter>
                     </>

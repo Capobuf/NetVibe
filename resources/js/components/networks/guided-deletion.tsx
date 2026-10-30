@@ -169,7 +169,7 @@ export function GuidedDeletion({
                 onSuccess={onSuccess}
                 onError={() => setStale(true)}
                 disabled={stale}
-                submitLabel="Elimina dispositivo"
+                submitLabel="Elimina dispositivo e libera IP"
                 fields={(processing) => (
                     <>
                         <input
@@ -195,7 +195,7 @@ export function GuidedDeletion({
                     <div className="flex flex-col gap-2 text-sm">
                         <p>
                             {impact.interfaces.length} interfacce da eliminare ·{' '}
-                            {impact.ips.length} IP da scollegare
+                            {impact.ips.length} record IP da eliminare
                         </p>
                         <ul className="max-h-52 overflow-y-auto">
                             {impact.ips.map((ip) => (
@@ -209,9 +209,10 @@ export function GuidedDeletion({
                 }
             >
                 <p>
-                    «{impact.device.name}» e le sue interfacce saranno
-                    eliminati. Gli IP resteranno documentati con hostname,
-                    descrizione, MAC, stato e tag.
+                    «{impact.device.name}» e le sue interfacce saranno eliminati
+                    insieme ai record IP elencati, con hostname, descrizione,
+                    MAC, stato e associazioni ai tag. Gli indirizzi torneranno
+                    liberi; quelli esclusi resteranno esclusi dai suggerimenti.
                 </p>
             </DeletionConfirmation>
         );

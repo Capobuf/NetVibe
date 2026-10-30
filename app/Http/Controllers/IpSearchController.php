@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\IpAddress;
 use App\Models\Site;
+use App\Support\DeviceAssignment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,6 +16,7 @@ class IpSearchController extends Controller
     {
         $columns = [
             'ip' => 'ip_addresses.address',
+            'device' => 'assignment_label',
             'hostname' => 'ip_addresses.hostname',
             'mac_address' => 'ip_addresses.mac_address',
             'site' => 'sites.name',
@@ -38,16 +40,18 @@ class IpSearchController extends Controller
             ->join('sites', 'sites.id', '=', 'subnets.site_id')
             ->where('sites.company_id', $company->id)
             ->select([
-                'ip_addresses.id', 'ip_addresses.address', 'ip_addresses.hostname', 'ip_addresses.mac_address',
+                'ip_addresses.device_id', 'ip_addresses.device_interface_id', 'ip_addresses.id', 'ip_addresses.address', 'ip_addresses.hostname', 'ip_addresses.mac_address',
                 'sites.id as site_id', 'sites.name as site',
                 'subnets.id as subnet_id', 'subnets.cidr as subnet',
             ])
+            ->selectRaw(DeviceAssignment::labelSql().' as assignment_label')
+            ->with(['device:id,name', 'deviceInterface:id,device_id,name,kind,connector_id,mac_address'])
             ->when($search === '', fn ($query) => $query->whereRaw('1 = 0'))
             ->where(function ($query) use ($pattern) {
                 $query->whereRaw("INET_NTOA(ip_addresses.address) LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereRaw("ip_addresses.hostname LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereRaw("ip_addresses.mac_address LIKE ? ESCAPE '!'", [$pattern])
-                    ->orWhereHas('device', fn ($q) => $q->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
+                    ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern]);
             })
             ->when($group === 'site', fn ($query) => $query
                 ->orderBy('sites.name', $sort === 'site' ? $direction : 'asc')->orderBy('sites.id'))

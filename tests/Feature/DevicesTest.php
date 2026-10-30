@@ -59,7 +59,7 @@ class DevicesTest extends TestCase
         $this->assertDatabaseCount('ip_addresses', 0);
     }
 
-    public function test_multiple_ips_and_independent_macs_survive_interface_and_device_deletion(): void
+    public function test_deleting_an_interface_or_device_frees_only_its_ips_and_preserves_exclusions(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
@@ -70,25 +70,75 @@ class DevicesTest extends TestCase
         $interface = $device->interfaces()->create(['name' => 'Management', 'kind' => 'logical', 'mac_address' => 'AA:BB:CC:DD:EE:01']);
         $store = route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]);
         foreach (['10.0.0.1', '10.0.0.2'] as $address) {
-            $this->post($store, ['ip' => $address, 'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => 'AA:BB:CC:DD:EE:02'])
+            $this->post($store, ['ip' => $address, 'device_id' => $device->id, 'device_interface_id' => $interface->id])
                 ->assertSessionHasNoErrors();
         }
         $this->assertDatabaseCount('ip_addresses', 2);
         $this->assertSame('AA:BB:CC:DD:EE:01', $interface->fresh()->mac_address);
+        $ips = $interface->ipAddresses()->get();
+        $this->assertSame(['AA:BB:CC:DD:EE:01', 'AA:BB:CC:DD:EE:01'], $ips->pluck('mac_address')->all());
+        $tag = $company->tags()->create(['name' => 'Management', 'color' => 'blue']);
+        $ips->each(fn ($ip) => $ip->tags()->attach($tag));
+        $range = $subnet->excludedRanges()->create(['start_address' => ip2long('10.0.0.1'), 'end_address' => ip2long('10.0.0.1')]);
+        $standalone = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.3'), 'hostname' => 'standalone']);
         $this->get(route('companies.sites.search.index', [$company, $site, 'search' => 'Server']))
             ->assertInertia(fn (Assert $page) => $page->where('results.total', 2));
-        $this->delete(route('companies.sites.devices.interfaces.destroy', [$company, $site, $device, $interface]), ['confirmed' => true])
+        $deleteInterface = route('companies.sites.devices.interfaces.destroy', [$company, $site, $device, $interface]);
+        $this->delete($deleteInterface, ['confirmed' => true, 'ip_ids' => [$ips[0]->id]])->assertSessionHasErrors('confirmed');
+        $this->assertModelExists($interface);
+        $this->assertModelExists($ips[1]);
+        $this->delete($deleteInterface, ['confirmed' => true, 'ip_ids' => $ips->modelKeys()])
             ->assertSessionHasNoErrors();
-        $ip = $subnet->ipAddresses()->orderBy('id')->first();
-        $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'device_id' => null, 'device_interface_id' => null, 'mac_address' => 'AA:BB:CC:DD:EE:02']);
-        $this->post(route('companies.sites.devices.ip-addresses.store', [$company, $site, $device]), ['ip_address_id' => $ip->id])
+        $this->assertModelMissing($interface);
+        $ips->each(fn ($ip) => $this->assertModelMissing($ip));
+        $this->assertDatabaseCount('ip_address_tag', 0);
+        $this->assertModelExists($tag);
+        $this->assertModelExists($range);
+        $this->post($store, ['ip' => '10.0.0.2', 'device_id' => $device->id])
             ->assertSessionHasNoErrors();
+        $deviceIp = $device->ipAddresses()->sole();
         $impact = $this->getJson(route('companies.sites.devices.deletion-impact', [$company, $site, $device]))->assertOk()->json();
         $this->delete(route('companies.sites.devices.destroy', [$company, $site, $device]), ['confirmed' => true, 'impact_token' => $impact['impact_token']])
             ->assertSessionHasNoErrors();
         $this->assertModelMissing($device);
-        $this->assertDatabaseCount('ip_addresses', 2);
-        $this->assertDatabaseHas('ip_addresses', ['id' => $ip->id, 'device_id' => null, 'mac_address' => 'AA:BB:CC:DD:EE:02']);
+        $this->assertModelMissing($deviceIp);
+        $this->assertModelExists($standalone);
+        $this->assertModelExists($range);
+        $this->assertDatabaseCount('ip_addresses', 1);
+    }
+
+    public function test_clearing_an_ip_assignment_requires_confirmed_release_instead_of_preserving_metadata(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $device = $site->devices()->create(['name' => 'Server', 'manufacturer_id' => $vendor->id]);
+        $interface = $device->interfaces()->create(['name' => 'eth0', 'mac_address' => 'AA:BB:CC:DD:EE:01']);
+        $ip = $subnet->ipAddresses()->create([
+            'address' => ip2long('10.0.0.1'), 'hostname' => 'server', 'description' => 'Management',
+            'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => $interface->mac_address,
+        ]);
+        $tag = $company->tags()->create(['name' => 'Server', 'color' => 'blue']);
+        $ip->tags()->attach($tag);
+        $update = route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ip]);
+        $delete = route('companies.sites.subnets.ip-addresses.destroy', [$company, $site, $subnet, $ip]);
+        $this->patch($update, ['ip' => '10.0.0.1', 'hostname' => 'server', 'device_id' => $device->id])->assertSessionHasErrors('device_interface_id');
+        $this->patch($update, ['ip' => '10.0.0.1', 'hostname' => 'server'])->assertSessionHasErrors('device_id');
+        $this->post(route('companies.sites.devices.ip-addresses.store', [$company, $site, $device]), ['ip_address_id' => $ip->id])
+            ->assertSessionHasErrors('device_interface_id');
+        $this->delete($delete)->assertSessionHasErrors('confirmed');
+        $this->assertSame($interface->id, $ip->fresh()->device_interface_id);
+        $this->assertDatabaseHas('ip_address_tag', ['ip_address_id' => $ip->id, 'tag_id' => $tag->id]);
+        $this->delete($delete, ['confirmed' => true])->assertSessionHasNoErrors();
+        $this->assertModelMissing($ip);
+        $this->assertDatabaseCount('ip_address_tag', 0);
+        $this->assertModelExists($tag);
+        $this->assertSame('AA:BB:CC:DD:EE:01', $interface->fresh()->mac_address);
+        $this->post(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), ['ip' => '10.0.0.1', 'hostname' => 'new-host'])
+            ->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ip_addresses', ['address' => ip2long('10.0.0.1'), 'hostname' => 'new-host', 'mac_address' => null, 'device_id' => null]);
     }
 
     public function test_persisted_panel_images_and_stable_interfaces_survive_geometry_changes_and_reject_structural_loss(): void
@@ -243,6 +293,114 @@ class DevicesTest extends TestCase
             ->has('availableIps', 2)->where('availableIps.0.ip', '10.0.0.1')->where('availableIps.1.ip', '10.0.0.2')
             ->has('subnets', 1)->where('subnets.0.id', $subnet->id)
             ->where('subnets.0.excludedRanges.0.start_ip', '10.0.0.100'));
+    }
+
+    public function test_mac_changes_are_atomic_confirmed_and_shared_in_both_directions(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $device = $site->devices()->create(['name' => 'Server', 'manufacturer_id' => $vendor->id]);
+        $interface = $device->interfaces()->create(['name' => 'eth0', 'kind' => 'physical', 'mac_address' => 'AA:BB:CC:DD:EE:01']);
+        $ips = collect([1, 2])->map(fn ($last) => $subnet->ipAddresses()->create([
+            'address' => ip2long('10.0.0.'.$last), 'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => 'AA:BB:CC:DD:EE:01',
+        ]));
+        $interfaceUrl = route('companies.sites.devices.interfaces.update', [$company, $site, $device, $interface]);
+        $change = ['name' => 'eth0', 'kind' => 'physical', 'mac_address' => 'AA:BB:CC:DD:EE:02'];
+
+        $preview = $this->patchJson($interfaceUrl, $change)->assertUnprocessable()->assertJsonValidationErrors('mac_confirmation');
+        $this->assertSame('AA:BB:CC:DD:EE:01', $interface->fresh()->mac_address);
+        $this->assertSame(['AA:BB:CC:DD:EE:01', 'AA:BB:CC:DD:EE:01'], $interface->ipAddresses()->orderBy('id')->pluck('mac_address')->all());
+        $this->patchJson($interfaceUrl, [...$change, 'mac_confirmation_token' => $preview->json('errors.mac_confirmation_token.0')])->assertRedirect();
+        $this->assertSame('AA:BB:CC:DD:EE:02', $interface->fresh()->mac_address);
+        $this->assertSame(['AA:BB:CC:DD:EE:02', 'AA:BB:CC:DD:EE:02'], $interface->ipAddresses()->orderBy('id')->pluck('mac_address')->all());
+
+        $ipUrl = route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $ips[0]]);
+        $change = ['ip' => '10.0.0.1', 'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => 'AA:BB:CC:DD:EE:03'];
+        $preview = $this->patchJson($ipUrl, $change)->assertUnprocessable();
+        $this->patchJson($ipUrl, [...$change, 'mac_confirmation_token' => $preview->json('errors.mac_confirmation_token.0')])->assertRedirect();
+        $this->assertSame('AA:BB:CC:DD:EE:03', $interface->fresh()->mac_address);
+        $this->assertSame(['AA:BB:CC:DD:EE:03', 'AA:BB:CC:DD:EE:03'], $interface->ipAddresses()->orderBy('id')->pluck('mac_address')->all());
+
+        $this->delete(route('companies.sites.devices.ip-addresses.destroy', [$company, $site, $device, $ips[0]]))->assertSessionHasErrors('confirmed');
+        $this->assertModelExists($ips[0]);
+        $this->delete(route('companies.sites.devices.ip-addresses.destroy', [$company, $site, $device, $ips[0]]), ['confirmed' => true])->assertSessionHasNoErrors();
+        $this->assertModelMissing($ips[0]);
+        $this->postJson(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), ['ip' => '10.0.0.1', 'device_id' => $device->id, 'mac_address' => 'AA:BB:CC:DD:EE:04'])->assertRedirect();
+        $this->assertSame('AA:BB:CC:DD:EE:03', $interface->fresh()->mac_address);
+    }
+
+    public function test_link_conflicts_reject_stale_confirmation_and_never_rewrite_other_interfaces(): void
+    {
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $this->actingAs($user);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $device = $site->devices()->create(['name' => 'Server', 'manufacturer_id' => $vendor->id]);
+        $interface = $device->interfaces()->create(['name' => 'eth0', 'kind' => 'physical', 'mac_address' => 'AA:BB:CC:DD:EE:01']);
+        $other = $device->interfaces()->create(['name' => 'eth1', 'kind' => 'physical', 'mac_address' => 'AA:BB:CC:DD:EE:09']);
+        $existing = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => 'AA:BB:CC:DD:EE:01']);
+        $incoming = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'hostname' => 'server', 'mac_address' => 'AA:BB:CC:DD:EE:02']);
+        $url = route('companies.sites.devices.ip-addresses.store', [$company, $site, $device]);
+        $data = ['ip_address_id' => $incoming->id, 'device_interface_id' => $interface->id];
+
+        $preview = $this->postJson($url, $data)->assertUnprocessable()->assertJsonValidationErrors('mac_confirmation');
+        $this->assertNull($incoming->fresh()->device_id);
+        $this->assertSame('AA:BB:CC:DD:EE:01', $existing->fresh()->mac_address);
+        // Another operator changes a value after the first comparison was displayed.
+        $interface->update(['mac_address' => 'AA:BB:CC:DD:EE:03']);
+        $stale = $this->postJson($url, [...$data, 'mac_confirmation_token' => $preview->json('errors.mac_confirmation_token.0')])->assertUnprocessable();
+        $this->assertSame('AA:BB:CC:DD:EE:03', $interface->fresh()->mac_address);
+        $this->assertNull($incoming->fresh()->device_id);
+        $this->postJson($url, [...$data, 'mac_confirmation_token' => $stale->json('errors.mac_confirmation_token.0')])->assertRedirect();
+        $this->assertDatabaseHas('ip_addresses', ['id' => $incoming->id, 'device_id' => $device->id, 'device_interface_id' => $interface->id, 'mac_address' => 'AA:BB:CC:DD:EE:02']);
+        $this->assertSame('AA:BB:CC:DD:EE:02', $existing->fresh()->mac_address);
+        $this->assertSame('AA:BB:CC:DD:EE:02', $interface->fresh()->mac_address);
+        $this->assertSame('AA:BB:CC:DD:EE:09', $other->fresh()->mac_address);
+
+        $ipUrl = route('companies.sites.subnets.ip-addresses.update', [$company, $site, $subnet, $incoming]);
+        $move = ['ip' => '10.0.0.2', 'device_id' => $device->id, 'device_interface_id' => $other->id, 'mac_address' => 'AA:BB:CC:DD:EE:02'];
+        $this->patchJson($ipUrl, $move)->assertUnprocessable()->assertJsonValidationErrors('mac_confirmation');
+        $this->assertSame($interface->id, $incoming->fresh()->device_interface_id);
+        $this->getJson(route('companies.sites.devices.interfaces.show', [$company, $site, $device, $interface]))->assertOk()->assertJsonCount(2, 'ips');
+        $foreignSite = $company->sites()->create(['name' => 'Milano']);
+        $foreignDevice = $foreignSite->devices()->create(['name' => 'Foreign', 'manufacturer_id' => $vendor->id]);
+        $foreignInterface = $foreignDevice->interfaces()->create(['name' => 'eth0']);
+        $this->getJson(route('companies.sites.devices.interfaces.show', [$company, $site, $device, $foreignInterface]))->assertNotFound();
+        $this->postJson($url, [...$data, 'device_interface_id' => $foreignInterface->id])->assertUnprocessable()->assertJsonValidationErrors('device_interface_id');
+        $this->actingAs(User::factory()->create())->getJson(route('companies.sites.devices.interfaces.show', [$company, $site, $device, $interface]))->assertForbidden();
+    }
+
+    public function test_subnet_and_company_search_use_model_port_labels_and_sort_associations(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $panel = $this->panel();
+        $panel['faces']['front']['ports'][0]['label'] = 'ether1';
+        $model = $vendor->models()->create(['name' => 'Switch', 'panel' => $panel]);
+        $device = $site->devices()->create(['name' => 'SW-CORE', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id]);
+        $device->addModelInterfaces($model);
+        $interface = $device->interfaces()->sole();
+        $ip = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.200'), 'device_id' => $device->id, 'device_interface_id' => $interface->id]);
+        $url = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+
+        $this->get($url.'?search=ether1&sort=device&direction=asc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.assignment_label', 'SW-CORE@ether1'));
+        $this->get($url.'?sort=device&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 254)->where('ipAddresses.data.0.ip', '10.0.0.200')->where('ipAddresses.data.1.ip', '10.0.0.1'));
+        $this->get(route('companies.sites.search.index', [$company, $site, 'search' => 'ether1', 'sort' => 'device']))
+            ->assertInertia(fn (Assert $page) => $page->where('results.total', 1)->where('results.data.0.assignment_label', 'SW-CORE@ether1')->where('results.data.0.device.id', $device->id));
+        $this->get(route('companies.sites.devices.show', [$company, $site, $device, 'interface' => $interface->id]))
+            ->assertInertia(fn (Assert $page) => $page->where('initialInterfaceId', $interface->id));
+        $this->assertDatabaseCount('ip_addresses', 1);
     }
 
     private function panel(): array

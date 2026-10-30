@@ -19,18 +19,22 @@ class SubnetAddressTable
                         ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern])
+                        ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereHas('status', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]))
                         ->orWhereHas('tags', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
                 });
             });
         $textSort = $sort !== null && $sort !== 'ip';
-        $relatedSort = in_array($sort, ['status', 'tags'], true);
+        $relatedSort = in_array($sort, ['status', 'tags', 'device'], true);
         $sortColumn = match ($sort) {
+            'device' => 'assignment_label',
             'status' => 'status_name',
             'tags' => 'tags_min_name',
             default => $sort,
         };
-        if ($sort === 'status') {
+        if ($sort === 'device') {
+            $matching->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label');
+        } elseif ($sort === 'status') {
             $matching->withAggregate('status', 'name');
         } elseif ($sort === 'tags') {
             $matching->withMin('tags', 'name');
@@ -97,7 +101,7 @@ class SubnetAddressTable
             }
         }
 
-        $records = $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
+        $records = $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
             ->whereIn('address', $addresses)->get()->keyBy('address');
         $excludedRanges = $subnet->excludedRanges;
         $rows = array_map(function ($address) use ($records, $excludedRanges) {
@@ -105,6 +109,7 @@ class SubnetAddressTable
 
             return [
                 'id' => $record?->id,
+                'assignment_label' => $record?->assignment_label,
                 'ip' => long2ip($address),
                 'device_id' => $record?->device_id, 'device_interface_id' => $record?->device_interface_id,
                 'device' => $record?->device, 'device_interface' => $record?->deviceInterface,

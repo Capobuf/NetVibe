@@ -1,0 +1,1200 @@
+import Konva from 'konva';
+import type { KonvaEventObject } from 'konva/lib/Node';
+import {
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type Ref,
+} from 'react';
+import {
+    Group,
+    Image as CanvasImage,
+    Layer,
+    Line,
+    Rect,
+    Stage,
+    Text,
+    Transformer,
+} from 'react-konva';
+import { useAppearance } from '@/hooks/use-appearance';
+import {
+    boundsOf,
+    faceLayers,
+    imageBounds,
+    duplicatePorts,
+    portBounds,
+    snapDelta,
+    resizeBlockSpacing,
+    reshapeBlock,
+    type BlockOptions,
+    type BlockEdge,
+    type BlockCorner,
+    type Bounds,
+    type Point,
+    type Port,
+} from '@/lib/hardware-editor/document';
+import { PortSymbol } from './port-symbol';
+import type { Editor, Selection } from './use-editor';
+
+const blockHandles = [
+    ['left', 0, 0.5, 'ew-resize'],
+    ['right', 1, 0.5, 'ew-resize'],
+    ['top', 0.5, 0, 'ns-resize'],
+    ['bottom', 0.5, 1, 'ns-resize'],
+    ['top-left', 0, 0, 'nwse-resize'],
+    ['top-right', 1, 0, 'nesw-resize'],
+    ['bottom-left', 0, 1, 'nesw-resize'],
+    ['bottom-right', 1, 1, 'nwse-resize'],
+] as const;
+
+export type CanvasApi = {
+    fit: () => void;
+    zoom: (factor: number) => void;
+    center: () => Point;
+};
+type Gesture = {
+    start: Point;
+    screen: Point;
+    selection: string[];
+    moving: Port[];
+    copy: boolean;
+    duplicated: boolean;
+    moved: boolean;
+    mode: 'pan' | 'ports' | 'marquee' | 'image' | 'crop' | 'block-spacing';
+    block?: BlockOptions;
+    blockEdge?: BlockEdge | BlockCorner;
+    crop?: NonNullable<Editor['crop']>;
+    handle?: string;
+    additive: boolean;
+    originalView: Point;
+};
+export function EditorCanvas({
+    editor: e,
+    pan,
+    snap,
+    preview,
+    blockPreview,
+    blockOptions,
+    onChangeBlock,
+    fitKey,
+    onContext,
+    onEditLabel,
+    onZoom,
+    api,
+}: {
+    editor: Editor;
+    pan: boolean;
+    snap: boolean;
+    preview?: Map<string, string>;
+    blockPreview?: Port[];
+    blockOptions: BlockOptions | null;
+    onChangeBlock: (options: BlockOptions) => void;
+    fitKey: number;
+    onContext: (point: Point, selection: Selection) => void;
+    onEditLabel: () => void;
+    onZoom: (zoom: number) => void;
+    api: Ref<CanvasApi>;
+}) {
+    const host = useRef<HTMLDivElement>(null);
+    const stage = useRef<Konva.Stage>(null);
+    const transformer = useRef<Konva.Transformer>(null);
+    const [size, setSize] = useState({ width: 800, height: 500 });
+    const [view, setView] = useState({ x: 40, y: 100, zoom: 1 });
+    const viewRef = useRef(view);
+    viewRef.current = view;
+    const [space, setSpace] = useState(false);
+    const [hover, setHover] = useState<string | null>(null);
+    const [draft, setDraft] = useState<Port[] | null>(null);
+    const [imageDelta, setImageDelta] = useState<Point | null>(null);
+    const [marquee, setMarquee] = useState<Bounds | null>(null);
+    const [guides, setGuides] = useState<{ axis: 'x' | 'y'; value: number }[]>(
+        [],
+    );
+    const gesture = useRef<Gesture | null>(null);
+    const middlePan = useRef<{ x: number; y: number; view: Point } | null>(
+        null,
+    );
+    const [panning, setPanning] = useState(false);
+    const [blockDragging, setBlockDragging] = useState(false);
+    const draftRef = useRef<Port[] | null>(null);
+    const delta = useRef<Point>({ x: 0, y: 0 });
+    const { resolvedAppearance } = useAppearance();
+    const dark = resolvedAppearance === 'dark';
+    const { shell } = e.doc;
+    const image = e.doc.faces[e.face].image;
+    const ports = draft ?? e.ports;
+    const selected = ports.filter(
+        (p) => !p.hidden && e.selection.ids.includes(p.id),
+    );
+    const selectedBox = selected.length
+        ? boundsOf(selected.map(portBounds))
+        : null;
+    const blocked = !!e.session || !!preview || !!e.crop || !!blockPreview;
+    const blockBox = blockPreview
+        ? boundsOf(blockPreview.map(portBounds))
+        : null;
+
+    function fit() {
+        const boxes: Bounds[] = [
+            shell,
+            ...e.ports.filter((p) => !p.hidden).map(portBounds),
+            ...(blockPreview ?? []).map(portBounds),
+        ];
+        if (e.crop)
+            boxes.push({
+                x: e.crop.image.x,
+                y: e.crop.image.y,
+                width: e.crop.image.width * e.crop.image.scale,
+                height: e.crop.image.height * e.crop.image.scale,
+            });
+        else if (image && !image.hidden) boxes.push(imageBounds(image));
+        const b = boundsOf(boxes);
+        const zoom = Math.max(
+            0.1,
+            Math.min(
+                2.5,
+                (size.width - 100) / (b.width + 40),
+                (size.height - 140) / (b.height + 40),
+            ),
+        );
+        setView({
+            zoom,
+            x: (size.width - b.width * zoom) / 2 - b.x * zoom,
+            y: (size.height - b.height * zoom) / 2 - b.y * zoom,
+        });
+    }
+    function zoomAt(
+        factor: number,
+        pointer = { x: size.width / 2, y: size.height / 2 },
+    ) {
+        setView((v) => {
+            const zoom = Math.min(6, Math.max(0.1, v.zoom * factor));
+            return {
+                zoom,
+                x: pointer.x - ((pointer.x - v.x) / v.zoom) * zoom,
+                y: pointer.y - ((pointer.y - v.y) / v.zoom) * zoom,
+            };
+        });
+    }
+    useImperativeHandle(api, () => ({
+        fit,
+        zoom: zoomAt,
+        center: () => ({
+            x: (size.width / 2 - view.x) / view.zoom,
+            y: (size.height / 2 - view.y) / view.zoom,
+        }),
+    }));
+    useEffect(() => {
+        const observer = new ResizeObserver((entries) => {
+            const { width, height } = entries[0].contentRect;
+            setSize({ width, height });
+        });
+        if (host.current) observer.observe(host.current);
+        return () => observer.disconnect();
+    }, []);
+    useEffect(() => {
+        fit();
+    }, [size.width, size.height, fitKey, e.loading]);
+    useEffect(() => {
+        onZoom(view.zoom);
+    }, [view.zoom, onZoom]);
+    useEffect(() => {
+        const down = (event: KeyboardEvent) => {
+            if (
+                (event.target as HTMLElement).closest(
+                    'input,textarea,select,[contenteditable="true"],[role="dialog"],[role="menu"]',
+                )
+            )
+                return;
+            if (
+                event.code === 'Space' &&
+                host.current?.contains(event.target as Node)
+            ) {
+                event.preventDefault();
+                setSpace(true);
+            }
+        };
+        const up = (event: KeyboardEvent) => {
+            if (event.code === 'Space') setSpace(false);
+        };
+        const reset = () => {
+            setSpace(false);
+            middlePan.current = null;
+            setPanning(false);
+            setBlockDragging(false);
+            gesture.current = null;
+            setDraft(null);
+            setImageDelta(null);
+            setMarquee(null);
+            setGuides([]);
+        };
+        window.addEventListener('keydown', down);
+        window.addEventListener('keyup', up);
+        window.addEventListener('blur', reset);
+        return () => {
+            window.removeEventListener('keydown', down);
+            window.removeEventListener('keyup', up);
+            window.removeEventListener('blur', reset);
+        };
+    }, []);
+    useLayoutEffect(() => {
+        const tr = transformer.current;
+        if (!tr || !stage.current) return;
+        let node: Konva.Node | undefined;
+        if (!blocked && !pan && !space && !gesture.current) {
+            if (
+                e.selection.kind === 'ports' &&
+                e.selected.length === 1 &&
+                selected.length === 1 &&
+                !e.portLocked(selected[0])
+            )
+                node = stage.current
+                    .findOne<Konva.Group>(`#${selected[0].id}`)
+                    ?.findOne('.symbol');
+            if (
+                e.selection.kind === 'shell' &&
+                !e.shellState.locked &&
+                !e.shellState.hidden
+            )
+                node = stage.current.findOne('#shell');
+            if (
+                e.selection.kind === 'image' &&
+                !image?.locked &&
+                !image?.hidden
+            )
+                node = stage.current.findOne('#panel-image');
+        }
+        tr.nodes(node ? [node] : []);
+    });
+    function point(): Point {
+        const p = stage.current!.getPointerPosition()!;
+        return {
+            x: (p.x - viewRef.current.x) / viewRef.current.zoom,
+            y: (p.y - viewRef.current.y) / viewRef.current.zoom,
+        };
+    }
+    function pick(target: Konva.Node): Selection {
+        const port = target.findAncestor('.port', true);
+        if (port) {
+            const p = e.ports.find((p) => p.id === port.id());
+            if (p)
+                return {
+                    kind: 'ports',
+                    ids:
+                        p.group && p.group !== e.enteredGroup
+                            ? e.ports
+                                  .filter((item) => item.group === p.group)
+                                  .map((item) => item.id)
+                            : [p.id],
+                };
+        }
+        if (target.id() === 'panel-image') return { kind: 'image', ids: [] };
+        if (target.id() === 'shell') return { kind: 'shell', ids: [] };
+        return { kind: 'canvas', ids: [] };
+    }
+    function down(event: KonvaEventObject<PointerEvent>) {
+        if (
+            event.evt.button !== 0 ||
+            event.target.findAncestor('Transformer', true)
+        )
+            return;
+        host.current?.focus({ preventScroll: true });
+        const blockEdge = blockHandles.find(
+            ([edge]) => event.target.name() === `block-${edge}`,
+        )?.[0];
+        if (blockPreview && !pan && !space && !blockEdge) return;
+        const hit = pick(event.target);
+        if (
+            e.crop &&
+            !space &&
+            !event.target.findAncestor('.crop-editor', true)
+        )
+            return;
+        if (e.session && !pan && !space) {
+            const p = event.target.findAncestor('.port', true);
+            if (p) e.numberPort(p.id());
+            return;
+        }
+        if (preview && !pan && !space) return;
+        const screen = stage.current!.getPointerPosition()!;
+        const start = point();
+        const additive =
+            event.evt.ctrlKey || event.evt.metaKey || event.evt.shiftKey;
+        const panning = (!e.crop && pan) || space;
+        let ids = hit.ids;
+        if (!panning && !e.crop && !blockOptions && hit.kind === 'ports') {
+            if (additive)
+                ids = hit.ids.every((id) => e.selection.ids.includes(id))
+                    ? e.selection.ids.filter((id) => !hit.ids.includes(id))
+                    : [...new Set([...e.selection.ids, ...hit.ids])];
+            else if (hit.ids.some((id) => e.selection.ids.includes(id)))
+                ids = e.selection.ids;
+            e.setSelection({ kind: 'ports', ids });
+        } else if (!panning && !e.crop && !blockOptions) e.setSelection(hit);
+        const mode = panning
+            ? 'pan'
+            : blockEdge && blockOptions
+              ? 'block-spacing'
+              : e.crop
+                ? 'crop'
+                : hit.kind === 'ports'
+                  ? 'ports'
+                  : hit.kind === 'image' && !image?.locked
+                    ? 'image'
+                    : 'marquee';
+        gesture.current = {
+            start,
+            screen,
+            selection: additive ? e.selection.ids : [],
+            moving: e.ports.filter((p) => ids.includes(p.id)).some(e.portLocked)
+                ? []
+                : e.ports.filter((p) => ids.includes(p.id)),
+            crop: e.crop ?? undefined,
+            block: blockOptions ?? undefined,
+            blockEdge,
+            handle: event.target.name(),
+            copy: mode === 'ports' && event.evt.altKey,
+            duplicated: false,
+            moved: false,
+            mode,
+            additive,
+            originalView: { x: view.x, y: view.y },
+        };
+        delta.current = { x: 0, y: 0 };
+        draftRef.current = null;
+        (
+            stage.current?.container().firstElementChild as HTMLElement | null
+        )?.setPointerCapture(event.evt.pointerId);
+    }
+    function move(event: KonvaEventObject<PointerEvent>) {
+        const g = gesture.current;
+        if (!g) {
+            const p = event.target.findAncestor('.port', true);
+            setHover(p?.id() ?? null);
+            return;
+        }
+        const screen = stage.current!.getPointerPosition()!;
+        if (g.mode === 'pan') {
+            setView((v) => ({
+                ...v,
+                x: g.originalView.x + screen.x - g.screen.x,
+                y: g.originalView.y + screen.y - g.screen.y,
+            }));
+            return;
+        }
+        let d = {
+            x: (screen.x - g.screen.x) / view.zoom,
+            y: (screen.y - g.screen.y) / view.zoom,
+        };
+        if (
+            !g.moved &&
+            Math.hypot(screen.x - g.screen.x, screen.y - g.screen.y) < 3
+        )
+            return;
+        g.moved = true;
+        if (g.mode === 'block-spacing' && g.block && g.blockEdge) {
+            onChangeBlock(
+                g.blockEdge === 'left' ||
+                    g.blockEdge === 'right' ||
+                    g.blockEdge === 'top' ||
+                    g.blockEdge === 'bottom'
+                    ? resizeBlockSpacing(
+                          g.block,
+                          g.blockEdge,
+                          g.blockEdge === 'left' || g.blockEdge === 'right'
+                              ? d.x
+                              : d.y,
+                      )
+                    : reshapeBlock(g.block, g.blockEdge, d),
+            );
+            return;
+        }
+        if (g.mode === 'crop' && g.crop) {
+            const { image: original, frame } = g.crop;
+            const w = original.width * original.scale,
+                h = original.height * original.scale;
+            const clamp = (n: number, min: number, max: number) =>
+                Math.max(min, Math.min(max, n));
+            if (g.handle?.startsWith('crop-')) {
+                let left = frame.x,
+                    top = frame.y,
+                    right = frame.x + frame.width,
+                    bottom = frame.y + frame.height;
+                if (g.handle.slice(5).includes('w'))
+                    left = clamp(
+                        frame.x + d.x,
+                        original.x,
+                        right - original.scale,
+                    );
+                if (g.handle.slice(5).includes('e'))
+                    right = clamp(
+                        right + d.x,
+                        left + original.scale,
+                        original.x + w,
+                    );
+                if (g.handle.slice(5).includes('n'))
+                    top = clamp(
+                        frame.y + d.y,
+                        original.y,
+                        bottom - original.scale,
+                    );
+                if (g.handle.slice(5).includes('s'))
+                    bottom = clamp(
+                        bottom + d.y,
+                        top + original.scale,
+                        original.y + h,
+                    );
+                e.setCrop({
+                    image: original,
+                    frame: {
+                        x: left,
+                        y: top,
+                        width: right - left,
+                        height: bottom - top,
+                    },
+                });
+            } else {
+                e.setCrop({
+                    frame,
+                    image: {
+                        ...original,
+                        x: clamp(
+                            original.x + d.x,
+                            frame.x + frame.width - w,
+                            frame.x,
+                        ),
+                        y: clamp(
+                            original.y + d.y,
+                            frame.y + frame.height - h,
+                            frame.y,
+                        ),
+                    },
+                });
+            }
+            return;
+        }
+        if (g.mode === 'ports' && g.moving.length) {
+            if (g.copy && !g.duplicated) {
+                g.duplicated = true;
+                g.moving = duplicatePorts(g.moving);
+                e.setSelection({
+                    kind: 'ports',
+                    ids: g.moving.map((p) => p.id),
+                });
+            }
+            const stationary = e.ports.filter(
+                (p) => !g.moving.some((m) => m.id === p.id),
+            );
+            if (snap) {
+                const snapped = snapDelta(
+                    g.moving,
+                    stationary.filter((p) => !p.hidden),
+                    shell,
+                    d,
+                    view.zoom,
+                );
+                d = snapped.delta;
+                setGuides(snapped.guides);
+            }
+            const movedPorts = g.moving.map((p) => ({
+                ...p,
+                x: p.x + d.x,
+                y: p.y + d.y,
+            }));
+            draftRef.current = g.duplicated
+                ? [...e.ports, ...movedPorts]
+                : e.ports.map(
+                      (p) => movedPorts.find((m) => m.id === p.id) ?? p,
+                  );
+            setDraft(draftRef.current);
+        } else if (g.mode === 'image') setImageDelta(d);
+        else if (g.mode === 'marquee') {
+            const p = { x: g.start.x + d.x, y: g.start.y + d.y };
+            setMarquee({
+                x: Math.min(g.start.x, p.x),
+                y: Math.min(g.start.y, p.y),
+                width: Math.abs(d.x),
+                height: Math.abs(d.y),
+            });
+        }
+        delta.current = d;
+    }
+    function up() {
+        const g = gesture.current;
+        if (!g) return;
+        const moved = g.moved;
+        if (!moved && !blocked && g.mode !== 'pan') e.setPastePoint(g.start);
+        if (g.mode === 'block-spacing' && stage.current)
+            stage.current.container().style.cursor = '';
+        if (moved && g.mode === 'ports' && draftRef.current)
+            e.setPortList(draftRef.current);
+        if (moved && g.mode === 'image' && image)
+            e.patchImage({
+                x: image.x + delta.current.x,
+                y: image.y + delta.current.y,
+            });
+        if (moved && g.mode === 'marquee' && marquee) {
+            const ids = new Set(g.additive ? g.selection : []);
+            for (const p of e.ports) {
+                if (p.hidden) continue;
+                const b = portBounds(p);
+                if (
+                    b.x < marquee.x + marquee.width &&
+                    b.x + b.width > marquee.x &&
+                    b.y < marquee.y + marquee.height &&
+                    b.y + b.height > marquee.y
+                ) {
+                    if (p.group && p.group !== e.enteredGroup)
+                        e.ports
+                            .filter((item) => item.group === p.group)
+                            .forEach((item) => ids.add(item.id));
+                    else ids.add(p.id);
+                }
+            }
+            e.setSelection({ kind: 'ports', ids: [...ids] });
+        }
+        gesture.current = null;
+        setDraft(null);
+        setImageDelta(null);
+        setMarquee(null);
+        setGuides([]);
+    }
+    function transformEnd() {
+        const node = transformer.current?.nodes()[0];
+        if (!node) return;
+        if (e.selection.kind === 'ports' && e.selected.length === 1) {
+            const p = e.selected[0];
+            const rotation =
+                (((Math.round(node.rotation() / 90) * 90) % 360) + 360) % 360;
+            const scale = Math.max(0.2, Math.min(8, node.scaleX()));
+            const offset = { x: node.x(), y: node.y() };
+            node.position({ x: 0, y: 0 });
+            node.scale({ x: p.scale, y: p.scale });
+            node.rotation(p.rotation);
+            e.patchPorts({
+                scale,
+                rotation,
+                x: p.x + offset.x,
+                y: p.y + offset.y,
+            });
+        } else if (e.selection.kind === 'shell') {
+            const width = shell.width * node.scaleX();
+            const height = shell.height * node.scaleY();
+            const x = node.x(),
+                y = node.y();
+            node.scale({ x: 1, y: 1 });
+            e.commit({ ...e.doc, shell: { ...shell, x, y, width, height } });
+        } else if (image) {
+            const scale = Math.max(
+                0.001,
+                Math.min(8, image.scale * node.scaleX()),
+            );
+            const x = node.x(),
+                y = node.y();
+            node.scale({ x: 1, y: 1 });
+            const crop = image.crop;
+            e.patchImage({
+                scale,
+                x: x - crop.x * scale,
+                y: y - crop.y * scale,
+            });
+        }
+    }
+    const hovered = ports.find(
+        (p) => p.id === hover && !p.hidden && !e.selection.ids.includes(p.id),
+    );
+    const frame = hovered ? portBounds(hovered) : null;
+    return (
+        <div
+            ref={host}
+            onPointerDownCapture={(event) => {
+                if (event.button !== 1) return;
+                event.preventDefault();
+                event.stopPropagation();
+                middlePan.current = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    view: viewRef.current,
+                };
+                setPanning(true);
+                event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMoveCapture={(event) => {
+                const g = middlePan.current;
+                if (!g) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setView((v) => ({
+                    ...v,
+                    x: g.view.x + event.clientX - g.x,
+                    y: g.view.y + event.clientY - g.y,
+                }));
+            }}
+            onPointerUpCapture={(event) => {
+                if (!middlePan.current) return;
+                event.preventDefault();
+                event.stopPropagation();
+                middlePan.current = null;
+                setPanning(false);
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onLostPointerCapture={() => {
+                middlePan.current = null;
+                setPanning(false);
+            }}
+            onAuxClick={(event) => {
+                if (event.button === 1) event.preventDefault();
+            }}
+            tabIndex={0}
+            role="region"
+            aria-label="Canvas del pannello. Seleziona una porta o trascina per selezionare. Spazio per spostare la vista."
+            className="relative h-full min-h-80 w-full touch-none overflow-hidden bg-muted/40 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            style={{
+                cursor: panning
+                    ? 'grabbing'
+                    : space
+                      ? 'grab'
+                      : e.crop
+                        ? 'move'
+                        : pan
+                          ? 'grab'
+                          : e.session
+                            ? 'crosshair'
+                            : 'default',
+                backgroundImage:
+                    'radial-gradient(var(--border) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+            }}
+        >
+            <Stage
+                ref={stage}
+                width={size.width}
+                height={size.height}
+                x={view.x}
+                y={view.y}
+                scaleX={view.zoom}
+                scaleY={view.zoom}
+                onPointerDown={down}
+                onPointerMove={move}
+                onPointerUp={up}
+                onPointerCancel={() => {
+                    gesture.current = null;
+                    setBlockDragging(false);
+                    setDraft(null);
+                    setMarquee(null);
+                    setImageDelta(null);
+                    setGuides([]);
+                }}
+                onWheel={(event) => {
+                    event.evt.preventDefault();
+                    if (
+                        !gesture.current &&
+                        !middlePan.current &&
+                        !stage.current?.findOne('.block-preview')?.isDragging()
+                    )
+                        zoomAt(
+                            event.evt.deltaY < 0 ? 1.1 : 1 / 1.1,
+                            stage.current!.getPointerPosition()!,
+                        );
+                }}
+                onContextMenu={(event) => {
+                    event.evt.preventDefault();
+                    if (blocked) return;
+                    const hit = pick(event.target);
+                    const selection =
+                        hit.kind === 'ports' &&
+                        hit.ids.some((id) => e.selection.ids.includes(id))
+                            ? e.selection
+                            : hit;
+                    e.setSelection(selection);
+                    onContext(point(), selection);
+                }}
+                onDblClick={(event) => {
+                    if (blocked) return;
+                    const port = event.target.findAncestor('.port', true);
+                    if (port) {
+                        e.setSelection({ kind: 'ports', ids: [port.id()] });
+                        onEditLabel();
+                    }
+                }}
+                onDblTap={(event) => {
+                    if (blocked) return;
+                    const port = event.target.findAncestor('.port', true);
+                    if (port) {
+                        e.setSelection({ kind: 'ports', ids: [port.id()] });
+                        onEditLabel();
+                    }
+                }}
+            >
+                <Layer>
+                    <Text
+                        listening={false}
+                        x={shell.x}
+                        y={shell.y - 28 / view.zoom}
+                        text={e.face === 'front' ? 'Frontale' : 'Retro'}
+                        fontFamily="Instrument Sans, sans-serif"
+                        fontSize={12 / view.zoom}
+                        fill={dark ? '#a3a3a3' : '#737373'}
+                    />
+                    <Rect
+                        visible={!e.shellState.hidden}
+                        id="shell"
+                        x={shell.x}
+                        y={shell.y}
+                        width={shell.width}
+                        height={shell.height}
+                        cornerRadius={shell.radius}
+                        stroke={dark ? '#64748b' : '#9ba7b6'}
+                        strokeWidth={shell.border}
+                        fill="transparent"
+                    />
+                    {faceLayers({ ...e.doc.faces[e.face], ports }).map(
+                        (layer) =>
+                            layer.id === 'image' ? (
+                                image &&
+                                !image.hidden &&
+                                !e.crop &&
+                                e.images[image.assetId] && (
+                                    <Group
+                                        key="image"
+                                        clipX={image.clip ? shell.x : undefined}
+                                        clipY={image.clip ? shell.y : undefined}
+                                        clipWidth={
+                                            image.clip ? shell.width : undefined
+                                        }
+                                        clipHeight={
+                                            image.clip
+                                                ? shell.height
+                                                : undefined
+                                        }
+                                    >
+                                        <CanvasImage
+                                            id="panel-image"
+                                            image={e.images[image.assetId]}
+                                            {...imageBounds(image)}
+                                            x={
+                                                imageBounds(image).x +
+                                                (imageDelta?.x ?? 0)
+                                            }
+                                            y={
+                                                imageBounds(image).y +
+                                                (imageDelta?.y ?? 0)
+                                            }
+                                            crop={image.crop}
+                                            listening={!image.locked}
+                                            opacity={
+                                                e.selection.kind === 'image'
+                                                    ? (e.opacityPreview ??
+                                                      image.opacity)
+                                                    : image.opacity
+                                            }
+                                        />
+                                    </Group>
+                                )
+                            ) : (
+                                <Group key={layer.id}>
+                                    {layer.ids
+                                        .map((id) =>
+                                            ports.find((p) => p.id === id)!,
+                                        )
+                                        .filter((p) => !p.hidden)
+                                        .map((port) => (
+                                            <PortSymbol
+                                                key={port.id}
+                                                port={
+                                                    e.selection.ids.includes(
+                                                        port.id,
+                                                    )
+                                                        ? {
+                                                              ...port,
+                                                              opacity:
+                                                                  e.opacityPreview ??
+                                                                  port.opacity,
+                                                              borderColor:
+                                                                  e.borderColorPreview ??
+                                                                  port.borderColor,
+                                                          }
+                                                        : port
+                                                }
+                                                selected={false}
+                                                numbering={!!e.session}
+                                                preview={preview?.get(port.id)}
+                                                zoom={view.zoom}
+                                                dark={dark}
+                                            />
+                                        ))}
+                                </Group>
+                            ),
+                    )}
+                    {blockPreview && blockOptions && blockBox && (
+                        <Group
+                            name="block-preview"
+                            draggable={!pan && !space}
+                            onDragStart={() => setBlockDragging(true)}
+                            onDragMove={(event) => {
+                                if (!snap) return;
+                                const node = event.currentTarget;
+                                const snapped = snapDelta(
+                                    blockPreview,
+                                    e.ports.filter((p) => !p.hidden),
+                                    shell,
+                                    node.position(),
+                                    view.zoom,
+                                );
+                                node.position(snapped.delta);
+                                setGuides(snapped.guides);
+                            }}
+                            onDragEnd={(event) => {
+                                const node = event.currentTarget;
+                                onChangeBlock({
+                                    ...blockOptions,
+                                    x: blockOptions.x + node.x(),
+                                    y: blockOptions.y + node.y(),
+                                });
+                                node.position({ x: 0, y: 0 });
+                                setBlockDragging(false);
+                                setGuides([]);
+                            }}
+                            onMouseEnter={() => {
+                                if (
+                                    !pan &&
+                                    !space &&
+                                    stage.current &&
+                                    gesture.current?.mode !== 'block-spacing'
+                                )
+                                    stage.current.container().style.cursor =
+                                        'move';
+                            }}
+                            onMouseLeave={() => {
+                                if (
+                                    stage.current &&
+                                    gesture.current?.mode !== 'block-spacing'
+                                )
+                                    stage.current.container().style.cursor = '';
+                            }}
+                        >
+                            <Rect
+                                {...blockBox}
+                                fill="transparent"
+                                stroke="#3b82f6"
+                                strokeWidth={1 / view.zoom}
+                                dash={[5 / view.zoom, 3 / view.zoom]}
+                            />
+                            {blockPreview.map((port) => (
+                                <PortSymbol
+                                    key={port.id}
+                                    port={port}
+                                    selected={false}
+                                    numbering={false}
+                                    zoom={view.zoom}
+                                    dark={dark}
+                                />
+                            ))}
+                        </Group>
+                    )}
+                    {blockPreview &&
+                        blockBox &&
+                        !blockDragging &&
+                        !pan &&
+                        !space &&
+                        blockHandles.map(([edge, x, y, cursor]) => {
+                            const horizontal =
+                                edge === 'left' || edge === 'right';
+                            const corner = x !== 0.5 && y !== 0.5;
+                            if (
+                                blockPreview.length < 2 ||
+                                (!corner &&
+                                    new Set(
+                                        blockPreview.map((port) =>
+                                            horizontal ? port.x : port.y,
+                                        ),
+                                    ).size < 2)
+                            )
+                                return null;
+                            return (
+                                <Rect
+                                    key={edge}
+                                    name={`block-${edge}`}
+                                    x={
+                                        blockBox.x +
+                                        blockBox.width * x -
+                                        5 / view.zoom
+                                    }
+                                    y={
+                                        blockBox.y +
+                                        blockBox.height * y -
+                                        5 / view.zoom
+                                    }
+                                    width={10 / view.zoom}
+                                    height={10 / view.zoom}
+                                    fill={dark ? '#17202c' : '#fff'}
+                                    stroke="#3b82f6"
+                                    strokeWidth={1 / view.zoom}
+                                    hitStrokeWidth={14 / view.zoom}
+                                    cornerRadius={2 / view.zoom}
+                                    onMouseEnter={() => {
+                                        if (stage.current)
+                                            stage.current.container().style.cursor =
+                                                cursor;
+                                    }}
+                                    onMouseLeave={() => {
+                                        if (
+                                            stage.current &&
+                                            gesture.current?.mode !==
+                                                'block-spacing'
+                                        )
+                                            stage.current.container().style.cursor =
+                                                '';
+                                    }}
+                                />
+                            );
+                        })}
+                    {ports
+                        .filter((p) => e.selection.ids.includes(p.id))
+                        .map((p) => (
+                            <Rect
+                                key={`selection-${p.id}`}
+                                dash={
+                                    p.hidden
+                                        ? [5 / view.zoom, 4 / view.zoom]
+                                        : undefined
+                                }
+                                {...portBounds(p)}
+                                listening={false}
+                                stroke="#3b82f6"
+                                strokeWidth={1.5 / view.zoom}
+                                cornerRadius={2}
+                            />
+                        ))}
+                    {e.selection.kind === 'shell' &&
+                        (e.shellState.hidden ||
+                            e.shellState.locked ||
+                            blocked ||
+                            pan ||
+                            space) && (
+                            <Rect
+                                x={shell.x}
+                                y={shell.y}
+                                width={shell.width}
+                                height={shell.height}
+                                cornerRadius={shell.radius}
+                                listening={false}
+                                stroke="#3b82f6"
+                                strokeWidth={1.5 / view.zoom}
+                                dash={
+                                    e.shellState.hidden
+                                        ? [5 / view.zoom, 4 / view.zoom]
+                                        : undefined
+                                }
+                            />
+                        )}
+                    {image && e.selection.kind === 'image' && !e.crop && (
+                        <Rect
+                            {...imageBounds(image)}
+                            x={imageBounds(image).x + (imageDelta?.x ?? 0)}
+                            y={imageBounds(image).y + (imageDelta?.y ?? 0)}
+                            listening={false}
+                            stroke="#3b82f6"
+                            strokeWidth={1 / view.zoom}
+                            dash={[5 / view.zoom, 4 / view.zoom]}
+                        />
+                    )}
+                    {e.crop &&
+                        (() => {
+                            const { image: original, frame: f } = e.crop;
+                            const crop = {
+                                x: (f.x - original.x) / original.scale,
+                                y: (f.y - original.y) / original.scale,
+                                width: f.width / original.scale,
+                                height: f.height / original.scale,
+                            };
+                            return (
+                                <Group name="crop-editor">
+                                    <CanvasImage
+                                        image={e.images[original.assetId]}
+                                        x={original.x}
+                                        y={original.y}
+                                        width={original.width * original.scale}
+                                        height={
+                                            original.height * original.scale
+                                        }
+                                        opacity={0.3}
+                                    />
+                                    <CanvasImage
+                                        image={e.images[original.assetId]}
+                                        {...f}
+                                        crop={crop}
+                                    />
+                                    <Rect
+                                        {...f}
+                                        stroke="#3b82f6"
+                                        strokeWidth={1.5 / view.zoom}
+                                        listening={false}
+                                    />
+                                    {[1 / 3, 2 / 3].map((r) => (
+                                        <Group key={r} listening={false}>
+                                            <Line
+                                                points={[
+                                                    f.x + f.width * r,
+                                                    f.y,
+                                                    f.x + f.width * r,
+                                                    f.y + f.height,
+                                                ]}
+                                                stroke="#fff"
+                                                opacity={0.6}
+                                                strokeWidth={1 / view.zoom}
+                                            />
+                                            <Line
+                                                points={[
+                                                    f.x,
+                                                    f.y + f.height * r,
+                                                    f.x + f.width,
+                                                    f.y + f.height * r,
+                                                ]}
+                                                stroke="#fff"
+                                                opacity={0.6}
+                                                strokeWidth={1 / view.zoom}
+                                            />
+                                        </Group>
+                                    ))}
+                                    {(
+                                        [
+                                            ['nw', 0, 0],
+                                            ['n', 0.5, 0],
+                                            ['ne', 1, 0],
+                                            ['e', 1, 0.5],
+                                            ['se', 1, 1],
+                                            ['s', 0.5, 1],
+                                            ['sw', 0, 1],
+                                            ['w', 0, 0.5],
+                                        ] as const
+                                    ).map(([name, x, y]) => (
+                                        <Rect
+                                            key={name}
+                                            name={`crop-${name}`}
+                                            x={
+                                                f.x +
+                                                f.width * x -
+                                                5 / view.zoom
+                                            }
+                                            y={
+                                                f.y +
+                                                f.height * y -
+                                                5 / view.zoom
+                                            }
+                                            width={10 / view.zoom}
+                                            height={10 / view.zoom}
+                                            fill="#fff"
+                                            stroke="#3b82f6"
+                                            strokeWidth={1 / view.zoom}
+                                            hitStrokeWidth={14 / view.zoom}
+                                            cornerRadius={2 / view.zoom}
+                                        />
+                                    ))}
+                                </Group>
+                            );
+                        })()}
+                    {frame && (
+                        <Rect
+                            listening={false}
+                            x={frame.x - 4}
+                            y={frame.y - 4}
+                            width={frame.width + 8}
+                            height={frame.height + 8}
+                            stroke="#60a5fa"
+                            strokeWidth={1 / view.zoom}
+                            cornerRadius={4}
+                        />
+                    )}
+                    {selectedBox && selected.length > 1 && (
+                        <Rect
+                            listening={false}
+                            x={selectedBox.x - 7}
+                            y={selectedBox.y - 7}
+                            width={selectedBox.width + 14}
+                            height={selectedBox.height + 14}
+                            stroke="#3b82f6"
+                            strokeWidth={1 / view.zoom}
+                            dash={[5 / view.zoom, 3 / view.zoom]}
+                        />
+                    )}
+                    {guides.map((g) => (
+                        <Line
+                            key={g.axis}
+                            listening={false}
+                            points={
+                                g.axis === 'x'
+                                    ? [g.value, -10000, g.value, 10000]
+                                    : [-10000, g.value, 10000, g.value]
+                            }
+                            stroke="#d946ef"
+                            strokeWidth={1 / view.zoom}
+                            dash={[4 / view.zoom, 4 / view.zoom]}
+                        />
+                    ))}
+                    {marquee && (
+                        <Rect
+                            {...marquee}
+                            listening={false}
+                            fill="#3b82f620"
+                            stroke="#3b82f6"
+                            strokeWidth={1 / view.zoom}
+                        />
+                    )}
+                    <Transformer
+                        ref={transformer}
+                        rotateEnabled={e.selection.kind === 'ports'}
+                        rotationSnaps={[0, 90, 180, 270]}
+                        rotationSnapTolerance={45}
+                        keepRatio={e.selection.kind !== 'shell'}
+                        ignoreStroke={e.selection.kind === 'shell'}
+                        flipEnabled={false}
+                        enabledAnchors={
+                            e.selection.kind === 'shell'
+                                ? [
+                                      'top-left',
+                                      'top-center',
+                                      'top-right',
+                                      'middle-left',
+                                      'middle-right',
+                                      'bottom-left',
+                                      'bottom-center',
+                                      'bottom-right',
+                                  ]
+                                : [
+                                      'top-left',
+                                      'top-right',
+                                      'bottom-left',
+                                      'bottom-right',
+                                  ]
+                        }
+                        anchorSize={9}
+                        anchorCornerRadius={2}
+                        borderStroke="#3b82f6"
+                        anchorStroke="#3b82f6"
+                        anchorFill={dark ? '#17202c' : '#fff'}
+                        boundBoxFunc={(old, next) => {
+                            if (e.selection.kind === 'shell') {
+                                const width = next.width / view.zoom;
+                                const height = next.height / view.zoom;
+                                return width < 40 ||
+                                    height < 40 ||
+                                    width > 5000 ||
+                                    height > 5000
+                                    ? old
+                                    : next;
+                            }
+                            return Math.abs(next.width) < 8 ||
+                                Math.abs(next.height) < 8
+                                ? old
+                                : next;
+                        }}
+                        onTransformEnd={transformEnd}
+                    />
+                </Layer>
+            </Stage>
+        </div>
+    );
+}

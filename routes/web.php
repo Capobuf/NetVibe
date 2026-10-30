@@ -60,6 +60,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+        Route::inertia('prototypes/hardware-editor', 'administration/hardware-editor')->name('hardware-editor');
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');
         Route::put('email', [SmtpSettingController::class, 'update'])->name('email.update');

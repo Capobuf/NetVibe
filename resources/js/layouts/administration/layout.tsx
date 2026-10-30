@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
-import { Building2, Mail, Tags, Users } from 'lucide-react';
+import { Building2, Mail, Tags, Users, PanelsTopLeft } from 'lucide-react';
+import { hardwareEditor } from '@/routes/administration';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
@@ -10,13 +11,15 @@ import { index as users } from '@/routes/administration/users';
 
 export default function AdministrationLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const tab = isCurrentOrParentUrl(email())
-        ? 'email'
-        : isCurrentOrParentUrl(ipStatuses())
-          ? 'ip-statuses'
-          : isCurrentOrParentUrl(users())
-            ? 'users'
-            : 'companies';
+    const tab = isCurrentOrParentUrl(hardwareEditor())
+        ? 'hardware-editor'
+        : isCurrentOrParentUrl(email())
+          ? 'email'
+          : isCurrentOrParentUrl(ipStatuses())
+            ? 'ip-statuses'
+            : isCurrentOrParentUrl(users())
+              ? 'users'
+              : 'companies';
 
     return (
         <section
@@ -34,13 +37,15 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                 activationMode="manual"
                 onValueChange={(value) =>
                     router.visit(
-                        value === 'email'
-                            ? email()
-                            : value === 'companies'
-                              ? companies()
-                              : value === 'users'
-                                ? users()
-                                : ipStatuses(),
+                        value === 'hardware-editor'
+                            ? hardwareEditor()
+                            : value === 'email'
+                              ? email()
+                              : value === 'companies'
+                                ? companies()
+                                : value === 'users'
+                                  ? users()
+                                  : ipStatuses(),
                     )
                 }
                 className="min-w-0 gap-0"
@@ -62,6 +67,10 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                         <TabsTrigger value="email">
                             <Mail />
                             Email
+                        </TabsTrigger>
+                        <TabsTrigger value="hardware-editor">
+                            <PanelsTopLeft />
+                            Editor pannelli
                         </TabsTrigger>
                     </TabsList>
                 </div>

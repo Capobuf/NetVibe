@@ -41,7 +41,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
         Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
-        Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['store', 'update', 'destroy']);
+        Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');

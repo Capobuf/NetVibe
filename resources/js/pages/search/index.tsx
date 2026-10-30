@@ -1,3 +1,5 @@
+import { DeviceAssociation } from '@/components/devices/device-association';
+import type { DeviceInterface } from '@/types/device';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
@@ -53,7 +55,7 @@ const groupLabels = {
     site: 'Sede',
 };
 
-type Column = 'ip' | 'hostname' | 'mac_address' | 'site' | 'subnet';
+type Column = 'ip' | 'hostname' | 'mac_address' | 'site' | 'subnet' | 'device';
 type Result = {
     id: number;
     ip: string;
@@ -63,6 +65,9 @@ type Result = {
     site_id: number;
     subnet: string;
     subnet_id: number;
+    assignment_label: string | null;
+    device: { id: number; name: string } | null;
+    device_interface: DeviceInterface | null;
 };
 
 export default function SearchIndex({
@@ -93,6 +98,7 @@ export default function SearchIndex({
             { id: 'ip', label: 'IP', visible: true },
             { id: 'hostname', label: 'Hostname', visible: true },
             { id: 'mac_address', label: 'MAC Address', visible: true },
+            { id: 'device', label: 'Dispositivo / Interfaccia', visible: true },
             { id: 'site', label: 'Sede', visible: true },
             { id: 'subnet', label: 'Subnet', visible: true },
         ]);
@@ -357,6 +363,25 @@ export default function SearchIndex({
                                                                 >
                                                                     {result.ip}
                                                                 </Link>
+                                                            ) : column.id ===
+                                                              'device' ? (
+                                                                <DeviceAssociation
+                                                                    company={
+                                                                        company.id
+                                                                    }
+                                                                    site={
+                                                                        result.site_id
+                                                                    }
+                                                                    device={
+                                                                        result.device
+                                                                    }
+                                                                    item={
+                                                                        result.device_interface
+                                                                    }
+                                                                    label={
+                                                                        result.assignment_label
+                                                                    }
+                                                                />
                                                             ) : (
                                                                 (result[
                                                                     column.id

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type Konva from 'konva';
 import { Stage, Layer } from 'react-konva';
 import { Minus, Plus, Maximize } from 'lucide-react';
@@ -27,13 +27,19 @@ export function PanelViewer({
     assetUrls,
     onPort,
     compact = false,
+    initialPortId,
 }: {
     panel: PanelDocument;
     assetUrls: Record<string, string>;
     onPort?: (port: Port | null, anchor: PortAnchor | null) => void;
     compact?: boolean;
+    initialPortId?: string;
 }) {
-    const [face, setFace] = useState<Face>('front');
+    const [face, setFace] = useState<Face>(
+        panel.faces.rear.ports.some((port) => port.id === initialPortId)
+            ? 'rear'
+            : 'front',
+    );
     const [images, setImages] = useState<Record<string, HTMLImageElement>>({});
     const [error, setError] = useState('');
     const [width, setWidth] = useState(800);
@@ -113,6 +119,17 @@ export function PanelViewer({
             },
         });
     }
+    const openInitialPort = useEffectEvent(() => {
+        const port = side.ports.find(
+            (port) => port.id === initialPortId && !port.hidden,
+        );
+        if (port) showPort(port);
+    });
+    useEffect(() => {
+        if (!initialPortId) return;
+        const frame = requestAnimationFrame(() => openInitialPort());
+        return () => cancelAnimationFrame(frame);
+    }, [initialPortId]);
     return (
         <div className="min-w-0 overflow-hidden rounded-xl border bg-muted/20">
             {!compact && (

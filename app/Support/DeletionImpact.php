@@ -76,7 +76,7 @@ class DeletionImpact
     /** @param list<int> $ids */
     public static function deleteDevices(array $ids): void
     {
-        DB::table('ip_addresses')->whereIn('device_id', $ids)->update(['device_id' => null, 'device_interface_id' => null]);
+        DB::table('ip_addresses')->whereIn('device_id', $ids)->delete();
         DB::table('devices')->whereIn('id', $ids)->delete();
     }
 

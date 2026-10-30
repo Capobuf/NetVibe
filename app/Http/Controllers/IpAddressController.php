@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\IpAddressRequest;
 use App\Models\Company;
+use App\Models\DeviceInterface;
 use App\Models\IpAddress;
 use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Support\DeviceAssignment;
+use App\Support\InterfaceMac;
 use App\Support\Ipv4Ranges;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -34,11 +36,17 @@ class IpAddressController extends Controller
         $request->validate(['confirmed' => ['accepted']], [
             'confirmed.accepted' => 'Conferma esplicitamente la liberazione dell’IP e la cancellazione dei suoi dati.',
         ]);
-        $excluded = $subnet->isExcluded($ipAddress->address);
-        $ipAddress->delete();
+        $excluded = DB::transaction(function () use ($company, $subnet, $ipAddress) {
+            Company::query()->lockForUpdate()->findOrFail($company->id);
+            $record = $subnet->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
+            $excluded = $subnet->isExcluded($record->address);
+            $record->delete();
+
+            return $excluded;
+        }, 3);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $excluded
-            ? 'Documentazione rimossa. L’indirizzo resta escluso dai suggerimenti.' : 'Documentazione dell’IP rimossa.']);
+            ? 'Documentazione rimossa. L’indirizzo resta escluso dai suggerimenti.' : 'IP liberato e documentazione rimossa.']);
 
         return back();
     }
@@ -64,15 +72,21 @@ class IpAddressController extends Controller
                 }
 
                 $record = $ipAddress
-                    ? $subnet->ipAddresses()->findOrFail($ipAddress->id)
+                    ? $subnet->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id)
                     : $subnet->ipAddresses()->make();
-                $assignment = DeviceAssignment::validate($subnet->site_id, $data['device_id'] ?? null, $data['device_interface_id'] ?? null);
+                $assignment = DeviceAssignment::validate($subnet->site_id, $data['device_id'] ?? null, $data['device_interface_id'] ?? null, $record);
+                $record->address = $address;
+                $mac = $data['mac_address'] ?? null;
+                if ($assignment['device_interface_id']) {
+                    $interface = DeviceInterface::query()->lockForUpdate()->findOrFail($assignment['device_interface_id']);
+                    $mac = InterfaceMac::synchronize($interface, $mac, $record, $data['mac_confirmation_token'] ?? null);
+                }
                 $record->fill([
                     ...$assignment,
                     'address' => $address,
                     'description' => $data['description'] ?? null,
                     'hostname' => $data['hostname'] ?? null,
-                    'mac_address' => $data['mac_address'] ?? null,
+                    'mac_address' => $mac,
                     'ip_status_id' => $data['ip_status_id'] ?? null,
                 ])->save();
 

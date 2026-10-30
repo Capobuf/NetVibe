@@ -1,7 +1,4 @@
-import { IpAssignmentFields } from '@/components/devices/ip-assignment-fields';
-import { interfaceName, type Device } from '@/types/device';
-import { show as deviceShow } from '@/routes/companies/sites/devices';
-import { Form, Link, usePage } from '@inertiajs/react';
+import { Form, usePage } from '@inertiajs/react';
 import {
     ArrowRight,
     Check,
@@ -12,25 +9,29 @@ import {
 } from 'lucide-react';
 import { type ComponentProps, useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
+import { CopyValue } from '@/components/copy-value';
+import { DeviceAssociation } from '@/components/devices/device-association';
+import { IpAssignmentFields } from '@/components/devices/ip-assignment-fields';
+import { MacConfirmation } from '@/components/devices/mac-confirmation';
 import { IconButton } from '@/components/icon-button';
-import { TagBadge } from '@/components/networks/tag-badge';
-import { Badge } from '@/components/ui/badge';
 import InputError from '@/components/input-error';
 import IpMetadataFields from '@/components/networks/ip-metadata-fields';
-import { Alert, AlertTitle } from '@/components/ui/alert';
+import { TagBadge } from '@/components/networks/tag-badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogFooter,
-    DialogHeader,
-    DialogDescription,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import {
+    Sheet,
+    SheetContent,
+    SheetFooter,
+    SheetHeader,
+    SheetDescription,
+    SheetTitle,
+    SheetTrigger,
+} from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ipv4Number } from '@/lib/ipv4';
@@ -39,6 +40,7 @@ import {
     store,
     update,
 } from '@/routes/companies/sites/subnets/ip-addresses';
+import type { Device } from '@/types/device';
 import type { ExcludedRange, IpAddress, IpStatus, Tag } from '@/types/network';
 
 export default function IpAddressForm({
@@ -54,6 +56,7 @@ export default function IpAddressForm({
     onOpenChange,
     onCloseAutoFocus,
     assignment,
+    devices: providedDevices,
 }: {
     companyId: number;
     siteId: number;
@@ -65,23 +68,27 @@ export default function IpAddressForm({
     suggestedIp?: string;
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
-    onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
-    assignment?: { deviceId: number; interfaceId: number; label: string };
+    onCloseAutoFocus?: ComponentProps<typeof SheetContent>['onCloseAutoFocus'];
+    assignment?: { deviceId: number; interfaceId?: number; label: string };
+    devices?: Device[];
 }) {
-    const { auth, devices } = usePage<{ devices: Device[] }>().props;
+    const { auth, devices: pageDevices } = usePage<{ devices?: Device[] }>()
+        .props;
+    const devices = providedDevices ?? pageDevices ?? [];
     const canEdit = auth.canEditIpam;
-    const devicePanel = devices?.find(
-        (device) => device.id === ipAddress?.device_id,
-    )?.model?.panel;
-    const ports = devicePanel
-        ? [...devicePanel.faces.front.ports, ...devicePanel.faces.rear.ports]
-        : [];
+    const initialInterface = devices
+        .find((device) => device.id === assignment?.deviceId)
+        ?.interfaces.find((item) => item.id === assignment?.interfaceId);
+    const initialMac =
+        ipAddress?.mac_address ?? initialInterface?.mac_address ?? '';
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
     const setOpen = onOpenChange ?? setInternalOpen;
     const [deleting, setDeleting] = useState(false);
+    const [releasing, setReleasing] = useState(false);
     const [editing, setEditing] = useState(!ipAddress);
     const [ip, setIp] = useState(ipAddress?.ip ?? suggestedIp ?? '');
+    const [mac, setMac] = useState(initialMac);
     const address = ipv4Number(ip);
     const excluded =
         address !== null &&
@@ -92,24 +99,30 @@ export default function IpAddressForm({
         );
     const id = useId();
     const route = { company: companyId, site: siteId, subnet: subnetId };
-
+    function startEditing() {
+        setReleasing(false);
+        setIp(ipAddress?.ip ?? suggestedIp ?? '');
+        setMac(initialMac);
+        setEditing(true);
+    }
     return (
-        <Dialog
+        <Sheet
             open={open}
             onOpenChange={(value) => {
                 setOpen(value);
                 if (value) {
                     setDeleting(false);
+                    setReleasing(false);
                     setEditing(!ipAddress);
                     setIp(ipAddress?.ip ?? suggestedIp ?? '');
+                    setMac(initialMac);
                 }
             }}
         >
-            {controlledOpen === undefined ? (
-                <DialogTrigger asChild>
+            {controlledOpen === undefined && (
+                <SheetTrigger asChild>
                     <Button
                         variant={suggestedIp ? 'secondary' : 'default'}
-                        className="group motion-safe:transition-transform motion-safe:active:scale-[0.98]"
                         aria-label={
                             suggestedIp
                                 ? `Aggiungi IP ${suggestedIp}`
@@ -119,10 +132,7 @@ export default function IpAddressForm({
                         {suggestedIp ? (
                             <>
                                 Usa questo IP
-                                <ArrowRight
-                                    data-icon="inline-end"
-                                    className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
-                                />
+                                <ArrowRight data-icon="inline-end" />
                             </>
                         ) : (
                             <>
@@ -131,401 +141,470 @@ export default function IpAddressForm({
                             </>
                         )}
                     </Button>
-                </DialogTrigger>
-            ) : null}
-            <DialogContent
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+                </SheetTrigger>
+            )}
+            <SheetContent
+                overlayClassName="bg-black/30"
+                className="w-full gap-0 overflow-y-auto sm:max-w-xl"
                 onCloseAutoFocus={onCloseAutoFocus}
                 aria-describedby={assignment ? `${id}-assignment` : undefined}
             >
-                <DialogHeader>
-                    <DialogTitle>
+                <SheetHeader className="gap-2 border-b px-6 py-5 pr-12">
+                    <SheetTitle>
                         {deleting
-                            ? `Elimina dati di ${ipAddress?.ip}`
+                            ? `Libera IP ${ipAddress?.ip}`
                             : ipAddress
                               ? `${editing ? 'Modifica IP' : 'IP'} ${ipAddress.ip}`
-                              : ip || 'Nuovo IP'}
-                    </DialogTitle>
+                              : 'Nuovo IP'}
+                    </SheetTitle>
                     {assignment && (
-                        <DialogDescription id={`${id}-assignment`}>
+                        <SheetDescription id={`${id}-assignment`}>
                             {assignment.label}
-                        </DialogDescription>
+                        </SheetDescription>
                     )}
-                </DialogHeader>
-                {ipAddress && !editing ? (
-                    <>
-                        <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                            {(
-                                [
-                                    ['IP', ipAddress.ip],
-                                    ['Hostname', ipAddress.hostname],
-                                    ['MAC Address', ipAddress.mac_address],
-                                ] as const
-                            ).map(([label, value]) => (
-                                <div
-                                    key={label}
-                                    className="flex min-w-0 flex-col gap-1"
-                                >
-                                    <dt className="text-muted-foreground">
-                                        {label}
-                                    </dt>
-                                    <dd className="break-words">
-                                        {value || '—'}
-                                    </dd>
-                                </div>
-                            ))}
-                            <div className="flex min-w-0 flex-col gap-1">
-                                <dt className="text-muted-foreground">Stato</dt>
-                                <dd>
-                                    {ipAddress.status ? (
-                                        <Badge variant="secondary">
-                                            {ipAddress.status.name}
-                                        </Badge>
+                </SheetHeader>
+                <div className="flex flex-1 flex-col gap-6 p-6">
+                    {ipAddress && !editing ? (
+                        <>
+                            <div className="flex items-center justify-between gap-3">
+                                <h3 className="text-sm font-semibold">
+                                    Indirizzo
+                                </h3>
+                                {canEdit && (
+                                    <IconButton
+                                        label={`Modifica IP ${ipAddress.ip}`}
+                                        onClick={startEditing}
+                                    >
+                                        <Pencil />
+                                    </IconButton>
+                                )}
+                            </div>
+                            <dl className="grid gap-5 text-sm sm:grid-cols-2">
+                                {(
+                                    [
+                                        ['IPv4', ipAddress.ip],
+                                        ['Hostname', ipAddress.hostname],
+                                        ['MAC', ipAddress.mac_address],
+                                        ['Descrizione', ipAddress.description],
+                                    ] as const
+                                ).map(([label, value]) => (
+                                    <div
+                                        key={label}
+                                        className={
+                                            label === 'Descrizione'
+                                                ? 'min-w-0 sm:col-span-2'
+                                                : 'min-w-0'
+                                        }
+                                    >
+                                        <dt className="mb-1 text-muted-foreground">
+                                            {label}
+                                        </dt>
+                                        <dd>
+                                            {value ? (
+                                                <CopyValue
+                                                    value={value}
+                                                    className="-ml-2"
+                                                />
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                            <Separator />
+                            <section className="flex flex-col gap-3">
+                                <h3 className="text-sm font-semibold">
+                                    Dispositivo / Interfaccia
+                                </h3>
+                                <div className="text-sm">
+                                    {ipAddress.device ? (
+                                        <DeviceAssociation
+                                            company={companyId}
+                                            site={siteId}
+                                            device={ipAddress.device}
+                                            item={ipAddress.device_interface}
+                                            label={ipAddress.assignment_label}
+                                        />
                                     ) : (
                                         '—'
                                     )}
-                                </dd>
-                            </div>
-                            <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
-                                <dt className="text-muted-foreground">
-                                    Descrizione
-                                </dt>
-                                <dd className="break-words whitespace-pre-wrap">
-                                    {ipAddress.description || '—'}
-                                </dd>
-                            </div>
-                            <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
-                                <dt className="text-muted-foreground">Tag</dt>
-                                <dd className="flex flex-wrap gap-1">
-                                    {ipAddress.tags.length
-                                        ? ipAddress.tags.map((tag) => (
-                                              <TagBadge
-                                                  key={tag.id}
-                                                  color={tag.color}
-                                                  className="max-w-full break-words whitespace-normal"
-                                              >
-                                                  {tag.name}
-                                              </TagBadge>
-                                          ))
-                                        : '—'}
-                                </dd>
-                            </div>
-                            {ipAddress.device && (
-                                <div className="flex flex-col gap-1">
-                                    <dt className="text-muted-foreground">
-                                        Dispositivo
+                                </div>
+                            </section>
+                            <Separator />
+                            <dl className="grid gap-5 text-sm sm:grid-cols-2">
+                                <div>
+                                    <dt className="mb-2 text-muted-foreground">
+                                        Stato
                                     </dt>
                                     <dd>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            asChild
-                                        >
-                                            <Link
-                                                href={deviceShow({
-                                                    company: companyId,
-                                                    site: siteId,
-                                                    device: ipAddress.device.id,
-                                                })}
-                                            >
-                                                {ipAddress.device.name}
-                                            </Link>
-                                        </Button>
-                                    </dd>
-                                </div>
-                            )}
-                            {ipAddress.device_interface && (
-                                <div className="flex flex-col gap-1">
-                                    <dt className="text-muted-foreground">
-                                        Interfaccia / MAC
-                                    </dt>
-                                    <dd>
-                                        {interfaceName(
-                                            ipAddress.device_interface,
-                                            ports,
-                                        )}
-                                        {ipAddress.device_interface.mac_address
-                                            ? ` · ${ipAddress.device_interface.mac_address}`
-                                            : ''}
-                                    </dd>
-                                </div>
-                            )}
-                        </dl>
-                        {excluded ? (
-                            <p className="text-sm text-muted-foreground">
-                                Escluso dai suggerimenti
-                            </p>
-                        ) : null}
-                        {canEdit ? (
-                            <DialogFooter className="flex-row justify-end">
-                                <IconButton
-                                    label={`Modifica IP ${ipAddress.ip}`}
-                                    onClick={() => setEditing(true)}
-                                >
-                                    <Pencil />
-                                </IconButton>
-                            </DialogFooter>
-                        ) : null}
-                    </>
-                ) : (
-                    <div hidden={deleting}>
-                        <Form
-                            {...(ipAddress
-                                ? update.form({
-                                      ...route,
-                                      ipAddress: ipAddress.id,
-                                  })
-                                : store.form(route))}
-                            onSuccess={() => setOpen(false)}
-                            transform={(data) =>
-                                assignment
-                                    ? {
-                                          ...data,
-                                          device_id: assignment.deviceId,
-                                          device_interface_id:
-                                              assignment.interfaceId,
-                                      }
-                                    : data
-                            }
-                            onBefore={() => canEdit && editing}
-                            options={{ preserveScroll: true }}
-                            className="flex flex-col gap-5"
-                        >
-                            {({ processing, errors }) => (
-                                <FieldGroup>
-                                    {excluded ? (
-                                        <Alert>
-                                            <TriangleAlert />
-                                            <AlertTitle>
-                                                IP in un intervallo escluso
-                                            </AlertTitle>
-                                        </Alert>
-                                    ) : null}
-                                    <div className="grid gap-7 sm:grid-cols-2">
-                                        {(
-                                            [
-                                                {
-                                                    name: 'hostname',
-                                                    label: 'Hostname',
-                                                    maxLength: 255,
-                                                },
-                                                {
-                                                    name: 'ip',
-                                                    label: 'IP',
-                                                    maxLength: 15,
-                                                },
-                                                {
-                                                    name: 'mac_address',
-                                                    label: 'MAC Address',
-                                                    maxLength: 17,
-                                                },
-                                            ] as const
-                                        ).map((field) => (
-                                            <Field
-                                                key={field.name}
-                                                className={
-                                                    field.name === 'hostname'
-                                                        ? 'min-w-0 sm:col-span-2'
-                                                        : 'min-w-0'
-                                                }
-                                                data-invalid={Boolean(
-                                                    errors[field.name],
-                                                )}
-                                                data-disabled={processing}
-                                            >
-                                                <FieldLabel
-                                                    htmlFor={`${id}-${field.name}`}
-                                                >
-                                                    {field.label}
-                                                    {field.name === 'ip' ? (
-                                                        <span aria-hidden="true">
-                                                            *
-                                                        </span>
-                                                    ) : null}
-                                                </FieldLabel>
-                                                <Input
-                                                    id={`${id}-${field.name}`}
-                                                    name={field.name}
-                                                    maxLength={field.maxLength}
-                                                    required={
-                                                        field.name === 'ip'
-                                                    }
-                                                    autoFocus={
-                                                        field.name ===
-                                                        'hostname'
-                                                    }
-                                                    autoComplete="off"
-                                                    readOnly={!canEdit}
-                                                    disabled={processing}
-                                                    defaultValue={
-                                                        field.name === 'ip'
-                                                            ? undefined
-                                                            : (ipAddress?.[
-                                                                  field.name
-                                                              ] ?? '')
-                                                    }
+                                        {ipAddress.status ? (
+                                            <Badge variant="secondary">
+                                                <CopyValue
                                                     value={
-                                                        field.name === 'ip'
-                                                            ? ip
-                                                            : undefined
+                                                        ipAddress.status.name
                                                     }
-                                                    onChange={
-                                                        field.name === 'ip'
-                                                            ? (event) =>
-                                                                  setIp(
-                                                                      event
-                                                                          .target
-                                                                          .value,
-                                                                  )
-                                                            : undefined
-                                                    }
-                                                    aria-invalid={Boolean(
-                                                        errors[field.name],
-                                                    )}
-                                                    aria-describedby={`${field.name === 'hostname' && !assignment ? `${id}-help ` : ''}${id}-${field.name}-error`}
+                                                    className="h-auto p-0"
                                                 />
-                                                <InputError
-                                                    id={`${id}-${field.name}-error`}
-                                                    message={errors[field.name]}
-                                                />
-                                            </Field>
-                                        ))}
-                                    </div>
-                                    <Field
-                                        data-invalid={Boolean(
-                                            errors.description,
+                                            </Badge>
+                                        ) : (
+                                            '—'
                                         )}
-                                    >
-                                        <FieldLabel
-                                            htmlFor={`${id}-description`}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt className="mb-2 text-muted-foreground">
+                                        Tag
+                                    </dt>
+                                    <dd className="flex flex-wrap gap-1">
+                                        {ipAddress.tags.length
+                                            ? ipAddress.tags.map((tag) => (
+                                                  <TagBadge
+                                                      key={tag.id}
+                                                      color={tag.color}
+                                                  >
+                                                      <CopyValue
+                                                          value={tag.name}
+                                                          className="h-auto p-0"
+                                                      />
+                                                  </TagBadge>
+                                              ))
+                                            : '—'}
+                                    </dd>
+                                </div>
+                            </dl>
+                            {excluded && (
+                                <p className="text-sm text-muted-foreground">
+                                    Escluso dai suggerimenti
+                                </p>
+                            )}
+                        </>
+                    ) : (
+                        <div hidden={deleting}>
+                            <Form
+                                {...(ipAddress
+                                    ? update.form({
+                                          ...route,
+                                          ipAddress: ipAddress.id,
+                                      })
+                                    : store.form(route))}
+                                onSuccess={() => setOpen(false)}
+                                onBefore={() => {
+                                    if (releasing) {
+                                        setDeleting(true);
+                                        return false;
+                                    }
+                                    return canEdit && editing;
+                                }}
+                                options={{ preserveScroll: true }}
+                                className="flex flex-col gap-6"
+                            >
+                                {({ processing, errors }) => (
+                                    <FieldGroup>
+                                        <h3 className="text-sm font-semibold">
+                                            Indirizzo
+                                        </h3>
+                                        {excluded && (
+                                            <Alert>
+                                                <TriangleAlert />
+                                                <AlertTitle>
+                                                    IP in un intervallo escluso
+                                                </AlertTitle>
+                                            </Alert>
+                                        )}
+                                        <div className="grid gap-5 sm:grid-cols-2">
+                                            {(
+                                                [
+                                                    {
+                                                        name: 'ip',
+                                                        label: 'IPv4',
+                                                        maxLength: 15,
+                                                    },
+                                                    {
+                                                        name: 'hostname',
+                                                        label: 'Hostname',
+                                                        maxLength: 255,
+                                                    },
+                                                    {
+                                                        name: 'mac_address',
+                                                        label: 'MAC',
+                                                        maxLength: 17,
+                                                    },
+                                                ] as const
+                                            ).map((field) => (
+                                                <Field
+                                                    key={field.name}
+                                                    data-invalid={
+                                                        !!errors[field.name]
+                                                    }
+                                                >
+                                                    <FieldLabel
+                                                        htmlFor={`${id}-${field.name}`}
+                                                    >
+                                                        {field.label}
+                                                        {field.name === 'ip'
+                                                            ? ' *'
+                                                            : ''}
+                                                    </FieldLabel>
+                                                    <Input
+                                                        id={`${id}-${field.name}`}
+                                                        name={field.name}
+                                                        maxLength={
+                                                            field.maxLength
+                                                        }
+                                                        required={
+                                                            field.name === 'ip'
+                                                        }
+                                                        autoFocus={
+                                                            field.name === 'ip'
+                                                        }
+                                                        autoComplete="off"
+                                                        disabled={
+                                                            processing ||
+                                                            !canEdit
+                                                        }
+                                                        defaultValue={
+                                                            field.name ===
+                                                            'hostname'
+                                                                ? (ipAddress?.hostname ??
+                                                                  '')
+                                                                : undefined
+                                                        }
+                                                        value={
+                                                            field.name === 'ip'
+                                                                ? ip
+                                                                : field.name ===
+                                                                    'mac_address'
+                                                                  ? mac
+                                                                  : undefined
+                                                        }
+                                                        onChange={
+                                                            field.name === 'ip'
+                                                                ? (event) =>
+                                                                      setIp(
+                                                                          event
+                                                                              .target
+                                                                              .value,
+                                                                      )
+                                                                : field.name ===
+                                                                    'mac_address'
+                                                                  ? (event) =>
+                                                                        setMac(
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                  : undefined
+                                                        }
+                                                        aria-invalid={
+                                                            !!errors[field.name]
+                                                        }
+                                                        aria-describedby={`${id}-${field.name}-error`}
+                                                    />
+                                                    <InputError
+                                                        id={`${id}-${field.name}-error`}
+                                                        message={
+                                                            errors[field.name]
+                                                        }
+                                                    />
+                                                </Field>
+                                            ))}
+                                        </div>
+                                        <Field
+                                            data-invalid={!!errors.description}
                                         >
-                                            Descrizione
-                                        </FieldLabel>
-                                        <Textarea
-                                            id={`${id}-description`}
-                                            name="description"
-                                            defaultValue={
-                                                ipAddress?.description ?? ''
-                                            }
-                                            rows={4}
-                                            className="min-h-28 resize-y"
-                                            maxLength={2000}
-                                            readOnly={!canEdit}
-                                            disabled={processing}
-                                            aria-invalid={Boolean(
-                                                errors.description,
-                                            )}
-                                            aria-describedby={`${assignment ? '' : `${id}-help `}${id}-description-error`}
-                                        />
-                                        <InputError
-                                            id={`${id}-description-error`}
-                                            message={errors.description}
-                                        />
-                                        {!assignment && (
-                                            <p
-                                                id={`${id}-help`}
-                                                className="text-sm text-muted-foreground"
+                                            <FieldLabel
+                                                htmlFor={`${id}-description`}
                                             >
-                                                Compila Hostname, Descrizione
-                                                oppure Dispositivo.
-                                            </p>
-                                        )}
-                                    </Field>
-                                    {assignment ? (
-                                        <>
-                                            <InputError
-                                                message={errors.device_id}
-                                            />
-                                            <InputError
-                                                message={
-                                                    errors.device_interface_id
+                                                Descrizione
+                                            </FieldLabel>
+                                            <Textarea
+                                                id={`${id}-description`}
+                                                name="description"
+                                                defaultValue={
+                                                    ipAddress?.description ?? ''
                                                 }
+                                                rows={4}
+                                                maxLength={2000}
+                                                disabled={
+                                                    processing || !canEdit
+                                                }
+                                                aria-invalid={
+                                                    !!errors.description
+                                                }
+                                                aria-describedby={`${id}-description-error`}
                                             />
-                                        </>
-                                    ) : (
+                                            <InputError
+                                                id={`${id}-description-error`}
+                                                message={errors.description}
+                                            />
+                                        </Field>
+                                        <Separator />
+                                        <h3 className="text-sm font-semibold">
+                                            Dispositivo / Interfaccia
+                                        </h3>
                                         <IpAssignmentFields
-                                            devices={devices ?? []}
-                                            ipAddress={ipAddress}
+                                            devices={devices}
+                                            ipAddress={
+                                                ipAddress ?? {
+                                                    device_id:
+                                                        assignment?.deviceId,
+                                                    device_interface_id:
+                                                        assignment?.interfaceId,
+                                                }
+                                            }
                                             disabled={processing || !canEdit}
                                             errors={errors}
+                                            onAssignmentChange={(
+                                                deviceId,
+                                                interfaceId,
+                                            ) =>
+                                                setReleasing(
+                                                    Boolean(
+                                                        ipAddress?.device_id &&
+                                                        (!deviceId ||
+                                                            (deviceId ===
+                                                                ipAddress.device_id &&
+                                                                ipAddress.device_interface_id &&
+                                                                !interfaceId)),
+                                                    ),
+                                                )
+                                            }
+                                            onInterfaceChange={(item) => {
+                                                if (!mac && item?.mac_address)
+                                                    setMac(item.mac_address);
+                                            }}
                                         />
-                                    )}
-                                    <div className="grid items-start gap-7 sm:grid-cols-2">
-                                        <IpMetadataFields
-                                            statuses={statuses}
-                                            tags={tags}
-                                            ipAddress={ipAddress}
-                                            disabled={processing}
-                                            readOnly={!canEdit}
-                                            errors={errors}
-                                        />
-                                    </div>
-                                    <DialogFooter>
-                                        {ipAddress && canEdit ? (
-                                            <IconButton
-                                                label="Elimina dati IP"
-                                                variant="destructive"
-                                                className="sm:mr-auto"
+                                        {releasing && (
+                                            <Alert variant="destructive">
+                                                <TriangleAlert />
+                                                <AlertTitle>
+                                                    La rimozione
+                                                    dell’associazione libera
+                                                    l’IP
+                                                </AlertTitle>
+                                                <AlertDescription>
+                                                    Il record di {ipAddress?.ip}{' '}
+                                                    verrà eliminato con
+                                                    hostname, descrizione, MAC,
+                                                    stato e associazioni ai tag.
+                                                    Le altre modifiche al form
+                                                    non verranno salvate. Gli
+                                                    indirizzi esclusi restano
+                                                    esclusi dai suggerimenti.
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
+                                        <Separator />
+                                        <div className="grid items-start gap-5 sm:grid-cols-2">
+                                            <IpMetadataFields
+                                                statuses={statuses}
+                                                tags={tags}
+                                                ipAddress={ipAddress}
                                                 disabled={processing}
-                                                onClick={() =>
-                                                    setDeleting(true)
-                                                }
-                                            >
-                                                <Trash2 />
-                                            </IconButton>
-                                        ) : null}
-                                        <DialogClose asChild>
+                                                readOnly={!canEdit}
+                                                errors={errors}
+                                            />
+                                        </div>
+                                        <MacConfirmation errors={errors} />
+                                        <SheetFooter className="flex-row flex-wrap justify-end px-0 pb-0">
+                                            {ipAddress && canEdit && (
+                                                <IconButton
+                                                    label="Elimina dati IP"
+                                                    variant="destructive"
+                                                    className="mr-auto"
+                                                    disabled={processing}
+                                                    onClick={() =>
+                                                        setDeleting(true)
+                                                    }
+                                                >
+                                                    <Trash2 />
+                                                </IconButton>
+                                            )}
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 disabled={processing}
+                                                onClick={() =>
+                                                    ipAddress
+                                                        ? setEditing(false)
+                                                        : setOpen(false)
+                                                }
                                             >
-                                                {canEdit ? 'Annulla' : 'Chiudi'}
+                                                Annulla
                                             </Button>
-                                        </DialogClose>
-                                        {canEdit ? (
-                                            <Button
-                                                type="submit"
-                                                disabled={processing}
-                                            >
-                                                {processing ? (
-                                                    <Spinner />
-                                                ) : (
-                                                    <Check data-icon="inline-start" />
-                                                )}
-                                                Salva
-                                            </Button>
-                                        ) : null}
-                                    </DialogFooter>
-                                </FieldGroup>
-                            )}
-                        </Form>
-                    </div>
-                )}
-                {deleting && ipAddress && canEdit && editing ? (
-                    <DeletionConfirmation
-                        action={destroy.form({
-                            ...route,
-                            ipAddress: ipAddress.id,
-                        })}
-                        onCancel={() => {
-                            setDeleting(false);
-                            requestAnimationFrame(() =>
-                                document.getElementById(`${id}-ip`)?.focus(),
-                            );
-                        }}
-                        onSuccess={() => setOpen(false)}
-                    >
-                        <p>
-                            Verrà eliminato il record di{' '}
-                            <strong>{ipAddress.ip}</strong> con descrizione,
-                            hostname, MAC, stato e associazioni ai tag. Se
-                            l’indirizzo è escluso, resterà escluso dai
-                            suggerimenti.
-                        </p>
-                    </DeletionConfirmation>
-                ) : null}
-            </DialogContent>
-        </Dialog>
+                                            {canEdit && (
+                                                <Button
+                                                    type={
+                                                        releasing
+                                                            ? 'button'
+                                                            : 'submit'
+                                                    }
+                                                    variant={
+                                                        releasing
+                                                            ? 'destructive'
+                                                            : 'default'
+                                                    }
+                                                    disabled={processing}
+                                                    onClick={
+                                                        releasing
+                                                            ? () =>
+                                                                  setDeleting(
+                                                                      true,
+                                                                  )
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {processing ? (
+                                                        <Spinner />
+                                                    ) : releasing ? (
+                                                        <Trash2 data-icon="inline-start" />
+                                                    ) : (
+                                                        <Check data-icon="inline-start" />
+                                                    )}
+                                                    {releasing
+                                                        ? 'Libera IP…'
+                                                        : errors.mac_confirmation
+                                                          ? 'Sostituisci MAC'
+                                                          : 'Salva'}
+                                                </Button>
+                                            )}
+                                        </SheetFooter>
+                                    </FieldGroup>
+                                )}
+                            </Form>
+                        </div>
+                    )}
+                    {deleting && ipAddress && canEdit && editing && (
+                        <DeletionConfirmation
+                            action={destroy.form({
+                                ...route,
+                                ipAddress: ipAddress.id,
+                            })}
+                            onCancel={() => {
+                                setDeleting(false);
+                                requestAnimationFrame(() =>
+                                    document
+                                        .getElementById(`${id}-ip`)
+                                        ?.focus(),
+                                );
+                            }}
+                            onSuccess={() => setOpen(false)}
+                            submitLabel="Libera IP"
+                        >
+                            <p>
+                                Verrà eliminato il record di{' '}
+                                <strong>{ipAddress.ip}</strong> con descrizione,
+                                hostname, MAC, stato, associazioni ai tag e al
+                                dispositivo/interfaccia. L’indirizzo tornerà
+                                libero. Se è escluso, resterà escluso dai
+                                suggerimenti. Le modifiche al form non verranno
+                                salvate.
+                            </p>
+                        </DeletionConfirmation>
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
     );
 }

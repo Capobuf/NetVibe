@@ -16,6 +16,7 @@ use App\Support\DeletionImpact;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -40,13 +41,16 @@ class DeviceController extends Controller
         ]);
     }
 
-    public function show(Company $company, Site $site, Device $device): Response
+    public function show(Request $request, Company $company, Site $site, Device $device): Response
     {
+        $options = $request->validate(['interface' => ['sometimes', 'integer', 'min:1']]);
+        $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
 
         return Inertia::render('devices/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'device' => $device,
+            'initialInterfaceId' => $selectedInterface?->id,
             'assetUrls' => $device->model?->assetUrls() ?? [],
             'manufacturers' => $this->catalog(),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
@@ -54,7 +58,7 @@ class DeviceController extends Controller
             'availableIps' => IpAddress::query()->whereIn('subnet_id', $site->subnets()->select('id'))
                 ->where(fn ($query) => $query->whereNull('device_id')->orWhere(fn ($query) => $query->where('device_id', $device->id)->whereNull('device_interface_id')))
                 ->with('subnet:id,cidr')->orderBy('address')->get()
-                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'subnet'), 'ip' => long2ip($ip->address)]),
+                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)]),
             'subnets' => $site->subnets()->with('excludedRanges')->orderBy('network_address')->get(['id', 'cidr', 'name'])
                 ->map(fn ($subnet) => [...$subnet->only('id', 'cidr', 'name'),
                     'excludedRanges' => $subnet->excludedRanges->map(fn ($range) => [
@@ -109,10 +113,9 @@ class DeviceController extends Controller
         DB::transaction(function () use ($request, $company, $site, $device) {
             $impact = DeletionImpact::device($company, $site, $device);
             $request->ensureUnchanged($impact);
-            $device->ipAddresses()->update(['device_id' => null, 'device_interface_id' => null]);
-            $device->delete();
+            DeletionImpact::deleteDevices([$device->id]);
         }, 3);
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo eliminato. Gli IP sono stati conservati.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo e documentazione degli IP collegati eliminati. Le esclusioni delle subnet restano valide.']);
 
         return to_route('companies.sites.devices.index', [$company, $site]);
     }

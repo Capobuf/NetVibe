@@ -9,16 +9,27 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import InputError from '@/components/input-error';
-import { interfaceName, type Device } from '@/types/device';
+import {
+    interfaceName,
+    type Device,
+    type DeviceInterface,
+} from '@/types/device';
 import type { IpAddress } from '@/types/network';
 export function IpAssignmentFields({
     devices,
     ipAddress,
     disabled,
     errors,
+    onInterfaceChange,
+    onAssignmentChange,
 }: {
     devices: Device[];
-    ipAddress?: IpAddress;
+    ipAddress?: Pick<IpAddress, 'device_id' | 'device_interface_id'>;
+    onInterfaceChange?: (item: DeviceInterface | undefined) => void;
+    onAssignmentChange?: (
+        deviceId: number | null,
+        interfaceId: number | null,
+    ) => void;
     disabled: boolean;
     errors: Record<string, string>;
 }) {
@@ -50,6 +61,11 @@ export function IpAssignmentFields({
                     onValueChange={(v) => {
                         setDeviceId(v);
                         setInterfaceId('none');
+                        onInterfaceChange?.(undefined);
+                        onAssignmentChange?.(
+                            v === 'none' ? null : Number(v),
+                            null,
+                        );
                     }}
                     disabled={disabled}
                 >
@@ -84,7 +100,18 @@ export function IpAssignmentFields({
                 />
                 <Select
                     value={interfaceId}
-                    onValueChange={setInterfaceId}
+                    onValueChange={(value) => {
+                        setInterfaceId(value);
+                        onAssignmentChange?.(
+                            device?.id ?? null,
+                            value === 'none' ? null : Number(value),
+                        );
+                        onInterfaceChange?.(
+                            device?.interfaces.find(
+                                (item) => String(item.id) === value,
+                            ),
+                        );
+                    }}
                     disabled={disabled || !device}
                 >
                     <SelectTrigger

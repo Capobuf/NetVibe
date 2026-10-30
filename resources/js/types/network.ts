@@ -20,6 +20,7 @@ export type IpAddress = {
     description: string | null;
     hostname: string | null;
     mac_address: string | null;
+    assignment_label?: string | null;
     device_id?: number | null;
     device_interface_id?: number | null;
     device?: { id: number; name: string } | null;

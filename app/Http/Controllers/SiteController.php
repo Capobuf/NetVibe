@@ -79,6 +79,7 @@ class SiteController extends Controller
             }
 
             DeletionImpact::deleteSubnets(array_column($impact['subnets'], 'id'));
+            DeletionImpact::deleteDevices(array_column($impact['devices'], 'id'));
             $site->vlans()->delete();
             $company->sites()->findOrFail($site->id)->delete();
         }, 3);

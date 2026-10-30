@@ -70,7 +70,7 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                         </TabsTrigger>
                         <TabsTrigger value="hardware-editor">
                             <PanelsTopLeft />
-                            Editor pannelli
+                            Editor
                         </TabsTrigger>
                     </TabsList>
                 </div>

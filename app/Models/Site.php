@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['name'])]
 class Site extends Model
 {
+    /** @return HasMany<Device, $this> */
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
+    }
+
     /** @return HasMany<Vlan, $this> */
     public function vlans(): HasMany
     {

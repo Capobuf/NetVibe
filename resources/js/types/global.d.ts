@@ -12,6 +12,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            navigationArea: 'tenant' | 'administration';
             companyNavigation: {
                 companies: Company[];
                 currentCompanyId: number | null;

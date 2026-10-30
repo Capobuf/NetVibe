@@ -8,6 +8,7 @@ use App\Models\IpAddress;
 use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
+use App\Support\DeviceAssignment;
 use App\Support\Ipv4Ranges;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -65,7 +66,9 @@ class IpAddressController extends Controller
                 $record = $ipAddress
                     ? $subnet->ipAddresses()->findOrFail($ipAddress->id)
                     : $subnet->ipAddresses()->make();
+                $assignment = DeviceAssignment::validate($subnet->site_id, $data['device_id'] ?? null, $data['device_interface_id'] ?? null);
                 $record->fill([
+                    ...$assignment,
                     'address' => $address,
                     'description' => $data['description'] ?? null,
                     'hostname' => $data['hostname'] ?? null,

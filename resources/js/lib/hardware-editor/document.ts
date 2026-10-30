@@ -194,7 +194,7 @@ export function blankDocument(): PanelDocument {
     return {
         version: 3,
         name: 'Pannello senza titolo',
-        shell: { x: 0, y: 0, width: 900, height: 180, radius: 8, border: 2 },
+        shell: { x: 0, y: 0, width: 900, height: 180, radius: 0, border: 2 },
         faces: {
             front: {
                 ports: [],
@@ -216,7 +216,8 @@ export function makePort(type: ConnectorType, point: Point): Port {
     return {
         id: newId(),
         type,
-        ...point,
+        x: point.x,
+        y: point.y,
         rotation: 0,
         scale: 1,
         label: '',
@@ -257,18 +258,38 @@ export function portLabelPosition(port: Port): Port['labelPosition'] {
         ? 'bottom'
         : port.labelPosition;
 }
+export const portLabelFontFamily = 'ui-monospace, monospace';
+let labelMeasureContext: CanvasRenderingContext2D | null = null;
+function portLabelWidth(label: string, fontSize: number) {
+    if (typeof document !== 'undefined') {
+        labelMeasureContext ??= document
+            .createElement('canvas')
+            .getContext('2d');
+        if (labelMeasureContext) {
+            labelMeasureContext.font = `${fontSize}px ${portLabelFontFamily}`;
+            return labelMeasureContext.measureText(label).width;
+        }
+    }
+    // Geometry tests run without a browser canvas.
+    return Array.from(label).length * fontSize * 0.6;
+}
 function portLabelText(label: string, width: number, fontSize: number) {
     const characters = Array.from(label);
-    if (characters.length * fontSize * 0.65 <= width)
+    if (portLabelWidth(label, fontSize) <= width)
         return { text: label, truncated: false };
-    const capacity = Math.floor(width / (fontSize * 0.65));
-    if (capacity < 3) return { text: '…', truncated: true };
-    const start = Math.floor((capacity - 1) / 2);
-    const end = capacity - 1 - start;
-    return {
-        text: `${characters.slice(0, start).join('')}…${characters.slice(-end).join('')}`,
-        truncated: true,
-    };
+    let capacity = Math.min(
+        characters.length - 1,
+        Math.floor(width / portLabelWidth('M', fontSize)),
+    );
+    while (capacity >= 3) {
+        const start = Math.floor((capacity - 1) / 2);
+        const end = capacity - 1 - start;
+        const text = `${characters.slice(0, start).join('')}…${characters.slice(-end).join('')}`;
+        if (portLabelWidth(text, fontSize) <= width)
+            return { text, truncated: true };
+        capacity--;
+    }
+    return { text: '…', truncated: true };
 }
 export function portLabelLayout(port: Port, label: string) {
     const bounds = portBodyBounds(port);
@@ -277,7 +298,7 @@ export function portLabelLayout(port: Port, label: string) {
     if (isPowerConnector(port.type)) {
         const position = portLabelPosition(port);
         const fontSize = 12 * port.scale;
-        const fullWidth = Array.from(label).length * fontSize * 0.65;
+        const fullWidth = portLabelWidth(label, fontSize) + 0.1 * port.scale;
         const width = Math.min(fullWidth, bounds.width * 2);
         const gap = 4 * port.scale;
         return {
@@ -299,19 +320,16 @@ export function portLabelLayout(port: Port, label: string) {
             ...portLabelText(label, width, fontSize),
         };
     }
-    const width = bounds.width * 0.75;
+    const width = bounds.width - 1.5 * port.scale;
     const availableHeight = bounds.height * 0.45;
     const fontSize = Math.min(
         12 * port.scale,
         availableHeight,
-        Math.max(
-            8 * port.scale,
-            width / Math.max(1, Array.from(label).length * 0.65),
-        ),
+        Math.max(8 * port.scale, width / Math.max(1, portLabelWidth(label, 1))),
     );
     const textWidth = Math.min(
         width,
-        Array.from(label).length * fontSize * 0.65,
+        portLabelWidth(label, fontSize) + 0.1 * port.scale,
     );
     return {
         x:
@@ -634,6 +652,38 @@ export type BlockCorner =
     | 'top-right'
     | 'bottom-left'
     | 'bottom-right';
+export function resizePortGroup(
+    ports: Port[],
+    corner: BlockCorner,
+    delta: Point,
+): Port[] {
+    if (!ports.length) return ports;
+    const boxes = ports.map(portBounds);
+    const bounds = boundsOf(boxes);
+    const left = corner.endsWith('left');
+    const top = corner.startsWith('top');
+    const x = bounds.x + (left ? 0 : bounds.width) + delta.x;
+    const y = bounds.y + (top ? 0 : bounds.height) + delta.y;
+    // Fit the dragged edges while keeping every port centered on its original position.
+    const scaleX = Math.min(
+        ...ports.map(
+            (p, i) => (left ? p.x - x : x - p.x) / (boxes[i].width / 2),
+        ),
+    );
+    const scaleY = Math.min(
+        ...ports.map(
+            (p, i) => (top ? p.y - y : y - p.y) / (boxes[i].height / 2),
+        ),
+    );
+    const factor = Math.max(
+        0.2 / Math.min(...ports.map((p) => p.scale)),
+        Math.min(
+            8 / Math.max(...ports.map((p) => p.scale)),
+            Math.abs(scaleX - 1) > Math.abs(scaleY - 1) ? scaleX : scaleY,
+        ),
+    );
+    return ports.map((port) => ({ ...port, scale: port.scale * factor }));
+}
 export function reshapeBlock(
     options: BlockOptions,
     corner: BlockCorner,
@@ -758,22 +808,6 @@ export function previewBlock(options: BlockOptions): Port[] {
         x: port.x + options.x - box.x - box.width / 2,
         y: port.y + options.y - box.y - box.height / 2,
     }));
-}
-export function exampleDocument(): PanelDocument {
-    const doc = blankDocument();
-    doc.name = 'Switch dimostrativo';
-    const ports = createBlock('rj45', 24, 12, 16, 38, 0, { x: 65, y: 52 }).map(
-        (p, i) => ({ ...p, label: String(i + 1), poe: true }),
-    );
-    const uplinks = createBlock('sfp', 4, 2, 20, 48, 0, { x: 745, y: 52 }).map(
-        (p, i) => ({ ...p, label: `sfp${i + 1}` }),
-    );
-    doc.faces.front.ports = [...ports, ...uplinks];
-    doc.faces.rear.ports = [
-        { ...makePort('ac', { x: 75, y: 90 }), label: 'AC' },
-        { ...makePort('console', { x: 800, y: 90 }), label: 'console' },
-    ];
-    return doc;
 }
 export function snapDelta(
     moving: Port[],

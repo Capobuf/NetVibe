@@ -55,7 +55,7 @@ class SubnetController extends Controller
 
         $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
         $selected = isset($options['ip_address'])
-            ? $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color'])->find($options['ip_address'])
+            ? $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
             : null;
 
         return Inertia::render('subnets/show', [
@@ -74,11 +74,14 @@ class SubnetController extends Controller
             'query' => compact('search', 'sort', 'direction'),
             'addressCounts' => $subnet->addressCounts(),
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
+            'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
             'initialIpAddress' => $selected ? [
                 ...$selected->only('id', 'hostname', 'mac_address', 'description'),
                 'ip' => long2ip($selected->address),
+                'device_id' => $selected->device_id, 'device_interface_id' => $selected->device_interface_id,
+                'device' => $selected->device, 'device_interface' => $selected->deviceInterface,
                 'status' => $selected->status?->only('id', 'name'),
                 'tags' => $selected->tags->map->only('id', 'name', 'color'),
                 'excluded' => $subnet->isExcluded($selected->address),

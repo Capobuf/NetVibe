@@ -78,10 +78,10 @@ export async function saveDraft(
         };
     });
 }
-function validateDraft(value: Draft): void {
+export function validateDraft(value: Draft): void {
     const fail = () => {
         throw new Error(
-            'Bozza non compatibile o danneggiata. Puoi riprovare oppure iniziare una nuova bozza.',
+            'Disegno salvato non compatibile o danneggiato. Ricarica per riprovare.',
         );
     };
     const finite = (n: number) => typeof n === 'number' && Number.isFinite(n);

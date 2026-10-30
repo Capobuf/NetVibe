@@ -8,6 +8,7 @@ import {
     previewBlock,
     resizeBlockSpacing,
     reshapeBlock,
+    resizePortGroup,
     boundsOf,
     faceLayers,
     categorizedLayers,
@@ -124,7 +125,7 @@ test('long labels stop shrinking and are marked for ellipsis without changing th
     assert.equal(short.truncated, false);
     assert.equal(short.text, '24');
     assert.equal(long.truncated, true);
-    assert.equal(long.text, 'u…01');
+    assert.equal(long.text, 'up…-01');
     assert.equal(long.fontSize, 8);
     assert.equal(longer.fontSize, long.fontSize);
     assert.equal(longer.width, long.width);
@@ -134,7 +135,7 @@ test('long labels stop shrinking and are marked for ellipsis without changing th
 test('middle abbreviation keeps both ends on external labels and fits narrow ports', () => {
     const power = makePort('ac', { x: 0, y: 0 });
     const label = portLabelLayout(power, 'alimentazione-primaria-01');
-    assert.equal(label.text, 'alim…ia-01');
+    assert.equal(label.text, 'alime…ia-01');
     const small = portLabelLayout(
         { ...makePort('usbMicroB', { x: 0, y: 0 }), rotation: 90 },
         'console12',
@@ -145,6 +146,21 @@ test('middle abbreviation keeps both ends on external labels and fits narrow por
         'alimentazione-primaria-01',
     );
     assert.equal(scaled.text, label.text);
+});
+
+test('short SFP labels use the available port width before abbreviating', () => {
+    for (const scale of [0.2, 1, 4]) {
+        const port = { ...makePort('sfp', { x: 50, y: 50 }), scale };
+        const label = portLabelLayout(port, 'SFP+1');
+        assert.equal(label.text, 'SFP+1');
+        assert.equal(label.truncated, false);
+        assert.ok(label.width <= portBounds(port).width);
+        assert.ok(label.fontSize >= 8 * scale);
+        assert.equal(
+            portLabelLayout(port, 'SFP+uplink-distribution-01').truncated,
+            true,
+        );
+    }
 });
 
 test('connector categories preserve mixed groups and document stacking order', () => {
@@ -511,6 +527,9 @@ test('block preview stays centered with scaled rotated ports and preserves reque
     };
 
     const ports = previewBlock(options);
+    const portKeys = Object.keys(makePort('rj45', { x: 0, y: 0 })).sort();
+    for (const port of ports)
+        assert.deepEqual(Object.keys(port).sort(), portKeys);
     const box = boundsOf(ports.map(portBounds));
     const moved = previewBlock({ ...options, x: 540, y: 280 });
 
@@ -667,4 +686,67 @@ test('block corners reflow rows and columns while preserving the opposite corner
         reshapeBlock(single, 'bottom-right', { x: 100, y: 100 }),
         single,
     );
+});
+
+test('group corner resizing changes only port scales, preserving centers and relative sizes within limits', () => {
+    const ports = [
+        { ...makePort('rj45', { x: 50, y: 40 }), group: 'bank' },
+        {
+            ...makePort('sfp', { x: 150, y: 100 }),
+            group: 'bank',
+            scale: 2,
+            rotation: 90,
+        },
+    ];
+    const original = structuredClone(ports);
+    const bounds = boundsOf(ports.map(portBounds));
+    for (const corner of [
+        'top-left',
+        'top-right',
+        'bottom-left',
+        'bottom-right',
+    ] as const) {
+        const left = corner.endsWith('left');
+        const resized = resizePortGroup(ports, corner, {
+            x: left ? -17 : 18,
+            y: 0,
+        });
+        const box = boundsOf(resized.map(portBounds));
+        assert.deepEqual(
+            resized.map((p) => p.scale),
+            [2, 4],
+        );
+        assert.equal(
+            left ? box.x : box.x + box.width,
+            left ? bounds.x - 17 : bounds.x + bounds.width + 18,
+        );
+        resized.forEach((port, index) => {
+            assert.deepEqual(port, {
+                ...original[index],
+                scale: original[index].scale * 2,
+            });
+        });
+    }
+    const taller = resizePortGroup(ports, 'bottom-right', { x: 0, y: 26 });
+    assert.deepEqual(
+        taller.map((p) => p.scale),
+        [2, 4],
+    );
+    assert.deepEqual(
+        resizePortGroup(ports, 'bottom-right', { x: 10000, y: 10000 }).map(
+            (p) => p.scale,
+        ),
+        [4, 8],
+    );
+    assert.deepEqual(
+        resizePortGroup(ports, 'top-left', { x: 10000, y: 10000 }).map(
+            (p) => p.scale,
+        ),
+        [0.2, 0.4],
+    );
+    assert.deepEqual(
+        resizePortGroup(ports, 'top-left', { x: 0, y: 0 }),
+        original,
+    );
+    assert.deepEqual(ports, original);
 });

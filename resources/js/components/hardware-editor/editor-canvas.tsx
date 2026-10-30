@@ -26,13 +26,13 @@ import {
 import { useAppearance } from '@/hooks/use-appearance';
 import {
     boundsOf,
-    faceLayers,
     imageBounds,
     duplicatePorts,
     portBounds,
     portLabelLayout,
     snapDelta,
     resizeBlockSpacing,
+    resizePortGroup,
     reshapeBlock,
     type BlockOptions,
     type BlockEdge,
@@ -42,6 +42,7 @@ import {
     type Port,
 } from '@/lib/hardware-editor/document';
 import { PortSymbol } from './port-symbol';
+import { PanelScene } from './panel-scene';
 import type { Editor, Selection } from './use-editor';
 
 const blockHandles = [
@@ -68,7 +69,15 @@ type Gesture = {
     copy: boolean;
     duplicated: boolean;
     moved: boolean;
-    mode: 'pan' | 'ports' | 'marquee' | 'image' | 'crop' | 'block-spacing';
+    mode:
+        | 'pan'
+        | 'ports'
+        | 'marquee'
+        | 'image'
+        | 'crop'
+        | 'block-spacing'
+        | 'group-scale';
+    groupCorner?: BlockCorner;
     block?: BlockOptions;
     blockEdge?: BlockEdge | BlockCorner;
     crop?: NonNullable<Editor['crop']>;
@@ -139,6 +148,14 @@ export function EditorCanvas({
         ? boundsOf(selected.map(portBounds))
         : null;
     const blocked = !!e.session || !!preview || !!e.crop || !!blockPreview;
+    const canResizeGroup =
+        !!e.group &&
+        selected.length > 1 &&
+        !blocked &&
+        !e.loading &&
+        !pan &&
+        !space &&
+        !e.selected.some((p) => p.hidden || e.portLocked(p));
     const blockBox = blockPreview
         ? boundsOf(blockPreview.map(portBounds))
         : null;
@@ -337,6 +354,14 @@ export function EditorCanvas({
         const blockEdge = blockHandles.find(
             ([edge]) => event.target.name() === `block-${edge}`,
         )?.[0];
+        const groupCorner = canResizeGroup
+            ? (blockHandles.find(
+                  ([edge, x, y]) =>
+                      x !== 0.5 &&
+                      y !== 0.5 &&
+                      event.target.name() === `group-${edge}`,
+              )?.[0] as BlockCorner | undefined)
+            : undefined;
         if (blockPreview && !pan && !space && !blockEdge) return;
         const hit = pick(event.target);
         if (
@@ -356,8 +381,14 @@ export function EditorCanvas({
         const additive =
             event.evt.ctrlKey || event.evt.metaKey || event.evt.shiftKey;
         const panning = (!e.crop && pan) || space;
-        let ids = hit.ids;
-        if (!panning && !e.crop && !blockOptions && hit.kind === 'ports') {
+        let ids = groupCorner ? e.selection.ids : hit.ids;
+        if (
+            !groupCorner &&
+            !panning &&
+            !e.crop &&
+            !blockOptions &&
+            hit.kind === 'ports'
+        ) {
             if (additive)
                 ids = hit.ids.every((id) => e.selection.ids.includes(id))
                     ? e.selection.ids.filter((id) => !hit.ids.includes(id))
@@ -365,18 +396,21 @@ export function EditorCanvas({
             else if (hit.ids.some((id) => e.selection.ids.includes(id)))
                 ids = e.selection.ids;
             e.setSelection({ kind: 'ports', ids });
-        } else if (!panning && !e.crop && !blockOptions) e.setSelection(hit);
+        } else if (!groupCorner && !panning && !e.crop && !blockOptions)
+            e.setSelection(hit);
         const mode = panning
             ? 'pan'
-            : blockEdge && blockOptions
-              ? 'block-spacing'
-              : e.crop
-                ? 'crop'
-                : hit.kind === 'ports'
-                  ? 'ports'
-                  : hit.kind === 'image' && !image?.locked
-                    ? 'image'
-                    : 'marquee';
+            : groupCorner
+              ? 'group-scale'
+              : blockEdge && blockOptions
+                ? 'block-spacing'
+                : e.crop
+                  ? 'crop'
+                  : hit.kind === 'ports'
+                    ? 'ports'
+                    : hit.kind === 'image' && !image?.locked
+                      ? 'image'
+                      : 'marquee';
         gesture.current = {
             start,
             screen,
@@ -387,6 +421,7 @@ export function EditorCanvas({
             crop: e.crop ?? undefined,
             block: blockOptions ?? undefined,
             blockEdge,
+            groupCorner,
             handle: event.target.name(),
             copy: mode === 'ports' && event.evt.altKey,
             duplicated: false,
@@ -430,6 +465,14 @@ export function EditorCanvas({
         )
             return;
         g.moved = true;
+        if (g.mode === 'group-scale' && g.groupCorner) {
+            const resized = resizePortGroup(g.moving, g.groupCorner, d);
+            draftRef.current = e.ports.map(
+                (port) => resized.find((p) => p.id === port.id) ?? port,
+            );
+            setDraft(draftRef.current);
+            return;
+        }
         if (g.mode === 'block-spacing' && g.block && g.blockEdge) {
             onChangeBlock(
                 g.blockEdge === 'left' ||
@@ -562,9 +605,16 @@ export function EditorCanvas({
         if (!g) return;
         const moved = g.moved;
         if (!moved && !blocked && g.mode !== 'pan') e.setPastePoint(g.start);
-        if (g.mode === 'block-spacing' && stage.current)
+        if (
+            (g.mode === 'block-spacing' || g.mode === 'group-scale') &&
+            stage.current
+        )
             stage.current.container().style.cursor = '';
-        if (moved && g.mode === 'ports' && draftRef.current)
+        if (
+            moved &&
+            (g.mode === 'ports' || g.mode === 'group-scale') &&
+            draftRef.current
+        )
             e.setPortList(draftRef.current);
         if (moved && g.mode === 'image' && image)
             e.patchImage({
@@ -720,6 +770,8 @@ export function EditorCanvas({
                 onPointerUp={up}
                 onPointerCancel={() => {
                     gesture.current = null;
+                    if (stage.current)
+                        stage.current.container().style.cursor = '';
                     setBlockDragging(false);
                     setDraft(null);
                     setMarquee(null);
@@ -779,95 +831,36 @@ export function EditorCanvas({
                         fontSize={12 / view.zoom}
                         fill={dark ? '#a3a3a3' : '#737373'}
                     />
-                    <Rect
-                        visible={!e.shellState.hidden}
-                        id="shell"
-                        x={shell.x}
-                        y={shell.y}
-                        width={shell.width}
-                        height={shell.height}
-                        cornerRadius={shell.radius}
-                        stroke={dark ? '#64748b' : '#9ba7b6'}
-                        strokeWidth={shell.border}
-                        fill="transparent"
-                    />
-                    {faceLayers({ ...e.doc.faces[e.face], ports }).map(
-                        (layer) =>
-                            layer.id === 'image' ? (
-                                image &&
-                                !image.hidden &&
-                                !e.crop &&
-                                e.images[image.assetId] && (
-                                    <Group
-                                        key="image"
-                                        clipX={image.clip ? shell.x : undefined}
-                                        clipY={image.clip ? shell.y : undefined}
-                                        clipWidth={
-                                            image.clip ? shell.width : undefined
-                                        }
-                                        clipHeight={
-                                            image.clip
-                                                ? shell.height
-                                                : undefined
-                                        }
-                                    >
-                                        <CanvasImage
-                                            id="panel-image"
-                                            image={e.images[image.assetId]}
-                                            {...imageBounds(image)}
-                                            x={
-                                                imageBounds(image).x +
-                                                (imageDelta?.x ?? 0)
-                                            }
-                                            y={
-                                                imageBounds(image).y +
-                                                (imageDelta?.y ?? 0)
-                                            }
-                                            crop={image.crop}
-                                            listening={!image.locked}
-                                            opacity={
-                                                e.selection.kind === 'image'
-                                                    ? (e.opacityPreview ??
-                                                      image.opacity)
-                                                    : image.opacity
-                                            }
-                                        />
-                                    </Group>
-                                )
-                            ) : (
-                                <Group key={layer.id}>
-                                    {layer.ids
-                                        .map((id) =>
-                                            ports.find((p) => p.id === id)!,
-                                        )
-                                        .filter((p) => !p.hidden)
-                                        .map((port) => (
-                                            <PortSymbol
-                                                key={port.id}
-                                                port={
-                                                    e.selection.ids.includes(
-                                                        port.id,
-                                                    )
-                                                        ? {
-                                                              ...port,
-                                                              opacity:
-                                                                  e.opacityPreview ??
-                                                                  port.opacity,
-                                                              borderColor:
-                                                                  e.borderColorPreview ??
-                                                                  port.borderColor,
-                                                          }
-                                                        : port
-                                                }
-                                                selected={false}
-                                                numbering={!!e.session}
-                                                preview={preview?.get(port.id)}
-                                                zoom={view.zoom}
-                                            />
-                                        ))}
-                                </Group>
+                    <PanelScene
+                        shell={shell}
+                        face={{
+                            ...e.doc.faces[e.face],
+                            ports: ports.map((port) =>
+                                e.selection.ids.includes(port.id)
+                                    ? {
+                                          ...port,
+                                          opacity:
+                                              e.opacityPreview ?? port.opacity,
+                                          borderColor:
+                                              e.borderColorPreview ??
+                                              port.borderColor,
+                                      }
+                                    : port,
                             ),
-                    )}
+                        }}
+                        images={e.images}
+                        dark={dark}
+                        zoom={view.zoom}
+                        hideImage={!!e.crop}
+                        imageDelta={imageDelta}
+                        imageOpacity={
+                            e.selection.kind === 'image'
+                                ? (e.opacityPreview ?? image?.opacity)
+                                : image?.opacity
+                        }
+                        numbering={!!e.session}
+                        preview={preview}
+                    />
                     {blockPreview && blockOptions && blockBox && (
                         <Group
                             name="block-preview"
@@ -1162,6 +1155,51 @@ export function EditorCanvas({
                             dash={[5 / view.zoom, 3 / view.zoom]}
                         />
                     )}
+                    {selectedBox &&
+                        canResizeGroup &&
+                        blockHandles.map(
+                            ([corner, x, y, cursor]) =>
+                                x !== 0.5 &&
+                                y !== 0.5 && (
+                                    <Rect
+                                        key={corner}
+                                        name={`group-${corner}`}
+                                        x={
+                                            selectedBox.x +
+                                            selectedBox.width * x +
+                                            (x ? 10 : -10) / view.zoom -
+                                            4.5 / view.zoom
+                                        }
+                                        y={
+                                            selectedBox.y +
+                                            selectedBox.height * y +
+                                            (y ? 10 : -10) / view.zoom -
+                                            4.5 / view.zoom
+                                        }
+                                        width={9 / view.zoom}
+                                        height={9 / view.zoom}
+                                        fill={dark ? '#17202c' : '#fff'}
+                                        stroke="#3b82f6"
+                                        strokeWidth={1 / view.zoom}
+                                        hitStrokeWidth={14 / view.zoom}
+                                        cornerRadius={2 / view.zoom}
+                                        onMouseEnter={() => {
+                                            if (stage.current)
+                                                stage.current.container().style.cursor =
+                                                    cursor;
+                                        }}
+                                        onMouseLeave={() => {
+                                            if (
+                                                stage.current &&
+                                                gesture.current?.mode !==
+                                                    'group-scale'
+                                            )
+                                                stage.current.container().style.cursor =
+                                                    '';
+                                        }}
+                                    />
+                                ),
+                        )}
                     {guides.map((g) => (
                         <Line
                             key={g.axis}

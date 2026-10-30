@@ -5,6 +5,9 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubItem,
+    SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem } from '@/types';
@@ -33,7 +36,6 @@ export function NavMain({
                         >
                             <Link
                                 href={item.href}
-                                prefetch
                                 aria-current={
                                     (item.isActive ??
                                     isCurrentOrParentUrl(item.href))
@@ -45,6 +47,36 @@ export function NavMain({
                                 <span>{item.title}</span>
                             </Link>
                         </SidebarMenuButton>
+                        {item.items?.length ? (
+                            <SidebarMenuSub>
+                                {item.items.map((child) => (
+                                    <SidebarMenuSubItem key={child.title}>
+                                        <SidebarMenuSubButton
+                                            asChild
+                                            isActive={
+                                                child.isActive ??
+                                                isCurrentOrParentUrl(child.href)
+                                            }
+                                        >
+                                            <Link
+                                                href={child.href}
+                                                aria-current={
+                                                    (child.isActive ??
+                                                    isCurrentOrParentUrl(
+                                                        child.href,
+                                                    ))
+                                                        ? 'page'
+                                                        : undefined
+                                                }
+                                            >
+                                                {child.icon && <child.icon />}
+                                                <span>{child.title}</span>
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                ))}
+                            </SidebarMenuSub>
+                        ) : null}
                     </SidebarMenuItem>
                 ))}
             </SidebarMenu>

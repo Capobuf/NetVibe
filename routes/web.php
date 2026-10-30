@@ -2,10 +2,17 @@
 
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CompanyUserController;
+use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\DeviceInterfaceController;
+use App\Http\Controllers\DeviceIpController;
+use App\Http\Controllers\DeviceModelController;
 use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpSearchController;
 use App\Http\Controllers\IpStatusController;
+use App\Http\Controllers\ManufacturerController;
+use App\Http\Controllers\ModelPanelController;
+use App\Http\Controllers\ModelTypeController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
 use App\Http\Controllers\SubnetController;
@@ -20,10 +27,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('device-models/{model}/assets/{asset}', [DeviceModelController::class, 'asset'])->name('device-models.assets');
+    Route::prefix('devices')->middleware('can:administer')->scopeBindings()->group(function () {
+        Route::resource('model-types', ModelTypeController::class)->parameters(['model-types' => 'modelType'])->only(['store', 'update', 'destroy']);
+        Route::get('models', [DeviceModelController::class, 'index'])->name('device-models.index');
+        Route::resource('manufacturers', ManufacturerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+        Route::resource('manufacturers.models', DeviceModelController::class)->only(['store', 'update', 'edit', 'destroy']);
+        Route::post('manufacturers/{manufacturer}/models/{model}/panel', [ModelPanelController::class, 'update'])->name('manufacturers.models.panel.update');
+    });
     Route::redirect('search', '/companies');
     Route::resource('companies', CompanyController::class)->only(['index']);
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
+        Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
+        Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+        Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['store', 'update', 'destroy']);
+        Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');
         Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])->name('companies.sites.deletion-impact');

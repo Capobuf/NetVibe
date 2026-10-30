@@ -1,3 +1,5 @@
+import type { DeviceInterface } from './device';
+
 export type Vlan = {
     id: number;
     tag: number;
@@ -18,6 +20,10 @@ export type IpAddress = {
     description: string | null;
     hostname: string | null;
     mac_address: string | null;
+    device_id?: number | null;
+    device_interface_id?: number | null;
+    device?: { id: number; name: string } | null;
+    device_interface?: DeviceInterface | null;
     status: IpStatus | null;
     tags: Tag[];
 };

@@ -150,35 +150,104 @@ export function BlockPanel({
                             }
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    {(
+                        [
+                            ['gapX', 'Spazio orizzontale', 'Orizzontale'],
+                            ['gapY', 'Spazio verticale', 'Verticale'],
+                        ] as const
+                    ).map(([key, label, shortLabel]) => (
+                        <div
+                            key={key}
+                            className="grid grid-cols-[minmax(0,1fr)_5rem] items-start gap-3"
+                        >
+                            <Field className="gap-1.5">
+                                <FieldLabel id={`block-${key}-label`}>
+                                    {label}
+                                </FieldLabel>
+                                <Slider
+                                    aria-labelledby={`block-${key}-label`}
+                                    className="h-10"
+                                    min={0}
+                                    max={300}
+                                    step={0.1}
+                                    value={[options[key]]}
+                                    onValueChange={([value]) =>
+                                        patch({ [key]: value })
+                                    }
+                                />
+                                <div
+                                    className="relative h-4 text-xs text-muted-foreground tabular-nums"
+                                    aria-hidden="true"
+                                >
+                                    {[0, 75, 150, 225, 300].map((value) => (
+                                        <span
+                                            key={value}
+                                            className="absolute"
+                                            style={{
+                                                left: `${value / 3}%`,
+                                                transform: `translateX(${value === 0 ? 0 : value === 300 ? -100 : -50}%)`,
+                                            }}
+                                        >
+                                            {value}
+                                        </span>
+                                    ))}
+                                </div>
+                            </Field>
+                            <NumberField
+                                live
+                                label={shortLabel}
+                                value={options[key]}
+                                min={0}
+                                max={300}
+                                step={0.1}
+                                onChange={(value) => patch({ [key]: value })}
+                            />
+                        </div>
+                    ))}
+                    <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-start gap-3">
+                        <Field className="gap-1.5">
+                            <FieldLabel id="block-scale-label">
+                                Scala porte %
+                            </FieldLabel>
+                            <Slider
+                                aria-labelledby="block-scale-label"
+                                className="h-10"
+                                min={20}
+                                max={800}
+                                step={0.1}
+                                value={[options.scale * 100]}
+                                onValueChange={([scale]) =>
+                                    patch({ scale: scale / 100 })
+                                }
+                            />
+                            <div
+                                className="relative h-4 text-xs text-muted-foreground tabular-nums"
+                                aria-hidden="true"
+                            >
+                                {[20, 200, 400, 600, 800].map((value) => (
+                                    <span
+                                        key={value}
+                                        className="absolute"
+                                        style={{
+                                            left: `${((value - 20) / 780) * 100}%`,
+                                            transform: `translateX(${value === 20 ? 0 : value === 800 ? -100 : -50}%)`,
+                                        }}
+                                    >
+                                        {value}
+                                    </span>
+                                ))}
+                            </div>
+                        </Field>
                         <NumberField
                             live
-                            label="Spazio orizzontale"
-                            value={options.gapX}
-                            min={0}
-                            max={300}
+                            label="Scala %"
+                            value={options.scale * 100}
+                            min={20}
+                            max={800}
                             step={0.1}
-                            onChange={(gapX) => patch({ gapX })}
-                        />
-                        <NumberField
-                            live
-                            label="Spazio verticale"
-                            value={options.gapY}
-                            min={0}
-                            max={300}
-                            step={0.1}
-                            onChange={(gapY) => patch({ gapY })}
+                            onChange={(scale) => patch({ scale: scale / 100 })}
                         />
                     </div>
-                    <NumberField
-                        live
-                        label="Scala porte %"
-                        value={options.scale * 100}
-                        min={20}
-                        max={800}
-                        step={0.1}
-                        onChange={(scale) => patch({ scale: scale / 100 })}
-                    />
                     <Choice
                         label="Rotazione porte"
                         value={String(options.rotation)}

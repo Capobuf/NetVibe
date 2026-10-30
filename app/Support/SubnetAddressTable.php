@@ -97,7 +97,7 @@ class SubnetAddressTable
             }
         }
 
-        $records = $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color'])
+        $records = $subnet->ipAddresses()->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
             ->whereIn('address', $addresses)->get()->keyBy('address');
         $excludedRanges = $subnet->excludedRanges;
         $rows = array_map(function ($address) use ($records, $excludedRanges) {
@@ -106,6 +106,8 @@ class SubnetAddressTable
             return [
                 'id' => $record?->id,
                 'ip' => long2ip($address),
+                'device_id' => $record?->device_id, 'device_interface_id' => $record?->device_interface_id,
+                'device' => $record?->device, 'device_interface' => $record?->deviceInterface,
                 'hostname' => $record?->hostname,
                 'mac_address' => $record?->mac_address,
                 'description' => $record?->description,

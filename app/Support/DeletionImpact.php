@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Company;
+use App\Models\Device;
 use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\Subnet;
@@ -36,7 +37,13 @@ class DeletionImpact
         $tags = $company->tags()->when($site, fn ($query) => $query->whereIn('id', $links->pluck('tag_id')))
             ->orderBy('id')->lockForUpdate()->get();
 
+        $devices = DB::table('devices')->whereIn('site_id', $siteIds)
+            ->when($subnet || $vlan, fn ($q) => $q->whereRaw('1 = 0'))->orderBy('id')->lockForUpdate()->get();
+        $interfaces = DB::table('device_interfaces')->whereIn('device_id', $devices->pluck('id'))->orderBy('id')->lockForUpdate()->get();
+
         return [
+            'devices' => $devices->all(), 'interfaces' => $interfaces->all(),
+            'device_links' => $ips->filter(fn ($ip) => $ip->device_id !== null)->values()->all(),
             'scope' => ['company' => $company->id, 'site' => $site?->id, 'subnet' => $subnet?->id, 'vlan' => $vlan?->id],
             'company' => $company->only('id', 'name'),
             'sites' => $sites->map->only('id', 'name')->all(),
@@ -50,6 +57,27 @@ class DeletionImpact
             'tags' => $tags->toArray(),
             'tag_links' => $links->all(),
         ];
+    }
+
+    /** @return array<string, mixed> */
+    public static function device(Company $company, Site $site, Device $device): array
+    {
+        Company::query()->lockForUpdate()->findOrFail($company->id);
+        $device = $site->devices()->lockForUpdate()->findOrFail($device->id);
+
+        return [
+            'device' => $device->toArray(),
+            'interfaces' => $device->interfaces()->orderBy('id')->lockForUpdate()->get()->toArray(),
+            'ips' => $device->ipAddresses()->orderBy('id')->lockForUpdate()->get()
+                ->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)])->all(),
+        ];
+    }
+
+    /** @param list<int> $ids */
+    public static function deleteDevices(array $ids): void
+    {
+        DB::table('ip_addresses')->whereIn('device_id', $ids)->update(['device_id' => null, 'device_interface_id' => null]);
+        DB::table('devices')->whereIn('id', $ids)->delete();
     }
 
     public static function status(IpStatus $status): array

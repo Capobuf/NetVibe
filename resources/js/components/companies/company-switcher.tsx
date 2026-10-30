@@ -13,7 +13,10 @@ import {
 import { index, show } from '@/routes/companies';
 
 export function CompanySwitcher() {
-    const { companyNavigation } = usePage().props;
+    const {
+        props: { companyNavigation },
+        component,
+    } = usePage();
 
     if (!companyNavigation) {
         return null;
@@ -21,7 +24,11 @@ export function CompanySwitcher() {
 
     return (
         <Select
-            value={companyNavigation.currentCompanyId?.toString() ?? ''}
+            value={
+                component === 'companies/index'
+                    ? 'all'
+                    : (companyNavigation.currentCompanyId?.toString() ?? '')
+            }
             onValueChange={(value) =>
                 router.visit(value === 'all' ? index() : show(Number(value)))
             }

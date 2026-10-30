@@ -7,9 +7,27 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-#[Fillable(['address', 'description', 'hostname', 'mac_address', 'ip_status_id'])]
+#[Fillable(['address', 'description', 'hostname', 'mac_address', 'ip_status_id', 'device_id', 'device_interface_id'])]
 class IpAddress extends Model
 {
+    /** @return BelongsTo<Subnet, $this> */
+    public function subnet(): BelongsTo
+    {
+        return $this->belongsTo(Subnet::class);
+    }
+
+    /** @return BelongsTo<Device, $this> */
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class);
+    }
+
+    /** @return BelongsTo<DeviceInterface, $this> */
+    public function deviceInterface(): BelongsTo
+    {
+        return $this->belongsTo(DeviceInterface::class);
+    }
+
     /** @return BelongsTo<IpStatus, $this> */
     public function status(): BelongsTo
     {

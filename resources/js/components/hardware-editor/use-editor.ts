@@ -1,3 +1,8 @@
+import {
+    loadModel,
+    saveModel,
+    type CatalogModel,
+} from '@/lib/hardware-editor/catalog-storage';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { parseCustomColors } from '@/lib/hardware-editor/colors';
@@ -42,7 +47,8 @@ export type Selection = {
     kind: 'ports' | 'shell' | 'image' | 'canvas';
     ids: string[];
 };
-export function useEditor(userId: number) {
+export function useEditor(userId: number, catalogModel?: CatalogModel) {
+    const revision = useRef(catalogModel?.panel_revision ?? 0);
     const [history, setHistory] = useState<History>(() => ({
         past: [],
         current: blankDocument(),
@@ -62,7 +68,7 @@ export function useEditor(userId: number) {
     const [importing, setImporting] = useState(false);
     const [loadFailed, setLoadFailed] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<{ message: string } | null>(null);
     const [crop, setCrop] = useState<{
         image: PanelImage;
         frame: Bounds;
@@ -100,12 +106,18 @@ export function useEditor(userId: number) {
             : null;
 
     useEffect(() => {
+        revision.current = catalogModel?.panel_revision ?? 0;
+        setLoading(true);
+        setLoadFailed(false);
+        reportError(null);
         setClipboard(null);
         pastePoint.current = undefined;
         let cancelled = false;
         async function restore() {
             try {
-                const draft = await loadDraft(userId);
+                const draft = catalogModel
+                    ? await loadModel(catalogModel)
+                    : await loadDraft(userId);
                 const decoded: Record<string, HTMLImageElement> = {};
                 if (draft)
                     for (const [id, blob] of Object.entries(draft.assets))
@@ -119,11 +131,11 @@ export function useEditor(userId: number) {
             } catch (e) {
                 if (!cancelled) {
                     setLoadFailed(true);
-                    setError(
+                    reportError(
                         (e instanceof Error
                             ? e.message
-                            : 'Bozza non leggibile.') +
-                            ' Ricarica per riprovare oppure scegli Bozza → Nuova bozza vuota.',
+                            : 'Disegno non leggibile.') +
+                            ' Ricarica per riprovare.',
                     );
                 }
             } finally {
@@ -134,7 +146,7 @@ export function useEditor(userId: number) {
         return () => {
             cancelled = true;
         };
-    }, [userId]);
+    }, [userId, catalogModel?.id]);
 
     useEffect(() => {
         setPaletteReady(false);
@@ -147,11 +159,14 @@ export function useEditor(userId: number) {
             );
             setPaletteReady(true);
         } catch {
-            toast.error(
+            reportError(
                 'Impossibile leggere i colori salvati. Verifica i dati del sito nel browser e ricarica.',
             );
         }
     }, [userId]);
+    function reportError(message: string | null) {
+        setError(message === null ? null : { message });
+    }
     function saveCustomColors(colors: string[]) {
         if (!paletteReady) return;
         try {
@@ -162,7 +177,7 @@ export function useEditor(userId: number) {
             );
             setCustomColors(next);
         } catch {
-            toast.error(
+            reportError(
                 'Impossibile salvare la palette. Consenti il salvataggio dei dati del sito nel browser.',
             );
         }
@@ -213,7 +228,7 @@ export function useEditor(userId: number) {
             };
         const conflict = labelConflict(next);
         if (conflict) {
-            toast.error(
+            reportError(
                 `Etichetta «${conflict}» già assegnata. Scegli un altro valore.`,
             );
             return false;
@@ -226,31 +241,33 @@ export function useEditor(userId: number) {
         }));
         return true;
     }
-    function replace(next: PanelDocument) {
-        pastePoint.current = undefined;
-        commit(next);
-        setSelection({ kind: 'canvas', ids: [] });
-        setEnteredGroup(null);
-        setFace('front');
-        setError(null);
-        setLoadFailed(false);
-    }
     async function save(document = doc) {
         if (savingRef.current || loadFailed) return false;
         savingRef.current = true;
         setSaving(true);
         try {
-            await saveDraft(userId, document, assets);
+            if (catalogModel)
+                revision.current = await saveModel(
+                    catalogModel,
+                    revision.current,
+                    document,
+                    assets,
+                );
+            else await saveDraft(userId, document, assets);
             setSaved(document);
-            setError(null);
-            toast.success('Bozza salvata in questo browser');
+            reportError(null);
+            toast.success(
+                catalogModel
+                    ? 'Pannello del modello salvato'
+                    : 'Disegno salvato in questo browser',
+            );
             return true;
         } catch (e) {
             const message =
                 e instanceof Error
                     ? e.message
                     : 'Spazio del browser non disponibile.';
-            setError(
+            reportError(
                 `Salvataggio fallito. ${message} Riprova senza chiudere l’editor.`,
             );
             return false;
@@ -407,7 +424,7 @@ export function useEditor(userId: number) {
     function cut() {
         if (!selected.length) return false;
         if (selected.some(portLocked)) {
-            toast.error('Sblocca gli elementi selezionati prima di tagliarli.');
+            reportError('Sblocca gli elementi selezionati prima di tagliarli.');
             return true;
         }
         if (
@@ -498,7 +515,7 @@ export function useEditor(userId: number) {
         );
         const conflict = labelConflict(next);
         if (conflict) {
-            toast.error(
+            reportError(
                 `«${conflict}» è già assegnata. Cambia il prossimo numero.`,
             );
             return;
@@ -593,7 +610,7 @@ export function useEditor(userId: number) {
             });
             setSelection({ kind: 'image', ids: [] });
         } catch (e) {
-            toast.error(
+            reportError(
                 e instanceof Error
                     ? e.message
                     : 'Importazione fallita. Riprova con un’altra immagine.',
@@ -704,7 +721,6 @@ export function useEditor(userId: number) {
         error,
         session,
         commit,
-        replace,
         save,
         undo,
         redo,

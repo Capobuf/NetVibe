@@ -1,12 +1,11 @@
+import type { CatalogModel } from '@/lib/hardware-editor/catalog-storage';
+import { index as modelIndex } from '@/routes/device-models';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
     Crop,
     X,
     Check,
-    ChevronDown,
-    FolderOpen,
-    Grid2X2,
     ImagePlus,
     Maximize,
     Minus,
@@ -32,7 +31,7 @@ import { EditorToolbar } from '@/components/hardware-editor/editor-toolbar';
 import { NumberingPanel } from '@/components/hardware-editor/numbering-panel';
 import { useEditor } from '@/components/hardware-editor/use-editor';
 import { IconButton } from '@/components/icon-button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ErrorNotification } from '@/components/error-notification';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
@@ -44,18 +43,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuGroup,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-    blankDocument,
-    exampleDocument,
     labelConflict,
     makePort,
     numberingLabels,
@@ -71,9 +62,13 @@ import {
 import { cn } from '@/lib/utils';
 import { index as administration } from '@/routes/administration';
 
-export default function HardwareEditor() {
+export default function HardwareEditor({
+    catalogModel,
+}: {
+    catalogModel?: CatalogModel;
+}) {
     const { auth } = usePage().props;
-    const e = useEditor(auth.user.id);
+    const e = useEditor(auth.user.id, catalogModel);
     const canvas = useRef<CanvasApi>(null);
     const context = useRef<HTMLDivElement>(null);
     const file = useRef<HTMLInputElement>(null);
@@ -109,7 +104,6 @@ export default function HardwareEditor() {
         reverseY: false,
     });
     const [endNumbering, setEndNumbering] = useState(false);
-    const [reset, setReset] = useState<'blank' | 'example' | null>(null);
     const [shortcuts, setShortcuts] = useState(false);
     const [leave, setLeave] = useState<(() => void) | null>(null);
     const allowLeave = useRef(false);
@@ -450,34 +444,48 @@ export default function HardwareEditor() {
     });
 
     return (
-        <>
-            <Head title="Editor pannelli" />
+        <TooltipProvider delayDuration={700} skipDelayDuration={0}>
+            <Head title="Editor" />
+            <ErrorNotification error={e.error} />
             <div className="flex h-[calc(100dvh-5rem)] min-h-150 min-w-0 flex-col overflow-hidden">
                 <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <div className="flex min-w-0 items-center gap-3">
                         <IconButton
-                            label="Amministrazione"
+                            label={catalogModel ? 'Modelli' : 'Amministrazione'}
                             variant="ghost"
                             asChild
                         >
-                            <Link href={administration()}>
+                            <Link
+                                href={
+                                    catalogModel
+                                        ? modelIndex({
+                                              query: {
+                                                  manufacturer:
+                                                      catalogModel.manufacturer_id,
+                                              },
+                                          })
+                                        : administration()
+                                }
+                            >
                                 <ArrowLeft />
                             </Link>
                         </IconButton>
                         <PanelsTopLeft className="hidden size-5 text-muted-foreground sm:block" />
                         <div className="min-w-0">
                             <h1 className="truncate text-base font-semibold">
-                                Editor pannelli
+                                Editor
                             </h1>
                             <p className="truncate text-xs text-muted-foreground">
-                                {e.doc.name}
+                                {catalogModel
+                                    ? `${catalogModel.manufacturer.name} · ${catalogModel.name}`
+                                    : e.doc.name}
                             </p>
                         </div>
                         <Badge
                             variant="outline"
                             className="hidden sm:inline-flex"
                         >
-                            Prototipo
+                            {catalogModel ? 'Modello' : 'Prototipo'}
                         </Badge>
                     </div>
                     <div className="flex items-center gap-2">
@@ -497,38 +505,10 @@ export default function HardwareEditor() {
                                 ? 'Salvataggio…'
                                 : e.dirty
                                   ? 'Modifiche non salvate'
-                                  : 'Salvata nel browser'}
+                                  : catalogModel
+                                    ? 'Salvato'
+                                    : 'Salvata nel browser'}
                         </span>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    disabled={blocked || e.loading || e.saving}
-                                >
-                                    <FolderOpen />
-                                    <span className="hidden sm:inline">
-                                        Bozza
-                                    </span>
-                                    <ChevronDown />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuGroup>
-                                    <DropdownMenuItem
-                                        onSelect={() => setReset('blank')}
-                                    >
-                                        <Plus />
-                                        Nuova bozza vuota
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onSelect={() => setReset('example')}
-                                    >
-                                        <Grid2X2 />
-                                        Esempio: switch dimostrativo
-                                    </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
                         <Button
                             onClick={() => {
                                 if (e.session) void finishNumbering();
@@ -544,17 +524,10 @@ export default function HardwareEditor() {
                             }
                         >
                             <Save />
-                            <span className="hidden sm:inline">
-                                Salva bozza
-                            </span>
+                            <span className="hidden sm:inline">Salva</span>
                         </Button>
                     </div>
                 </header>
-                {e.error && (
-                    <Alert variant="destructive" className="mx-4 mb-2 w-auto">
-                        <AlertDescription>{e.error}</AlertDescription>
-                    </Alert>
-                )}
                 <EditorToolbar
                     editor={e}
                     blocked={blocked}
@@ -853,7 +826,11 @@ export default function HardwareEditor() {
                     )}
                 </div>
                 <footer className="flex items-center justify-between gap-3 border-t px-4 py-1.5 text-xs text-muted-foreground">
-                    <span>Bozza locale a questo browser</span>
+                    <span>
+                        {catalogModel
+                            ? `${catalogModel.manufacturer.name} · ${catalogModel.name}`
+                            : 'Disegno salvato in questo browser'}
+                    </span>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -880,29 +857,6 @@ export default function HardwareEditor() {
                     key={e.selected[0].id}
                     editor={e}
                     onClose={() => setEditLabel(false)}
-                />
-            )}
-            {reset && (
-                <ConfirmDialog
-                    title={
-                        reset === 'blank'
-                            ? 'Creare una nuova bozza?'
-                            : 'Aprire lo switch dimostrativo?'
-                    }
-                    description="Il pannello corrente sarà sostituito. La bozza salvata rimane disponibile fino al prossimo salvataggio."
-                    confirm={
-                        reset === 'blank' ? 'Crea bozza vuota' : 'Apri esempio'
-                    }
-                    onClose={() => setReset(null)}
-                    onConfirm={() => {
-                        e.replace(
-                            reset === 'blank'
-                                ? blankDocument()
-                                : exampleDocument(),
-                        );
-                        setReset(null);
-                        setFitKey((n) => n + 1);
-                    }}
                 />
             )}
             {leave && !e.session && (
@@ -933,11 +887,6 @@ export default function HardwareEditor() {
                                 : `${e.session?.steps.length ?? 0} assegnazioni in questa sessione.`}
                         </DialogDescription>
                     </DialogHeader>
-                    {e.error && (
-                        <Alert variant="destructive">
-                            <AlertDescription>{e.error}</AlertDescription>
-                        </Alert>
-                    )}
                     <DialogFooter className="flex-row flex-wrap justify-between sm:justify-between">
                         <Button
                             variant="outline"
@@ -987,7 +936,7 @@ export default function HardwareEditor() {
                                 'Annulla / ripristina',
                                 'Ctrl/Cmd + Z / Shift + Z',
                             ],
-                            ['Salva bozza', 'Ctrl/Cmd + S'],
+                            ['Salva', 'Ctrl/Cmd + S'],
                             [
                                 'Sposta vista',
                                 'Spazio / clic centrale + trascina',
@@ -1014,6 +963,6 @@ export default function HardwareEditor() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </>
+        </TooltipProvider>
     );
 }

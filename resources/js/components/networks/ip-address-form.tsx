@@ -1,4 +1,7 @@
-import { Form, usePage } from '@inertiajs/react';
+import { IpAssignmentFields } from '@/components/devices/ip-assignment-fields';
+import { interfaceName, type Device } from '@/types/device';
+import { show as deviceShow } from '@/routes/companies/sites/devices';
+import { Form, Link, usePage } from '@inertiajs/react';
 import {
     ArrowRight,
     Check,
@@ -22,6 +25,7 @@ import {
     DialogContent,
     DialogFooter,
     DialogHeader,
+    DialogDescription,
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
@@ -49,6 +53,7 @@ export default function IpAddressForm({
     open: controlledOpen,
     onOpenChange,
     onCloseAutoFocus,
+    assignment,
 }: {
     companyId: number;
     siteId: number;
@@ -61,9 +66,16 @@ export default function IpAddressForm({
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
+    assignment?: { deviceId: number; interfaceId: number; label: string };
 }) {
-    const { auth } = usePage().props;
+    const { auth, devices } = usePage<{ devices: Device[] }>().props;
     const canEdit = auth.canEditIpam;
+    const devicePanel = devices?.find(
+        (device) => device.id === ipAddress?.device_id,
+    )?.model?.panel;
+    const ports = devicePanel
+        ? [...devicePanel.faces.front.ports, ...devicePanel.faces.rear.ports]
+        : [];
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
     const setOpen = onOpenChange ?? setInternalOpen;
@@ -124,7 +136,7 @@ export default function IpAddressForm({
             <DialogContent
                 className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
                 onCloseAutoFocus={onCloseAutoFocus}
-                aria-describedby={undefined}
+                aria-describedby={assignment ? `${id}-assignment` : undefined}
             >
                 <DialogHeader>
                     <DialogTitle>
@@ -134,6 +146,11 @@ export default function IpAddressForm({
                               ? `${editing ? 'Modifica IP' : 'IP'} ${ipAddress.ip}`
                               : ip || 'Nuovo IP'}
                     </DialogTitle>
+                    {assignment && (
+                        <DialogDescription id={`${id}-assignment`}>
+                            {assignment.label}
+                        </DialogDescription>
+                    )}
                 </DialogHeader>
                 {ipAddress && !editing ? (
                     <>
@@ -193,6 +210,46 @@ export default function IpAddressForm({
                                         : '—'}
                                 </dd>
                             </div>
+                            {ipAddress.device && (
+                                <div className="flex flex-col gap-1">
+                                    <dt className="text-muted-foreground">
+                                        Dispositivo
+                                    </dt>
+                                    <dd>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            asChild
+                                        >
+                                            <Link
+                                                href={deviceShow({
+                                                    company: companyId,
+                                                    site: siteId,
+                                                    device: ipAddress.device.id,
+                                                })}
+                                            >
+                                                {ipAddress.device.name}
+                                            </Link>
+                                        </Button>
+                                    </dd>
+                                </div>
+                            )}
+                            {ipAddress.device_interface && (
+                                <div className="flex flex-col gap-1">
+                                    <dt className="text-muted-foreground">
+                                        Interfaccia / MAC
+                                    </dt>
+                                    <dd>
+                                        {interfaceName(
+                                            ipAddress.device_interface,
+                                            ports,
+                                        )}
+                                        {ipAddress.device_interface.mac_address
+                                            ? ` · ${ipAddress.device_interface.mac_address}`
+                                            : ''}
+                                    </dd>
+                                </div>
+                            )}
                         </dl>
                         {excluded ? (
                             <p className="text-sm text-muted-foreground">
@@ -220,6 +277,16 @@ export default function IpAddressForm({
                                   })
                                 : store.form(route))}
                             onSuccess={() => setOpen(false)}
+                            transform={(data) =>
+                                assignment
+                                    ? {
+                                          ...data,
+                                          device_id: assignment.deviceId,
+                                          device_interface_id:
+                                              assignment.interfaceId,
+                                      }
+                                    : data
+                            }
                             onBefore={() => canEdit && editing}
                             options={{ preserveScroll: true }}
                             className="flex flex-col gap-5"
@@ -315,7 +382,7 @@ export default function IpAddressForm({
                                                     aria-invalid={Boolean(
                                                         errors[field.name],
                                                     )}
-                                                    aria-describedby={`${field.name === 'hostname' ? `${id}-help ` : ''}${id}-${field.name}-error`}
+                                                    aria-describedby={`${field.name === 'hostname' && !assignment ? `${id}-help ` : ''}${id}-${field.name}-error`}
                                                 />
                                                 <InputError
                                                     id={`${id}-${field.name}-error`}
@@ -348,20 +415,41 @@ export default function IpAddressForm({
                                             aria-invalid={Boolean(
                                                 errors.description,
                                             )}
-                                            aria-describedby={`${id}-help ${id}-description-error`}
+                                            aria-describedby={`${assignment ? '' : `${id}-help `}${id}-description-error`}
                                         />
                                         <InputError
                                             id={`${id}-description-error`}
                                             message={errors.description}
                                         />
-                                        <p
-                                            id={`${id}-help`}
-                                            className="text-sm text-muted-foreground"
-                                        >
-                                            Compila almeno Hostname o
-                                            Descrizione.
-                                        </p>
+                                        {!assignment && (
+                                            <p
+                                                id={`${id}-help`}
+                                                className="text-sm text-muted-foreground"
+                                            >
+                                                Compila Hostname, Descrizione
+                                                oppure Dispositivo.
+                                            </p>
+                                        )}
                                     </Field>
+                                    {assignment ? (
+                                        <>
+                                            <InputError
+                                                message={errors.device_id}
+                                            />
+                                            <InputError
+                                                message={
+                                                    errors.device_interface_id
+                                                }
+                                            />
+                                        </>
+                                    ) : (
+                                        <IpAssignmentFields
+                                            devices={devices ?? []}
+                                            ipAddress={ipAddress}
+                                            disabled={processing || !canEdit}
+                                            errors={errors}
+                                        />
+                                    )}
                                     <div className="grid items-start gap-7 sm:grid-cols-2">
                                         <IpMetadataFields
                                             statuses={statuses}

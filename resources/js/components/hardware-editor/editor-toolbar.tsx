@@ -35,6 +35,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
+import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
     Tooltip,
@@ -83,45 +84,6 @@ export function EditorToolbar({
 }) {
     return (
         <div className="flex flex-wrap items-center gap-2 border-y bg-background px-3 py-2">
-            <ToggleGroup
-                type="single"
-                variant="outline"
-                value={tool}
-                disabled={blocked || e.loading}
-                onValueChange={(value) => {
-                    if (value) setTool(value);
-                }}
-                aria-label="Strumento"
-            >
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <ToggleGroupItem
-                            value="select"
-                            aria-label="Seleziona"
-                            className="size-10"
-                        >
-                            <MousePointer2 />
-                        </ToggleGroupItem>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        Seleziona · Ctrl/Cmd+clic per aggiungere
-                    </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <ToggleGroupItem
-                            value="pan"
-                            aria-label="Sposta vista"
-                            className="size-10"
-                        >
-                            <Hand />
-                        </ToggleGroupItem>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        Sposta vista · Spazio o clic centrale+trascina
-                    </TooltipContent>
-                </Tooltip>
-            </ToggleGroup>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button disabled={blocked || e.loading}>
@@ -153,6 +115,96 @@ export function EditorToolbar({
                     </DropdownMenuGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
+            <div
+                role="group"
+                aria-label="Strumenti e livelli"
+                className="flex items-center"
+            >
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={tool}
+                    disabled={blocked || e.loading}
+                    onValueChange={(value) => {
+                        if (value) setTool(value);
+                    }}
+                    aria-label="Strumento"
+                >
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <ToggleGroupItem
+                                value="select"
+                                aria-label="Seleziona"
+                                className="size-10"
+                            >
+                                <MousePointer2 />
+                            </ToggleGroupItem>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Seleziona · Ctrl/Cmd+clic per aggiungere
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <ToggleGroupItem
+                                value="pan"
+                                aria-label="Sposta vista"
+                                className="size-10 last:rounded-r-none"
+                            >
+                                <Hand />
+                            </ToggleGroupItem>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Sposta vista · Spazio o clic centrale+trascina
+                        </TooltipContent>
+                    </Tooltip>
+                </ToggleGroup>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <IconButton
+                            label="Numerazione"
+                            variant="outline"
+                            className="size-10 rounded-none border-l-0 shadow-none focus-visible:z-10"
+                            disabled={blocked || e.loading}
+                        >
+                            <Hash />
+                        </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                            <DropdownMenuItem
+                                disabled={!e.selected.length}
+                                onSelect={() => onNumbering('quick')}
+                            >
+                                <Hash />
+                                Numerazione rapida
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onSelect={() => onNumbering('click')}
+                            >
+                                <MousePointer2 />
+                                Numera con clic
+                            </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Toggle
+                            variant="outline"
+                            pressed={layers}
+                            onPressedChange={setLayers}
+                            aria-label="Livelli"
+                            aria-expanded={layers}
+                            className="size-10 rounded-l-none border-l-0 shadow-none focus-visible:z-10"
+                        >
+                            <Layers />
+                        </Toggle>
+                    </TooltipTrigger>
+                    <TooltipContent>Livelli</TooltipContent>
+                </Tooltip>
+            </div>
+
             <Separator orientation="vertical" className="mx-1 h-6" />
             <IconButton
                 label="Annulla · Ctrl/Cmd+Z"
@@ -170,30 +222,7 @@ export function EditorToolbar({
             >
                 <Redo2 />
             </IconButton>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" disabled={blocked || e.loading}>
-                        <Hash />
-                        Numera
-                        <ChevronDown />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuGroup>
-                        <DropdownMenuItem
-                            disabled={!e.selected.length}
-                            onSelect={() => onNumbering('quick')}
-                        >
-                            <Hash />
-                            Numerazione rapida
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => onNumbering('click')}>
-                            <MousePointer2 />
-                            Numera con clic
-                        </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                </DropdownMenuContent>
-            </DropdownMenu>
+
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <IconButton
@@ -320,15 +349,6 @@ export function EditorToolbar({
                         </TooltipContent>
                     </Tooltip>
                 </ToggleGroup>
-                <Button
-                    variant={layers ? 'secondary' : 'ghost'}
-                    aria-pressed={layers}
-                    aria-expanded={layers}
-                    onClick={() => setLayers(!layers)}
-                >
-                    <Layers />
-                    <span className="hidden sm:inline">Livelli</span>
-                </Button>
                 <IconButton
                     aria-pressed={inspector}
                     label="Proprietà"

@@ -4,6 +4,7 @@ import {
     portBounds,
     portBodyBounds,
     portLabelLayout,
+    portLabelFontFamily,
     type Port,
 } from '@/lib/hardware-editor/document';
 
@@ -89,7 +90,7 @@ export function PortSymbol({
                             height={layout.height}
                             fontSize={layout.fontSize}
                             text={layout.text}
-                            fontFamily="ui-monospace, monospace"
+                            fontFamily={portLabelFontFamily}
                             align="center"
                             verticalAlign="middle"
                             wrap="none"

@@ -263,33 +263,30 @@ export function EditorInspector({
                         <Transformations>
                             <FieldGroup>
                                 {single && (
-                                    <>
-                                        {' '}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <NumberField
-                                                label="X"
-                                                value={single.x}
-                                                step={0.1}
-                                                disabled={e.selected.some(
-                                                    e.portLocked,
-                                                )}
-                                                onChange={(x) =>
-                                                    e.patchPorts({ x })
-                                                }
-                                            />
-                                            <NumberField
-                                                label="Y"
-                                                value={single.y}
-                                                step={0.1}
-                                                disabled={e.selected.some(
-                                                    e.portLocked,
-                                                )}
-                                                onChange={(y) =>
-                                                    e.patchPorts({ y })
-                                                }
-                                            />
-                                        </div>
-                                    </>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <NumberField
+                                            label="X"
+                                            value={single.x}
+                                            step={0.1}
+                                            disabled={e.selected.some(
+                                                e.portLocked,
+                                            )}
+                                            onChange={(x) =>
+                                                e.patchPorts({ x })
+                                            }
+                                        />
+                                        <NumberField
+                                            label="Y"
+                                            value={single.y}
+                                            step={0.1}
+                                            disabled={e.selected.some(
+                                                e.portLocked,
+                                            )}
+                                            onChange={(y) =>
+                                                e.patchPorts({ y })
+                                            }
+                                        />
+                                    </div>
                                 )}
                                 <NumberField
                                     label={

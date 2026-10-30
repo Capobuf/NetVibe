@@ -91,6 +91,7 @@ class CompanyController extends Controller
             $impact = DeletionImpact::networks($company);
             $request->ensureUnchanged($impact);
             DeletionImpact::deleteSubnets(array_column($impact['subnets'], 'id'));
+            DeletionImpact::deleteDevices(array_column($impact['devices'], 'id'));
             DB::table('vlans')->whereIn('site_id', array_column($impact['sites'], 'id'))->delete();
             $company->sites()->delete();
             $company->delete();

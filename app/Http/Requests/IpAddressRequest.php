@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Site;
 use App\Models\Tag;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -11,10 +12,15 @@ class IpAddressRequest extends FormRequest
     /** @return array<string, array<mixed>> */
     public function rules(): array
     {
+        $site = $this->route('site');
+        abort_unless($site instanceof Site, 404);
+
         return [
             'ip' => ['required', 'string', 'ipv4'],
-            'description' => ['nullable', 'required_without:hostname', 'string', 'max:2000'],
-            'hostname' => ['nullable', 'required_without:description', 'string', 'max:255'],
+            'description' => ['nullable', 'required_without_all:hostname,device_id', 'string', 'max:2000'],
+            'hostname' => ['nullable', 'required_without_all:description,device_id', 'string', 'max:255'],
+            'device_id' => ['nullable', 'integer', Rule::exists('devices', 'id')->where('site_id', $site->id)],
+            'device_interface_id' => ['nullable', 'integer', Rule::exists('device_interfaces', 'id')->where('device_id', $this->input('device_id'))],
             'mac_address' => ['nullable', 'string', 'mac_address'],
             'ip_status_id' => ['nullable', 'integer', 'exists:ip_statuses,id'],
             'tags' => ['sometimes', 'array'],
@@ -33,8 +39,8 @@ class IpAddressRequest extends FormRequest
     {
         return [
             'ip.ipv4' => 'Inserisci un indirizzo IPv4 valido.',
-            'description.required_without' => 'Inserisci almeno una descrizione o un hostname.',
-            'hostname.required_without' => 'Inserisci almeno una descrizione o un hostname.',
+            'description.required_without_all' => 'Inserisci una descrizione, un hostname oppure un dispositivo.',
+            'hostname.required_without_all' => 'Inserisci una descrizione, un hostname oppure un dispositivo.',
             'mac_address.mac_address' => 'Inserisci un MAC valido, ad esempio AA:BB:CC:DD:EE:FF.',
             'tags.*.id.exists' => 'Scegli tag appartenenti a questa azienda.',
             'tags.*.color.in' => 'Scegli uno dei colori disponibili.',

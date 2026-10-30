@@ -52,6 +52,13 @@ type Impact = {
           statuses: IpStatus[];
       }
     | {
+          device: { id: number; name: string };
+          interfaces: { id: number; name: string | null }[];
+      }
+    | {
+          devices: { id: number; name: string; site_id: number }[];
+          interfaces: { id: number; device_id: number; name: string | null }[];
+          device_links: { id: number; device_id: number }[];
           scope: {
               company: number;
               site: number | null;
@@ -82,7 +89,7 @@ export function GuidedDeletion({
 }: {
     previewUrl: string;
     action: RouteFormDefinition<'post'>;
-    kind: 'company' | 'site' | 'subnet' | 'vlan' | 'status';
+    kind: 'company' | 'site' | 'subnet' | 'vlan' | 'status' | 'device';
     onCancel: () => void;
     onSuccess: () => void;
 }) {
@@ -151,6 +158,62 @@ export function GuidedDeletion({
                     {error ? <Button onClick={refresh}>Riprova</Button> : null}
                 </div>
             </div>
+        );
+
+    if ('device' in impact)
+        return (
+            <DeletionConfirmation
+                key={revision}
+                action={action}
+                onCancel={onCancel}
+                onSuccess={onSuccess}
+                onError={() => setStale(true)}
+                disabled={stale}
+                submitLabel="Elimina dispositivo"
+                fields={(processing) => (
+                    <>
+                        <input
+                            type="hidden"
+                            name="impact_token"
+                            value={impact.impact_token}
+                        />
+                        {stale && (
+                            <InputError message="I dati sono cambiati. Aggiorna l’anteprima." />
+                        )}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={refresh}
+                            disabled={processing}
+                        >
+                            <RefreshCw />
+                            Aggiorna impatto
+                        </Button>
+                    </>
+                )}
+                details={
+                    <div className="flex flex-col gap-2 text-sm">
+                        <p>
+                            {impact.interfaces.length} interfacce da eliminare ·{' '}
+                            {impact.ips.length} IP da scollegare
+                        </p>
+                        <ul className="max-h-52 overflow-y-auto">
+                            {impact.ips.map((ip) => (
+                                <li key={ip.id}>
+                                    {ip.ip}
+                                    {ip.hostname ? ` · ${ip.hostname}` : ''}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                }
+            >
+                <p>
+                    «{impact.device.name}» e le sue interfacce saranno
+                    eliminati. Gli IP resteranno documentati con hostname,
+                    descrizione, MAC, stato e tag.
+                </p>
+            </DeletionConfirmation>
         );
 
     const statuses = 'status' in impact ? impact.statuses : [];
@@ -352,6 +415,7 @@ export function GuidedDeletion({
 }
 
 function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
+    if ('device' in impact) return null;
     if ('status' in impact) {
         const companies = new Map<number, { name: string; ips: ImpactIp[] }>();
         for (const ip of impact.ips) {
@@ -441,6 +505,28 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                     </Badge>
                 ) : null}
             </div>
+            {(kind === 'company' || kind === 'site') && (
+                <div className="flex flex-col gap-2">
+                    <p>
+                        {impact.devices.length} dispositivi ·{' '}
+                        {impact.interfaces.length} interfacce ·{' '}
+                        {impact.device_links.length} collegamenti IP
+                    </p>
+                    <ul className="max-h-40 overflow-y-auto">
+                        {impact.devices.map((device) => (
+                            <li key={device.id}>
+                                {device.name} ·{' '}
+                                {
+                                    impact.interfaces.filter(
+                                        (i) => i.device_id === device.id,
+                                    ).length
+                                }{' '}
+                                interfacce
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             {impact.vlans.length ? (
                 <ul className="flex flex-wrap gap-2">
                     {impact.vlans.map((vlan) => (

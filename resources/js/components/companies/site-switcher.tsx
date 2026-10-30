@@ -1,3 +1,4 @@
+import { index as deviceIndex } from '@/routes/companies/sites/devices';
 import { router, usePage } from '@inertiajs/react';
 import { MapPin } from 'lucide-react';
 import {
@@ -30,9 +31,11 @@ export function SiteSwitcher() {
     const index =
         component === 'search/index'
             ? searchIndex
-            : component.startsWith('vlans/')
-              ? vlanIndex
-              : subnetIndex;
+            : component.startsWith('devices/')
+              ? deviceIndex
+              : component.startsWith('vlans/')
+                ? vlanIndex
+                : subnetIndex;
 
     return (
         <Select

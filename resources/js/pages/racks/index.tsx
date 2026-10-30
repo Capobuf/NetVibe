@@ -1,0 +1,87 @@
+import { Head, router, usePage } from '@inertiajs/react';
+import { PanelsTopLeft } from 'lucide-react';
+import { DeviceTable } from '@/components/devices/device-table';
+import { RackForm } from '@/components/racks/rack-form';
+import TextLink from '@/components/text-link';
+import { index, show } from '@/routes/companies/sites/racks';
+import type { Company, Site } from '@/types/company';
+import type { Rack } from '@/types/rack';
+
+type Props = { company: Company; site: Site; racks: Rack[] };
+export default function Racks({ company, site, racks }: Props) {
+    const { companyNavigation } = usePage().props;
+    const route = { company: company.id, site: site.id };
+    const context =
+        (companyNavigation?.sites.length ?? 0) > 1
+            ? `${company.name} · ${site.name}`
+            : company.name;
+    const value = (
+        rack: Rack,
+        column: 'name' | 'height_u' | 'numbering' | 'devices_count',
+    ) =>
+        column === 'numbering'
+            ? rack.numbering === 'bottom-up'
+                ? 'Dal basso verso l’alto'
+                : 'Dall’alto verso il basso'
+            : (rack[column] ?? 0);
+    return (
+        <>
+            <Head title={`Rack · ${context}`} />
+            <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
+                <header className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <PanelsTopLeft className="size-6 text-muted-foreground" />
+                        <div>
+                            <p className="text-sm text-muted-foreground">
+                                {context}
+                            </p>
+                            <h1 className="text-2xl font-semibold tracking-tight">
+                                Rack
+                            </h1>
+                        </div>
+                    </div>
+                    <RackForm {...route} />
+                </header>
+                <DeviceTable
+                    name="racks"
+                    rows={racks}
+                    columns={[
+                        { id: 'name', label: 'Nome', visible: true },
+                        { id: 'height_u', label: 'Altezza (U)', visible: true },
+                        {
+                            id: 'numbering',
+                            label: 'Numerazione',
+                            visible: true,
+                        },
+                        {
+                            id: 'devices_count',
+                            label: 'Dispositivi',
+                            visible: true,
+                        },
+                    ]}
+                    value={value}
+                    render={(rack, column) =>
+                        column === 'name' ? (
+                            <TextLink href={show({ ...route, rack: rack.id })}>
+                                {rack.name}
+                            </TextLink>
+                        ) : (
+                            value(rack, column)
+                        )
+                    }
+                    onRowClick={(rack) =>
+                        router.visit(show({ ...route, rack: rack.id }))
+                    }
+                    rowOpensDialog={false}
+                    actions={(rack) => <RackForm {...route} rack={rack} />}
+                    empty="Nessun rack"
+                />
+            </div>
+        </>
+    );
+}
+Racks.layout = ({ company, site }: Props) => ({
+    breadcrumbs: [
+        { title: 'Rack', href: index({ company: company.id, site: site.id }) },
+    ],
+});

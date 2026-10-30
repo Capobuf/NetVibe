@@ -21,6 +21,7 @@ import { store as storeManufacturer } from '@/routes/manufacturers';
 import { store as storeType } from '@/routes/model-types';
 import type { Manufacturer, ModelType, CreatedModel } from '@/types/device';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import type { RouteFormDefinition } from '@/wayfinder';
@@ -40,7 +41,13 @@ export function CatalogForm({
     onCreated,
 }: {
     title: string;
-    item?: { id: number; name: string; model_type_id?: number | null };
+    item?: {
+        id: number;
+        name: string;
+        model_type_id?: number | null;
+        rack_height_u?: number | null;
+        without_rack_ears?: boolean;
+    };
     types?: ModelType[];
     deletionMessage?: string;
     action:
@@ -115,9 +122,14 @@ export function CatalogForm({
                         {...formAction}
                         onBefore={() => !!formAction && !creating}
                         errorBag={onCreated ? 'newModel' : undefined}
-                        transform={(data) =>
-                            onCreated ? { ...data, inline: true } : data
-                        }
+                        transform={(data) => ({
+                            ...data,
+                            ...(types && {
+                                without_rack_ears:
+                                    data.without_rack_ears === '1',
+                            }),
+                            ...(onCreated && { inline: true }),
+                        })}
                         onFlash={(flash) => {
                             if (onCreated && flash.createdModel)
                                 onCreated(flash.createdModel as CreatedModel);
@@ -195,6 +207,69 @@ export function CatalogForm({
                                             onCreatingChange={setCreating}
                                             disabled={processing || creating}
                                             error={errors.model_type_id}
+                                        />
+                                    </Field>
+                                )}
+                                {types && (
+                                    <Field
+                                        data-invalid={!!errors.rack_height_u}
+                                    >
+                                        <FieldLabel
+                                            htmlFor={`${id}-rack-height`}
+                                        >
+                                            Altezza (U, facoltativa)
+                                        </FieldLabel>
+                                        <Input
+                                            id={`${id}-rack-height`}
+                                            name="rack_height_u"
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            step={1}
+                                            defaultValue={
+                                                item?.rack_height_u ?? ''
+                                            }
+                                            placeholder="Non specificata"
+                                            disabled={processing || creating}
+                                            aria-invalid={
+                                                !!errors.rack_height_u
+                                            }
+                                        />
+                                        <InputError
+                                            message={errors.rack_height_u}
+                                        />
+                                    </Field>
+                                )}
+                                {types && (
+                                    <Field
+                                        data-invalid={
+                                            !!errors.without_rack_ears
+                                        }
+                                    >
+                                        <Field orientation="horizontal">
+                                            <Checkbox
+                                                id={`${id}-without-rack-ears`}
+                                                name="without_rack_ears"
+                                                value="1"
+                                                defaultChecked={
+                                                    item?.without_rack_ears ??
+                                                    false
+                                                }
+                                                disabled={
+                                                    processing || creating
+                                                }
+                                                aria-invalid={
+                                                    !!errors.without_rack_ears
+                                                }
+                                            />
+                                            <FieldLabel
+                                                htmlFor={`${id}-without-rack-ears`}
+                                            >
+                                                Senza staffe rack
+                                            </FieldLabel>
+                                        </Field>
+                                        <InputError
+                                            message={errors.without_rack_ears}
                                         />
                                     </Field>
                                 )}

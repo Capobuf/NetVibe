@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
+    advancePointer,
     boundsOf,
     imageBounds,
     duplicatePorts,
@@ -39,6 +40,7 @@ import {
     type BlockCorner,
     type Bounds,
     type Point,
+    type PointerMotion,
     type Port,
 } from '@/lib/hardware-editor/document';
 import { PortSymbol } from './port-symbol';
@@ -64,6 +66,8 @@ export type CanvasApi = {
 type Gesture = {
     start: Point;
     screen: Point;
+    motion: PointerMotion;
+    clickSelection?: string[];
     selection: string[];
     moving: Port[];
     copy: boolean;
@@ -115,7 +119,8 @@ export function EditorCanvas({
     const host = useRef<HTMLDivElement>(null);
     const stage = useRef<Konva.Stage>(null);
     const transformer = useRef<Konva.Transformer>(null);
-    const [size, setSize] = useState({ width: 800, height: 500 });
+    const [size, setSize] = useState({ width: 0, height: 0 });
+    const hasSize = size.width > 0 && size.height > 0;
     const [view, setView] = useState({ x: 40, y: 100, zoom: 1 });
     const viewRef = useRef(view);
     viewRef.current = view;
@@ -129,6 +134,8 @@ export function EditorCanvas({
         [],
     );
     const gesture = useRef<Gesture | null>(null);
+    const anchorMotion = useRef<PointerMotion | null>(null);
+    const blockMotion = useRef<PointerMotion | null>(null);
     const middlePan = useRef<{ x: number; y: number; view: Point } | null>(
         null,
     );
@@ -244,8 +251,8 @@ export function EditorCanvas({
         return () => observer.disconnect();
     }, []);
     useEffect(() => {
-        fit();
-    }, [size.width, size.height, fitKey, e.loading]);
+        if (hasSize) fit();
+    }, [hasSize, fitKey, e.loading]);
     useEffect(() => {
         onZoom(view.zoom);
     }, [view.zoom, onZoom]);
@@ -275,6 +282,8 @@ export function EditorCanvas({
             setPanning(false);
             setBlockDragging(false);
             gesture.current = null;
+            anchorMotion.current = null;
+            blockMotion.current = null;
             setDraft(null);
             setImageDelta(null);
             setMarquee(null);
@@ -382,6 +391,7 @@ export function EditorCanvas({
             event.evt.ctrlKey || event.evt.metaKey || event.evt.shiftKey;
         const panning = (!e.crop && pan) || space;
         let ids = groupCorner ? e.selection.ids : hit.ids;
+        let clickSelection: string[] | undefined;
         if (
             !groupCorner &&
             !panning &&
@@ -389,11 +399,19 @@ export function EditorCanvas({
             !blockOptions &&
             hit.kind === 'ports'
         ) {
-            if (additive)
-                ids = hit.ids.every((id) => e.selection.ids.includes(id))
+            if (additive) {
+                const alreadySelected = hit.ids.every((id) =>
+                    e.selection.ids.includes(id),
+                );
+                ids = alreadySelected
                     ? e.selection.ids.filter((id) => !hit.ids.includes(id))
                     : [...new Set([...e.selection.ids, ...hit.ids])];
-            else if (hit.ids.some((id) => e.selection.ids.includes(id)))
+                // Ctrl+click still toggles selection; Ctrl+drag keeps the selected items moving.
+                if (event.evt.ctrlKey && alreadySelected) {
+                    clickSelection = ids;
+                    ids = e.selection.ids;
+                }
+            } else if (hit.ids.some((id) => e.selection.ids.includes(id)))
                 ids = e.selection.ids;
             e.setSelection({ kind: 'ports', ids });
         } else if (!groupCorner && !panning && !e.crop && !blockOptions)
@@ -414,6 +432,8 @@ export function EditorCanvas({
         gesture.current = {
             start,
             screen,
+            motion: { pointer: screen, position: screen },
+            clickSelection,
             selection: additive ? e.selection.ids : [],
             moving: e.ports.filter((p) => ids.includes(p.id)).some(e.portLocked)
                 ? []
@@ -455,9 +475,14 @@ export function EditorCanvas({
             }));
             return;
         }
+        g.motion = advancePointer(
+            g.motion,
+            screen,
+            event.evt.ctrlKey && g.mode !== 'marquee',
+        );
         let d = {
-            x: (screen.x - g.screen.x) / view.zoom,
-            y: (screen.y - g.screen.y) / view.zoom,
+            x: (g.motion.position.x - g.screen.x) / view.zoom,
+            y: (g.motion.position.y - g.screen.y) / view.zoom,
         };
         if (
             !g.moved &&
@@ -566,7 +591,7 @@ export function EditorCanvas({
             const stationary = e.ports.filter(
                 (p) => !g.moving.some((m) => m.id === p.id),
             );
-            if (snap) {
+            if (snap && !event.evt.ctrlKey) {
                 const snapped = snapDelta(
                     g.moving,
                     stationary.filter((p) => !p.hidden),
@@ -576,7 +601,7 @@ export function EditorCanvas({
                 );
                 d = snapped.delta;
                 setGuides(snapped.guides);
-            }
+            } else setGuides([]);
             const movedPorts = g.moving.map((p) => ({
                 ...p,
                 x: p.x + d.x,
@@ -604,6 +629,8 @@ export function EditorCanvas({
         const g = gesture.current;
         if (!g) return;
         const moved = g.moved;
+        if (!moved && g.clickSelection)
+            e.setSelection({ kind: 'ports', ids: g.clickSelection });
         if (!moved && !blocked && g.mode !== 'pan') e.setPastePoint(g.start);
         if (
             (g.mode === 'block-spacing' || g.mode === 'group-scale') &&
@@ -770,6 +797,8 @@ export function EditorCanvas({
                 onPointerUp={up}
                 onPointerCancel={() => {
                     gesture.current = null;
+                    anchorMotion.current = null;
+                    blockMotion.current = null;
                     if (stage.current)
                         stage.current.container().style.cursor = '';
                     setBlockDragging(false);
@@ -865,10 +894,27 @@ export function EditorCanvas({
                         <Group
                             name="block-preview"
                             draggable={!pan && !space}
-                            onDragStart={() => setBlockDragging(true)}
+                            onDragStart={() => {
+                                blockMotion.current = {
+                                    pointer: { x: 0, y: 0 },
+                                    position: { x: 0, y: 0 },
+                                };
+                                setBlockDragging(true);
+                            }}
                             onDragMove={(event) => {
-                                if (!snap) return;
                                 const node = event.currentTarget;
+                                if (blockMotion.current) {
+                                    blockMotion.current = advancePointer(
+                                        blockMotion.current,
+                                        node.position(),
+                                        event.evt.ctrlKey,
+                                    );
+                                    node.position(blockMotion.current.position);
+                                }
+                                if (!snap || event.evt.ctrlKey) {
+                                    setGuides([]);
+                                    return;
+                                }
                                 const snapped = snapDelta(
                                     blockPreview,
                                     e.ports.filter((p) => !p.hidden),
@@ -887,6 +933,7 @@ export function EditorCanvas({
                                     y: blockOptions.y + node.y(),
                                 });
                                 node.position({ x: 0, y: 0 });
+                                blockMotion.current = null;
                                 setBlockDragging(false);
                                 setGuides([]);
                             }}
@@ -1257,6 +1304,25 @@ export function EditorCanvas({
                         borderStroke="#3b82f6"
                         anchorStroke="#3b82f6"
                         anchorFill={dark ? '#17202c' : '#fff'}
+                        onTransformStart={() => {
+                            anchorMotion.current = null;
+                        }}
+                        anchorDragBoundFunc={(old, next, event: MouseEvent) => {
+                            if (
+                                transformer.current?.getActiveAnchor() ===
+                                'rotater'
+                            )
+                                return next;
+                            anchorMotion.current = advancePointer(
+                                anchorMotion.current ?? {
+                                    pointer: old,
+                                    position: old,
+                                },
+                                next,
+                                event.ctrlKey,
+                            );
+                            return anchorMotion.current.position;
+                        }}
                         boundBoxFunc={(old, next) => {
                             if (e.selection.kind === 'shell') {
                                 const width = next.width / view.zoom;
@@ -1273,7 +1339,10 @@ export function EditorCanvas({
                                 ? old
                                 : next;
                         }}
-                        onTransformEnd={transformEnd}
+                        onTransformEnd={() => {
+                            anchorMotion.current = null;
+                            transformEnd();
+                        }}
                     />
                 </Layer>
             </Stage>

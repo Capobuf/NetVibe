@@ -5,10 +5,13 @@ namespace App\Support;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\IpStatus;
+use App\Models\Rack;
+use App\Models\RackItem;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Models\Vlan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class DeletionImpact
 {
@@ -40,8 +43,12 @@ class DeletionImpact
         $devices = DB::table('devices')->whereIn('site_id', $siteIds)
             ->when($subnet || $vlan, fn ($q) => $q->whereRaw('1 = 0'))->orderBy('id')->lockForUpdate()->get();
         $interfaces = DB::table('device_interfaces')->whereIn('device_id', $devices->pluck('id'))->orderBy('id')->lockForUpdate()->get();
+        $racks = Rack::query()->whereIn('site_id', $siteIds)
+            ->when($subnet || $vlan, fn ($q) => $q->whereRaw('1 = 0'))->orderBy('id')->lockForUpdate()->get();
+        $rackItems = RackItem::query()->whereIn('rack_id', $racks->modelKeys())->orderBy('id')->lockForUpdate()->get();
 
         return [
+            'racks' => $racks->toArray(), 'rack_items' => $rackItems->toArray(),
             'devices' => $devices->all(), 'interfaces' => $interfaces->all(),
             'device_links' => $ips->filter(fn ($ip) => $ip->device_id !== null)->values()->all(),
             'scope' => ['company' => $company->id, 'site' => $site?->id, 'subnet' => $subnet?->id, 'vlan' => $vlan?->id],
@@ -67,6 +74,7 @@ class DeletionImpact
 
         return [
             'device' => $device->toArray(),
+            'rack_item' => $device->rackItem()->with('rack:id,name,revision')->first()?->toArray(),
             'interfaces' => $device->interfaces()->orderBy('id')->lockForUpdate()->get()->toArray(),
             'ips' => $device->ipAddresses()->orderBy('id')->lockForUpdate()->get()
                 ->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)])->all(),
@@ -76,6 +84,13 @@ class DeletionImpact
     /** @param list<int> $ids */
     public static function deleteDevices(array $ids): void
     {
+        $supportsOtherDevices = DB::table('rack_items as supported')
+            ->join('rack_items as support', fn ($join) => $join->on('support.rack_id', '=', 'supported.rack_id')->on('support.key', '=', 'supported.shelf_key'))
+            ->whereIn('support.device_id', $ids)->whereNotIn('supported.device_id', $ids)->exists();
+        if ($supportsOtherDevices) {
+            throw ValidationException::withMessages(['confirmed' => 'Il dispositivo sostiene altri apparati nel rack. Spostali o rimuovili dal rack prima di eliminarlo.']);
+        }
+        Rack::query()->whereIn('id', RackItem::query()->whereIn('device_id', $ids)->select('rack_id'))->increment('revision');
         DB::table('ip_addresses')->whereIn('device_id', $ids)->delete();
         DB::table('devices')->whereIn('id', $ids)->delete();
     }

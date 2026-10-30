@@ -6,10 +6,16 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number'])]
 class Device extends Model
 {
+    public function rackItem(): HasOne
+    {
+        return $this->hasOne(RackItem::class);
+    }
+
     /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {

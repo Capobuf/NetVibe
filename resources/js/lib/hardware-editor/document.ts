@@ -1,5 +1,22 @@
 export type Face = 'front' | 'rear';
 export type Point = { x: number; y: number };
+export type PointerMotion = { pointer: Point; position: Point };
+
+export function advancePointer(
+    previous: PointerMotion,
+    pointer: Point,
+    precise: boolean,
+): PointerMotion {
+    const factor = precise ? 0.1 : 1;
+    return {
+        pointer,
+        position: {
+            x: previous.position.x + (pointer.x - previous.pointer.x) * factor,
+            y: previous.position.y + (pointer.y - previous.pointer.y) * factor,
+        },
+    };
+}
+
 export const connectorCategories = {
     rj45: 'RJ45',
     sfp: 'SFP / SFP+',
@@ -190,11 +207,24 @@ export function newId(): string {
         n.toString(16).padStart(8, '0'),
     ).join('');
 }
-export function blankDocument(): PanelDocument {
+// Nominal millimetres keep model panels and the rack canvas on the same scale.
+export const RACK_WIDTH = 482.6;
+export const RACK_UNIT_HEIGHT = 44.45;
+
+export function blankDocument(
+    rackHeightU: number | null = null,
+): PanelDocument {
     return {
         version: 3,
         name: 'Pannello senza titolo',
-        shell: { x: 0, y: 0, width: 900, height: 180, radius: 0, border: 2 },
+        shell: {
+            x: 0,
+            y: 0,
+            width: rackHeightU ? RACK_WIDTH : 900,
+            height: rackHeightU ? rackHeightU * RACK_UNIT_HEIGHT : 180,
+            radius: 0,
+            border: 2,
+        },
         faces: {
             front: {
                 ports: [],

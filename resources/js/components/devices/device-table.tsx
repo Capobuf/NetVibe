@@ -28,6 +28,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     render,
     actions,
     onRowClick,
+    rowOpensDialog = true,
     filters,
     empty = 'Nessun risultato',
 }: {
@@ -38,6 +39,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     render?: (row: Row, column: Column) => ReactNode;
     actions?: (row: Row) => ReactNode;
     onRowClick?: (row: Row) => void;
+    rowOpensDialog?: boolean;
     filters?: ReactNode;
     empty?: string;
 }) {
@@ -110,7 +112,9 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                 }
                                 tabIndex={onRowClick ? 0 : undefined}
                                 aria-haspopup={
-                                    onRowClick ? 'dialog' : undefined
+                                    onRowClick && rowOpensDialog
+                                        ? 'dialog'
+                                        : undefined
                                 }
                                 className={
                                     onRowClick
@@ -136,6 +140,9 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                     onRowClick
                                         ? (event) => {
                                               if (
+                                                  event.currentTarget.contains(
+                                                      event.target as Node,
+                                                  ) &&
                                                   window.getSelection()
                                                       ?.isCollapsed !== false &&
                                                   !(

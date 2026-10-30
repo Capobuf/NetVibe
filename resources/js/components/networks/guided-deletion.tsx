@@ -53,10 +53,13 @@ type Impact = {
       }
     | {
           device: { id: number; name: string };
+          rack_item: { rack: { name: string } } | null;
           interfaces: { id: number; name: string | null }[];
       }
     | {
           devices: { id: number; name: string; site_id: number }[];
+          racks: { id: number; name: string }[];
+          rack_items: { id: number }[];
           interfaces: { id: number; device_id: number; name: string | null }[];
           device_links: { id: number; device_id: number }[];
           scope: {
@@ -193,6 +196,12 @@ export function GuidedDeletion({
                 )}
                 details={
                     <div className="flex flex-col gap-2 text-sm">
+                        {impact.rack_item && (
+                            <p>
+                                Verrà rimossa anche la posizione nel rack «
+                                {impact.rack_item.rack.name}».
+                            </p>
+                        )}
                         <p>
                             {impact.interfaces.length} interfacce da eliminare ·{' '}
                             {impact.ips.length} record IP da eliminare
@@ -508,6 +517,16 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
             </div>
             {(kind === 'company' || kind === 'site') && (
                 <div className="flex flex-col gap-2">
+                    <p>
+                        {impact.racks.length} rack · {impact.rack_items.length}{' '}
+                        elementi nei rack
+                    </p>
+                    {impact.racks.length > 0 && (
+                        <p>
+                            Rack:{' '}
+                            {impact.racks.map((rack) => rack.name).join(', ')}
+                        </p>
+                    )}
                     <p>
                         {impact.devices.length} dispositivi ·{' '}
                         {impact.interfaces.length} interfacce ·{' '}

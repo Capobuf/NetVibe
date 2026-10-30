@@ -15,10 +15,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ConfirmDialog,
-    LabelDialog,
-} from '@/components/hardware-editor/editor-dialogs';
+import { LabelDialog } from '@/components/hardware-editor/editor-dialogs';
 import { BlockPanel } from '@/components/hardware-editor/block-panel';
 import {
     EditorCanvas,
@@ -69,6 +66,11 @@ export default function HardwareEditor({
 }) {
     const { auth } = usePage().props;
     const e = useEditor(auth.user.id, catalogModel);
+    const currentDocument = useRef(e.doc);
+    currentDocument.current = e.doc;
+    const exitRoute = catalogModel
+        ? modelIndex({ query: { manufacturer: catalogModel.manufacturer_id } })
+        : administration();
     const canvas = useRef<CanvasApi>(null);
     const context = useRef<HTMLDivElement>(null);
     const file = useRef<HTMLInputElement>(null);
@@ -134,6 +136,36 @@ export default function HardwareEditor({
         (p) => !p.hidden && outsideShell(p, e.doc.shell),
     );
     const blocked = !!e.session || !!numberMode || !!e.crop || !!block;
+    const saveDisabled =
+        e.loading ||
+        e.loadFailed ||
+        e.saving ||
+        !!preview ||
+        !!e.crop ||
+        !!block;
+    function exitEditor() {
+        allowLeave.current = true;
+        router.visit(exitRoute, {
+            onFinish: () => {
+                allowLeave.current = false;
+            },
+        });
+    }
+    async function saveAndExit(afterSave = exitEditor) {
+        if (saveDisabled) return;
+        const document = e.doc;
+        const succeeded = e.session
+            ? await e.finishNumbering(false)
+            : await e.save();
+        if (!succeeded) return;
+        setEndNumbering(false);
+        setNumberMode(null);
+        // Keep edits made while the save was in flight in the editor.
+        if (currentDocument.current !== document) return;
+        allowLeave.current = true;
+        setLeave(null);
+        afterSave();
+    }
     function openBlock() {
         setBlock({
             ...(canvas.current?.center() ?? {
@@ -455,18 +487,7 @@ export default function HardwareEditor({
                             variant="ghost"
                             asChild
                         >
-                            <Link
-                                href={
-                                    catalogModel
-                                        ? modelIndex({
-                                              query: {
-                                                  manufacturer:
-                                                      catalogModel.manufacturer_id,
-                                              },
-                                          })
-                                        : administration()
-                                }
-                            >
+                            <Link href={exitRoute}>
                                 <ArrowLeft />
                             </Link>
                         </IconButton>
@@ -488,7 +509,7 @@ export default function HardwareEditor({
                             {catalogModel ? 'Modello' : 'Prototipo'}
                         </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <span
                             className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"
                             role="status"
@@ -514,17 +535,17 @@ export default function HardwareEditor({
                                 if (e.session) void finishNumbering();
                                 else void e.save();
                             }}
-                            disabled={
-                                e.loading ||
-                                e.loadFailed ||
-                                e.saving ||
-                                !!preview ||
-                                !!e.crop ||
-                                !!block
-                            }
+                            disabled={saveDisabled}
                         >
                             <Save />
                             <span className="hidden sm:inline">Salva</span>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            disabled={saveDisabled}
+                            onClick={() => void saveAndExit()}
+                        >
+                            Salva ed esci
                         </Button>
                     </div>
                 </header>
@@ -860,13 +881,44 @@ export default function HardwareEditor({
                 />
             )}
             {leave && !e.session && (
-                <ConfirmDialog
-                    title="Uscire senza salvare?"
-                    description="Le modifiche non salvate di questo pannello andranno perse."
-                    confirm="Esci senza salvare"
-                    onClose={() => setLeave(null)}
-                    onConfirm={leave}
-                />
+                <Dialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open && !e.saving) setLeave(null);
+                    }}
+                >
+                    <DialogContent className="sm:max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Salvare prima di uscire?</DialogTitle>
+                            <DialogDescription>
+                                Uscendo senza salvare, le modifiche di questo
+                                pannello andranno perse.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                disabled={e.saving}
+                                onClick={() => setLeave(null)}
+                            >
+                                Continua a modificare
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                disabled={e.saving}
+                                onClick={leave}
+                            >
+                                Esci senza salvare
+                            </Button>
+                            <Button
+                                disabled={saveDisabled}
+                                onClick={() => void saveAndExit(leave)}
+                            >
+                                {e.saving ? 'Salvataggio…' : 'Salva ed esci'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             )}
             <Dialog
                 open={endNumbering}
@@ -909,7 +961,7 @@ export default function HardwareEditor({
                                 onClick={() => void finishNumbering()}
                             >
                                 <Save data-icon="inline-start" />
-                                Salva
+                                {leave ? 'Salva ed esci' : 'Salva'}
                             </Button>
                         </div>
                     </DialogFooter>
@@ -931,6 +983,10 @@ export default function HardwareEditor({
                             ['Raggruppa / sciogli gruppo', 'Ctrl/Cmd + G'],
                             ['Seleziona tutte le porte', 'Ctrl/Cmd + A'],
                             ['Sposta di 1 / 10', 'Frecce / Shift + frecce'],
+                            [
+                                'Sposta / ridimensiona con precisione',
+                                'Ctrl + trascina',
+                            ],
                             ['Elimina selezione', 'Canc'],
                             [
                                 'Annulla / ripristina',

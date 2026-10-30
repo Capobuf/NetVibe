@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property array{faces: array{front: array{ports: list<array<string, mixed>>}, rear: array{ports: list<array<string, mixed>>}}, ...}|null $panel
  * @property array<string, string>|null $assets
  */
-#[Fillable(['name', 'manufacturer_id', 'model_type_id', 'panel', 'assets', 'panel_revision'])]
+#[Fillable(['name', 'manufacturer_id', 'model_type_id', 'panel', 'assets', 'panel_revision', 'rack_height_u', 'without_rack_ears'])]
 class DeviceModel extends Model
 {
     protected $hidden = ['assets'];
@@ -19,7 +19,7 @@ class DeviceModel extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['panel' => 'array', 'assets' => 'array', 'panel_revision' => 'integer'];
+        return ['panel' => 'array', 'assets' => 'array', 'panel_revision' => 'integer', 'rack_height_u' => 'integer', 'without_rack_ears' => 'boolean'];
     }
 
     /** @return BelongsTo<Manufacturer, $this> */

@@ -90,6 +90,9 @@ class DeviceController extends Controller
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $site = Site::query()->findOrFail($site->id);
             $record = $device ? $site->devices()->lockForUpdate()->findOrFail($device->id) : $site->devices()->make();
+            if ($record->exists && $record->device_model_id !== $model->id && $record->rackItem()->exists()) {
+                throw ValidationException::withMessages(['device_model_id' => 'Rimuovi prima il dispositivo dal rack per cambiarne il modello.']);
+            }
             if ($record->exists && $record->device_model_id !== $model->id && $record->interfaces()->whereNotNull('connector_id')->exists()) {
                 throw ValidationException::withMessages(['device_model_id' => 'Il dispositivo ha interfacce legate al pannello. Il cambio modello non può conservarne l’identità: mantieni il modello attuale.']);
             }

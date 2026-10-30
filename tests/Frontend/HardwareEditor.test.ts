@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCustomColors } from '../../resources/js/lib/hardware-editor/colors.ts';
 import {
+    advancePointer,
     arrangePorts,
     blankDocument,
     createBlock,
@@ -27,6 +28,26 @@ import {
     outsideShell,
     snapDelta,
 } from '../../resources/js/lib/hardware-editor/document.ts';
+
+test('Ctrl reduces pointer movement tenfold without jumping when toggled mid-drag', () => {
+    let motion = { pointer: { x: 100, y: 200 }, position: { x: 100, y: 200 } };
+    motion = advancePointer(motion, { x: 120, y: 180 }, false);
+    assert.deepEqual(motion.position, { x: 120, y: 180 });
+    motion = advancePointer(motion, { x: 130, y: 160 }, true);
+    assert.deepEqual(motion.position, { x: 121, y: 178 });
+    motion = advancePointer(motion, { x: 130, y: 160 }, false);
+    assert.deepEqual(motion.position, { x: 121, y: 178 });
+    motion = advancePointer(motion, { x: 135, y: 170 }, false);
+    assert.deepEqual(motion.position, { x: 126, y: 188 });
+});
+
+test('new rack model panels use the selected U height and the rack width', () => {
+    assert.equal(blankDocument(1).shell.width, 482.6);
+    assert.equal(blankDocument(1).shell.height, 44.45);
+    assert.equal(blankDocument(2).shell.height, 88.9);
+    assert.equal(blankDocument(100).shell.height, 4445);
+    assert.deepEqual(blankDocument(null).shell, blankDocument().shell);
+});
 
 test('internal labels fit narrow and rotated ports and scale with their symbols', () => {
     const port = makePort('usbMicroB', { x: 100, y: 200 });

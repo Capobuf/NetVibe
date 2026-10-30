@@ -178,6 +178,11 @@ export default function Models({
                                 },
                                 { id: 'type', label: 'Tipo', visible: true },
                                 {
+                                    id: 'rack_height_u',
+                                    label: 'Altezza rack',
+                                    visible: true,
+                                },
+                                {
                                     id: 'panel',
                                     label: 'Pannello',
                                     visible: true,
@@ -189,18 +194,26 @@ export default function Models({
                                 },
                             ]}
                             value={(m, c) =>
-                                c === 'type'
-                                    ? (m.model_type?.name ?? '—')
-                                    : c === 'manufacturer'
-                                      ? m.manufacturer.name
-                                      : c === 'panel'
-                                        ? m.panel
-                                            ? 'Con pannello'
-                                            : 'Senza pannello'
-                                        : (m[c] ?? 0)
+                                c === 'rack_height_u'
+                                    ? (m.rack_height_u ?? 'Non rackmount')
+                                    : c === 'type'
+                                      ? (m.model_type?.name ?? '—')
+                                      : c === 'manufacturer'
+                                        ? m.manufacturer.name
+                                        : c === 'panel'
+                                          ? m.panel
+                                              ? 'Con pannello'
+                                              : 'Senza pannello'
+                                          : (m[c] ?? 0)
                             }
                             render={(m, c) =>
-                                c === 'type' ? (
+                                c === 'rack_height_u' ? (
+                                    m.rack_height_u ? (
+                                        `${m.rack_height_u}U`
+                                    ) : (
+                                        'Non rackmount'
+                                    )
+                                ) : c === 'type' ? (
                                     (m.model_type?.name ?? '—')
                                 ) : c === 'manufacturer' ? (
                                     m.manufacturer.name

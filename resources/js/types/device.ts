@@ -16,6 +16,8 @@ export type DeviceModel = {
     manufacturer_id: number;
     name: string;
     model_type_id: number | null;
+    rack_height_u: number | null;
+    without_rack_ears: boolean;
     model_type?: ModelType | null;
     panel: PanelDocument | null;
     panel_revision: number;

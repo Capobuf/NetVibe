@@ -1,9 +1,11 @@
 import { index as deviceIndex } from '@/routes/companies/sites/devices';
+import { index as rackIndex } from '@/routes/companies/sites/racks';
 import { index as modelIndex } from '@/routes/device-models';
 import { index as companyIndex } from '@/routes/companies';
 import { Link, usePage } from '@inertiajs/react';
 import {
     Layers,
+    PanelsTopLeft as RackIcon,
     Network,
     Settings2,
     Server,
@@ -147,6 +149,16 @@ export function AppSidebar() {
                                               },
                                           ]
                                         : [],
+                                },
+                                {
+                                    title: 'Rack',
+                                    href: networkContext
+                                        ? rackIndex(networkContext)
+                                        : companyIndex(),
+                                    icon: RackIcon,
+                                    isActive:
+                                        !!networkContext &&
+                                        component.startsWith('racks/'),
                                 },
                             ]}
                         />

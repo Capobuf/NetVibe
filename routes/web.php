@@ -13,6 +13,7 @@ use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\ManufacturerController;
 use App\Http\Controllers\ModelPanelController;
 use App\Http\Controllers\ModelTypeController;
+use App\Http\Controllers\RackController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
 use App\Http\Controllers\SubnetController;
@@ -39,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('companies', CompanyController::class)->only(['index']);
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
+        Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
         Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);

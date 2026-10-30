@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
+use App\Models\RackItem;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,9 +49,9 @@ class DeviceModelController extends Controller
     private function save(Request $request, Manufacturer $manufacturer, ?DeviceModel $model = null): RedirectResponse
     {
         $request->mergeIfMissing(['manufacturer_id' => $manufacturer->id]);
-        $data = $request->validate(['manufacturer_id' => ['required', 'integer', 'exists:manufacturers,id'], 'model_type_id' => ['nullable', 'integer', 'exists:model_types,id'], 'name' => ['required', 'string', 'max:255',
+        $data = $request->validate(['without_rack_ears' => ['sometimes', 'boolean'], 'rack_height_u' => ['nullable', 'integer', 'between:1,100'], 'manufacturer_id' => ['required', 'integer', 'exists:manufacturers,id'], 'model_type_id' => ['nullable', 'integer', 'exists:model_types,id'], 'name' => ['required', 'string', 'max:255',
             Rule::unique('device_models')->where('manufacturer_id', $request->input('manufacturer_id'))->ignore($model),
-        ]], [], ['name' => 'nome', 'manufacturer_id' => 'produttore', 'model_type_id' => 'tipo']);
+        ]], [], ['name' => 'nome', 'manufacturer_id' => 'produttore', 'model_type_id' => 'tipo', 'rack_height_u' => 'altezza rack', 'without_rack_ears' => 'senza staffe rack']);
         try {
             $record = DB::transaction(function () use ($model, $data) {
                 if (! empty($data['model_type_id'])) {
@@ -59,8 +60,13 @@ class DeviceModelController extends Controller
                 $manufacturer = Manufacturer::query()->sharedLock()->whereKey($data['manufacturer_id'])->firstOrFail();
                 if ($model) {
                     $model = DeviceModel::query()->lockForUpdate()->findOrFail($model->id);
-                    $manufacturerChanged = $model->manufacturer_id !== $manufacturer->id;
-                    $model->update($data);
+                    $model->fill($data);
+                    if ($model->isDirty(['rack_height_u', 'without_rack_ears']) && RackItem::query()->whereIn('device_id', $model->devices()->select('id'))->exists()) {
+                        $field = $model->isDirty('rack_height_u') ? 'rack_height_u' : 'without_rack_ears';
+                        throw ValidationException::withMessages([$field => 'Il modello è montato in un rack. Rimuovi prima i dispositivi dal rack per modificarne l’altezza o il fissaggio.']);
+                    }
+                    $manufacturerChanged = $model->isDirty('manufacturer_id');
+                    $model->save();
                     if ($manufacturerChanged) {
                         $model->devices()->update(['manufacturer_id' => $manufacturer->id]);
                     }

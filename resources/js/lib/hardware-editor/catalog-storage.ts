@@ -25,7 +25,10 @@ export async function loadModel(model: CatalogModel) {
         }),
     );
     const draft = {
-        document: model.panel ?? { ...blankDocument(), name: model.name },
+        document: model.panel ?? {
+            ...blankDocument(model.rack_height_u),
+            name: model.name,
+        },
         assets,
     };
     validateDraft(draft);

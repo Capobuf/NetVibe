@@ -1,5 +1,7 @@
 import {
     Copy,
+    ClipboardPaste,
+    Scissors,
     Crop,
     Layers,
     Undo2,
@@ -27,9 +29,10 @@ import {
     ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
 import {
-    connectorTypes,
+    insertableConnectors,
     type ConnectorType,
 } from '@/lib/hardware-editor/document';
+import { ConnectorIcon } from './connector-icon';
 import { orderActions } from './editor-layers';
 import { alignmentActions } from './editor-inspector';
 import type { Editor } from './use-editor';
@@ -37,6 +40,7 @@ import type { Editor } from './use-editor';
 export function EditorContextMenu({
     editor: e,
     add,
+    paste,
     properties,
     label,
     image,
@@ -44,6 +48,7 @@ export function EditorContextMenu({
 }: {
     editor: Editor;
     add: (type: ConnectorType) => void;
+    paste: () => void;
     properties: () => void;
     label: () => void;
     image: () => void;
@@ -56,6 +61,28 @@ export function EditorContextMenu({
             onKeyDown={(event) => event.stopPropagation()}
         >
             <ContextMenuGroup>
+                {e.selection.kind === 'ports' && e.selected.length > 0 && (
+                    <>
+                        <ContextMenuItem onClick={e.copy}>
+                            <Copy />
+                            Copia
+                            <ContextMenuShortcut>⌘/Ctrl C</ContextMenuShortcut>
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            disabled={e.selected.some(e.portLocked)}
+                            onClick={e.cut}
+                        >
+                            <Scissors />
+                            Taglia
+                            <ContextMenuShortcut>⌘/Ctrl X</ContextMenuShortcut>
+                        </ContextMenuItem>
+                    </>
+                )}
+                <ContextMenuItem disabled={!e.canPaste} onClick={paste}>
+                    <ClipboardPaste />
+                    Incolla<ContextMenuShortcut>⌘/Ctrl V</ContextMenuShortcut>
+                </ContextMenuItem>
+                <ContextMenuSeparator />
                 {(e.selection.kind === 'ports' ||
                     e.selection.kind === 'image') && (
                     <ContextMenuSub>
@@ -87,10 +114,6 @@ export function EditorContextMenu({
                                 Modifica etichetta / numero
                             </ContextMenuItem>
                         )}
-                        <ContextMenuItem onClick={properties}>
-                            <Settings2 />
-                            Proprietà
-                        </ContextMenuItem>
                         {e.group && (
                             <ContextMenuItem
                                 onClick={() => {
@@ -114,10 +137,17 @@ export function EditorContextMenu({
                         </ContextMenuItem>
                         <ContextMenuItem
                             disabled={e.selected.some(e.portLocked)}
-                            onClick={e.rotate}
+                            onClick={() => e.rotate()}
                         >
                             <RotateCw />
                             Ruota di 90°
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            disabled={e.selected.some(e.portLocked)}
+                            onClick={() => e.rotate(180)}
+                        >
+                            <RotateCw />
+                            Ruota di 180°
                         </ContextMenuItem>
                         {e.selected.length > 1 && (
                             <ContextMenuSub>
@@ -151,12 +181,16 @@ export function EditorContextMenu({
                                 Separa gruppo
                             </ContextMenuItem>
                         ) : e.selected.length > 1 ? (
-                            <ContextMenuItem onClick={e.groupPorts}>
+                            <ContextMenuItem onClick={() => e.groupPorts()}>
                                 <Group />
                                 Raggruppa
                             </ContextMenuItem>
                         ) : null}
                         <ContextMenuSeparator />
+                        <ContextMenuItem onClick={properties}>
+                            <Settings2 />
+                            Proprietà
+                        </ContextMenuItem>
                         <ContextMenuItem
                             variant="destructive"
                             onClick={e.remove}
@@ -172,10 +206,6 @@ export function EditorContextMenu({
                     </>
                 ) : e.selection.kind === 'image' && picture ? (
                     <>
-                        <ContextMenuItem onClick={properties}>
-                            <Settings2 />
-                            Modifica immagine
-                        </ContextMenuItem>
                         <ContextMenuItem
                             disabled={picture.locked || picture.hidden}
                             onClick={e.startCrop}
@@ -214,6 +244,10 @@ export function EditorContextMenu({
                             Sostituisci immagine
                         </ContextMenuItem>
                         <ContextMenuSeparator />
+                        <ContextMenuItem onClick={properties}>
+                            <Settings2 />
+                            Proprietà
+                        </ContextMenuItem>
                         <ContextMenuItem
                             variant="destructive"
                             onClick={e.remove}
@@ -224,10 +258,6 @@ export function EditorContextMenu({
                     </>
                 ) : e.selection.kind === 'shell' ? (
                     <>
-                        <ContextMenuItem onClick={properties}>
-                            <Settings2 />
-                            Dimensioni e bordi
-                        </ContextMenuItem>
                         <ContextMenuItem
                             onClick={() =>
                                 e.patchShellState({
@@ -244,6 +274,11 @@ export function EditorContextMenu({
                             <ImagePlus />
                             Importa immagine
                         </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onClick={properties}>
+                            <Settings2 />
+                            Proprietà
+                        </ContextMenuItem>
                     </>
                 ) : (
                     <>
@@ -254,7 +289,7 @@ export function EditorContextMenu({
                             </ContextMenuSubTrigger>
                             <ContextMenuSubContent>
                                 <ContextMenuGroup>
-                                    {Object.entries(connectorTypes).map(
+                                    {insertableConnectors.map(
                                         ([type, item]) => (
                                             <ContextMenuItem
                                                 key={type}
@@ -262,6 +297,7 @@ export function EditorContextMenu({
                                                     add(type as ConnectorType)
                                                 }
                                             >
+                                                <ConnectorIcon type={type} />
                                                 {item.name}
                                             </ContextMenuItem>
                                         ),

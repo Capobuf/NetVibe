@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -95,7 +95,7 @@ export function Choice({
 }: {
     label: string;
     value: string;
-    choices: Record<string, string>;
+    choices: Record<string, ReactNode>;
     onChange: (value: string) => void;
     disabled?: boolean;
 }) {

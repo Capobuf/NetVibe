@@ -1,23 +1,135 @@
 export type Face = 'front' | 'rear';
 export type Point = { x: number; y: number };
+export const connectorCategories = {
+    rj45: 'RJ45',
+    sfp: 'SFP / SFP+',
+    qsfp: 'QSFP',
+    usbA: 'USB-A',
+    usbC: 'USB-C',
+    usbMiniB: 'USB Mini-B',
+    usbMicroB: 'USB Micro-B',
+    ac: 'Alimentazione AC',
+    dc: 'Alimentazione DC',
+} as const;
+export type ConnectorCategory = keyof typeof connectorCategories;
 export const connectorTypes = {
-    rj45: { name: 'RJ45 Ethernet', width: 34, height: 28 },
-    sfp: { name: 'SFP / SFP+', width: 26, height: 18 },
-    qsfp: { name: 'QSFP', width: 38, height: 20 },
-    console: { name: 'Console RJ45', width: 34, height: 28 },
-    usbA: { name: 'USB-A', width: 30, height: 14 },
-    usbC: { name: 'USB-C', width: 22, height: 10 },
-    ac: { name: 'Alimentazione AC', width: 40, height: 32 },
-    dc: { name: 'Alimentazione DC', width: 22, height: 22 },
+    rj45: {
+        name: 'RJ45',
+        width: 34,
+        height: 28,
+        category: 'rj45',
+        color: '#3b82f6',
+    },
+    sfp: {
+        name: 'SFP / SFP+',
+        width: 26,
+        height: 18,
+        category: 'sfp',
+        color: '#ef4444',
+    },
+    qsfp: {
+        name: 'QSFP',
+        width: 38,
+        height: 20,
+        category: 'qsfp',
+        color: '#ef4444',
+    },
+    console: {
+        name: 'RJ45 · Console seriale',
+        width: 34,
+        height: 28,
+        category: 'rj45',
+        color: '#facc15',
+    },
+    usbA: {
+        name: 'USB-A',
+        width: 30,
+        height: 14,
+        category: 'usbA',
+        color: '#8998aa',
+    },
+    usbC: {
+        name: 'USB-C',
+        width: 22,
+        height: 10,
+        category: 'usbC',
+        color: '#8998aa',
+    },
+    usbMiniB: {
+        name: 'USB Mini-B',
+        width: 24,
+        height: 14,
+        category: 'usbMiniB',
+        color: '#8998aa',
+    },
+    usbMicroB: {
+        name: 'USB Micro-B',
+        width: 24,
+        height: 10,
+        category: 'usbMicroB',
+        color: '#8998aa',
+    },
+    ac: {
+        name: 'IEC C13',
+        width: 40,
+        height: 32,
+        category: 'ac',
+        color: '#8998aa',
+    },
+    acC19: {
+        name: 'IEC C19',
+        width: 46,
+        height: 34,
+        category: 'ac',
+        color: '#8998aa',
+    },
+    acC7: {
+        name: 'IEC C7',
+        width: 32,
+        height: 18,
+        category: 'ac',
+        color: '#8998aa',
+    },
+    acC5: {
+        name: 'IEC C5',
+        width: 30,
+        height: 28,
+        category: 'ac',
+        color: '#8998aa',
+    },
+    dc: {
+        name: 'Alimentazione DC',
+        width: 22,
+        height: 22,
+        category: 'dc',
+        color: '#8998aa',
+    },
 } as const;
 export type ConnectorType = keyof typeof connectorTypes;
+export const insertableConnectors = Object.entries(connectorTypes).filter(
+    ([type]) => type !== 'console',
+) as [ConnectorType, (typeof connectorTypes)[ConnectorType]][];
 export const labelPositions = {
-    top: 'Sopra',
-    bottom: 'Sotto',
-    left: 'Sinistra',
-    right: 'Destra',
+    center: 'Al centro',
+    top: 'In alto',
+    bottom: 'In basso',
+    left: 'A sinistra',
+    right: 'A destra',
     hidden: 'Nascosta',
 } as const;
+export const powerLabelPositions = {
+    top: 'Sopra',
+    bottom: 'Sotto',
+    left: 'A sinistra',
+    right: 'A destra',
+    hidden: 'Nascosta',
+} as const;
+export function isPowerConnector(type: ConnectorType): boolean {
+    return (
+        connectorTypes[type].category === 'ac' ||
+        connectorTypes[type].category === 'dc'
+    );
+}
 export type LayerState = { hidden: boolean; locked: boolean };
 export type Port = Point &
     LayerState & {
@@ -108,12 +220,12 @@ export function makePort(type: ConnectorType, point: Point): Port {
         rotation: 0,
         scale: 1,
         label: '',
-        labelPosition: 'bottom',
+        labelPosition: isPowerConnector(type) ? 'bottom' : 'center',
         poe: false,
         group: null,
         opacity: 1,
         opacityCustomized: false,
-        borderColor: type === 'console' ? '#65b9d0' : '#8998aa',
+        borderColor: connectorTypes[type].color,
         hidden: false,
         locked: false,
     };
@@ -124,6 +236,103 @@ export function portBounds(port: Port): Bounds {
     const width = (sideways ? type.height : type.width) * port.scale;
     const height = (sideways ? type.width : type.height) * port.scale;
     return { x: port.x - width / 2, y: port.y - height / 2, width, height };
+}
+export function portBodyBounds(port: Port): Bounds {
+    const bounds = portBounds(port);
+    if (port.type !== 'rj45' && port.type !== 'console') return bounds;
+    // Exclude the RJ45 notch from the area used by labels and badges.
+    const sideways = port.rotation % 180 !== 0;
+    const angle = (port.rotation * Math.PI) / 180;
+    const width = bounds.width - (sideways ? 6 * port.scale : 0);
+    const height = bounds.height - (sideways ? 0 : 6 * port.scale);
+    return {
+        x: port.x + 3 * Math.sin(angle) * port.scale - width / 2,
+        y: port.y - 3 * Math.cos(angle) * port.scale - height / 2,
+        width,
+        height,
+    };
+}
+export function portLabelPosition(port: Port): Port['labelPosition'] {
+    return isPowerConnector(port.type) && port.labelPosition === 'center'
+        ? 'bottom'
+        : port.labelPosition;
+}
+function portLabelText(label: string, width: number, fontSize: number) {
+    const characters = Array.from(label);
+    if (characters.length * fontSize * 0.65 <= width)
+        return { text: label, truncated: false };
+    const capacity = Math.floor(width / (fontSize * 0.65));
+    if (capacity < 3) return { text: '…', truncated: true };
+    const start = Math.floor((capacity - 1) / 2);
+    const end = capacity - 1 - start;
+    return {
+        text: `${characters.slice(0, start).join('')}…${characters.slice(-end).join('')}`,
+        truncated: true,
+    };
+}
+export function portLabelLayout(port: Port, label: string) {
+    const bounds = portBodyBounds(port);
+    const centerX = bounds.x + bounds.width / 2 - port.x;
+    const centerY = bounds.y + bounds.height / 2 - port.y;
+    if (isPowerConnector(port.type)) {
+        const position = portLabelPosition(port);
+        const fontSize = 12 * port.scale;
+        const fullWidth = Array.from(label).length * fontSize * 0.65;
+        const width = Math.min(fullWidth, bounds.width * 2);
+        const gap = 4 * port.scale;
+        return {
+            x:
+                position === 'left'
+                    ? -bounds.width / 2 - gap - width
+                    : position === 'right'
+                      ? bounds.width / 2 + gap
+                      : -width / 2,
+            y:
+                position === 'top'
+                    ? -bounds.height / 2 - gap - fontSize
+                    : position === 'left' || position === 'right'
+                      ? -fontSize / 2
+                      : bounds.height / 2 + gap,
+            width,
+            height: fontSize,
+            fontSize,
+            ...portLabelText(label, width, fontSize),
+        };
+    }
+    const width = bounds.width * 0.75;
+    const availableHeight = bounds.height * 0.45;
+    const fontSize = Math.min(
+        12 * port.scale,
+        availableHeight,
+        Math.max(
+            8 * port.scale,
+            width / Math.max(1, Array.from(label).length * 0.65),
+        ),
+    );
+    const textWidth = Math.min(
+        width,
+        Array.from(label).length * fontSize * 0.65,
+    );
+    return {
+        x:
+            centerX +
+            (port.labelPosition === 'left'
+                ? -width / 2
+                : port.labelPosition === 'right'
+                  ? width / 2 - textWidth
+                  : -textWidth / 2),
+        y:
+            centerY +
+            (port.labelPosition === 'top'
+                ? -availableHeight / 2
+                : port.labelPosition === 'bottom'
+                  ? availableHeight / 2 - fontSize
+                  : -fontSize / 2),
+        width: textWidth,
+        height: fontSize,
+        fontSize,
+        ...portLabelText(label, textWidth, fontSize),
+    };
 }
 export function boundsOf(boxes: Bounds[]): Bounds {
     const x = Math.min(...boxes.map((p) => p.x));
@@ -629,6 +838,33 @@ export function faceLayers(face: PanelDocument['faces'][Face]): FaceLayer[] {
         layers.push({ id: key, ids: [...members, id] });
     }
     return layers;
+}
+
+export function categorizedLayers(face: PanelDocument['faces'][Face]) {
+    const categories = new Map<string, { name: string; layers: FaceLayer[] }>();
+    for (const layer of faceLayers(face).reverse()) {
+        if (layer.id === 'image') continue;
+        const types = new Set(
+            layer.ids.map(
+                (id) =>
+                    connectorTypes[face.ports.find((p) => p.id === id)!.type]
+                        .category,
+            ),
+        );
+        const category = types.size === 1 ? [...types][0] : 'mixed';
+        const section: { name: string; layers: FaceLayer[] } = categories.get(
+            category,
+        ) ?? {
+            name:
+                category === 'mixed'
+                    ? 'Gruppi misti'
+                    : connectorCategories[category],
+            layers: [],
+        };
+        section.layers.push(layer);
+        categories.set(category, section);
+    }
+    return [...categories].map(([id, section]) => ({ id, ...section }));
 }
 
 export function reorderLayers(

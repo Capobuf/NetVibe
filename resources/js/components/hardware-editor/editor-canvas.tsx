@@ -18,6 +18,11 @@ import {
     Text,
     Transformer,
 } from 'react-konva';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
     boundsOf,
@@ -25,6 +30,7 @@ import {
     imageBounds,
     duplicatePorts,
     portBounds,
+    portLabelLayout,
     snapDelta,
     resizeBlockSpacing,
     reshapeBlock,
@@ -106,6 +112,7 @@ export function EditorCanvas({
     viewRef.current = view;
     const [space, setSpace] = useState(false);
     const [hover, setHover] = useState<string | null>(null);
+    const [labelTooltip, setLabelTooltip] = useState<string | null>(null);
     const [draft, setDraft] = useState<Port[] | null>(null);
     const [imageDelta, setImageDelta] = useState<Point | null>(null);
     const [marquee, setMarquee] = useState<Bounds | null>(null);
@@ -135,6 +142,31 @@ export function EditorCanvas({
     const blockBox = blockPreview
         ? boundsOf(blockPreview.map(portBounds))
         : null;
+
+    const labelPort = (blockPreview ?? ports).find(
+        (p) => p.id === hover && !p.hidden,
+    );
+    const fullLabel = labelPort
+        ? (preview?.get(labelPort.id) ?? labelPort.label)
+        : '';
+    const tooltipKey =
+        labelPort &&
+        fullLabel &&
+        (labelPort.labelPosition !== 'hidden' || preview?.has(labelPort.id)) &&
+        portLabelLayout(labelPort, fullLabel).truncated &&
+        !pan &&
+        !space &&
+        !panning &&
+        !blockDragging &&
+        !e.crop
+            ? `${e.face}:${labelPort.id}:${fullLabel}`
+            : null;
+    useEffect(() => {
+        setLabelTooltip(null);
+        if (!tooltipKey) return;
+        const timer = window.setTimeout(() => setLabelTooltip(tooltipKey), 700);
+        return () => window.clearTimeout(timer);
+    }, [tooltipKey, view]);
 
     function fit() {
         const boxes: Bounds[] = [
@@ -220,6 +252,7 @@ export function EditorCanvas({
             if (event.code === 'Space') setSpace(false);
         };
         const reset = () => {
+            setHover(null);
             setSpace(false);
             middlePan.current = null;
             setPanning(false);
@@ -371,7 +404,10 @@ export function EditorCanvas({
     function move(event: KonvaEventObject<PointerEvent>) {
         const g = gesture.current;
         if (!g) {
-            const p = event.target.findAncestor('.port', true);
+            const p =
+                event.evt.buttons === 0
+                    ? event.target.findAncestor('.port', true)
+                    : undefined;
             setHover(p?.id() ?? null);
             return;
         }
@@ -609,7 +645,10 @@ export function EditorCanvas({
     return (
         <div
             ref={host}
+            onPointerLeave={() => setHover(null)}
             onPointerDownCapture={(event) => {
+                setHover(null);
+                setLabelTooltip(null);
                 if (event.button !== 1) return;
                 event.preventDefault();
                 event.stopPropagation();
@@ -688,6 +727,7 @@ export function EditorCanvas({
                     setGuides([]);
                 }}
                 onWheel={(event) => {
+                    setHover(null);
                     event.evt.preventDefault();
                     if (
                         !gesture.current &&
@@ -700,6 +740,7 @@ export function EditorCanvas({
                         );
                 }}
                 onContextMenu={(event) => {
+                    setHover(null);
                     event.evt.preventDefault();
                     if (blocked) return;
                     const hit = pick(event.target);
@@ -822,7 +863,6 @@ export function EditorCanvas({
                                                 numbering={!!e.session}
                                                 preview={preview?.get(port.id)}
                                                 zoom={view.zoom}
-                                                dark={dark}
                                             />
                                         ))}
                                 </Group>
@@ -889,7 +929,6 @@ export function EditorCanvas({
                                     selected={false}
                                     numbering={false}
                                     zoom={view.zoom}
-                                    dark={dark}
                                 />
                             ))}
                         </Group>
@@ -961,7 +1000,10 @@ export function EditorCanvas({
                                         ? [5 / view.zoom, 4 / view.zoom]
                                         : undefined
                                 }
-                                {...portBounds(p)}
+                                x={portBounds(p).x - 6 / view.zoom}
+                                y={portBounds(p).y - 6 / view.zoom}
+                                width={portBounds(p).width + 12 / view.zoom}
+                                height={portBounds(p).height + 12 / view.zoom}
                                 listening={false}
                                 stroke="#3b82f6"
                                 strokeWidth={1.5 / view.zoom}
@@ -1111,10 +1153,10 @@ export function EditorCanvas({
                     {selectedBox && selected.length > 1 && (
                         <Rect
                             listening={false}
-                            x={selectedBox.x - 7}
-                            y={selectedBox.y - 7}
-                            width={selectedBox.width + 14}
-                            height={selectedBox.height + 14}
+                            x={selectedBox.x - 10 / view.zoom}
+                            y={selectedBox.y - 10 / view.zoom}
+                            width={selectedBox.width + 20 / view.zoom}
+                            height={selectedBox.height + 20 / view.zoom}
                             stroke="#3b82f6"
                             strokeWidth={1 / view.zoom}
                             dash={[5 / view.zoom, 3 / view.zoom]}
@@ -1172,6 +1214,8 @@ export function EditorCanvas({
                         }
                         anchorSize={9}
                         anchorCornerRadius={2}
+                        padding={e.selection.kind === 'ports' ? 6 : 0}
+                        borderEnabled={e.selection.kind !== 'ports'}
                         borderStroke="#3b82f6"
                         anchorStroke="#3b82f6"
                         anchorFill={dark ? '#17202c' : '#fff'}
@@ -1195,6 +1239,39 @@ export function EditorCanvas({
                     />
                 </Layer>
             </Stage>
+            {labelPort && tooltipKey && (
+                <Tooltip
+                    open={labelTooltip === tooltipKey}
+                    onOpenChange={(open) => {
+                        if (!open) setHover(null);
+                    }}
+                    disableHoverableContent
+                >
+                    <TooltipTrigger asChild>
+                        <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute"
+                            style={{
+                                left:
+                                    view.x +
+                                    portBounds(labelPort).x * view.zoom,
+                                top:
+                                    view.y +
+                                    portBounds(labelPort).y * view.zoom,
+                                width: portBounds(labelPort).width * view.zoom,
+                                height:
+                                    portBounds(labelPort).height * view.zoom,
+                            }}
+                        />
+                    </TooltipTrigger>
+                    <TooltipContent
+                        className="pointer-events-none max-w-none whitespace-nowrap"
+                        sideOffset={10}
+                    >
+                        {fullLabel}
+                    </TooltipContent>
+                </Tooltip>
+            )}
         </div>
     );
 }

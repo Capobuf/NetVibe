@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Slider } from '@/components/ui/slider';
 import {
-    connectorTypes,
+    insertableConnectors,
     type BlockOptions,
     type ConnectorType,
 } from '@/lib/hardware-editor/document';
+import { ConnectorIcon } from './connector-icon';
 import { Choice, NumberField } from './editor-fields';
 
 const portCounts = [2, 4, 6, 8, 12, 16, 24, 48, 52];
@@ -71,9 +72,13 @@ export function BlockPanel({
                         label="Connettore"
                         value={options.type}
                         choices={Object.fromEntries(
-                            Object.entries(connectorTypes).map(
-                                ([key, item]) => [key, item.name],
-                            ),
+                            insertableConnectors.map(([key, item]) => [
+                                key,
+                                <span className="flex items-center gap-2">
+                                    <ConnectorIcon type={key} />
+                                    {item.name}
+                                </span>,
+                            ]),
                         )}
                         onChange={(type) =>
                             patch({ type: type as ConnectorType })

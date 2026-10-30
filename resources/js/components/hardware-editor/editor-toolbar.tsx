@@ -19,6 +19,7 @@ import {
     Undo2,
     Ungroup,
 } from 'lucide-react';
+import { ConnectorIcon } from './connector-icon';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -41,7 +42,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-    connectorTypes,
+    insertableConnectors,
     type ConnectorType,
 } from '@/lib/hardware-editor/document';
 import { alignmentActions } from './editor-inspector';
@@ -131,11 +132,12 @@ export function EditorToolbar({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                     <DropdownMenuGroup>
-                        {Object.entries(connectorTypes).map(([type, item]) => (
+                        {insertableConnectors.map(([type, item]) => (
                             <DropdownMenuItem
                                 key={type}
                                 onSelect={() => add(type as ConnectorType)}
                             >
+                                <ConnectorIcon type={type} />
                                 {item.name}
                             </DropdownMenuItem>
                         ))}
@@ -235,7 +237,7 @@ export function EditorToolbar({
                                 !e.selected.length ||
                                 e.selected.some(e.portLocked)
                             }
-                            onSelect={e.rotate}
+                            onSelect={() => e.rotate()}
                         >
                             <RotateCw />
                             Ruota di 90°
@@ -248,7 +250,7 @@ export function EditorToolbar({
                         ) : (
                             <DropdownMenuItem
                                 disabled={e.selected.length < 2}
-                                onSelect={e.groupPorts}
+                                onSelect={() => e.groupPorts()}
                             >
                                 <Group />
                                 Raggruppa

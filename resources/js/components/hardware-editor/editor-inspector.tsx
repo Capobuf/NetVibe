@@ -8,7 +8,6 @@ import {
     Lock,
     Maximize,
     Pencil,
-    Pipette,
     RotateCw,
     Scan,
     Trash2,
@@ -36,12 +35,15 @@ import {
     CollapsibleContent,
 } from '@/components/ui/collapsible';
 import { Slider } from '@/components/ui/slider';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { BorderColorField } from './border-color-field';
 import { LayerOrderMenu } from './editor-layers';
 import { Separator } from '@/components/ui/separator';
 import {
     connectorTypes,
     labelPositions,
+    powerLabelPositions,
+    isPowerConnector,
+    portLabelPosition,
     type Port,
 } from '@/lib/hardware-editor/document';
 import { NumberField, Choice } from './editor-fields';
@@ -86,6 +88,18 @@ export function EditorInspector({
 }) {
     const [gap, setGap] = useState(16);
     const single = e.selected.length === 1 ? e.selected[0] : null;
+    const rj45 = e.selected.filter(
+        (p) => p.type === 'rj45' || p.type === 'console',
+    );
+    const hasPowerPorts = e.selected.some((port) =>
+        isPowerConnector(port.type),
+    );
+    const positions = e.selected.map(portLabelPosition);
+    const labelPosition = positions.every(
+        (position) => position === positions[0],
+    )
+        ? (positions[0] ?? '')
+        : '';
     const image = e.doc.faces[e.face].image;
     const title =
         e.selection.kind === 'image'
@@ -171,8 +185,12 @@ export function EditorInspector({
                             </div>
                             <Choice
                                 label="Posizione etichetta"
-                                value={common('labelPosition') ?? ''}
-                                choices={labelPositions}
+                                value={labelPosition}
+                                choices={
+                                    hasPowerPorts
+                                        ? powerLabelPositions
+                                        : labelPositions
+                                }
                                 onChange={(labelPosition) =>
                                     e.patchPorts({
                                         labelPosition:
@@ -180,6 +198,27 @@ export function EditorInspector({
                                     })
                                 }
                             />
+                            {rj45.length > 0 && (
+                                <Choice
+                                    label="Funzione RJ45"
+                                    value={
+                                        rj45.every(
+                                            (p) => p.type === rj45[0].type,
+                                        )
+                                            ? rj45[0].type
+                                            : ''
+                                    }
+                                    choices={{
+                                        rj45: 'Ethernet',
+                                        console: 'Console seriale',
+                                    }}
+                                    onChange={(value) =>
+                                        e.setRj45Function(
+                                            value as 'rj45' | 'console',
+                                        )
+                                    }
+                                />
+                            )}
                             {e.selected.some((p) => p.type === 'rj45') && (
                                 <Field orientation="horizontal">
                                     <Checkbox
@@ -350,7 +389,7 @@ export function EditorInspector({
                             ) : e.selected.length > 1 ? (
                                 <Button
                                     variant="outline"
-                                    onClick={e.groupPorts}
+                                    onClick={() => e.groupPorts()}
                                 >
                                     <Group />
                                     Raggruppa
@@ -381,7 +420,7 @@ export function EditorInspector({
                                 <Button
                                     variant="outline"
                                     disabled={e.selected.some(e.portLocked)}
-                                    onClick={e.rotate}
+                                    onClick={() => e.rotate()}
                                 >
                                     <RotateCw />
                                     Ruota
@@ -629,93 +668,6 @@ function Transformations({ children }: { children: ReactNode }) {
                 {children}
             </CollapsibleContent>
         </Collapsible>
-    );
-}
-const borderColors = [
-    { name: 'Grigio', color: '#8998aa' },
-    { name: 'Bianco', color: '#ffffff' },
-    { name: 'Azzurro', color: '#65b9d0' },
-    { name: 'Giallo', color: '#facc15' },
-    { name: 'Rosso', color: '#ef4444' },
-];
-
-function BorderColorField({
-    editor: e,
-    value,
-}: {
-    editor: Editor;
-    value?: string;
-}) {
-    const display = e.borderColorPreview ?? value;
-    useEffect(
-        () => () => e.setBorderColorPreview(null),
-        [e.setBorderColorPreview],
-    );
-    return (
-        <Field>
-            <div className="flex items-center justify-between gap-2">
-                <FieldLabel id="port-border-color-label">
-                    Colore bordo
-                </FieldLabel>
-                <span className="text-xs text-muted-foreground">
-                    {display ?? 'Valori diversi'}
-                </span>
-            </div>
-            <div className="flex items-center gap-2">
-                <ToggleGroup
-                    type="single"
-                    size="sm"
-                    value={display ?? ''}
-                    onValueChange={(borderColor) => {
-                        if (borderColor) {
-                            e.setBorderColorPreview(null);
-                            e.patchPorts({ borderColor });
-                        }
-                    }}
-                    aria-labelledby="port-border-color-label"
-                    className="gap-2"
-                >
-                    {borderColors.map(({ name, color }) => (
-                        <ToggleGroupItem
-                            key={color}
-                            value={color}
-                            aria-label={name}
-                            className="group size-8 rounded-full p-0 first:rounded-full last:rounded-full"
-                        >
-                            <span
-                                className="size-6 rounded-full border border-foreground/20 ring-foreground ring-offset-background group-data-[state=on]:ring-2 group-data-[state=on]:ring-offset-2"
-                                style={{ backgroundColor: color }}
-                            />
-                        </ToggleGroupItem>
-                    ))}
-                </ToggleGroup>
-                <div
-                    data-selected={
-                        !!display &&
-                        !borderColors.some(({ color }) => color === display)
-                    }
-                    className="relative flex size-8 shrink-0 items-center justify-center rounded-full border border-input has-focus-visible:ring-4 has-focus-visible:ring-ring/50 data-[selected=true]:ring-2 data-[selected=true]:ring-foreground data-[selected=true]:ring-offset-2 data-[selected=true]:ring-offset-background"
-                >
-                    <Pipette className="size-4" aria-hidden="true" />
-                    <Input
-                        type="color"
-                        aria-label="Colore bordo personalizzato"
-                        className="absolute inset-0 size-full cursor-pointer rounded-full p-0 opacity-0"
-                        value={display ?? e.selected[0].borderColor}
-                        onChange={(event) =>
-                            e.setBorderColorPreview(event.target.value)
-                        }
-                        onBlur={() => {
-                            if (e.borderColorPreview !== null)
-                                e.patchPorts({
-                                    borderColor: e.borderColorPreview,
-                                });
-                            e.setBorderColorPreview(null);
-                        }}
-                    />
-                </div>
-            </div>
-        </Field>
     );
 }
 function OpacityField({

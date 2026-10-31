@@ -5,7 +5,6 @@ import {
 } from '@/lib/hardware-editor/catalog-storage';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { parseCustomColors } from '@/lib/hardware-editor/colors';
 import {
     arrangePorts,
     connectorTypes,
@@ -78,8 +77,6 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         null,
     );
     const savingRef = useRef(false);
-    const [customColors, setCustomColors] = useState<string[]>([]);
-    const [paletteReady, setPaletteReady] = useState(false);
     const [clipboard, setClipboard] = useState<Port[] | null>(null);
     const pastePoint = useRef<Point | undefined>(undefined);
     const doc = history.current;
@@ -148,41 +145,9 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         };
     }, [userId, catalogModel?.id]);
 
-    useEffect(() => {
-        setPaletteReady(false);
-        setCustomColors([]);
-        try {
-            setCustomColors(
-                parseCustomColors(
-                    localStorage.getItem(`netvibe:port-colors:${userId}`),
-                ),
-            );
-            setPaletteReady(true);
-        } catch {
-            reportError(
-                'Impossibile leggere i colori salvati. Verifica i dati del sito nel browser e ricarica.',
-            );
-        }
-    }, [userId]);
     function reportError(message: string | null) {
         setError(message === null ? null : { message });
     }
-    function saveCustomColors(colors: string[]) {
-        if (!paletteReady) return;
-        try {
-            const next = parseCustomColors(JSON.stringify(colors));
-            localStorage.setItem(
-                `netvibe:port-colors:${userId}`,
-                JSON.stringify(next),
-            );
-            setCustomColors(next);
-        } catch {
-            reportError(
-                'Impossibile salvare la palette. Consenti il salvataggio dei dati del sito nel browser.',
-            );
-        }
-    }
-
     useEffect(() => {
         pastePoint.current = undefined;
     }, [face]);
@@ -699,9 +664,6 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         opacityPreview,
         setOpacityPreview,
         borderColorPreview,
-        customColors,
-        paletteReady,
-        saveCustomColors,
         setBorderColorPreview,
         face,
         setFace,

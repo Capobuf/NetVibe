@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\Cable;
+use App\Models\CableEnd;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\IpStatus;
@@ -48,6 +50,7 @@ class DeletionImpact
         $rackItems = RackItem::query()->whereIn('rack_id', $racks->modelKeys())->orderBy('id')->lockForUpdate()->get();
 
         return [
+            'cables' => self::cables($devices->pluck('id')->all()),
             'racks' => $racks->toArray(), 'rack_items' => $rackItems->toArray(),
             'devices' => $devices->all(), 'interfaces' => $interfaces->all(),
             'device_links' => $ips->filter(fn ($ip) => $ip->device_id !== null)->values()->all(),
@@ -73,6 +76,7 @@ class DeletionImpact
         $device = $site->devices()->lockForUpdate()->findOrFail($device->id);
 
         return [
+            'cables' => self::cables([$device->id]),
             'device' => $device->toArray(),
             'rack_item' => $device->rackItem()->with('rack:id,name,revision')->first()?->toArray(),
             'interfaces' => $device->interfaces()->orderBy('id')->lockForUpdate()->get()->toArray(),
@@ -91,8 +95,17 @@ class DeletionImpact
             throw ValidationException::withMessages(['confirmed' => 'Il dispositivo sostiene altri apparati nel rack. Spostali o rimuovili dal rack prima di eliminarlo.']);
         }
         Rack::query()->whereIn('id', RackItem::query()->whereIn('device_id', $ids)->select('rack_id'))->increment('revision');
+        $cables = Cable::query()->whereIn('id', CableEnd::query()->whereIn('device_id', $ids)->select('cable_id'))->get();
+        Site::query()->whereKey($cables->pluck('site_id')->unique())->increment('cabling_revision');
+        Cable::query()->whereKey($cables->modelKeys())->delete();
         DB::table('ip_addresses')->whereIn('device_id', $ids)->delete();
         DB::table('devices')->whereIn('id', $ids)->delete();
+    }
+
+    private static function cables(array $deviceIds): array
+    {
+        return Cable::query()->whereIn('id', CableEnd::query()->whereIn('device_id', $deviceIds)->select('cable_id'))
+            ->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData()->all();
     }
 
     public static function status(IpStatus $status): array

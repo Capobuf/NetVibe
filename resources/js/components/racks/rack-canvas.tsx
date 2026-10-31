@@ -9,36 +9,37 @@ import {
     type Ref,
 } from 'react';
 import { Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
+import { RackCables } from './rack-cables';
+import {
+    panelTransform,
+    RACK_LEFT as LEFT,
+    RACK_TOP as TOP,
+    FACE_WIDTH,
+    type Cable,
+    type CableEnd,
+} from '@/lib/rack-cabling';
 import { PanelScene } from '@/components/hardware-editor/panel-scene';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
     RACK_UNIT_HEIGHT as U,
     RACK_WIDTH as WIDTH,
-    boundsOf,
-    imageBounds,
-    portBounds,
     type Face,
 } from '@/lib/hardware-editor/document';
 import {
     clampDeviceDrag,
     dropDevice,
-    isRackMounted,
     itemBounds,
     itemName,
     unitLabel,
 } from '@/lib/rack-layout';
 import type { Rack, RackDevice, RackItem } from '@/types/rack';
 
-const LEFT = 76;
-const TOP = 28;
-const TOTAL_WIDTH = WIDTH + LEFT * 2;
-
 export type RackCanvasApi = {
     fit: () => void;
     zoom: (factor: number) => void;
 };
 
-function DeviceDrawing({
+export function DeviceDrawing({
     device,
     face,
     width,
@@ -98,26 +99,9 @@ function DeviceDrawing({
             />
         );
     const side = panel.faces[face];
-    const box = boundsOf([
-        panel.shell,
-        ...side.ports.filter((port) => !port.hidden).map(portBounds),
-        ...(side.image && !side.image.hidden && !side.image.clip
-            ? [imageBounds(side.image)]
-            : []),
-    ]);
-    const padding = isRackMounted(device) ? 0 : 4;
-    const scale = Math.min(
-        (width - padding * 2) / Math.max(1, box.width),
-        (height - padding * 2) / Math.max(1, box.height),
-    );
+    const { x, y, scale } = panelTransform(device, face, width, height);
     return (
-        <Group
-            x={(width - box.width * scale) / 2 - box.x * scale}
-            y={height - (box.y + box.height) * scale}
-            scaleX={scale}
-            scaleY={scale}
-            listening={false}
-        >
+        <Group x={x} y={y} scaleX={scale} scaleY={scale} listening={false}>
             <PanelScene
                 shell={panel.shell}
                 face={side}
@@ -224,11 +208,33 @@ export function RackCanvas({
     onPlace,
     onError,
     disabled,
+    pan,
+    cables,
+    allCables,
+    focusedBundle,
+    selectedCable,
+    pendingCable,
+    onPort,
+    onConnect,
+    onBundle,
+    onCable,
+    onReconnect,
 }: {
+    pan: boolean;
+    cables: Cable[];
+    allCables: Cable[];
+    focusedBundle: string | null;
+    selectedCable: number | null;
+    pendingCable: Cable | null;
+    onPort: (end: CableEnd) => void;
+    onConnect: (a: CableEnd, b: CableEnd) => void;
+    onBundle: (key: string | null) => void;
+    onCable: (cable: Cable) => void;
+    onReconnect: (id: number, side: 'a' | 'b', end: CableEnd) => void;
     rack: Pick<Rack, 'height_u' | 'numbering'>;
     items: RackItem[];
     devices: RackDevice[];
-    face: Face;
+    face: Face | 'both';
     selected: string | null;
     api: Ref<RackCanvasApi>;
     onZoom: (zoom: number) => void;
@@ -260,18 +266,20 @@ export function RackCanvas({
         if (host.current) observer.observe(host.current);
         return () => observer.disconnect();
     }, []);
+    const faces: Face[] = face === 'both' ? ['front', 'rear'] : [face];
+    const totalWidth = FACE_WIDTH * faces.length;
     const totalHeight = rack.height_u * U + TOP * 2;
     const fit = Math.max(
         0.05,
         Math.min(
-            (size.width - 24) / TOTAL_WIDTH,
+            (size.width - 24) / totalWidth,
             (size.height - 24) / totalHeight,
         ),
     );
     const scale = fit * view.zoom;
     function fitRack() {
         setView({
-            x: (size.width - TOTAL_WIDTH * fit) / 2,
+            x: (size.width - totalWidth * fit) / 2,
             y: (size.height - totalHeight * fit) / 2,
             zoom: 1,
         });
@@ -292,26 +300,34 @@ export function RackCanvas({
     useImperativeHandle(api, () => ({ fit: fitRack, zoom: zoomAt }));
     useLayoutEffect(() => {
         fitRack();
-    }, [size.width, size.height, totalHeight]);
+    }, [size.width, size.height, totalHeight, totalWidth]);
     useEffect(() => {
         onZoom(view.zoom);
     }, [view.zoom, onZoom]);
 
-    function displayedX(item: RackItem) {
+    function displayedX(item: RackItem, face: Face) {
         return (
             ((face === 'rear' ? 100 - item.x - item.width : item.x) / 100) *
             WIDTH
         );
     }
-    function renderItem(item: RackItem, support?: RackItem): ReactElement {
-        const x = support ? displayedX(item) - displayedX(support) : LEFT;
+    function renderItem(
+        item: RackItem,
+        face: Face,
+        support?: RackItem,
+    ): ReactElement {
+        const x = support
+            ? displayedX(item, face) - displayedX(support, face)
+            : LEFT;
         const visualHeight = item.kind === 'shelf' ? 1 : item.height;
         const y = support
             ? ((support.kind === 'shelf' ? 1 : 0) - visualHeight) * U
             : TOP + (rack.height_u - item.position - visualHeight) * U;
         function draggedPosition(local: { x: number; y: number }) {
             const displayed =
-                ((local.x + (support ? displayedX(support) : 0)) / WIDTH) * 100;
+                ((local.x + (support ? displayedX(support, face) : 0)) /
+                    WIDTH) *
+                100;
             return clampDeviceDrag(
                 item,
                 items,
@@ -325,7 +341,7 @@ export function RackCanvas({
                 key={item.key}
                 x={x}
                 y={y}
-                draggable={!disabled}
+                draggable={!disabled && !pendingCable}
                 dragBoundFunc={
                     support
                         ? function (position) {
@@ -341,7 +357,9 @@ export function RackCanvas({
                                       ? 100 - bounded.x - item.width
                                       : bounded.x;
                               return transform.point({
-                                  x: (left / 100) * WIDTH - displayedX(support),
+                                  x:
+                                      (left / 100) * WIDTH -
+                                      displayedX(support, face),
                                   y:
                                       y -
                                       (bounded.bottom -
@@ -427,7 +445,7 @@ export function RackCanvas({
                 )}
                 {items
                     .filter((child) => child.shelf_key === item.key)
-                    .map((child) => renderItem(child, item))}
+                    .map((child) => renderItem(child, face, item))}
                 {item.kind === 'shelf' && (
                     <ItemDrawing
                         item={item}
@@ -437,6 +455,31 @@ export function RackCanvas({
                         zoom={scale}
                         onError={onError}
                     />
+                )}
+                {selected === item.key && (
+                    <Group listening={false}>
+                        <Rect
+                            x={-3 / scale}
+                            y={-3 / scale}
+                            width={(WIDTH * item.width) / 100 + 6 / scale}
+                            height={visualHeight * U + 6 / scale}
+                            cornerRadius={4 / scale}
+                            stroke={dark ? '#0f172a' : '#ffffff'}
+                            strokeWidth={4 / scale}
+                        />
+                        <Rect
+                            x={-3 / scale}
+                            y={-3 / scale}
+                            width={(WIDTH * item.width) / 100 + 6 / scale}
+                            height={visualHeight * U + 6 / scale}
+                            cornerRadius={4 / scale}
+                            stroke={dark ? '#60a5fa' : '#2563eb'}
+                            strokeWidth={2 / scale}
+                            shadowColor={dark ? '#60a5fa' : '#2563eb'}
+                            shadowBlur={10 / scale}
+                            shadowOpacity={dark ? 0.65 : 0.35}
+                        />
+                    </Group>
                 )}
                 {selected === item.key && !support && (
                     <Text
@@ -456,7 +499,10 @@ export function RackCanvas({
         <div
             ref={host}
             className="h-[min(72vh,780px)] min-h-96 overflow-hidden bg-muted/30"
-            style={{ cursor: panning ? 'grabbing' : 'default' }}
+            style={{
+                cursor: panning ? 'grabbing' : pan ? 'grab' : 'default',
+                touchAction: 'none',
+            }}
             onPointerDownCapture={(event) => {
                 if (event.button !== 1) return;
                 event.preventDefault();
@@ -496,7 +542,11 @@ export function RackCanvas({
                 if (event.button === 1) event.preventDefault();
             }}
             role="img"
-            aria-label={`Rack, vista ${face === 'front' ? 'frontale' : 'posteriore'}`}
+            aria-label={
+                faces.length === 2
+                    ? 'Rack, fronte a sinistra e retro a destra'
+                    : `Rack, vista ${faces[0] === 'front' ? 'frontale' : 'posteriore'}`
+            }
         >
             <Stage
                 width={size.width}
@@ -505,6 +555,15 @@ export function RackCanvas({
                 scaleY={scale}
                 x={view.x}
                 y={view.y}
+                draggable={pan}
+                onDragEnd={(event) => {
+                    if (event.target === event.target.getStage())
+                        setView((current) => ({
+                            ...current,
+                            x: event.target.x(),
+                            y: event.target.y(),
+                        }));
+                }}
                 onWheel={(event) => {
                     event.evt.preventDefault();
                     const stage = event.target.getStage();
@@ -517,97 +576,165 @@ export function RackCanvas({
                         zoomAt(event.evt.deltaY < 0 ? 1.1 : 1 / 1.1, pointer);
                 }}
                 onClick={(event) => {
-                    if (event.target === event.target.getStage())
+                    if (!pan && event.target === event.target.getStage())
                         onSelect(null);
                 }}
                 onTap={(event) => {
-                    if (event.target === event.target.getStage())
+                    if (!pan && event.target === event.target.getStage())
                         onSelect(null);
                 }}
             >
-                <Layer>
-                    <Group listening={false}>
-                        <Rect
-                            x={LEFT - 29}
-                            y={TOP - 14}
-                            width={WIDTH + 58}
-                            height={rack.height_u * U + 28}
-                            fill={dark ? '#0f172a' : '#dbe1e8'}
-                            stroke={dark ? '#475569' : '#94a3b8'}
-                            strokeWidth={2}
-                            cornerRadius={6}
-                        />
-                        <Rect
-                            x={LEFT}
-                            y={TOP}
-                            width={WIDTH}
-                            height={rack.height_u * U}
-                            fill={dark ? '#111827' : '#f8fafc'}
-                        />
-                        {Array.from({ length: rack.height_u }, (_, row) => {
-                            const y = TOP + row * U;
-                            const label = String(
-                                unitLabel(rack.height_u - row - 1, rack),
-                            );
-                            const labelSize = Math.min(
-                                36,
-                                Math.max(16, 11 / scale),
-                            );
-                            return (
-                                <Group key={row}>
-                                    <Line
-                                        points={[LEFT, y, LEFT + WIDTH, y]}
-                                        stroke={dark ? '#334155' : '#cbd5e1'}
-                                        dash={[4, 4]}
-                                    />
-                                    <Text
-                                        text={label}
-                                        x={2}
-                                        y={y + U / 2 - labelSize / 2}
-                                        width={LEFT - 42}
-                                        align="right"
-                                        fontSize={labelSize}
-                                        fill={dark ? '#cbd5e1' : '#475569'}
-                                    />
-                                    <Text
-                                        text={label}
-                                        x={LEFT + WIDTH + 36}
-                                        y={y + U / 2 - labelSize / 2}
-                                        width={38}
-                                        fontSize={labelSize}
-                                        fill={dark ? '#cbd5e1' : '#475569'}
-                                    />
-                                </Group>
-                            );
-                        })}
-                    </Group>
-                    {items
-                        .filter((item) => !item.shelf_key)
-                        .map((item) => renderItem(item))}
-                    {items
-                        .filter((item) => item.key === dropTarget)
-                        .map((item) => (
-                            <Line
-                                key={`drop-${item.key}`}
-                                points={[
-                                    LEFT + displayedX(item),
-                                    TOP +
-                                        (rack.height_u -
-                                            itemBounds(item, items).top) *
-                                            U,
-                                    LEFT +
-                                        displayedX(item) +
-                                        (item.width / 100) * WIDTH,
-                                    TOP +
-                                        (rack.height_u -
-                                            itemBounds(item, items).top) *
-                                            U,
-                                ]}
-                                stroke={dark ? '#93c5fd' : '#1d4ed8'}
-                                strokeWidth={2 / scale}
+                <Layer listening={!pan}>
+                    {faces.map((side, faceIndex) => (
+                        <Group key={side} x={faceIndex * FACE_WIDTH}>
+                            <Text
+                                text={side === 'front' ? 'FRONTE' : 'RETRO'}
+                                x={LEFT}
+                                y={8}
+                                width={WIDTH}
+                                align="center"
+                                fontSize={16}
+                                fontStyle="bold"
+                                fill={dark ? '#cbd5e1' : '#475569'}
                                 listening={false}
                             />
-                        ))}
+                            <Group listening={false}>
+                                <Rect
+                                    x={LEFT - 29}
+                                    y={TOP - 14}
+                                    width={WIDTH + 58}
+                                    height={rack.height_u * U + 28}
+                                    fill={dark ? '#0f172a' : '#dbe1e8'}
+                                    stroke={dark ? '#475569' : '#94a3b8'}
+                                    strokeWidth={2}
+                                    cornerRadius={6}
+                                />
+                                <Rect
+                                    x={LEFT}
+                                    y={TOP}
+                                    width={WIDTH}
+                                    height={rack.height_u * U}
+                                    fill={dark ? '#111827' : '#f8fafc'}
+                                />
+                                {Array.from(
+                                    { length: rack.height_u },
+                                    (_, row) => {
+                                        const y = TOP + row * U;
+                                        const label = String(
+                                            unitLabel(
+                                                rack.height_u - row - 1,
+                                                rack,
+                                            ),
+                                        );
+                                        const labelSize = Math.min(
+                                            36,
+                                            Math.max(16, 11 / scale),
+                                        );
+                                        return (
+                                            <Group key={row}>
+                                                <Line
+                                                    points={[
+                                                        LEFT,
+                                                        y,
+                                                        LEFT + WIDTH,
+                                                        y,
+                                                    ]}
+                                                    stroke={
+                                                        dark
+                                                            ? '#334155'
+                                                            : '#cbd5e1'
+                                                    }
+                                                    dash={[4, 4]}
+                                                />
+                                                <Text
+                                                    text={label}
+                                                    x={2}
+                                                    y={
+                                                        y +
+                                                        U / 2 -
+                                                        labelSize / 2
+                                                    }
+                                                    width={LEFT - 42}
+                                                    align="right"
+                                                    fontSize={labelSize}
+                                                    fill={
+                                                        dark
+                                                            ? '#cbd5e1'
+                                                            : '#475569'
+                                                    }
+                                                />
+                                                <Text
+                                                    text={label}
+                                                    x={LEFT + WIDTH + 36}
+                                                    y={
+                                                        y +
+                                                        U / 2 -
+                                                        labelSize / 2
+                                                    }
+                                                    width={38}
+                                                    fontSize={labelSize}
+                                                    fill={
+                                                        dark
+                                                            ? '#cbd5e1'
+                                                            : '#475569'
+                                                    }
+                                                />
+                                            </Group>
+                                        );
+                                    },
+                                )}
+                            </Group>
+                            {items
+                                .filter((item) => !item.shelf_key)
+                                .map((item) => renderItem(item, side))}
+                            {items
+                                .filter((item) => item.key === dropTarget)
+                                .map((item) => (
+                                    <Line
+                                        key={`drop-${item.key}`}
+                                        points={[
+                                            LEFT + displayedX(item, side),
+                                            TOP +
+                                                (rack.height_u -
+                                                    itemBounds(item, items)
+                                                        .top) *
+                                                    U,
+                                            LEFT +
+                                                displayedX(item, side) +
+                                                (item.width / 100) * WIDTH,
+                                            TOP +
+                                                (rack.height_u -
+                                                    itemBounds(item, items)
+                                                        .top) *
+                                                    U,
+                                        ]}
+                                        stroke={dark ? '#93c5fd' : '#1d4ed8'}
+                                        strokeWidth={2 / scale}
+                                        listening={false}
+                                    />
+                                ))}
+                        </Group>
+                    ))}
+                    <RackCables
+                        items={items}
+                        devices={devices}
+                        height={rack.height_u}
+                        faces={faces}
+                        scale={scale}
+                        zoom={view.zoom}
+                        dark={dark}
+                        cables={cables}
+                        allCables={allCables}
+                        focusedBundle={focusedBundle}
+                        selectedCable={selectedCable}
+                        pendingCable={pendingCable}
+                        editing={!disabled}
+                        onPort={onPort}
+                        onConnect={onConnect}
+                        onBundle={onBundle}
+                        onCable={onCable}
+                        onReconnect={onReconnect}
+                    />
                 </Layer>
             </Stage>
         </div>

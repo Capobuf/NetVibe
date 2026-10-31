@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\PanelRequest;
+use App\Models\CableEnd;
 use App\Models\DeviceInterface;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
@@ -26,9 +27,13 @@ class ModelPanelController extends Controller
                 }
                 $panel = $data['panel'];
                 $ports = collect([...$panel['faces']['front']['ports'], ...$panel['faces']['rear']['ports']])->keyBy('id');
+                $cabled = CableEnd::query()->whereIn('device_id', $model->devices()->select('id'))->pluck('connector_id')->all();
                 $bound = DeviceInterface::query()->whereHas('device', fn ($q) => $q->where('device_model_id', $model->id))
                     ->whereNotNull('connector_id')->pluck('connector_id')->all();
                 foreach ($model->connectors() as $old) {
+                    if (in_array($old['id'], $cabled, true) && (! $ports->has($old['id']) || $ports[$old['id']]['type'] !== $old['type'])) {
+                        throw ValidationException::withMessages(['document' => 'La porta «'.($old['label'] ?: $old['id']).'» è usata da un cavo. Scollegalo esplicitamente prima di eliminare la porta o cambiarne il connettore.']);
+                    }
                     if (in_array($old['id'], $bound, true) && (! $ports->has($old['id']) || $ports[$old['id']]['type'] !== $old['type'])) {
                         throw ValidationException::withMessages(['document' => 'La porta «'.($old['label'] ?: $old['id']).'» è associata a interfacce di dispositivi. Conservane ID e tipologia: puoi modificarne la geometria.']);
                     }

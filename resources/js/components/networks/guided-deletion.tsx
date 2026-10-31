@@ -53,11 +53,13 @@ type Impact = {
       }
     | {
           device: { id: number; name: string };
+          cables: { id: number; purpose: string | null }[];
           rack_item: { rack: { name: string } } | null;
           interfaces: { id: number; name: string | null }[];
       }
     | {
           devices: { id: number; name: string; site_id: number }[];
+          cables: { id: number; purpose: string | null }[];
           racks: { id: number; name: string }[];
           rack_items: { id: number }[];
           interfaces: { id: number; device_id: number; name: string | null }[];
@@ -204,8 +206,20 @@ export function GuidedDeletion({
                         )}
                         <p>
                             {impact.interfaces.length} interfacce da eliminare ·{' '}
-                            {impact.ips.length} record IP da eliminare
+                            {impact.ips.length} record IP da eliminare ·{' '}
+                            {impact.cables.length} cavi da scollegare
                         </p>
+                        {impact.cables.length > 0 && (
+                            <p>
+                                Cavi:{' '}
+                                {impact.cables
+                                    .map(
+                                        (cable) =>
+                                            `C-${cable.id}${cable.purpose ? ` · ${cable.purpose}` : ''}`,
+                                    )
+                                    .join(', ')}
+                            </p>
+                        )}
                         <ul className="max-h-52 overflow-y-auto">
                             {impact.ips.map((ip) => (
                                 <li key={ip.id}>
@@ -219,9 +233,10 @@ export function GuidedDeletion({
             >
                 <p>
                     «{impact.device.name}» e le sue interfacce saranno eliminati
-                    insieme ai record IP elencati, con hostname, descrizione,
-                    MAC, stato e associazioni ai tag. Gli indirizzi torneranno
-                    liberi; quelli esclusi resteranno esclusi dai suggerimenti.
+                    insieme ai cavi e ai record IP elencati, con hostname,
+                    descrizione, MAC, stato e associazioni ai tag. Gli indirizzi
+                    torneranno liberi; quelli esclusi resteranno esclusi dai
+                    suggerimenti.
                 </p>
             </DeletionConfirmation>
         );
@@ -530,7 +545,8 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                     <p>
                         {impact.devices.length} dispositivi ·{' '}
                         {impact.interfaces.length} interfacce ·{' '}
-                        {impact.device_links.length} collegamenti IP
+                        {impact.device_links.length} collegamenti IP ·{' '}
+                        {impact.cables.length} cavi
                     </p>
                     <ul className="max-h-40 overflow-y-auto">
                         {impact.devices.map((device) => (

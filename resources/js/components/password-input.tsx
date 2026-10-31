@@ -12,16 +12,34 @@ import { cn } from '@/lib/utils';
 export default function PasswordInput({
     className,
     ref,
+    hasSavedValue = false,
     ...props
-}: Omit<ComponentProps<'input'>, 'type'> & { ref?: Ref<HTMLInputElement> }) {
+}: Omit<ComponentProps<'input'>, 'type'> & {
+    ref?: Ref<HTMLInputElement>;
+    hasSavedValue?: boolean;
+}) {
     const [showPassword, setShowPassword] = useState(false);
+    const [focused, setFocused] = useState(false);
+    const showSavedValue = hasSavedValue && !focused && !props.value;
+    const passwordVisible = showPassword && !showSavedValue;
 
     return (
         <InputGroup className={cn(className, 'flex')}>
             <InputGroupInput
-                type={showPassword ? 'text' : 'password'}
+                type={passwordVisible ? 'text' : 'password'}
                 ref={ref}
                 {...props}
+                // The saved indicator is masked by the browser and never submitted.
+                name={showSavedValue ? undefined : props.name}
+                value={showSavedValue ? ' '.repeat(24) : props.value}
+                onFocus={(event) => {
+                    setFocused(true);
+                    props.onFocus?.(event);
+                }}
+                onBlur={(event) => {
+                    setFocused(false);
+                    props.onBlur?.(event);
+                }}
             />
             <InputGroupAddon align="inline-end">
                 <InputGroupButton
@@ -30,13 +48,15 @@ export default function PasswordInput({
                     size="icon-sm"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={
-                        showPassword ? 'Nascondi password' : 'Mostra password'
+                        passwordVisible
+                            ? 'Nascondi password'
+                            : 'Mostra password'
                     }
-                    aria-pressed={showPassword}
+                    aria-pressed={passwordVisible}
                     tabIndex={props.tabIndex}
-                    disabled={props.disabled}
+                    disabled={props.disabled || showSavedValue}
                 >
-                    {showPassword ? (
+                    {passwordVisible ? (
                         <EyeOff className="size-4" />
                     ) : (
                         <Eye className="size-4" />

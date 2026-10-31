@@ -9,10 +9,10 @@ import {
     Network,
     Settings2,
     Server,
-    PanelsTopLeft,
     Component,
     Building2,
     Mail,
+    Plug,
     Tags,
     Users,
     ArrowLeft,
@@ -30,13 +30,11 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
-import {
-    index as administration,
-    hardwareEditor,
-} from '@/routes/administration';
+import { index as administration } from '@/routes/administration';
 import { index as adminCompanies } from '@/routes/administration/companies';
 import { index as adminUsers } from '@/routes/administration/users';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
+import { edit as integrations } from '@/routes/administration/integrations/snipe-it';
 import { edit as email } from '@/routes/administration/email';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';
@@ -99,9 +97,9 @@ export function AppSidebar() {
                             },
                             { title: 'Email', href: email(), icon: Mail },
                             {
-                                title: 'Editor',
-                                href: hardwareEditor(),
-                                icon: PanelsTopLeft,
+                                title: 'Integrazioni',
+                                href: integrations(),
+                                icon: Plug,
                             },
                         ]}
                     />

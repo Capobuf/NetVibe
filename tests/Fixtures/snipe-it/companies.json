@@ -1,0 +1,51 @@
+{
+    "total": 2,
+    "rows": [
+        {
+            "id": 7,
+            "name": "Rossi &amp; Figli &#039;Nord&#039; &lt;R&amp;D&gt;",
+            "phone": null,
+            "fax": null,
+            "email": "inventory@example.test",
+            "image": null,
+            "qr_code_url": "https://inventory.example.test/qr_code/companies/7",
+            "parent": null,
+            "children_count": 0,
+            "assets_count": 1,
+            "licenses_count": 0,
+            "accessories_count": 0,
+            "consumables_count": 0,
+            "components_count": 0,
+            "users_count": 0,
+            "created_by": { "id": 1, "name": "Test Admin" },
+            "tag_color": null,
+            "notes": null,
+            "created_at": { "datetime": "2026-10-01 12:00:00", "formatted": "01/10/2026 12:00" },
+            "updated_at": { "datetime": "2026-10-31 12:00:00", "formatted": "31/10/2026 12:00" },
+            "available_actions": { "update": true, "delete": false, "bulk_selectable": { "delete": false } }
+        },
+        {
+            "id": 8,
+            "name": "Literal &amp;amp;",
+            "phone": null,
+            "fax": null,
+            "email": null,
+            "image": null,
+            "qr_code_url": "https://inventory.example.test/qr_code/companies/8",
+            "parent": { "id": 7, "name": "Rossi &amp; Figli &#039;Nord&#039; &lt;R&amp;D&gt;" },
+            "children_count": 0,
+            "assets_count": 0,
+            "licenses_count": 0,
+            "accessories_count": 0,
+            "consumables_count": 0,
+            "components_count": 0,
+            "users_count": 0,
+            "created_by": null,
+            "tag_color": "#123456",
+            "notes": "<p>Fixture only</p>",
+            "created_at": { "datetime": "2026-10-01 12:00:00", "formatted": "01/10/2026 12:00" },
+            "updated_at": null,
+            "available_actions": { "update": true, "delete": true, "bulk_selectable": { "delete": true } }
+        }
+    ]
+}

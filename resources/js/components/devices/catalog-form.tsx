@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
+import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import type { RouteFormDefinition } from '@/wayfinder';
 
 export function CatalogForm({
@@ -35,6 +36,7 @@ export function CatalogForm({
     manufacturerId,
     types,
     deletionMessage,
+    deletionPreviewUrl,
     open: controlledOpen,
     onOpenChange,
     initialName = '',
@@ -50,6 +52,7 @@ export function CatalogForm({
     };
     types?: ModelType[];
     deletionMessage?: string;
+    deletionPreviewUrl?: string;
     action:
         | RouteFormDefinition<'post'>
         | ((manufacturer: number) => RouteFormDefinition<'post'>);
@@ -107,16 +110,26 @@ export function CatalogForm({
                     </DialogTitle>
                 </DialogHeader>
                 {removing && deletion ? (
-                    <DeletionConfirmation
-                        action={deletion}
-                        onCancel={() => setRemoving(false)}
-                        onSuccess={() => setOpen(false)}
-                    >
-                        <p>
-                            {deletionMessage ??
-                                `Verrà eliminato «${item?.name}». La rimozione è bloccata se ci sono modelli o dispositivi associati.`}
-                        </p>
-                    </DeletionConfirmation>
+                    deletionPreviewUrl ? (
+                        <GuidedDeletion
+                            kind="model"
+                            previewUrl={deletionPreviewUrl}
+                            action={deletion}
+                            onCancel={() => setRemoving(false)}
+                            onSuccess={() => setOpen(false)}
+                        />
+                    ) : (
+                        <DeletionConfirmation
+                            action={deletion}
+                            onCancel={() => setRemoving(false)}
+                            onSuccess={() => setOpen(false)}
+                        >
+                            <p>
+                                {deletionMessage ??
+                                    `Verrà eliminato «${item?.name}». La rimozione è bloccata se ci sono modelli o dispositivi associati.`}
+                            </p>
+                        </DeletionConfirmation>
+                    )
                 ) : (
                     <Form
                         {...formAction}

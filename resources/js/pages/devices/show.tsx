@@ -2,6 +2,10 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
 import { ArrowLeft, Trash2, Unlink, Pencil, X } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
+import {
+    SnipeItDevice,
+    type SnipeDevice,
+} from '@/components/devices/snipe-it-device';
 import { DeviceTable } from '@/components/devices/device-table';
 import {
     PanelViewer,
@@ -65,6 +69,7 @@ type Props = {
     company: Company;
     site: Site;
     device: Device;
+    snipeIt: SnipeDevice | null;
     manufacturers: Manufacturer[];
     assetUrls: Record<string, string>;
     initialInterfaceId: number | null;
@@ -78,6 +83,7 @@ export default function DeviceShow({
     company,
     site,
     device,
+    snipeIt,
     manufacturers,
     assetUrls,
     ips,
@@ -199,6 +205,11 @@ export default function DeviceShow({
                                 Seriale: {device.serial_number}
                             </p>
                         )}
+                        {device.asset_tag ? (
+                            <p className="text-sm text-muted-foreground">
+                                Asset tag: {device.asset_tag}
+                            </p>
+                        ) : null}
                     </div>
                     <div className="flex gap-2">
                         <DeviceForm
@@ -206,6 +217,7 @@ export default function DeviceShow({
                             site={site.id}
                             manufacturers={manufacturers}
                             device={device}
+                            linked={!!snipeIt}
                         />
                         <Dialog open={deleting} onOpenChange={setDeleting}>
                             <DialogTrigger asChild>
@@ -236,6 +248,14 @@ export default function DeviceShow({
                         </Dialog>
                     </div>
                 </header>
+                {snipeIt ? (
+                    <SnipeItDevice company={company.id} source={snipeIt} />
+                ) : null}
+                {device.notes ? (
+                    <p className="text-sm whitespace-pre-wrap">
+                        {device.notes}
+                    </p>
+                ) : null}
                 {panel && (
                     <PanelViewer
                         initialPortId={initialPort?.id}

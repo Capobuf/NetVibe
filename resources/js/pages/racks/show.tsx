@@ -72,6 +72,7 @@ import {
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { index, show, update } from '@/routes/companies/sites/racks';
+import { store as storeCable } from '@/routes/companies/sites/racks/cables';
 import { show as showDevice } from '@/routes/companies/sites/devices';
 import {
     isRackMounted,
@@ -103,6 +104,10 @@ type Draft = Pick<Rack, 'name' | 'height_u' | 'numbering' | 'revision'> & {
     cabling_revision: number;
     removed_cable_ids: number[];
 };
+type Deletion = { index: number } & (
+    | { kind: 'item'; item: RackItem }
+    | { kind: 'cable'; cable: Cable }
+);
 function draftOf(rack: Rack, cables: Cable[], cablingRevision: number): Draft {
     return {
         cables,
@@ -156,7 +161,9 @@ function RackEditor({
             ? `${company.name} · ${site.name}`
             : company.name;
     const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
-    const { data, setData, processing, errors } = form;
+    const { data, setData, errors } = form;
+    const [savingConnection, setSavingConnection] = useState(false);
+    const processing = form.processing || savingConnection;
     const [editing, setEditing] = useState(initialEditing);
     const [selectedCableId, setSelectedCableId] = useState<number | null>(null);
     const [focusedBundle, setFocusedBundle] = useState<string | null>(null);
@@ -166,6 +173,7 @@ function RackEditor({
     const [creatingCable, setCreatingCable] = useState<number | null>(null);
     const [modalDirty, setModalDirty] = useState(false);
     const nextCableId = useRef(-1);
+    const deletions = useRef<Deletion[]>([]);
     const isDirty = form.isDirty || cableDraft !== null || modalDirty;
     const selectedCable = data.cables.find((c) => c.id === selectedCableId);
     const rackDeviceIds = new Set(data.items.map((item) => item.device_id));
@@ -383,11 +391,68 @@ function RackEditor({
             setTab('properties');
             return;
         }
-        change(data.items.filter((item) => item.key !== selected.key));
+        if (!change(data.items.filter((item) => item.key !== selected.key)))
+            return;
+        deletions.current.push({
+            kind: 'item',
+            item: selected,
+            index: data.items.indexOf(selected),
+        });
         setSelectedKey(null);
+    }
+    function disconnect(cable: Cable) {
+        if (!editing || processing) return;
+        deletions.current.push({
+            kind: 'cable',
+            cable,
+            index: data.cables.indexOf(cable),
+        });
+        setData((current) => ({
+            ...current,
+            cables: current.cables.filter((item) => item.id !== cable.id),
+            removed_cable_ids:
+                cable.id > 0
+                    ? [...current.removed_cable_ids, cable.id]
+                    : current.removed_cable_ids,
+        }));
+        setDisconnecting(null);
+        setSelectedCableId(null);
+        setSelectedPort(null);
+        setFocusedBundle(null);
+        setError('');
+    }
+    function undoDeletion() {
+        const deletion = deletions.current.at(-1);
+        if (!deletion || processing || !editing || cableDraft) return;
+        if (deletion.kind === 'item') {
+            if (!change(data.items.toSpliced(deletion.index, 0, deletion.item)))
+                return;
+            select(deletion.item.key);
+        } else {
+            const problem = cableError(deletion.cable, data.cables, devices);
+            if (problem) {
+                setError(problem);
+                return;
+            }
+            setData((current) => ({
+                ...current,
+                cables: current.cables.toSpliced(
+                    deletion.index,
+                    0,
+                    deletion.cable,
+                ),
+                removed_cable_ids: current.removed_cable_ids.filter(
+                    (id) => id !== deletion.cable.id,
+                ),
+            }));
+            selectCable(deletion.cable);
+            setError('');
+        }
+        deletions.current.pop();
     }
     function selectCable(cable: Cable) {
         if (cableDraft) return;
+        setSelectedKey(null);
         setSelectedCableId(cable.id);
         setFocusedBundle(bundleKey(cable));
         setSelectedPort(null);
@@ -395,12 +460,14 @@ function RackEditor({
     }
     function selectBundle(key: string | null) {
         if (cableDraft) return;
+        setSelectedKey(null);
         setFocusedBundle(key);
         setSelectedCableId(null);
         setTab('cables');
     }
     function startCable(a?: CableEnd, b?: CableEnd) {
         if (!editing || processing) return;
+        setSelectedKey(null);
         const draft = normalizeCableType(
             {
                 id: nextCableId.current--,
@@ -413,11 +480,58 @@ function RackEditor({
             devices,
         );
         if (a && b) {
+            if (
+                !savedRackDeviceIds.has(a.device_id) &&
+                !savedRackDeviceIds.has(b.device_id)
+            ) {
+                setError(
+                    'Salva prima la disposizione dei nuovi dispositivi nel rack, poi collega il cavo.',
+                );
+                return;
+            }
             const problem = cableError(draft, data.cables, devices);
             if (problem) {
                 setError(problem);
                 return;
             }
+            setError('');
+            setSavingConnection(true);
+            allowLeave.current = true;
+            router.post(
+                storeCable.url(route),
+                {
+                    ...draft,
+                    cabling_revision: data.cabling_revision,
+                    removed_cable_ids: data.removed_cable_ids,
+                },
+                {
+                    preserveScroll: true,
+                    onSuccess: (page) => {
+                        const saved = page.props.cables as Cable[];
+                        acceptCreatedCables(
+                            saved,
+                            page.props.cablingRevision as number,
+                        );
+                        const created = saved.find(
+                            (cable) =>
+                                endKey(cable.a) === endKey(a) &&
+                                endKey(cable.b) === endKey(b),
+                        );
+                        setCableDraft(null);
+                        setSelectedPort(null);
+                        setSelectedCableId(created?.id ?? null);
+                        setFocusedBundle(created ? bundleKey(created) : null);
+                        setTab('cables');
+                    },
+                    onError: (errors) =>
+                        setError(Object.values(errors).join(' ')),
+                    onFinish: () => {
+                        setSavingConnection(false);
+                        allowLeave.current = false;
+                    },
+                },
+            );
+            return;
         }
         setPan(false);
         setCableDraft(draft);
@@ -426,6 +540,34 @@ function RackEditor({
         setFocusedBundle(null);
         setTab('cables');
         setError('');
+    }
+    function acceptCreatedCables(savedCables: Cable[], revision: number) {
+        const savedIds = new Set(savedCables.map((cable) => cable.id));
+        for (const deletion of deletions.current) {
+            if (
+                deletion.kind === 'cable' &&
+                deletion.cable.id > 0 &&
+                !savedIds.has(deletion.cable.id)
+            ) {
+                // A committed deletion must be restored as a new draft, not a stale database ID.
+                deletion.cable = {
+                    ...deletion.cable,
+                    id: nextCableId.current--,
+                };
+            }
+        }
+        const added = savedCables.filter(
+            (cable) => !cables.some((saved) => saved.id === cable.id),
+        );
+        form.setData((current) => ({
+            ...current,
+            cables: [...current.cables, ...added],
+            cabling_revision: revision,
+            removed_cable_ids: current.removed_cable_ids.filter((id) =>
+                savedIds.has(id),
+            ),
+        }));
+        form.setDefaults({ cables: savedCables, cabling_revision: revision });
     }
     function cancelCable() {
         setCableDraft(null);
@@ -443,6 +585,7 @@ function RackEditor({
             cable,
         ]);
         setCableDraft(null);
+        setSelectedKey(null);
         setSelectedCableId(cable.id);
         setFocusedBundle(bundleKey(cable));
         setError('');
@@ -450,6 +593,7 @@ function RackEditor({
     }
     function pickPort(end: CableEnd) {
         if (processing) return;
+        setSelectedKey(null);
         if (cableDraft && editing) {
             const occupied = data.cables.find((c) =>
                 [c.a, c.b].some((e) => endKey(e) === endKey(end)),
@@ -545,6 +689,7 @@ function RackEditor({
                 );
                 form.setData(saved);
                 form.setDefaults(saved);
+                deletions.current = [];
                 setError('');
                 setCableDraft(null);
                 setEditing(false);
@@ -572,6 +717,7 @@ function RackEditor({
         });
     }
     function reset() {
+        deletions.current = [];
         const saved = draftOf(rack, cables, cablingRevision);
         form.setData(saved);
         form.setDefaults(saved);
@@ -742,16 +888,36 @@ function RackEditor({
                                 render={<div />}
                                 tabIndex={0}
                                 aria-label="Rack. Porte, dispositivi e cablaggi sono disponibili anche nel pannello e nell’elenco."
+                                onPointerDownCapture={(event) =>
+                                    event.currentTarget.focus({
+                                        preventScroll: true,
+                                    })
+                                }
                                 onKeyDown={(event) => {
                                     if (
                                         event.target !== event.currentTarget ||
                                         processing ||
-                                        !editing
+                                        !editing ||
+                                        cableDraft
                                     )
                                         return;
-                                    if (event.key === 'Delete' && selected) {
+                                    if (
+                                        (event.ctrlKey || event.metaKey) &&
+                                        !event.shiftKey &&
+                                        event.key.toLowerCase() === 'z'
+                                    ) {
                                         event.preventDefault();
-                                        remove();
+                                        undoDeletion();
+                                        return;
+                                    }
+                                    if (event.key === 'Delete') {
+                                        event.preventDefault();
+                                        if (!event.repeat) {
+                                            if (selectedCable)
+                                                disconnect(selectedCable);
+                                            else if (selected) remove();
+                                        }
+                                        return;
                                     }
                                     if (
                                         selected &&
@@ -1651,28 +1817,21 @@ function RackEditor({
                     id={creatingCable}
                     route={route}
                     devices={devices}
-                    cables={[...cables, ...data.cables]}
+                    cables={[
+                        ...cables.filter(
+                            (cable) =>
+                                !data.removed_cable_ids.includes(cable.id),
+                        ),
+                        ...data.cables,
+                    ]}
+                    removedCableIds={data.removed_cable_ids}
                     revision={data.cabling_revision}
                     onClose={() => setCreatingCable(null)}
                     onDirtyChange={setModalDirty}
                     onSaving={(saving) => {
                         allowLeave.current = saving;
                     }}
-                    onSaved={(savedCables, revision) => {
-                        const added = savedCables.filter(
-                            (cable) =>
-                                !cables.some((saved) => saved.id === cable.id),
-                        );
-                        form.setData((current) => ({
-                            ...current,
-                            cables: [...current.cables, ...added],
-                            cabling_revision: revision,
-                        }));
-                        form.setDefaults({
-                            cables: savedCables,
-                            cabling_revision: revision,
-                        });
-                    }}
+                    onSaved={acceptCreatedCables}
                 />
             )}
             <Dialog
@@ -1710,22 +1869,7 @@ function RackEditor({
                             variant="destructive"
                             onClick={() => {
                                 if (!disconnecting) return;
-                                setData((current) => ({
-                                    ...current,
-                                    cables: current.cables.filter(
-                                        (c) => c.id !== disconnecting.id,
-                                    ),
-                                    removed_cable_ids:
-                                        disconnecting.id > 0
-                                            ? [
-                                                  ...current.removed_cable_ids,
-                                                  disconnecting.id,
-                                              ]
-                                            : current.removed_cable_ids,
-                                }));
-                                setDisconnecting(null);
-                                setSelectedCableId(null);
-                                setFocusedBundle(null);
+                                disconnect(disconnecting);
                             }}
                         >
                             Scollega

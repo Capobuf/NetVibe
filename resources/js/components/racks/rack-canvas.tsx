@@ -254,6 +254,9 @@ export function RackCanvas({
     } | null>(null);
     const [panning, setPanning] = useState(false);
     const [dropTarget, setDropTarget] = useState<string | null>(null);
+    const [connectionSource, setConnectionSource] = useState<number | null>(
+        null,
+    );
     const { resolvedAppearance } = useAppearance();
     const dark = resolvedAppearance === 'dark';
     useEffect(() => {
@@ -434,14 +437,24 @@ export function RackCanvas({
                 }}
             >
                 {item.kind !== 'shelf' && (
-                    <ItemDrawing
-                        item={item}
-                        devices={devices}
-                        face={face}
-                        dark={dark}
-                        zoom={scale}
-                        onError={onError}
-                    />
+                    <Group
+                        opacity={
+                            connectionSource !== null &&
+                            item.device_id &&
+                            item.device_id !== connectionSource
+                                ? 0.9
+                                : 1
+                        }
+                    >
+                        <ItemDrawing
+                            item={item}
+                            devices={devices}
+                            face={face}
+                            dark={dark}
+                            zoom={scale}
+                            onError={onError}
+                        />
+                    </Group>
                 )}
                 {items
                     .filter((child) => child.shelf_key === item.key)
@@ -731,6 +744,7 @@ export function RackCanvas({
                         editing={!disabled}
                         onPort={onPort}
                         onConnect={onConnect}
+                        onConnectionChange={setConnectionSource}
                         onBundle={onBundle}
                         onCable={onCable}
                         onReconnect={onReconnect}

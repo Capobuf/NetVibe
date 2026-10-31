@@ -10,6 +10,8 @@ class CableRequest extends FormRequest
     {
         return [
             'cabling_revision' => ['required', 'integer', 'min:0'],
+            'removed_cable_ids' => ['sometimes', 'array'],
+            'removed_cable_ids.*' => ['integer', 'min:1', 'distinct'],
             ...self::cableRules(),
         ];
     }

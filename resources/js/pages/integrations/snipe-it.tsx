@@ -2,6 +2,10 @@ import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
 import { Check, Link2, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import PasswordInput from '@/components/password-input';
+import {
+    SnipeItOverview,
+    type SyncSummary,
+} from '@/components/devices/snipe-it-overview';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,6 +73,7 @@ type Props = {
     company: Company | null;
     settings: Settings;
     affectedCompanies: Company[];
+    sync: SyncSummary | null;
 };
 type TestResult = {
     status: string;
@@ -108,7 +113,7 @@ export default function SnipeIt(props: Props) {
     );
 }
 
-function SnipeItForm({ company, settings, affectedCompanies }: Props) {
+function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
     const form = useForm(defaults(settings));
     const test = useHttp<ReturnType<typeof defaults>, TestResult>(
         defaults(settings),
@@ -245,6 +250,15 @@ function SnipeItForm({ company, settings, affectedCompanies }: Props) {
                         value="snipe-it"
                         className="flex flex-col gap-6"
                     >
+                        {company ? (
+                            <SnipeItOverview
+                                company={company.id}
+                                sync={sync}
+                                confirmed={
+                                    settings.association?.confirmed ?? false
+                                }
+                            />
+                        ) : null}
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-3">
                                 <h2 className="text-lg font-semibold">

@@ -44,6 +44,7 @@ type Props = {
     editing: boolean;
     onPort: (end: CableEnd) => void;
     onConnect: (a: CableEnd, b: CableEnd) => void;
+    onConnectionChange: (deviceId: number | null) => void;
     onBundle: (key: string | null) => void;
     onCable: (cable: Cable) => void;
     onReconnect: (id: number, side: 'a' | 'b', end: CableEnd) => void;
@@ -65,6 +66,7 @@ export function RackCables({
     editing,
     onPort,
     onConnect,
+    onConnectionChange,
     onBundle,
     onCable,
     onReconnect,
@@ -109,10 +111,13 @@ export function RackCables({
             draggedPort.current = null;
             node.stopDrag();
             setConnection(null);
+            setDragging(null);
+            setPointer(null);
+            onConnectionChange(null);
         };
         window.addEventListener('keydown', cancel);
         return () => window.removeEventListener('keydown', cancel);
-    }, []);
+    }, [onConnectionChange]);
     useEffect(() => {
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             const next = focusedBundle ? { [focusedBundle]: 1 } : {};
@@ -276,6 +281,24 @@ export function RackCables({
         : dragging && selected
           ? selected.type
           : pendingCable?.type;
+    const targetPoint = connection?.point ?? (dragging ? pointer : null);
+    const target = targetPoint ? portAt(targetPoint) : null;
+    function canConnect(anchor: PortAnchor) {
+        const cable = occupied.get(endKey(anchor));
+        return (
+            !!activeEnd &&
+            endKey(activeEnd) !== endKey(anchor) &&
+            (!cable || (!!dragging && cable.id === selectedCable)) &&
+            !!activeType &&
+            connectionTypes(anchor.type).includes(activeType)
+        );
+    }
+    const portTooltip =
+        target && activeEnd && endKey(target) !== endKey(activeEnd)
+            ? { point: target, text: portInfo(target) }
+            : !dragging && !connection
+              ? hover
+              : null;
     return (
         <Group>
             {groups.map(([key, members], groupIndex) => {
@@ -557,7 +580,9 @@ export function RackCables({
                         connection?.source ??
                         (pendingCable && byEnd.get(endKey(pendingCable.a)));
                     const b =
-                        connection?.point ??
+                        (connection && target && canConnect(target)
+                            ? target
+                            : connection?.point) ??
                         (pendingCable && byEnd.get(endKey(pendingCable.b))) ??
                         pointer;
                     if (!a || !b) return null;
@@ -574,7 +599,14 @@ export function RackCables({
                         <Line
                             points={points}
                             bezier
-                            stroke={accent}
+                            stroke={
+                                connection &&
+                                target &&
+                                !canConnect(target) &&
+                                endKey(target) !== endKey(connection.source)
+                                    ? '#dc2626'
+                                    : accent
+                            }
                             dash={[5 * cableUnit, 5 * cableUnit]}
                             strokeWidth={2 * cableUnit}
                             lineCap="round"
@@ -585,8 +617,13 @@ export function RackCables({
             {anchors.map((anchor) => {
                 const key = endKey(anchor);
                 const cable = occupied.get(key);
+                const hoveredTarget =
+                    !!target &&
+                    !!activeEnd &&
+                    endKey(target) === key &&
+                    endKey(activeEnd) !== key;
                 const highlighted =
-                    (connection && endKey(connection.source) === key) ||
+                    (activeEnd && endKey(activeEnd) === key) ||
                     (selected &&
                         [selected.a, selected.b].some(
                             (e) => endKey(e) === key,
@@ -595,12 +632,7 @@ export function RackCables({
                         [pendingCable.a, pendingCable.b].some(
                             (e) => endKey(e) === key,
                         ));
-                const selectable =
-                    !!activeEnd &&
-                    endKey(activeEnd) !== key &&
-                    (!cable || (!!dragging && cable.id === selectedCable)) &&
-                    !!activeType &&
-                    connectionTypes(anchor.type).includes(activeType);
+                const selectable = canConnect(anchor);
                 return (
                     <Group key={key}>
                         <Rect
@@ -609,23 +641,34 @@ export function RackCables({
                             width={anchor.width}
                             height={anchor.height}
                             fill={
-                                cable
-                                    ? dark
+                                hoveredTarget
+                                    ? selectable
                                         ? '#22c55e66'
-                                        : '#16a34a66'
-                                    : selectable
-                                      ? accent
-                                      : 'transparent'
+                                        : '#ef444466'
+                                    : highlighted
+                                      ? `${accent}55`
+                                      : cable
+                                        ? dark
+                                            ? '#22c55e66'
+                                            : '#16a34a66'
+                                        : selectable
+                                          ? `${accent}29`
+                                          : 'transparent'
                             }
-                            opacity={!cable && selectable ? 0.16 : 1}
                             stroke={
-                                highlighted
-                                    ? accent
-                                    : selectable
+                                hoveredTarget
+                                    ? selectable
+                                        ? '#16a34a'
+                                        : '#dc2626'
+                                    : highlighted
                                       ? accent
-                                      : undefined
+                                      : selectable
+                                        ? accent
+                                        : undefined
                             }
-                            strokeWidth={2 / scale}
+                            strokeWidth={
+                                (highlighted || hoveredTarget ? 3 : 1) / scale
+                            }
                             draggable={
                                 editing &&
                                 !cable &&
@@ -639,6 +682,7 @@ export function RackCables({
                             onDragStart={(event) => {
                                 event.cancelBubble = true;
                                 draggedPort.current = event.target;
+                                onConnectionChange(anchor.device_id);
                                 setConnection({
                                     source: anchor,
                                     point: anchor,
@@ -663,7 +707,13 @@ export function RackCables({
                                     ?.getRelativePointerPosition();
                                 const target = point && portAt(point);
                                 setConnection(null);
-                                if (target && event.evt?.type !== 'touchcancel')
+                                onConnectionChange(null);
+                                if (
+                                    target &&
+                                    !['touchcancel', 'pointercancel'].includes(
+                                        event.evt?.type,
+                                    )
+                                )
                                     onConnect(
                                         {
                                             device_id: anchor.device_id,
@@ -731,11 +781,18 @@ export function RackCables({
                             }}
                             onDragStart={(e) => {
                                 e.cancelBubble = true;
+                                draggedPort.current = e.target;
                                 setDragging(side);
+                                setPointer(anchor);
+                                onConnectionChange(
+                                    selected[side === 'a' ? 'b' : 'a']
+                                        .device_id,
+                                );
                                 setHover(null);
                             }}
                             onDragMove={(e) => {
                                 e.cancelBubble = true;
+                                setPointer(e.target.position());
                             }}
                             onDragEnd={(event) => {
                                 event.cancelBubble = true;
@@ -743,7 +800,17 @@ export function RackCables({
                                 const nearest = portAt(position);
                                 event.target.position(anchor);
                                 setDragging(null);
-                                if (nearest)
+                                setPointer(null);
+                                onConnectionChange(null);
+                                if (draggedPort.current !== event.target)
+                                    return;
+                                draggedPort.current = null;
+                                if (
+                                    nearest &&
+                                    !['touchcancel', 'pointercancel'].includes(
+                                        event.evt?.type,
+                                    )
+                                )
                                     onReconnect(selected.id, side, {
                                         device_id: nearest.device_id,
                                         connector_id: nearest.connector_id,
@@ -752,15 +819,15 @@ export function RackCables({
                         />
                     );
                 })}
-            {hover && !dragging && !connection && (
+            {portTooltip && (
                 <Label
-                    x={hover.point.x + 12}
-                    y={hover.point.y + 16}
+                    x={portTooltip.point.x + 12}
+                    y={portTooltip.point.y + 16}
                     listening={false}
                 >
                     <Tag fill={background} stroke={ink} cornerRadius={5} />
                     <Text
-                        text={hover.text}
+                        text={portTooltip.text}
                         fill={ink}
                         padding={8}
                         width={300 / scale}

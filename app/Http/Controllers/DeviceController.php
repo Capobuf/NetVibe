@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\DeviceRequest;
-use App\Models\CableEnd;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
@@ -13,6 +12,7 @@ use App\Models\IpStatus;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
 use App\Models\Site;
+use App\Models\SnipeItSync;
 use App\Support\DeletionImpact;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -31,11 +31,13 @@ class DeviceController extends Controller
         return Manufacturer::query()->with(['models:id,manufacturer_id,name'])->orderBy('name')->get(['id', 'name']);
     }
 
-    public function index(Company $company, Site $site): Response
+    public function index(Request $request, Company $company, Site $site): Response
     {
         return Inertia::render('devices/index', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'manufacturers' => $this->catalog(),
+            'snipePending' => $request->user()->is_superadmin
+                ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'ipAddresses:id,device_id,address'])->orderBy('name')->get()
                 ->map(fn ($device) => [...$device->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))]),
@@ -47,10 +49,19 @@ class DeviceController extends Controller
         $options = $request->validate(['interface' => ['sometimes', 'integer', 'min:1']]);
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
+        $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
 
         return Inertia::render('devices/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'device' => $device,
+            'snipeIt' => $asset ? [
+                ...$asset->only('id', 'present', 'problem', 'snapshot'),
+                'url' => $asset->sync->connection->server_url.'/hardware/'.$asset->external_id,
+                'active' => $asset->sync->isActive(), 'synced_at' => $asset->sync->synced_at,
+                'error' => $asset->sync->error,
+                'model' => $asset->externalModel?->snapshot,
+                'model_problem' => $asset->externalModel?->problem,
+            ] : null,
             'initialInterfaceId' => $selectedInterface?->id,
             'assetUrls' => $device->model?->assetUrls() ?? [],
             'manufacturers' => $this->catalog(),
@@ -91,14 +102,16 @@ class DeviceController extends Controller
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $site = Site::query()->findOrFail($site->id);
             $record = $device ? $site->devices()->lockForUpdate()->findOrFail($device->id) : $site->devices()->make();
-            if ($record->exists && $record->device_model_id !== $model->id && CableEnd::query()->where('device_id', $record->id)->exists()) {
-                throw ValidationException::withMessages(['device_model_id' => 'Il dispositivo ha cavi collegati. Scollegali esplicitamente prima di cambiarne il modello.']);
+            if ($record->exists && $record->snipeItAsset()->exists()) {
+                $changed = (clone $record)->fill($data)->getDirty();
+                foreach (['name', 'serial_number', 'asset_tag', 'device_model_id', 'manufacturer_id'] as $field) {
+                    if (array_key_exists($field, $changed)) {
+                        throw ValidationException::withMessages([$field => 'Questo campo è gestito da Snipe-IT. Modificalo alla fonte oppure scollega il dispositivo.']);
+                    }
+                }
             }
-            if ($record->exists && $record->device_model_id !== $model->id && $record->rackItem()->exists()) {
-                throw ValidationException::withMessages(['device_model_id' => 'Rimuovi prima il dispositivo dal rack per cambiarne il modello.']);
-            }
-            if ($record->exists && $record->device_model_id !== $model->id && $record->interfaces()->whereNotNull('connector_id')->exists()) {
-                throw ValidationException::withMessages(['device_model_id' => 'Il dispositivo ha interfacce legate al pannello. Il cambio modello non può conservarne l’identità: mantieni il modello attuale.']);
+            if ($record->exists && ($problem = $record->modelChangeProblem($model->id))) {
+                throw ValidationException::withMessages(['device_model_id' => $problem]);
             }
             $record->fill($data)->save();
             $record->addModelInterfaces($model);

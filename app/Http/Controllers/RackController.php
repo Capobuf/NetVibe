@@ -105,10 +105,17 @@ class RackController extends Controller
                     throw ValidationException::withMessages(['cables' => 'Almeno un’estremità deve appartenere al rack aperto.']);
                 }
                 $site = Site::query()->lockForUpdate()->findOrFail($site->id);
-                $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData()->all();
+                $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData();
+                $newCable = ['id' => -1, ...$request->safe()->except(['cabling_revision', 'removed_cable_ids'])];
+                // Commit only explicit disconnections needed by the new cable; leave unrelated drafts alone.
+                $removed = $cables->whereIn('id', $request->validated('removed_cable_ids', []))
+                    ->filter(fn ($cable) => collect([$cable['a'], $cable['b']])->contains(
+                        fn ($end) => $end == $newCable['a'] || $end == $newCable['b']
+                    ))->pluck('id');
                 RackCabling::save($site, [
                     'cabling_revision' => $request->integer('cabling_revision'),
-                    'cables' => [...$cables, ['id' => -1, ...$request->safe()->except('cabling_revision')]],
+                    'removed_cable_ids' => $removed->all(),
+                    'cables' => [...$cables->whereNotIn('id', $removed)->values()->all(), $newCable],
                 ]);
             }, 3);
         } catch (UniqueConstraintViolationException) {

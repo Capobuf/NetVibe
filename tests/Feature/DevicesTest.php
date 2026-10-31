@@ -183,9 +183,60 @@ class DevicesTest extends TestCase
         foreach ($oldAssets as $path) {
             Storage::disk('local')->assertExists($path);
         }
-        $this->delete(route('manufacturers.models.destroy', [$manufacturer, $model]), ['confirmed' => true])->assertSessionHasErrors('confirmed');
+        $this->delete(route('manufacturers.models.destroy', [$manufacturer, $model]), ['confirmed' => true])->assertSessionHasErrors('impact_token');
         $this->assertModelExists($device);
         $this->assertModelExists($model);
+    }
+
+    public function test_model_deletion_requires_current_global_impact_and_removes_only_its_devices(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create(['is_superadmin' => true]);
+        $manufacturer = Manufacturer::create(['name' => 'Vendor']);
+        $model = $manufacturer->models()->create(['name' => 'Switch', 'assets' => ['front' => 'models/front.png']]);
+        Storage::disk('local')->put('models/front.png', 'image');
+        $devices = collect(['Alfa', 'Beta'])->map(function ($name) use ($manufacturer, $model) {
+            $company = Company::create(['name' => $name]);
+            $site = $company->sites()->create(['name' => null]);
+            $device = $site->devices()->create(['name' => 'SW-'.$name, 'manufacturer_id' => $manufacturer->id, 'device_model_id' => $model->id]);
+            $interface = $device->interfaces()->create(['name' => 'Management']);
+            $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+            $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'device_id' => $device->id, 'device_interface_id' => $interface->id]);
+
+            return $device;
+        });
+        $site = $devices->first()->site;
+        $unrelated = $site->devices()->create(['name' => 'Unrelated', 'manufacturer_id' => $manufacturer->id]);
+        $subnet = $site->subnets()->sole();
+        $standalone = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'hostname' => 'standalone']);
+        $range = $subnet->excludedRanges()->create(['start_address' => ip2long('10.0.0.1'), 'end_address' => ip2long('10.0.0.1')]);
+        $preview = route('manufacturers.models.deletion-impact', [$manufacturer, $model]);
+        $delete = route('manufacturers.models.destroy', [$manufacturer, $model]);
+        $member = User::factory()->create();
+        $site->company->users()->attach($member);
+        $this->actingAs($member)->getJson($preview)->assertForbidden();
+        $this->delete($delete, ['confirmed' => true])->assertForbidden();
+
+        $this->actingAs($admin);
+        $impact = $this->getJson($preview)->assertOk()->assertJsonCount(2, 'devices')
+            ->assertJsonPath('devices.0.company.name', 'Alfa')->assertJsonPath('devices.1.company.name', 'Beta')->json();
+        $devices->first()->interfaces()->create(['name' => 'New interface']);
+        $this->delete($delete, ['confirmed' => true, 'impact_token' => $impact['impact_token']])->assertSessionHasErrors('impact_token');
+        $this->assertModelExists($model);
+        $devices->each(fn ($device) => $this->assertModelExists($device));
+        Storage::disk('local')->assertExists('models/front.png');
+
+        $impact = $this->getJson($preview)->assertOk()->json();
+        $this->delete($delete, ['confirmed' => true, 'impact_token' => $impact['impact_token']])->assertSessionHasNoErrors();
+        $this->assertModelMissing($model);
+        $devices->each(fn ($device) => $this->assertModelMissing($device));
+        $this->assertDatabaseCount('device_interfaces', 0);
+        $this->assertDatabaseCount('ip_addresses', 1);
+        $this->assertModelExists($standalone);
+        $this->assertModelExists($range);
+        $this->assertModelExists($unrelated);
+        $this->assertModelExists($manufacturer);
+        Storage::disk('local')->assertMissing('models/front.png');
     }
 
     public function test_container_impact_includes_devices_and_rejects_stale_confirmation(): void

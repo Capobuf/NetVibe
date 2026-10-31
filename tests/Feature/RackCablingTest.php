@@ -154,6 +154,33 @@ class RackCablingTest extends TestCase
         $other->ends()->create(['side' => 'b', 'device_id' => $this->source->id, 'connector_id' => str_repeat('a', 32)]);
     }
 
+    public function test_new_connection_commits_only_explicit_disconnections_on_reused_ports_atomically(): void
+    {
+        $this->put($this->url(), $this->payload(['cables' => [$this->cable('c', 'power'), [...$this->cable('b', 'usb'), 'id' => -2]]]))
+            ->assertSessionHasNoErrors();
+        $old = Cable::query()->where('type', 'power')->sole();
+        $unrelated = Cable::query()->where('type', 'usb')->sole();
+        $url = route('companies.sites.racks.cables.store', [$this->company, $this->site, $this->rack]);
+        $replacement = [...$this->cable('c', 'power'), 'cabling_revision' => 1,
+            'removed_cable_ids' => [$old->id, $unrelated->id]];
+
+        $this->post($url, [...$replacement, 'cabling_revision' => 0])->assertSessionHasErrors('cables');
+        $this->post($url, [...$replacement, 'type' => 'copper'])->assertSessionHasErrors('cables');
+        $this->assertModelExists($old);
+        $this->assertDatabaseCount('cable_ends', 4);
+        $this->assertSame(1, (int) $this->site->fresh()->cabling_revision);
+
+        $this->post($url, $replacement)->assertSessionHasNoErrors();
+        $this->assertModelMissing($old);
+        $this->assertModelExists($unrelated);
+        $this->assertSame($this->cable('c', 'power')['a'], Cable::query()->where('type', 'power')->sole()->workspaceData()['a']);
+        $this->assertDatabaseCount('cables', 2);
+        $this->assertDatabaseCount('cable_ends', 4);
+        $this->assertSame(2, (int) $this->site->fresh()->cabling_revision);
+        $this->assertSame(1, $this->rack->fresh()->revision);
+        $this->assertSame(1, $this->rack->items()->count());
+    }
+
     public function test_table_creates_a_cable_immediately_without_saving_the_rack_layout(): void
     {
         $url = route('companies.sites.racks.cables.store', [$this->company, $this->site, $this->rack]);

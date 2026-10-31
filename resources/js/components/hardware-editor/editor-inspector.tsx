@@ -7,7 +7,6 @@ import {
     ImagePlus,
     Lock,
     Maximize,
-    Pencil,
     RotateCw,
     Scan,
     Trash2,
@@ -78,12 +77,10 @@ export const alignmentActions = [
 export function EditorInspector({
     editor: e,
     onImage,
-    onLabel,
     onClose,
 }: {
     editor: Editor;
     onImage: () => void;
-    onLabel: () => void;
     onClose: () => void;
 }) {
     const [gap, setGap] = useState(16);
@@ -144,23 +141,33 @@ export function EditorInspector({
                                     <FieldLabel htmlFor="port-label">
                                         Etichetta / numero
                                     </FieldLabel>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            id="port-label"
-                                            value={
-                                                single.label ||
-                                                'Senza etichetta'
+                                    <Input
+                                        id="port-label"
+                                        key={single.label}
+                                        defaultValue={single.label}
+                                        placeholder="Senza etichetta"
+                                        maxLength={40}
+                                        onBlur={(event) => {
+                                            const label =
+                                                event.target.value.trim();
+                                            event.target.value = e.patchPorts({
+                                                label,
+                                            })
+                                                ? label
+                                                : single.label;
+                                        }}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Escape') {
+                                                event.preventDefault();
+                                                event.currentTarget.value =
+                                                    single.label;
+                                                event.currentTarget.blur();
+                                            } else if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                event.currentTarget.blur();
                                             }
-                                            readOnly
-                                            onClick={onLabel}
-                                        />
-                                        <IconButton
-                                            label="Modifica etichetta"
-                                            onClick={onLabel}
-                                        >
-                                            <Pencil />
-                                        </IconButton>
-                                    </div>
+                                        }}
+                                    />
                                 </Field>
                             </FieldGroup>
                         )}

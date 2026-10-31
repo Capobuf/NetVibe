@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class RackRequest extends FormRequest
 {
@@ -25,6 +26,13 @@ class RackRequest extends FormRequest
             'items.*.x' => ['required', 'numeric', 'between:0,95'],
             'removed_keys' => ['sometimes', 'array', 'max:500'],
             'removed_keys.*' => ['string', 'regex:/^[a-f0-9]{32}$/', 'distinct:strict'],
+            'cabling_revision' => [Rule::requiredIf(fn () => $this->has('cables')), 'integer', 'min:0'],
+            'cables' => ['sometimes', 'array', 'max:10000'],
+            'cables.*' => ['array:id,a,b,type,color,purpose'],
+            'cables.*.id' => ['required', 'integer', 'not_in:0', 'distinct'],
+            ...collect(CableRequest::cableRules())->mapWithKeys(fn ($rules, $field) => ["cables.*.$field" => $rules])->all(),
+            'removed_cable_ids' => ['sometimes', 'array', 'max:10000'],
+            'removed_cable_ids.*' => ['integer', 'min:1', 'distinct'],
         ];
     }
 

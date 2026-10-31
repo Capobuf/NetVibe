@@ -44,6 +44,7 @@ function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props & 
   return (
     <ComboboxPrimitive.Clear
       data-slot="combobox-clear"
+      aria-label="Cancella selezione"
       render={<InputGroupButton variant="ghost" size="icon-xs" />}
       className={cn(className)}
       {...props}

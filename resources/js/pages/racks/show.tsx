@@ -5,7 +5,6 @@ import {
     ArrowDown,
     ArrowUp,
     Archive,
-    Check,
     Maximize,
     Minus,
     Plus,
@@ -15,7 +14,27 @@ import {
     Settings2,
     Trash2,
     Undo2,
+    Cable as CableIcon,
+    Eye,
+    Hand,
+    Pencil,
 } from 'lucide-react';
+import { DeviceTable } from '@/components/devices/device-table';
+import { CableInspector } from '@/components/racks/cable-inspector';
+import { CableCreateDialog } from '@/components/racks/cable-create-dialog';
+import { DevicePortsList } from '@/components/racks/device-ports-list';
+import {
+    cableCode,
+    cableTypes,
+    cableError,
+    bundleKey,
+    devicePorts,
+    endKey,
+    endLabel,
+    normalizeCableType,
+    type Cable,
+    type CableEnd,
+} from '@/lib/rack-cabling';
 import { RackCanvas, type RackCanvasApi } from '@/components/racks/rack-canvas';
 import {
     NumberField,
@@ -39,6 +58,8 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
     Dialog,
     DialogContent,
+    DialogTrigger,
+    DialogClose,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -71,13 +92,22 @@ type Props = {
     site: Site;
     rack: Rack;
     devices: RackDevice[];
+    cables: Cable[];
+    cablingRevision: number;
+    editing: boolean;
 };
 type Draft = Pick<Rack, 'name' | 'height_u' | 'numbering' | 'revision'> & {
     items: RackItem[];
     removed_keys: string[];
+    cables: Cable[];
+    cabling_revision: number;
+    removed_cable_ids: number[];
 };
-function draftOf(rack: Rack): Draft {
+function draftOf(rack: Rack, cables: Cable[], cablingRevision: number): Draft {
     return {
+        cables,
+        cabling_revision: cablingRevision,
+        removed_cable_ids: [],
         name: rack.name,
         height_u: rack.height_u,
         numbering: rack.numbering,
@@ -110,20 +140,54 @@ function draftOf(rack: Rack): Draft {
 export default function RackShow(props: Props) {
     return <RackEditor key={props.rack.id} {...props} />;
 }
-function RackEditor({ company, site, rack, devices }: Props) {
+function RackEditor({
+    company,
+    site,
+    rack,
+    devices,
+    cables,
+    cablingRevision,
+    editing: initialEditing,
+}: Props) {
     const { companyNavigation } = usePage().props;
     const route = { company: company.id, site: site.id, rack: rack.id };
     const context =
         (companyNavigation?.sites.length ?? 0) > 1
             ? `${company.name} · ${site.name}`
             : company.name;
-    const form = useForm<Draft>(draftOf(rack));
-    const { data, setData, processing, errors, isDirty } = form;
-    const [face, setFace] = useState<Face>('front');
+    const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
+    const { data, setData, processing, errors } = form;
+    const [editing, setEditing] = useState(initialEditing);
+    const [selectedCableId, setSelectedCableId] = useState<number | null>(null);
+    const [focusedBundle, setFocusedBundle] = useState<string | null>(null);
+    const [cableDraft, setCableDraft] = useState<Cable | null>(null);
+    const [selectedPort, setSelectedPort] = useState<CableEnd | null>(null);
+    const [disconnecting, setDisconnecting] = useState<Cable | null>(null);
+    const [creatingCable, setCreatingCable] = useState<number | null>(null);
+    const [modalDirty, setModalDirty] = useState(false);
+    const nextCableId = useRef(-1);
+    const isDirty = form.isDirty || cableDraft !== null || modalDirty;
+    const selectedCable = data.cables.find((c) => c.id === selectedCableId);
+    const rackDeviceIds = new Set(data.items.map((item) => item.device_id));
+    const savedRackDeviceIds = new Set(
+        rack.items.map((item) => item.device_id),
+    );
+    const relevantCables = data.cables.filter(
+        (c) =>
+            rackDeviceIds.has(c.a.device_id) ||
+            rackDeviceIds.has(c.b.device_id) ||
+            savedRackDeviceIds.has(c.a.device_id) ||
+            savedRackDeviceIds.has(c.b.device_id),
+    );
+    const focusedCables = data.cables.filter(
+        (c) => bundleKey(c) === focusedBundle,
+    );
+    const [face, setFace] = useState<Face | 'both'>('both');
+    const [pan, setPan] = useState(false);
     const [zoom, setZoom] = useState(1);
     const canvas = useRef<RackCanvasApi>(null);
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [tab, setTab] = useState(rack.items.length ? 'add' : 'properties');
+    const [tab, setTab] = useState('properties');
     const [search, setSearch] = useState('');
     const [supportKey, setSupportKey] = useState('');
     const [error, setError] = useState('');
@@ -165,6 +229,14 @@ function RackEditor({ company, site, rack, devices }: Props) {
             .toLocaleLowerCase()
             .includes(search.trim().toLocaleLowerCase()),
     );
+    const cableDevices = devices.map((device) => ({
+        ...device,
+        rack_item: rackDeviceIds.has(device.id)
+            ? { rack_id: rack.id, rack: { id: rack.id, name: data.name } }
+            : device.rack_item?.rack_id === rack.id
+              ? null
+              : device.rack_item,
+    }));
     const feedback = error || Object.values(errors).join(' ') || imageError;
 
     useEffect(() => {
@@ -212,6 +284,10 @@ function RackEditor({ company, site, rack, devices }: Props) {
     }, [isDirty]);
 
     function select(key: string | null) {
+        if (cableDraft) return;
+        setSelectedCableId(null);
+        setFocusedBundle(null);
+        setSelectedPort(null);
         setSelectedKey(key);
         setTab('properties');
     }
@@ -235,10 +311,11 @@ function RackEditor({ company, site, rack, devices }: Props) {
         return true;
     }
     function move(key: string, position: number, x?: number) {
-        if (!processing) change(moveItem(data.items, key, position, x));
+        if (editing && !processing)
+            change(moveItem(data.items, key, position, x));
     }
     function patch(patch: Partial<RackItem>) {
-        if (selected)
+        if (editing && selected)
             change(
                 moveItem(
                     data.items,
@@ -251,7 +328,7 @@ function RackEditor({ company, site, rack, devices }: Props) {
             );
     }
     function add(kind: RackItem['kind'], device?: RackDevice) {
-        if (processing) return;
+        if (!editing || processing) return;
         const support =
             device && !isRackMounted(device)
                 ? supports.find((item) => item.key === supportKey)
@@ -295,7 +372,7 @@ function RackEditor({ company, site, rack, devices }: Props) {
         );
     }
     function remove() {
-        if (!selected || processing) return;
+        if (!editing || !selected || processing) return;
         const supported = data.items.filter(
             (item) => item.shelf_key === selected.key,
         );
@@ -309,45 +386,202 @@ function RackEditor({ company, site, rack, devices }: Props) {
         change(data.items.filter((item) => item.key !== selected.key));
         setSelectedKey(null);
     }
-    function exitEditor() {
-        allowLeave.current = true;
-        router.visit(index(route), {
-            onFinish: () => {
-                allowLeave.current = false;
-            },
-        });
+    function selectCable(cable: Cable) {
+        if (cableDraft) return;
+        setSelectedCableId(cable.id);
+        setFocusedBundle(bundleKey(cable));
+        setSelectedPort(null);
+        setTab('cables');
     }
+    function selectBundle(key: string | null) {
+        if (cableDraft) return;
+        setFocusedBundle(key);
+        setSelectedCableId(null);
+        setTab('cables');
+    }
+    function startCable(a?: CableEnd, b?: CableEnd) {
+        if (!editing || processing) return;
+        const draft = normalizeCableType(
+            {
+                id: nextCableId.current--,
+                a: a ?? { device_id: 0, connector_id: '' },
+                b: b ?? { device_id: 0, connector_id: '' },
+                type: 'copper',
+                color: '#2563eb',
+                purpose: null,
+            },
+            devices,
+        );
+        if (a && b) {
+            const problem = cableError(draft, data.cables, devices);
+            if (problem) {
+                setError(problem);
+                return;
+            }
+        }
+        setPan(false);
+        setCableDraft(draft);
+        setSelectedCableId(null);
+        setSelectedPort(null);
+        setFocusedBundle(null);
+        setTab('cables');
+        setError('');
+    }
+    function cancelCable() {
+        setCableDraft(null);
+        setError('');
+    }
+    function applyCable(cable: Cable) {
+        cable = normalizeCableType(cable, devices);
+        const problem = cableError(cable, data.cables, devices);
+        if (problem) {
+            setError(problem);
+            return false;
+        }
+        setData('cables', [
+            ...data.cables.filter((c) => c.id !== cable.id),
+            cable,
+        ]);
+        setCableDraft(null);
+        setSelectedCableId(cable.id);
+        setFocusedBundle(bundleKey(cable));
+        setError('');
+        return true;
+    }
+    function pickPort(end: CableEnd) {
+        if (processing) return;
+        if (cableDraft && editing) {
+            const occupied = data.cables.find((c) =>
+                [c.a, c.b].some((e) => endKey(e) === endKey(end)),
+            );
+            if (occupied) {
+                setError(
+                    `${endLabel(end, devices)} è occupata da ${cableCode(occupied)}. Scollega prima il cavo.`,
+                );
+                return;
+            }
+            const side = cableDraft.a.connector_id ? 'b' : 'a';
+            const next = normalizeCableType(
+                {
+                    ...cableDraft,
+                    [side]: end,
+                },
+                devices,
+            );
+            if (side === 'b') {
+                const problem = cableError(next, data.cables, devices);
+                if (problem) {
+                    setError(problem);
+                    return;
+                }
+            }
+            setCableDraft(next);
+            setError('');
+        } else {
+            const cable = data.cables.find((c) =>
+                [c.a, c.b].some((e) => endKey(e) === endKey(end)),
+            );
+            if (cable) selectCable(cable);
+            else {
+                setSelectedCableId(null);
+                setFocusedBundle(null);
+                setSelectedPort(end);
+                setTab('cables');
+            }
+        }
+    }
+    function changeMode(value: string) {
+        if (!value || processing) return;
+        if (value === 'edit') {
+            setEditing(true);
+            return;
+        }
+        if (isDirty) setDiscard(true);
+        else {
+            setEditing(false);
+            if (tab === 'add') setTab('properties');
+        }
+    }
+    useEffect(() => {
+        const escape = (event: KeyboardEvent) => {
+            if (
+                creatingCable ||
+                event.key !== 'Escape' ||
+                event.defaultPrevented
+            )
+                return;
+            setCableDraft(null);
+            setFocusedBundle(null);
+            setSelectedCableId(null);
+            setSelectedPort(null);
+        };
+        window.addEventListener('keydown', escape);
+        return () => window.removeEventListener('keydown', escape);
+    }, [creatingCable]);
     function save(afterSave?: () => void) {
         if (processing) return;
-        const problem = layoutError(data.items, data.height_u, devices);
+        const savingCables = cableDraft
+            ? [...data.cables, cableDraft]
+            : data.cables;
+        const problem =
+            layoutError(data.items, data.height_u, devices) ||
+            savingCables
+                .map((cable) => cableError(cable, savingCables, devices))
+                .find(Boolean);
         if (problem) {
             setError(problem);
             return;
         }
         allowLeave.current = true;
         let succeeded = false;
+        form.transform((draft) => ({ ...draft, cables: savingCables }));
         form.put(update.url(route), {
             preserveScroll: true,
             onSuccess: (page) => {
-                const saved = draftOf(page.props.rack as Rack);
+                const saved = draftOf(
+                    page.props.rack as Rack,
+                    page.props.cables as Cable[],
+                    page.props.cablingRevision as number,
+                );
                 form.setData(saved);
                 form.setDefaults(saved);
                 setError('');
+                setCableDraft(null);
+                setEditing(false);
+                const active = cableDraft ?? selectedCable;
+                const savedCable =
+                    active &&
+                    saved.cables.find(
+                        (c) =>
+                            c.id === active.id ||
+                            (endKey(c.a) === endKey(active.a) &&
+                                endKey(c.b) === endKey(active.b)),
+                    );
+                setSelectedCableId(savedCable?.id ?? null);
+                setFocusedBundle(
+                    savedCable ? bundleKey(savedCable) : focusedBundle,
+                );
+                if (tab === 'add') setTab('properties');
                 succeeded = true;
             },
             onFinish: () => {
+                form.transform((draft) => draft);
                 allowLeave.current = false;
                 if (succeeded) afterSave?.();
             },
         });
     }
     function reset() {
-        const saved = draftOf(rack);
+        const saved = draftOf(rack, cables, cablingRevision);
         form.setData(saved);
         form.setDefaults(saved);
         form.clearErrors();
         setError('');
-        setSelectedKey(null);
+        setCableDraft(null);
+        setSelectedCableId(null);
+        setFocusedBundle(null);
+        setEditing(false);
+        if (tab === 'add') setTab('properties');
         setDiscard(false);
         setFieldRevision((value) => value + 1);
     }
@@ -374,40 +608,50 @@ function RackEditor({ company, site, rack, devices }: Props) {
                         <Badge variant="secondary">{data.height_u}U</Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <span
-                            className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
-                            aria-live="polite"
-                        >
-                            {isDirty ? (
-                                'Modifiche da salvare'
-                            ) : (
-                                <>
-                                    <Check className="size-3.5" />
-                                    Salvato
-                                </>
-                            )}
-                        </span>
-                        <IconButton
-                            label="Annulla modifiche"
-                            disabled={!isDirty || processing}
-                            onClick={() => setDiscard(true)}
-                        >
-                            <Undo2 />
-                        </IconButton>
-                        <Button
-                            onClick={() => save()}
-                            disabled={!isDirty || processing}
-                        >
-                            <Save data-icon="inline-start" />
-                            {processing ? 'Salvataggio…' : 'Salva'}
-                        </Button>
-                        <Button
+                        <ToggleGroup
+                            type="single"
                             variant="outline"
-                            onClick={() => save(exitEditor)}
+                            value={editing ? 'edit' : 'view'}
+                            onValueChange={changeMode}
                             disabled={processing}
+                            aria-label="Modalità workspace"
                         >
-                            Salva ed esci
-                        </Button>
+                            <ToggleGroupItem value="view">
+                                <Eye />
+                                Visualizza
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="edit">
+                                <Pencil />
+                                Modifica
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+                        {editing && (
+                            <>
+                                {isDirty && (
+                                    <span
+                                        className="text-xs text-muted-foreground"
+                                        aria-live="polite"
+                                    >
+                                        Modifiche da salvare
+                                    </span>
+                                )}
+                                <Button
+                                    variant="outline"
+                                    disabled={processing}
+                                    onClick={() => changeMode('view')}
+                                >
+                                    <Undo2 />
+                                    Annulla
+                                </Button>
+                                <Button
+                                    onClick={() => save()}
+                                    disabled={processing}
+                                >
+                                    <Save />
+                                    {processing ? 'Salvataggio…' : 'Salva'}
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </header>
                 {feedback && (
@@ -419,12 +663,18 @@ function RackEditor({ company, site, rack, devices }: Props) {
                     <section className="min-w-0 overflow-hidden rounded-xl border">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background p-2">
                             <ToggleGroup
-                                type="single"
+                                type="multiple"
                                 variant="outline"
-                                value={face}
-                                onValueChange={(value) => {
-                                    if (value) setFace(value as Face);
-                                }}
+                                value={
+                                    face === 'both' ? ['front', 'rear'] : [face]
+                                }
+                                onValueChange={(values) =>
+                                    setFace(
+                                        values.length === 1
+                                            ? (values[0] as Face)
+                                            : 'both',
+                                    )
+                                }
                                 aria-label="Vista rack"
                             >
                                 <ToggleGroupItem value="front">
@@ -434,7 +684,34 @@ function RackEditor({ company, site, rack, devices }: Props) {
                                     Retro
                                 </ToggleGroupItem>
                             </ToggleGroup>
+                            {editing && (
+                                <Button
+                                    size="sm"
+                                    variant={
+                                        cableDraft ? 'secondary' : 'outline'
+                                    }
+                                    disabled={processing}
+                                    onClick={() =>
+                                        cableDraft
+                                            ? cancelCable()
+                                            : startCable()
+                                    }
+                                >
+                                    <CableIcon />
+                                    {cableDraft
+                                        ? 'Annulla collegamento'
+                                        : 'Collega'}
+                                </Button>
+                            )}
                             <div className="flex items-center gap-1">
+                                <IconButton
+                                    label="Sposta vista"
+                                    aria-pressed={pan}
+                                    variant={pan ? 'secondary' : 'ghost'}
+                                    onClick={() => setPan(!pan)}
+                                >
+                                    <Hand />
+                                </IconButton>
                                 <IconButton
                                     label="Riduci zoom"
                                     onClick={() =>
@@ -464,11 +741,12 @@ function RackEditor({ company, site, rack, devices }: Props) {
                             <ContextMenuTrigger
                                 render={<div />}
                                 tabIndex={0}
-                                aria-label="Editor rack. Usa le proprietà per modificare posizione e dimensioni."
+                                aria-label="Rack. Porte, dispositivi e cablaggi sono disponibili anche nel pannello e nell’elenco."
                                 onKeyDown={(event) => {
                                     if (
                                         event.target !== event.currentTarget ||
-                                        processing
+                                        processing ||
+                                        !editing
                                     )
                                         return;
                                     if (event.key === 'Delete' && selected) {
@@ -495,8 +773,9 @@ function RackEditor({ company, site, rack, devices }: Props) {
                             >
                                 <RackCanvas
                                     rack={data}
+                                    pan={pan}
                                     items={data.items}
-                                    devices={devices}
+                                    devices={cableDevices}
                                     face={face}
                                     selected={selectedKey}
                                     api={canvas}
@@ -504,10 +783,30 @@ function RackEditor({ company, site, rack, devices }: Props) {
                                     onSelect={select}
                                     onMove={move}
                                     onPlace={(items) => {
-                                        if (!processing) change(items);
+                                        if (editing && !processing)
+                                            change(items);
                                     }}
                                     onError={setImageError}
-                                    disabled={processing}
+                                    disabled={processing || !editing}
+                                    cables={relevantCables}
+                                    allCables={data.cables}
+                                    focusedBundle={focusedBundle}
+                                    selectedCable={selectedCableId}
+                                    pendingCable={cableDraft}
+                                    onPort={pickPort}
+                                    onConnect={startCable}
+                                    onBundle={selectBundle}
+                                    onCable={selectCable}
+                                    onReconnect={(id, side, end) => {
+                                        const cable = data.cables.find(
+                                            (c) => c.id === id,
+                                        );
+                                        if (cable && editing && !processing)
+                                            applyCable({
+                                                ...cable,
+                                                [side]: end,
+                                            });
+                                    }}
                                 />
                             </ContextMenuTrigger>
                             <ContextMenuContent>
@@ -520,7 +819,7 @@ function RackEditor({ company, site, rack, devices }: Props) {
                                         <Settings2 />
                                         Proprietà
                                     </ContextMenuItem>
-                                    {selected && (
+                                    {selected && editing && (
                                         <ContextMenuItem
                                             onClick={remove}
                                             disabled={processing}
@@ -540,25 +839,159 @@ function RackEditor({ company, site, rack, devices }: Props) {
                             </ContextMenuContent>
                         </ContextMenu>
                     </section>
-                    <aside className="flex min-w-0 flex-col overflow-hidden rounded-xl border bg-background">
+                    <aside className="flex h-[min(72vh,780px)] min-h-96 min-w-0 flex-col overflow-y-auto rounded-xl border bg-background lg:h-auto lg:min-h-0 lg:[contain:size]">
                         <Tabs
                             value={tab}
                             onValueChange={setTab}
-                            className="gap-0"
+                            className="shrink-0 gap-0"
                         >
                             <TabsList
                                 className="m-3"
                                 aria-label="Strumenti rack"
                             >
-                                <TabsTrigger value="add">
-                                    <Plus />
-                                    Aggiungi
-                                </TabsTrigger>
+                                {editing && (
+                                    <TabsTrigger value="add">
+                                        <Plus />
+                                        Aggiungi
+                                    </TabsTrigger>
+                                )}
                                 <TabsTrigger value="properties">
                                     <Settings2 />
                                     Proprietà
                                 </TabsTrigger>
+                                <TabsTrigger value="cables">
+                                    <CableIcon />
+                                    Porte / cavi
+                                </TabsTrigger>
                             </TabsList>
+                            <TabsContent value="cables" className="m-0">
+                                {cableDraft || selectedCable ? (
+                                    <CableInspector
+                                        cable={(cableDraft ?? selectedCable)!}
+                                        devices={cableDevices}
+                                        cables={data.cables}
+                                        editing={editing}
+                                        pending={!!cableDraft}
+                                        disabled={processing}
+                                        onChange={(cable) => {
+                                            if (cableDraft)
+                                                setCableDraft(cable);
+                                            else {
+                                                setData(
+                                                    'cables',
+                                                    data.cables.map((c) =>
+                                                        c.id === cable.id
+                                                            ? cable
+                                                            : c,
+                                                    ),
+                                                );
+                                                setFocusedBundle(
+                                                    bundleKey(cable),
+                                                );
+                                            }
+                                        }}
+                                        onConfirm={() => {
+                                            if (cableDraft)
+                                                applyCable(cableDraft);
+                                        }}
+                                        onCancel={cancelCable}
+                                        onDisconnect={() =>
+                                            setDisconnecting(
+                                                selectedCable ?? null,
+                                            )
+                                        }
+                                    />
+                                ) : (
+                                    <div className="flex flex-col gap-3 p-4">
+                                        {focusedBundle ? (
+                                            <>
+                                                <h2 className="text-sm font-semibold">
+                                                    {focusedBundle
+                                                        .split(':')
+                                                        .map(
+                                                            (id) =>
+                                                                devices.find(
+                                                                    (device) =>
+                                                                        device.id ===
+                                                                        Number(
+                                                                            id,
+                                                                        ),
+                                                                )?.name,
+                                                        )
+                                                        .join(' ↔ ')}{' '}
+                                                    · {focusedCables.length}×
+                                                </h2>
+                                                {focusedCables.map((cable) => (
+                                                    <Button
+                                                        key={cable.id}
+                                                        variant="outline"
+                                                        className="h-auto justify-start py-2 text-left whitespace-normal"
+                                                        onClick={() =>
+                                                            selectCable(cable)
+                                                        }
+                                                    >
+                                                        <span
+                                                            className="size-3 shrink-0 rounded-full border"
+                                                            style={{
+                                                                background:
+                                                                    cable.color,
+                                                            }}
+                                                        />
+                                                        <span>
+                                                            {cableCode(cable)}
+                                                            <span className="block text-xs">
+                                                                {endLabel(
+                                                                    cable.a,
+                                                                    devices,
+                                                                )}{' '}
+                                                                ↔{' '}
+                                                                {endLabel(
+                                                                    cable.b,
+                                                                    devices,
+                                                                )}
+                                                            </span>
+                                                        </span>
+                                                    </Button>
+                                                ))}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {selectedPort && (
+                                                    <p className="text-sm">
+                                                        {endLabel(
+                                                            selectedPort,
+                                                            devices,
+                                                        )}{' '}
+                                                        · Nessun cavo
+                                                        documentato
+                                                    </p>
+                                                )}
+                                                <h2 className="text-sm font-semibold">
+                                                    {selectedDevice?.name ??
+                                                        'Porte dei dispositivi'}
+                                                </h2>
+                                                {(selectedDevice
+                                                    ? [selectedDevice]
+                                                    : devices.filter((d) =>
+                                                          rackDeviceIds.has(
+                                                              d.id,
+                                                          ),
+                                                      )
+                                                ).map((device) => (
+                                                    <DevicePortsList
+                                                        key={device.id}
+                                                        device={device}
+                                                        devices={devices}
+                                                        cables={data.cables}
+                                                        disabled={processing}
+                                                        onSelect={pickPort}
+                                                    />
+                                                ))}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </TabsContent>
                             <TabsContent
                                 value="add"
                                 className="m-0 flex flex-col gap-4 p-4 pt-1"
@@ -668,315 +1101,638 @@ function RackEditor({ company, site, rack, devices }: Props) {
                                 value="properties"
                                 className="m-0 p-4 pt-1"
                             >
-                                <FieldGroup
-                                    key={`${selectedKey}-${fieldRevision}`}
-                                    className="gap-4"
-                                >
-                                    {selected ? (
-                                        <>
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div>
-                                                    <h2 className="text-sm font-semibold">
-                                                        {itemName(
-                                                            selected,
-                                                            devices,
-                                                        )}
-                                                    </h2>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {selected.shelf_key
-                                                            ? 'Appoggiato'
-                                                            : selected.kind ===
-                                                                'shelf'
-                                                              ? 'Alette 1U'
-                                                              : `${selected.height}U`}
-                                                    </p>
-                                                </div>
-                                                {selectedDevice && (
-                                                    <IconButton
-                                                        label="Apri dispositivo"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={showDevice({
-                                                                ...route,
-                                                                device: selectedDevice.id,
-                                                            })}
-                                                        >
-                                                            <Server />
-                                                        </Link>
-                                                    </IconButton>
-                                                )}
-                                            </div>
-                                            {selected.shelf_key ? (
+                                {editing ? (
+                                    <fieldset
+                                        disabled={processing}
+                                        className="min-w-0"
+                                    >
+                                        <FieldGroup
+                                            key={`${selectedKey}-${fieldRevision}`}
+                                            className="gap-4"
+                                        >
+                                            {selected ? (
                                                 <>
-                                                    <Choice
-                                                        label="Appoggio"
-                                                        value={
-                                                            selected.shelf_key
-                                                        }
-                                                        choices={Object.fromEntries(
-                                                            selectedSupports.map(
-                                                                (item) => [
-                                                                    item.key,
-                                                                    supportLabel(
-                                                                        item,
-                                                                    ),
-                                                                ],
-                                                            ),
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <h2 className="text-sm font-semibold">
+                                                                {itemName(
+                                                                    selected,
+                                                                    devices,
+                                                                )}
+                                                            </h2>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {selected.shelf_key
+                                                                    ? 'Appoggiato'
+                                                                    : selected.kind ===
+                                                                        'shelf'
+                                                                      ? 'Alette 1U'
+                                                                      : `${selected.height}U`}
+                                                            </p>
+                                                        </div>
+                                                        {selectedDevice && (
+                                                            <IconButton
+                                                                label="Apri dispositivo"
+                                                                asChild
+                                                            >
+                                                                <Link
+                                                                    href={showDevice(
+                                                                        {
+                                                                            ...route,
+                                                                            device: selectedDevice.id,
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    <Server />
+                                                                </Link>
+                                                            </IconButton>
                                                         )}
-                                                        onChange={(key) => {
-                                                            const support =
-                                                                supports.find(
-                                                                    (item) =>
-                                                                        item.key ===
-                                                                        key,
-                                                                );
-                                                            if (support)
-                                                                patch({
-                                                                    shelf_key:
-                                                                        key,
-                                                                    position:
-                                                                        support.position,
-                                                                    x: support.x,
-                                                                });
-                                                        }}
+                                                    </div>
+                                                    {selected.shelf_key ? (
+                                                        <>
+                                                            <Choice
+                                                                label="Appoggio"
+                                                                value={
+                                                                    selected.shelf_key
+                                                                }
+                                                                choices={Object.fromEntries(
+                                                                    selectedSupports.map(
+                                                                        (
+                                                                            item,
+                                                                        ) => [
+                                                                            item.key,
+                                                                            supportLabel(
+                                                                                item,
+                                                                            ),
+                                                                        ],
+                                                                    ),
+                                                                )}
+                                                                onChange={(
+                                                                    key,
+                                                                ) => {
+                                                                    const support =
+                                                                        supports.find(
+                                                                            (
+                                                                                item,
+                                                                            ) =>
+                                                                                item.key ===
+                                                                                key,
+                                                                        );
+                                                                    if (support)
+                                                                        patch({
+                                                                            shelf_key:
+                                                                                key,
+                                                                            position:
+                                                                                support.position,
+                                                                            x: support.x,
+                                                                        });
+                                                                }}
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            />
+                                                            <NumberField
+                                                                label="Altezza grafica (U)"
+                                                                value={
+                                                                    selected.height
+                                                                }
+                                                                min={0.25}
+                                                                max={
+                                                                    data.height_u
+                                                                }
+                                                                step={0.25}
+                                                                onChange={(
+                                                                    height,
+                                                                ) =>
+                                                                    patch({
+                                                                        height,
+                                                                    })
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            />
+                                                            <NumberField
+                                                                label="Larghezza (%)"
+                                                                value={
+                                                                    selected.width
+                                                                }
+                                                                min={5}
+                                                                max={100}
+                                                                onChange={(
+                                                                    width,
+                                                                ) =>
+                                                                    patch({
+                                                                        width,
+                                                                    })
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            />
+                                                            <NumberField
+                                                                label="Posizione orizzontale (%)"
+                                                                value={
+                                                                    selected.x
+                                                                }
+                                                                min={0}
+                                                                max={95}
+                                                                onChange={(x) =>
+                                                                    patch({ x })
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            />
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <NumberField
+                                                                label="Unità alla base"
+                                                                value={
+                                                                    positionLabel
+                                                                }
+                                                                min={1}
+                                                                max={
+                                                                    data.height_u
+                                                                }
+                                                                onChange={(
+                                                                    unit,
+                                                                ) =>
+                                                                    move(
+                                                                        selected.key,
+                                                                        data.numbering ===
+                                                                            'bottom-up'
+                                                                            ? unit -
+                                                                                  1
+                                                                            : data.height_u -
+                                                                                  unit,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="flex-1"
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                    onClick={() =>
+                                                                        move(
+                                                                            selected.key,
+                                                                            selected.position +
+                                                                                1,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <ArrowUp />
+                                                                    Su
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="flex-1"
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                    onClick={() =>
+                                                                        move(
+                                                                            selected.key,
+                                                                            selected.position -
+                                                                                1,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <ArrowDown />
+                                                                    Giù
+                                                                </Button>
+                                                            </div>
+                                                            {selected.kind ===
+                                                                'drawer' && (
+                                                                <NumberField
+                                                                    label="Altezza (U)"
+                                                                    value={
+                                                                        selected.height
+                                                                    }
+                                                                    min={1}
+                                                                    max={
+                                                                        data.height_u
+                                                                    }
+                                                                    onChange={(
+                                                                        height,
+                                                                    ) =>
+                                                                        patch({
+                                                                            height,
+                                                                        })
+                                                                    }
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                />
+                                                            )}
+                                                        </>
+                                                    )}
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={remove}
                                                         disabled={processing}
-                                                    />
-                                                    <NumberField
-                                                        label="Altezza grafica (U)"
-                                                        value={selected.height}
-                                                        min={0.25}
-                                                        max={data.height_u}
-                                                        step={0.25}
-                                                        onChange={(height) =>
-                                                            patch({ height })
+                                                    >
+                                                        <Trash2 />
+                                                        Rimuovi dal rack
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        onClick={() =>
+                                                            select(null)
                                                         }
-                                                        disabled={processing}
-                                                    />
-                                                    <NumberField
-                                                        label="Larghezza (%)"
-                                                        value={selected.width}
-                                                        min={5}
-                                                        max={100}
-                                                        onChange={(width) =>
-                                                            patch({ width })
-                                                        }
-                                                        disabled={processing}
-                                                    />
-                                                    <NumberField
-                                                        label="Posizione orizzontale (%)"
-                                                        value={selected.x}
-                                                        min={0}
-                                                        max={95}
-                                                        onChange={(x) =>
-                                                            patch({ x })
-                                                        }
-                                                        disabled={processing}
-                                                    />
+                                                    >
+                                                        Proprietà del rack
+                                                    </Button>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <NumberField
-                                                        label="Unità alla base"
-                                                        value={positionLabel}
-                                                        min={1}
-                                                        max={data.height_u}
-                                                        onChange={(unit) =>
-                                                            move(
-                                                                selected.key,
-                                                                data.numbering ===
-                                                                    'bottom-up'
-                                                                    ? unit - 1
-                                                                    : data.height_u -
-                                                                          unit,
-                                                            )
-                                                        }
-                                                        disabled={processing}
-                                                    />
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            variant="outline"
-                                                            className="flex-1"
-                                                            disabled={
-                                                                processing
-                                                            }
-                                                            onClick={() =>
-                                                                move(
-                                                                    selected.key,
-                                                                    selected.position +
-                                                                        1,
+                                                    <h2 className="text-sm font-semibold">
+                                                        Proprietà del rack
+                                                    </h2>
+                                                    <Field>
+                                                        <FieldLabel htmlFor="rack-name">
+                                                            Nome
+                                                        </FieldLabel>
+                                                        <Input
+                                                            id="rack-name"
+                                                            value={data.name}
+                                                            maxLength={255}
+                                                            required
+                                                            onChange={(event) =>
+                                                                setData(
+                                                                    'name',
+                                                                    event.target
+                                                                        .value,
                                                                 )
-                                                            }
-                                                        >
-                                                            <ArrowUp />
-                                                            Su
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            className="flex-1"
-                                                            disabled={
-                                                                processing
-                                                            }
-                                                            onClick={() =>
-                                                                move(
-                                                                    selected.key,
-                                                                    selected.position -
-                                                                        1,
-                                                                )
-                                                            }
-                                                        >
-                                                            <ArrowDown />
-                                                            Giù
-                                                        </Button>
-                                                    </div>
-                                                    {selected.kind ===
-                                                        'drawer' && (
-                                                        <NumberField
-                                                            label="Altezza (U)"
-                                                            value={
-                                                                selected.height
-                                                            }
-                                                            min={1}
-                                                            max={data.height_u}
-                                                            onChange={(
-                                                                height,
-                                                            ) =>
-                                                                patch({
-                                                                    height,
-                                                                })
                                                             }
                                                             disabled={
                                                                 processing
                                                             }
                                                         />
-                                                    )}
+                                                    </Field>
+                                                    <NumberField
+                                                        label="Altezza (U)"
+                                                        value={data.height_u}
+                                                        min={1}
+                                                        max={100}
+                                                        onChange={(height) =>
+                                                            change(
+                                                                data.items,
+                                                                height,
+                                                            )
+                                                        }
+                                                        disabled={processing}
+                                                    />
+                                                    <Choice
+                                                        label="Numerazione U"
+                                                        value={data.numbering}
+                                                        choices={{
+                                                            'bottom-up':
+                                                                'Dal basso verso l’alto',
+                                                            'top-down':
+                                                                'Dall’alto verso il basso',
+                                                        }}
+                                                        onChange={(numbering) =>
+                                                            setData(
+                                                                'numbering',
+                                                                numbering as Rack['numbering'],
+                                                            )
+                                                        }
+                                                        disabled={processing}
+                                                    />
                                                 </>
                                             )}
-                                            <Button
-                                                variant="outline"
-                                                onClick={remove}
-                                                disabled={processing}
-                                            >
-                                                <Trash2 />
-                                                Rimuovi dal rack
+                                        </FieldGroup>
+                                    </fieldset>
+                                ) : (
+                                    <div className="flex flex-col gap-4">
+                                        <h2 className="text-sm font-semibold">
+                                            {selected
+                                                ? itemName(selected, devices)
+                                                : data.name}
+                                        </h2>
+                                        <dl className="grid grid-cols-2 gap-2 text-sm">
+                                            <dt className="text-muted-foreground">
+                                                Altezza
+                                            </dt>
+                                            <dd>
+                                                {selected?.height ??
+                                                    data.height_u}{' '}
+                                                U
+                                            </dd>
+                                            {selected ? (
+                                                <>
+                                                    <dt className="text-muted-foreground">
+                                                        Posizione
+                                                    </dt>
+                                                    <dd>
+                                                        U{' '}
+                                                        {unitLabel(
+                                                            itemBounds(
+                                                                selected,
+                                                                data.items,
+                                                            ).bottom,
+                                                            data,
+                                                        )}
+                                                    </dd>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <dt className="text-muted-foreground">
+                                                        Numerazione
+                                                    </dt>
+                                                    <dd>
+                                                        {data.numbering ===
+                                                        'bottom-up'
+                                                            ? 'Dal basso'
+                                                            : 'Dall’alto'}
+                                                    </dd>
+                                                </>
+                                            )}
+                                        </dl>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setTab('cables')}
+                                        >
+                                            <CableIcon />
+                                            {selectedDevice
+                                                ? 'Porte e cavi'
+                                                : 'Esplora porte'}
+                                        </Button>
+                                        {selectedDevice && (
+                                            <Button variant="outline" asChild>
+                                                <Link
+                                                    href={showDevice({
+                                                        ...route,
+                                                        device: selectedDevice.id,
+                                                    })}
+                                                >
+                                                    <Server />
+                                                    Apri dispositivo
+                                                </Link>
                                             </Button>
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => select(null)}
-                                            >
-                                                Proprietà del rack
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <h2 className="text-sm font-semibold">
-                                                Proprietà del rack
-                                            </h2>
-                                            <Field>
-                                                <FieldLabel htmlFor="rack-name">
-                                                    Nome
-                                                </FieldLabel>
-                                                <Input
-                                                    id="rack-name"
-                                                    value={data.name}
-                                                    maxLength={255}
-                                                    required
-                                                    onChange={(event) =>
-                                                        setData(
-                                                            'name',
-                                                            event.target.value,
-                                                        )
-                                                    }
-                                                    disabled={processing}
-                                                />
-                                            </Field>
-                                            <NumberField
-                                                label="Altezza (U)"
-                                                value={data.height_u}
-                                                min={1}
-                                                max={100}
-                                                onChange={(height) =>
-                                                    change(data.items, height)
-                                                }
-                                                disabled={processing}
-                                            />
-                                            <Choice
-                                                label="Numerazione U"
-                                                value={data.numbering}
-                                                choices={{
-                                                    'bottom-up':
-                                                        'Dal basso verso l’alto',
-                                                    'top-down':
-                                                        'Dall’alto verso il basso',
-                                                }}
-                                                onChange={(numbering) =>
-                                                    setData(
-                                                        'numbering',
-                                                        numbering as Rack['numbering'],
-                                                    )
-                                                }
-                                                disabled={processing}
-                                            />
-                                        </>
-                                    )}
-                                </FieldGroup>
+                                        )}
+                                    </div>
+                                )}
                             </TabsContent>
                         </Tabs>
                         <Separator />
-                        <div className="flex flex-col gap-2 p-4">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-semibold">
-                                    Nel rack
-                                </h2>
-                                <Badge variant="secondary">
-                                    {data.items.length}
-                                </Badge>
-                            </div>
-                            <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
-                                {[...data.items]
-                                    .sort(
-                                        (a, b) =>
-                                            itemBounds(b, data.items).bottom -
-                                            itemBounds(a, data.items).bottom,
-                                    )
-                                    .map((item) => (
-                                        <button
-                                            type="button"
-                                            key={item.key}
-                                            onClick={() => select(item.key)}
-                                            aria-pressed={
-                                                selectedKey === item.key
-                                            }
-                                            className={cn(
-                                                'flex min-h-10 items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
-                                                selectedKey === item.key &&
-                                                    'bg-accent text-accent-foreground',
-                                            )}
-                                        >
-                                            <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">
-                                                U{' '}
-                                                {unitLabel(
-                                                    itemBounds(item, data.items)
+                        <div className="shrink-0 p-4">
+                            <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-between"
+                                    >
+                                        Nel rack
+                                        <Badge variant="secondary">
+                                            {data.items.length}
+                                        </Badge>
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent
+                                    aria-describedby={undefined}
+                                    onEscapeKeyDown={(event) =>
+                                        event.stopPropagation()
+                                    }
+                                >
+                                    <DialogHeader>
+                                        <DialogTitle>
+                                            Nel rack · {data.name}
+                                        </DialogTitle>
+                                    </DialogHeader>
+                                    <div className="flex flex-col gap-1">
+                                        {[...data.items]
+                                            .sort(
+                                                (a, b) =>
+                                                    itemBounds(b, data.items)
+                                                        .bottom -
+                                                    itemBounds(a, data.items)
                                                         .bottom,
-                                                    data,
-                                                )}
-                                            </span>
-                                            <span className="truncate">
-                                                {item.shelf_key ? '↳ ' : ''}
-                                                {itemName(item, devices)}
-                                            </span>
-                                        </button>
-                                    ))}
-                                {!data.items.length && (
-                                    <p className="py-2 text-sm text-muted-foreground">
-                                        Nessun elemento
-                                    </p>
-                                )}
-                            </div>
+                                            )
+                                            .map((item) => (
+                                                <DialogClose
+                                                    asChild
+                                                    key={item.key}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        disabled={
+                                                            processing ||
+                                                            !!cableDraft
+                                                        }
+                                                        onClick={() =>
+                                                            select(item.key)
+                                                        }
+                                                        aria-pressed={
+                                                            selectedKey ===
+                                                            item.key
+                                                        }
+                                                        className={cn(
+                                                            'flex min-h-10 items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring',
+                                                            selectedKey ===
+                                                                item.key &&
+                                                                'bg-accent text-accent-foreground',
+                                                        )}
+                                                    >
+                                                        <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">
+                                                            U{' '}
+                                                            {unitLabel(
+                                                                itemBounds(
+                                                                    item,
+                                                                    data.items,
+                                                                ).bottom,
+                                                                data,
+                                                            )}
+                                                        </span>
+                                                        <span className="truncate">
+                                                            {item.shelf_key
+                                                                ? '↳ '
+                                                                : ''}
+                                                            {itemName(
+                                                                item,
+                                                                devices,
+                                                            )}
+                                                        </span>
+                                                    </button>
+                                                </DialogClose>
+                                            ))}
+                                        {!data.items.length && (
+                                            <p className="py-2 text-sm text-muted-foreground">
+                                                Nessun elemento
+                                            </p>
+                                        )}
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
                         </div>
                     </aside>
                 </div>
+                <section
+                    className="flex flex-col gap-4"
+                    aria-label="Cablaggi del rack"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-lg font-semibold">Cablaggi</h2>
+                        <Button
+                            disabled={processing || !!cableDraft}
+                            onClick={() =>
+                                setCreatingCable(nextCableId.current--)
+                            }
+                        >
+                            <Plus />
+                            Nuovo
+                        </Button>
+                    </div>
+                    <DeviceTable
+                        name="rack-cables"
+                        rows={relevantCables}
+                        rowOpensDialog={false}
+                        columns={[
+                            { id: 'code', label: 'Codice', visible: true },
+                            { id: 'a', label: 'Partenza', visible: true },
+                            { id: 'b', label: 'Destinazione', visible: true },
+                            { id: 'type', label: 'Tipo', visible: true },
+                            { id: 'purpose', label: 'Scopo', visible: true },
+                            { id: 'color', label: 'Colore', visible: true },
+                        ]}
+                        value={(cable, column) =>
+                            column === 'code'
+                                ? cableCode(cable)
+                                : column === 'a' || column === 'b'
+                                  ? endLabel(cable[column], devices, '@')
+                                  : column === 'type'
+                                    ? cableTypes[cable.type]
+                                    : cable[column]
+                        }
+                        render={(cable, column) =>
+                            column === 'color' ? (
+                                <span
+                                    role="img"
+                                    aria-label={`Colore del cavo ${cable.color}`}
+                                    className="block h-1 w-16 rounded-sm ring-1 ring-foreground/20 ring-inset"
+                                    style={{ background: cable.color }}
+                                />
+                            ) : column === 'code' ? (
+                                <Badge
+                                    variant={
+                                        selectedCableId === cable.id
+                                            ? 'default'
+                                            : 'outline'
+                                    }
+                                >
+                                    {cableCode(cable)}
+                                </Badge>
+                            ) : column === 'a' || column === 'b' ? (
+                                endLabel(cable[column], devices, '@')
+                            ) : column === 'type' ? (
+                                cableTypes[cable.type]
+                            ) : (
+                                cable[column] || '—'
+                            )
+                        }
+                        onRowClick={(cable) =>
+                            selectedCableId === cable.id
+                                ? selectBundle(null)
+                                : selectCable(cable)
+                        }
+                        empty="Nessun cavo documentato"
+                    />
+                </section>
             </div>
+            {creatingCable !== null && (
+                <CableCreateDialog
+                    id={creatingCable}
+                    route={route}
+                    devices={devices}
+                    cables={[...cables, ...data.cables]}
+                    revision={data.cabling_revision}
+                    onClose={() => setCreatingCable(null)}
+                    onDirtyChange={setModalDirty}
+                    onSaving={(saving) => {
+                        allowLeave.current = saving;
+                    }}
+                    onSaved={(savedCables, revision) => {
+                        const added = savedCables.filter(
+                            (cable) =>
+                                !cables.some((saved) => saved.id === cable.id),
+                        );
+                        form.setData((current) => ({
+                            ...current,
+                            cables: [...current.cables, ...added],
+                            cabling_revision: revision,
+                        }));
+                        form.setDefaults({
+                            cables: savedCables,
+                            cabling_revision: revision,
+                        });
+                    }}
+                />
+            )}
+            <Dialog
+                open={!!disconnecting}
+                onOpenChange={(open) => {
+                    if (!open) setDisconnecting(null);
+                }}
+            >
+                <DialogContent aria-describedby={undefined}>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Scollegare{' '}
+                            {disconnecting
+                                ? cableCode(disconnecting)
+                                : 'il cavo'}
+                            ?
+                        </DialogTitle>
+                    </DialogHeader>
+                    {disconnecting && (
+                        <p className="text-sm">
+                            {endLabel(disconnecting.a, devices)} ↔{' '}
+                            {endLabel(disconnecting.b, devices)}. Il
+                            collegamento verrà eliminato con Salva; dispositivi,
+                            porte e IP saranno conservati.
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setDisconnecting(null)}
+                        >
+                            Annulla
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (!disconnecting) return;
+                                setData((current) => ({
+                                    ...current,
+                                    cables: current.cables.filter(
+                                        (c) => c.id !== disconnecting.id,
+                                    ),
+                                    removed_cable_ids:
+                                        disconnecting.id > 0
+                                            ? [
+                                                  ...current.removed_cable_ids,
+                                                  disconnecting.id,
+                                              ]
+                                            : current.removed_cable_ids,
+                                }));
+                                setDisconnecting(null);
+                                setSelectedCableId(null);
+                                setFocusedBundle(null);
+                            }}
+                        >
+                            Scollega
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <Dialog
                 open={!!leave || discard}
                 onOpenChange={(open) => {
@@ -993,7 +1749,9 @@ function RackEditor({ company, site, rack, devices }: Props) {
                     <DialogHeader>
                         <DialogTitle>
                             {leave
-                                ? 'Salvare prima di uscire?'
+                                ? modalDirty
+                                    ? 'Scartare il nuovo collegamento e le modifiche non salvate?'
+                                    : 'Salvare prima di uscire?'
                                 : 'Scartare le modifiche non salvate?'}
                         </DialogTitle>
                     </DialogHeader>
@@ -1010,7 +1768,7 @@ function RackEditor({ company, site, rack, devices }: Props) {
                         >
                             Scarta modifiche
                         </Button>
-                        {leave && (
+                        {leave && !modalDirty && (
                             <Button
                                 disabled={processing}
                                 onClick={() => save(leave)}

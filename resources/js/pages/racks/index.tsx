@@ -1,7 +1,8 @@
-import { Head, router, usePage } from '@inertiajs/react';
-import { PanelsTopLeft } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { PanelsTopLeft, Pencil } from 'lucide-react';
 import { DeviceTable } from '@/components/devices/device-table';
-import { RackForm } from '@/components/racks/rack-form';
+import { RackForm, RackDelete } from '@/components/racks/rack-form';
+import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
 import { index, show } from '@/routes/companies/sites/racks';
 import type { Company, Site } from '@/types/company';
@@ -73,7 +74,21 @@ export default function Racks({ company, site, racks }: Props) {
                         router.visit(show({ ...route, rack: rack.id }))
                     }
                     rowOpensDialog={false}
-                    actions={(rack) => <RackForm {...route} rack={rack} />}
+                    actions={(rack) => (
+                        <>
+                            <IconButton label={`Modifica ${rack.name}`} asChild>
+                                <Link
+                                    href={show(
+                                        { ...route, rack: rack.id },
+                                        { query: { edit: 1 } },
+                                    )}
+                                >
+                                    <Pencil />
+                                </Link>
+                            </IconButton>
+                            <RackDelete {...route} rack={rack} />
+                        </>
+                    )}
                     empty="Nessun rack"
                 />
             </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\DeviceRequest;
+use App\Models\CableEnd;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
@@ -90,6 +91,9 @@ class DeviceController extends Controller
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $site = Site::query()->findOrFail($site->id);
             $record = $device ? $site->devices()->lockForUpdate()->findOrFail($device->id) : $site->devices()->make();
+            if ($record->exists && $record->device_model_id !== $model->id && CableEnd::query()->where('device_id', $record->id)->exists()) {
+                throw ValidationException::withMessages(['device_model_id' => 'Il dispositivo ha cavi collegati. Scollegali esplicitamente prima di cambiarne il modello.']);
+            }
             if ($record->exists && $record->device_model_id !== $model->id && $record->rackItem()->exists()) {
                 throw ValidationException::withMessages(['device_model_id' => 'Rimuovi prima il dispositivo dal rack per cambiarne il modello.']);
             }

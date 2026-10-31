@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CableRequest;
 use App\Http\Requests\RackRequest;
+use App\Models\Cable;
 use App\Models\Company;
 use App\Models\Rack;
 use App\Models\RackItem;
 use App\Models\Site;
+use App\Support\RackCabling;
 use App\Support\RackLayout;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -26,14 +29,19 @@ class RackController extends Controller
         ]);
     }
 
-    public function show(Company $company, Site $site, Rack $rack): Response
+    public function show(Request $request, Company $company, Site $site, Rack $rack): Response
     {
-        return Inertia::render('racks/show', [
+        $request->validate(['edit' => ['sometimes', 'boolean']]);
+
+        return DB::transaction(fn () => Inertia::render('racks/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
-            'rack' => $rack->load('items'),
-            'devices' => $site->devices()->with(['model', 'manufacturer:id,name', 'rackItem.rack:id,name'])->orderBy('name')->get()
+            'rack' => $rack->fresh('items'),
+            'editing' => $request->boolean('edit'),
+            'cablingRevision' => (int) $site->fresh()->cabling_revision,
+            'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
+            'devices' => $site->devices()->with(['model', 'interfaces', 'manufacturer:id,name', 'rackItem.rack:id,name'])->orderBy('name')->get()
                 ->map(fn ($device) => [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []]),
-        ]);
+        ]));
     }
 
     public function store(Request $request, Company $company, Site $site): RedirectResponse
@@ -45,7 +53,7 @@ class RackController extends Controller
             return $company->sites()->findOrFail($site->id)->racks()->create([...$data, 'height_u' => 24, 'numbering' => 'bottom-up']);
         }, 3);
 
-        return to_route('companies.sites.racks.show', [$company, $site, $rack]);
+        return to_route('companies.sites.racks.show', [$company, $site, $rack, 'edit' => 1]);
     }
 
     public function update(RackRequest $request, Company $company, Site $site, Rack $rack): RedirectResponse
@@ -70,6 +78,9 @@ class RackController extends Controller
                     throw ValidationException::withMessages(['items' => 'Un dispositivo è già montato in un altro rack. Rimuovilo prima da quel rack.']);
                 }
                 RackLayout::validate($items, (int) ($data['height_u'] ?? $rack->height_u), $devices);
+                if (array_key_exists('cables', $data)) {
+                    RackCabling::save($site, $data);
+                }
                 $rack->update([...$request->safe()->only(['name', 'height_u', 'numbering']), 'revision' => $rack->revision + 1]);
                 if (isset($data['items'])) {
                     $rack->items()->delete();
@@ -77,11 +88,35 @@ class RackController extends Controller
                 }
             }, 3);
         } catch (UniqueConstraintViolationException) {
-            throw ValidationException::withMessages(['items' => 'Un dispositivo è già montato. Ricarica il rack prima di riprovare.']);
+            throw ValidationException::withMessages(['items' => 'Una porta o una posizione è già occupata. Ricarica il rack prima di riprovare.']);
         }
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Rack salvato.']);
 
-        return back();
+        return to_route('companies.sites.racks.show', [$company, $site, $rack]);
+    }
+
+    public function storeCable(CableRequest $request, Company $company, Site $site, Rack $rack): RedirectResponse
+    {
+        try {
+            DB::transaction(function () use ($request, $company, $site, $rack) {
+                Company::query()->lockForUpdate()->findOrFail($company->id);
+                $rack = $site->racks()->lockForUpdate()->findOrFail($rack->id);
+                if (! $rack->items()->whereIn('device_id', [$request->integer('a.device_id'), $request->integer('b.device_id')])->exists()) {
+                    throw ValidationException::withMessages(['cables' => 'Almeno un’estremità deve appartenere al rack aperto.']);
+                }
+                $site = Site::query()->lockForUpdate()->findOrFail($site->id);
+                $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData()->all();
+                RackCabling::save($site, [
+                    'cabling_revision' => $request->integer('cabling_revision'),
+                    'cables' => [...$cables, ['id' => -1, ...$request->safe()->except('cabling_revision')]],
+                ]);
+            }, 3);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['cables' => 'Una porta è già occupata. Ricarica la pagina prima di riprovare.']);
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Collegamento creato.']);
+
+        return to_route('companies.sites.racks.show', [$company, $site, $rack]);
     }
 
     public function destroy(Request $request, Company $company, Site $site, Rack $rack): RedirectResponse

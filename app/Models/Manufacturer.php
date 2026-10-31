@@ -9,6 +9,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['name'])]
 class Manufacturer extends Model
 {
+    public function isMikrotik(): bool
+    {
+        return mb_strtolower(trim($this->name)) === 'mikrotik';
+    }
+
     /** @return HasMany<DeviceModel, $this> */
     public function models(): HasMany
     {

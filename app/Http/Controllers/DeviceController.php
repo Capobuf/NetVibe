@@ -46,7 +46,7 @@ class DeviceController extends Controller
 
     public function show(Request $request, Company $company, Site $site, Device $device): Response
     {
-        $options = $request->validate(['interface' => ['sometimes', 'integer', 'min:1']]);
+        $options = $request->validate(['interface' => ['sometimes', 'integer', 'min:1'], 'tab' => ['sometimes', 'in:interfaces,ips,mikrotik']]);
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
         $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
@@ -54,6 +54,10 @@ class DeviceController extends Controller
         return Inertia::render('devices/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'device' => $device,
+            'initialTab' => $options['tab'] ?? 'interfaces',
+            'isMikrotik' => $device->manufacturer->isMikrotik(),
+            'mikrotik' => $request->user()->is_superadmin && $device->manufacturer->isMikrotik()
+                ? $device->mikrotikConnection()->first()?->summary() : null,
             'snipeIt' => $asset ? [
                 ...$asset->only('id', 'present', 'problem', 'snapshot'),
                 'url' => $asset->sync->connection->server_url.'/hardware/'.$asset->external_id,

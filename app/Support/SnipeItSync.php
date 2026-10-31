@@ -262,6 +262,11 @@ class SnipeItSync
             return;
         }
         $manufacturer = Manufacturer::firstOrCreate(['name' => $desired['manufacturer']]);
+        if (! $manufacturer->isMikrotik() && $model->devices()->whereHas('mikrotikConnection')->exists()) {
+            $external->update(['problem' => 'Cambio produttore sospeso: rimuovi esplicitamente le connessioni MikroTik dei dispositivi prima di riprovare.']);
+
+            return;
+        }
         $type = $desired['category'] !== null ? ModelType::firstOrCreate(['name' => $desired['category']]) : null;
         $model->update(['name' => $desired['name'], 'manufacturer_id' => $manufacturer->id, 'model_type_id' => $type?->id]);
         $model->devices()->update(['manufacturer_id' => $manufacturer->id]);

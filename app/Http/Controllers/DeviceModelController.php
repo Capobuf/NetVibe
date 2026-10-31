@@ -69,6 +69,9 @@ class DeviceModelController extends Controller
                         throw ValidationException::withMessages([$field => 'Il modello è montato in un rack. Rimuovi prima i dispositivi dal rack per modificarne l’altezza o il fissaggio.']);
                     }
                     $manufacturerChanged = $model->isDirty('manufacturer_id');
+                    if ($manufacturerChanged && ! $manufacturer->isMikrotik() && $model->devices()->whereHas('mikrotikConnection')->exists()) {
+                        throw ValidationException::withMessages(['manufacturer_id' => 'Rimuovi esplicitamente le connessioni MikroTik dei dispositivi prima di cambiare produttore.']);
+                    }
                     $model->save();
                     if ($manufacturerChanged) {
                         $model->devices()->update(['manufacturer_id' => $manufacturer->id]);

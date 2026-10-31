@@ -11,6 +11,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes'])]
 class Device extends Model
 {
+    public function mikrotikConnection(): HasOne
+    {
+        return $this->hasOne(MikrotikConnection::class);
+    }
+
     public function snipeItAsset(): HasOne
     {
         return $this->hasOne(SnipeItAsset::class);
@@ -18,6 +23,9 @@ class Device extends Model
 
     public function modelChangeProblem(int $modelId): ?string
     {
+        if ($this->mikrotikConnection()->exists() && ! DeviceModel::findOrFail($modelId)->manufacturer->isMikrotik()) {
+            return 'Rimuovi esplicitamente la connessione MikroTik prima di cambiare produttore.';
+        }
         if ($this->device_model_id === $modelId) {
             return null;
         }

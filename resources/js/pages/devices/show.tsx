@@ -3,6 +3,10 @@ import { useId, useRef, useState } from 'react';
 import { ArrowLeft, Trash2, Unlink, Pencil, X } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
 import {
+    MikrotikDevice,
+    type MikrotikConnection,
+} from '@/components/devices/mikrotik-device';
+import {
     SnipeItDevice,
     type SnipeDevice,
 } from '@/components/devices/snipe-it-device';
@@ -70,6 +74,9 @@ type Props = {
     site: Site;
     device: Device;
     snipeIt: SnipeDevice | null;
+    isMikrotik: boolean;
+    mikrotik: MikrotikConnection | null;
+    initialTab: string;
     manufacturers: Manufacturer[];
     assetUrls: Record<string, string>;
     initialInterfaceId: number | null;
@@ -84,6 +91,9 @@ export default function DeviceShow({
     site,
     device,
     snipeIt,
+    isMikrotik,
+    mikrotik,
+    initialTab,
     manufacturers,
     assetUrls,
     ips,
@@ -95,6 +105,10 @@ export default function DeviceShow({
 }: Props) {
     const { companyNavigation } = usePage().props;
     const [deleting, setDeleting] = useState(false);
+    const [tab, setTab] = useState(
+        initialTab === 'mikrotik' && !isMikrotik ? 'interfaces' : initialTab,
+    );
+    const activeTab = tab === 'mikrotik' && !isMikrotik ? 'interfaces' : tab;
     const [releasingIp, setReleasingIp] = useState<{
         id: number;
         ip: string;
@@ -275,7 +289,7 @@ export default function DeviceShow({
                         }}
                     />
                 )}
-                <Tabs defaultValue="interfaces" className="min-w-0">
+                <Tabs value={activeTab} onValueChange={setTab} className="min-w-0">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <TabsList>
                             <TabsTrigger value="interfaces">
@@ -284,8 +298,11 @@ export default function DeviceShow({
                             <TabsTrigger value="ips">
                                 IP ({ips.length})
                             </TabsTrigger>
+                            {isMikrotik ? (
+                                <TabsTrigger value="mikrotik">MikroTik</TabsTrigger>
+                            ) : null}
                         </TabsList>
-                        <div className="flex flex-wrap gap-2">
+                        {activeTab !== 'mikrotik' ? <div className="flex flex-wrap gap-2">
                             <InterfaceForm {...route} ports={ports} />
                             <LinkIpForm
                                 {...route}
@@ -301,7 +318,7 @@ export default function DeviceShow({
                                     setDocumentingSubnet(subnet);
                                 }}
                             />
-                        </div>
+                        </div> : null}
                     </div>
                     <TabsContent value="interfaces" className="pt-4">
                         <DeviceTable
@@ -449,6 +466,11 @@ export default function DeviceShow({
                             empty="Nessun IP collegato."
                         />
                     </TabsContent>
+                    {isMikrotik ? (
+                        <TabsContent value="mikrotik" className="pt-4">
+                            <MikrotikDevice {...route} connection={mikrotik} />
+                        </TabsContent>
+                    ) : null}
                 </Tabs>
             </div>
             {editingInterface && (

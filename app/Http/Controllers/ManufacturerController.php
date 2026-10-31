@@ -40,7 +40,15 @@ class ManufacturerController extends Controller
         $creating = $manufacturer === null;
         try {
             if ($manufacturer) {
-                $manufacturer->update($data);
+                DB::transaction(function () use ($manufacturer, $data) {
+                    $manufacturer = Manufacturer::query()->lockForUpdate()->findOrFail($manufacturer->id);
+                    $manufacturer->fill($data);
+                    if (! $manufacturer->isMikrotik() && $manufacturer->devices()->whereHas('mikrotikConnection')->exists()) {
+                        throw ValidationException::withMessages(['name' => 'Rimuovi esplicitamente le connessioni MikroTik dei dispositivi prima di rinominare il produttore.']);
+                    }
+                    $manufacturer->save();
+                }, 3);
+                $manufacturer->refresh();
             } else {
                 $manufacturer = Manufacturer::create($data);
             }

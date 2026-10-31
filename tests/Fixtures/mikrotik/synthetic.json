@@ -1,0 +1,23 @@
+{
+    "source": "Synthetic examples derived from the official MikroTik REST, bridge/VLAN and DHCP documentation; never observed on a customer device.",
+    "tables": {
+        "system/identity": {"name": "Synthetic router"},
+        "system/resource": {"version": "7.17 (stable)", "board-name": "Synthetic platform", "architecture-name": "arm64"},
+        "interface": [{"name": "ether1", "type": "ether"}, {"name": "ether5", "type": "ether"}, {"name": "bridge-a", "type": "bridge"}],
+        "interface/ethernet": [{"name": "ether1", "default-name": "ether1"}, {"name": "ether5", "default-name": "ether5"}],
+        "interface/vlan": [{"name": "vlan10-a", "interface": "bridge-a", "vlan-id": "10"}, {"name": "vlan10-physical", "interface": "ether5", "vlan-id": "10"}],
+        "interface/list": [{"name": "uplinks", "include": "", "exclude": ""}],
+        "interface/list/member": [{"list": "uplinks", "interface": "ether1", "dynamic": "false"}],
+        "interface/bridge": [{"name": "bridge-a", "vlan-filtering": "true"}, {"name": "bridge-b", "vlan-filtering": "false"}, {"name": "bridge-unknown"}],
+        "interface/bridge/port": [{"bridge": "bridge-a", "interface": "ether2", "pvid": "10", "dynamic": "false"}],
+        "interface/bridge/vlan": [{"bridge": "bridge-a", "vlan-ids": "10-12", "tagged": "uplinks", "current-tagged": "ether1", "untagged": "ether2", "current-untagged": "ether2", "dynamic": "false"}, {"bridge": "bridge-b", "vlan-ids": "10", "tagged": "", "untagged": "", "dynamic": "true"}],
+        "interface/bridge/host": [{"bridge": "bridge-a", "on-interface": "ether2", "mac-address": "02:00:00:00:00:01", "dynamic": "true", "local": "false"}],
+        "ip/address": [{"address": "192.0.2.1/24", "interface": "vlan10-a", "comment": "Synthetic interface address"}, {"address": "198.51.100.1/24", "interface": "vlan10-a"}, {"address": "203.0.113.1/24", "interface": "ether1"}],
+        "ip/arp": [],
+        "ip/dhcp-server": [{"name": "server-a", "interface": "vlan10-a", "address-pool": "pool-a"}],
+        "ip/dhcp-server/network": [{"address": "192.0.2.0/24", "gateway": "192.0.2.1"}],
+        "ip/dhcp-server/lease": [{"address": "192.0.2.10", "dynamic": "false", "status": "waiting", "comment": "Synthetic reservation"}, {"address": "192.0.2.20", "dynamic": "true", "status": "bound"}, {"address": "pool-a", "status": "waiting"}],
+        "ip/pool": [{"name": "pool-a", "ranges": "192.0.2.20-192.0.2.100"}],
+        "ip/neighbor": []
+    }
+}

@@ -11,6 +11,7 @@ use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpSearchController;
 use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\ManufacturerController;
+use App\Http\Controllers\MikrotikController;
 use App\Http\Controllers\ModelPanelController;
 use App\Http\Controllers\ModelTypeController;
 use App\Http\Controllers\RackController;
@@ -47,6 +48,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
         Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+        Route::prefix('companies/{company}/sites/{site}/devices/{device}/mikrotik')->name('companies.sites.devices.mikrotik.')
+            ->middleware(['can:administer', 'throttle:10,1'])->group(function () {
+                Route::put('/', [MikrotikController::class, 'update'])->name('update');
+                Route::delete('/', [MikrotikController::class, 'destroy'])->name('destroy');
+                Route::post('verify', [MikrotikController::class, 'verify'])->name('verify');
+                Route::post('analyze', [MikrotikController::class, 'analyze'])->name('analyze');
+            });
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');

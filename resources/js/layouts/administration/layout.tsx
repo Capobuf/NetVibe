@@ -1,18 +1,18 @@
 import { router } from '@inertiajs/react';
-import { Building2, Mail, Tags, Users, PanelsTopLeft } from 'lucide-react';
-import { hardwareEditor } from '@/routes/administration';
+import { Building2, Mail, Tags, Users, Plug } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { index as companies } from '@/routes/administration/companies';
+import { edit as integrations } from '@/routes/administration/integrations/snipe-it';
 import { edit as email } from '@/routes/administration/email';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
 import { index as users } from '@/routes/administration/users';
 
 export default function AdministrationLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const tab = isCurrentOrParentUrl(hardwareEditor())
-        ? 'hardware-editor'
+    const tab = isCurrentOrParentUrl(integrations())
+        ? 'integrations'
         : isCurrentOrParentUrl(email())
           ? 'email'
           : isCurrentOrParentUrl(ipStatuses())
@@ -37,8 +37,8 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                 activationMode="manual"
                 onValueChange={(value) =>
                     router.visit(
-                        value === 'hardware-editor'
-                            ? hardwareEditor()
+                        value === 'integrations'
+                            ? integrations()
                             : value === 'email'
                               ? email()
                               : value === 'companies'
@@ -68,9 +68,9 @@ export default function AdministrationLayout({ children }: PropsWithChildren) {
                             <Mail />
                             Email
                         </TabsTrigger>
-                        <TabsTrigger value="hardware-editor">
-                            <PanelsTopLeft />
-                            Editor
+                        <TabsTrigger value="integrations">
+                            <Plug />
+                            Integrazioni
                         </TabsTrigger>
                     </TabsList>
                 </div>

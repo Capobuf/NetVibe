@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash(['api_key', 'server_url']);
         // Notification failures must not leak SMTP replies or credentials into logs or debug pages.
         $exceptions->report(function (TransportExceptionInterface $exception): void {
             Log::warning('Invio email SMTP non riuscito.');

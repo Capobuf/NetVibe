@@ -1,0 +1,33 @@
+{
+    "total": 220,
+    "rows": [
+        {
+            "id": 101,
+            "name": "Test asset",
+            "asset_tag": "TEST-001",
+            "serial": "TEST-SERIAL",
+            "model": { "id": 1, "name": "Test model" },
+            "model_number": "MODEL-001",
+            "byod": false,
+            "requestable": false,
+            "status_label": { "id": 1, "name": "Ready", "status_type": "deployable", "status_meta": "deployable" },
+            "status": { "id": 1, "name": "Ready", "status_type": "deployable", "status_meta": "deployable" },
+            "category": { "id": 1, "name": "Computer", "tag_color": null },
+            "manufacturer": { "id": 1, "name": "Test manufacturer", "tag_color": null },
+            "company": { "id": 7, "name": "Rossi &amp; Figli &#039;Nord&#039; &lt;R&amp;D&gt;", "tag_color": null },
+            "location": null,
+            "rtd_location": null,
+            "assigned_to": null,
+            "notes": null,
+            "created_by": { "id": 1, "name": "Test Admin" },
+            "created_at": { "datetime": "2026-10-01 12:00:00", "formatted": "01/10/2026 12:00" },
+            "updated_at": { "datetime": "2026-10-31 12:00:00", "formatted": "31/10/2026 12:00" },
+            "purchase_date": { "date": "2026-10-01", "formatted": "01/10/2026" },
+            "deleted_at": null,
+            "custom_fields": {
+                "IP Address [eth]": { "field": "_snipeit_ip_address_eth_1", "value": "192.0.2.10", "field_format": "IP", "element": "text" }
+            },
+            "available_actions": { "checkout": true, "checkin": false, "clone": true, "restore": false, "update": true, "audit": true, "delete": true, "bulk_selectable": { "delete": true } }
+        }
+    ]
+}

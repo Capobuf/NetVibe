@@ -1,9 +1,10 @@
 import { router, usePage } from '@inertiajs/react';
-import { MapPin, Users } from 'lucide-react';
+import { MapPin, Users, Plug } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { show } from '@/routes/companies/settings';
+import { edit as integrations } from '@/routes/companies/settings/integrations/snipe-it';
 import { index as users } from '@/routes/companies/settings/users';
 import type { Company } from '@/types/company';
 
@@ -13,7 +14,11 @@ export default function CompanySettingsLayout({
 }: PropsWithChildren<{ company: Company }>) {
     const { auth } = usePage().props;
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const tab = isCurrentOrParentUrl(users(company.id)) ? 'users' : 'sites';
+    const tab = isCurrentOrParentUrl(integrations(company.id))
+        ? 'integrations'
+        : isCurrentOrParentUrl(users(company.id))
+          ? 'users'
+          : 'sites';
 
     return (
         <section
@@ -34,9 +39,11 @@ export default function CompanySettingsLayout({
                 activationMode="manual"
                 onValueChange={(value) =>
                     router.visit(
-                        value === 'users'
-                            ? users(company.id)
-                            : show(company.id),
+                        value === 'integrations'
+                            ? integrations(company.id)
+                            : value === 'users'
+                              ? users(company.id)
+                              : show(company.id),
                     )
                 }
                 className="min-w-0 gap-0"
@@ -50,10 +57,16 @@ export default function CompanySettingsLayout({
                         Sedi
                     </TabsTrigger>
                     {auth.user.is_superadmin ? (
-                        <TabsTrigger value="users">
-                            <Users />
-                            Utenti
-                        </TabsTrigger>
+                        <>
+                            <TabsTrigger value="integrations">
+                                <Plug />
+                                Integrazioni
+                            </TabsTrigger>
+                            <TabsTrigger value="users">
+                                <Users />
+                                Utenti
+                            </TabsTrigger>
+                        </>
                     ) : null}
                 </TabsList>
                 <TabsContent value={tab} className="min-w-0">

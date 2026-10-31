@@ -16,6 +16,7 @@ use App\Http\Controllers\ModelTypeController;
 use App\Http\Controllers\RackController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
+use App\Http\Controllers\SnipeItController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\UserController;
@@ -52,6 +53,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
             Route::resource('users', CompanyUserController::class)->only(['index', 'store', 'destroy']);
+            Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
+                Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
+                Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
+                Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
+                Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+                Route::post('companies', [SnipeItController::class, 'companies'])->middleware('throttle:10,1')->name('companies');
+                Route::post('association', [SnipeItController::class, 'associate'])->middleware('throttle:10,1')->name('associate');
+            });
         });
         Route::get('companies/{company}/sites/{site}', [CompanyController::class, 'show'])
             ->scopeBindings()->name('companies.sites.show');
@@ -82,6 +91,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+        Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
+            Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
+            Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
+            Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
+            Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+        });
         Route::inertia('prototypes/hardware-editor', 'administration/hardware-editor')->name('hardware-editor');
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');

@@ -5,6 +5,9 @@ import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { records as snipeRecords } from '@/routes/companies/settings/integrations/snipe-it';
 import {
     Select,
     SelectContent,
@@ -22,12 +25,14 @@ type Props = {
     site: Site;
     devices: Device[];
     manufacturers: Manufacturer[];
+    snipePending: number;
 };
 export default function Devices({
     company,
     site,
     devices,
     manufacturers,
+    snipePending,
 }: Props) {
     const { companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
@@ -88,6 +93,25 @@ export default function Devices({
                     </div>
                     <DeviceForm {...route} manufacturers={manufacturers} />
                 </header>
+                {snipePending > 0 ? (
+                    <Alert>
+                        <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                            <span>
+                                Snipe-IT · {snipePending} dispositivi da
+                                assegnare
+                            </span>
+                            <Button asChild variant="outline" size="sm">
+                                <Link
+                                    href={snipeRecords(company.id, {
+                                        query: { view: 'sites' },
+                                    })}
+                                >
+                                    Assegna sedi
+                                </Link>
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 <DeviceTable
                     name="devices"
                     rows={rows}

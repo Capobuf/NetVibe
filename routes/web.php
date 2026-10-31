@@ -17,6 +17,7 @@ use App\Http\Controllers\RackController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
 use App\Http\Controllers\SnipeItController;
+use App\Http\Controllers\SnipeItSyncController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\UserController;
@@ -34,6 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('model-types', ModelTypeController::class)->parameters(['model-types' => 'modelType'])->only(['store', 'update', 'destroy']);
         Route::get('models', [DeviceModelController::class, 'index'])->name('device-models.index');
         Route::resource('manufacturers', ManufacturerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+        Route::get('manufacturers/{manufacturer}/models/{model}/deletion-impact', [DeviceModelController::class, 'deletionImpact'])->name('manufacturers.models.deletion-impact');
         Route::resource('manufacturers.models', DeviceModelController::class)->only(['store', 'update', 'edit', 'destroy']);
         Route::post('manufacturers/{manufacturer}/models/{model}/panel', [ModelPanelController::class, 'update'])->name('manufacturers.models.panel.update');
     });
@@ -60,6 +62,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
                 Route::post('companies', [SnipeItController::class, 'companies'])->middleware('throttle:10,1')->name('companies');
                 Route::post('association', [SnipeItController::class, 'associate'])->middleware('throttle:10,1')->name('associate');
+                Route::get('records', [SnipeItSyncController::class, 'index'])->name('records');
+                Route::get('options', [SnipeItSyncController::class, 'options'])->name('options');
+                Route::post('sync', [SnipeItSyncController::class, 'refresh'])->middleware('throttle:5,1')->name('sync');
+                Route::post('confirm', [SnipeItSyncController::class, 'confirm'])->name('confirm');
+                Route::post('detach', [SnipeItSyncController::class, 'detach'])->name('detach');
             });
         });
         Route::get('companies/{company}/sites/{site}', [CompanyController::class, 'show'])

@@ -42,47 +42,58 @@ type ImpactIp = {
         cidr: string;
     };
 };
-type Impact = {
-    impact_token: string;
+type DeviceImpact = {
+    device: { id: number; name: string; serial_number: string | null };
+    cables: { id: number; purpose: string | null }[];
+    rack_item: { rack: { name: string } } | null;
+    interfaces: { id: number; name: string | null }[];
     ips: ImpactIp[];
-    tag_links: { ip_address_id: number; tag_id: number }[];
-} & (
+};
+type Impact = { impact_token: string } & (
     | {
-          status: IpStatus;
-          statuses: IpStatus[];
+          model: { id: number; name: string };
+          devices: (DeviceImpact & { company: Company; site: Site })[];
       }
-    | {
-          device: { id: number; name: string };
-          cables: { id: number; purpose: string | null }[];
-          rack_item: { rack: { name: string } } | null;
-          interfaces: { id: number; name: string | null }[];
-      }
-    | {
-          devices: { id: number; name: string; site_id: number }[];
-          cables: { id: number; purpose: string | null }[];
-          racks: { id: number; name: string }[];
-          rack_items: { id: number }[];
-          interfaces: { id: number; device_id: number; name: string | null }[];
-          device_links: { id: number; device_id: number }[];
-          scope: {
-              company: number;
-              site: number | null;
-              subnet: number | null;
-              vlan: number | null;
-          };
-          company: Company;
-          sites: Site[];
-          vlans: (Vlan & { site_id: number })[];
-          subnets: (Subnet & { site_id: number })[];
-          ranges: {
-              id: number;
-              subnet_id: number;
-              start_ip: string;
-              end_ip: string;
-          }[];
-          summaries: (SubnetSummaryEntry & { subnet_id: number })[];
-          tags: Tag[];
-      }
+    | ({
+          ips: ImpactIp[];
+          tag_links: { ip_address_id: number; tag_id: number }[];
+      } & (
+          | {
+                status: IpStatus;
+                statuses: IpStatus[];
+            }
+          | DeviceImpact
+          | {
+                devices: { id: number; name: string; site_id: number }[];
+                cables: { id: number; purpose: string | null }[];
+                racks: { id: number; name: string }[];
+                rack_items: { id: number }[];
+                interfaces: {
+                    id: number;
+                    device_id: number;
+                    name: string | null;
+                }[];
+                device_links: { id: number; device_id: number }[];
+                scope: {
+                    company: number;
+                    site: number | null;
+                    subnet: number | null;
+                    vlan: number | null;
+                };
+                company: Company;
+                sites: Site[];
+                vlans: (Vlan & { site_id: number })[];
+                subnets: (Subnet & { site_id: number })[];
+                ranges: {
+                    id: number;
+                    subnet_id: number;
+                    start_ip: string;
+                    end_ip: string;
+                }[];
+                summaries: (SubnetSummaryEntry & { subnet_id: number })[];
+                tags: Tag[];
+            }
+      ))
 );
 
 export function GuidedDeletion({
@@ -94,7 +105,14 @@ export function GuidedDeletion({
 }: {
     previewUrl: string;
     action: RouteFormDefinition<'post'>;
-    kind: 'company' | 'site' | 'subnet' | 'vlan' | 'status' | 'device';
+    kind:
+        | 'company'
+        | 'site'
+        | 'subnet'
+        | 'vlan'
+        | 'status'
+        | 'device'
+        | 'model';
     onCancel: () => void;
     onSuccess: () => void;
 }) {
@@ -165,7 +183,9 @@ export function GuidedDeletion({
             </div>
         );
 
-    if ('device' in impact)
+    if ('device' in impact || 'model' in impact) {
+        const devices: (DeviceImpact & { company?: Company; site?: Site })[] =
+            'model' in impact ? impact.devices : [impact];
         return (
             <DeletionConfirmation
                 key={revision}
@@ -174,7 +194,13 @@ export function GuidedDeletion({
                 onSuccess={onSuccess}
                 onError={() => setStale(true)}
                 disabled={stale}
-                submitLabel="Elimina dispositivo e libera IP"
+                submitLabel={
+                    'model' in impact
+                        ? impact.devices.length
+                            ? 'Elimina modello e dispositivi'
+                            : 'Elimina modello'
+                        : 'Elimina dispositivo e libera IP'
+                }
                 fields={(processing) => (
                     <>
                         <input
@@ -183,7 +209,7 @@ export function GuidedDeletion({
                             value={impact.impact_token}
                         />
                         {stale && (
-                            <InputError message="I dati sono cambiati. Aggiorna l’anteprima." />
+                            <InputError message="Aggiorna l’anteprima prima di riprovare." />
                         )}
                         <Button
                             type="button"
@@ -197,42 +223,79 @@ export function GuidedDeletion({
                     </>
                 )}
                 details={
-                    <div className="flex flex-col gap-2 text-sm">
-                        {impact.rack_item && (
-                            <p>
-                                Verrà rimossa anche la posizione nel rack «
-                                {impact.rack_item.rack.name}».
+                    <div
+                        id={`${id}-impact`}
+                        tabIndex={-1}
+                        className="flex max-h-64 flex-col gap-4 overflow-y-auto text-sm"
+                    >
+                        {'model' in impact && (
+                            <p className="font-medium">
+                                {devices.length} dispositivi da eliminare
                             </p>
                         )}
-                        <p>
-                            {impact.interfaces.length} interfacce da eliminare ·{' '}
-                            {impact.ips.length} record IP da eliminare ·{' '}
-                            {impact.cables.length} cavi da scollegare
-                        </p>
-                        {impact.cables.length > 0 && (
-                            <p>
-                                Cavi:{' '}
-                                {impact.cables
-                                    .map(
-                                        (cable) =>
-                                            `C-${cable.id}${cable.purpose ? ` · ${cable.purpose}` : ''}`,
-                                    )
-                                    .join(', ')}
-                            </p>
-                        )}
-                        <ul className="max-h-52 overflow-y-auto">
-                            {impact.ips.map((ip) => (
-                                <li key={ip.id}>
-                                    {ip.ip}
-                                    {ip.hostname ? ` · ${ip.hostname}` : ''}
-                                </li>
-                            ))}
-                        </ul>
+                        {devices.map((entry) => (
+                            <div
+                                key={entry.device.id}
+                                className="flex flex-col gap-2"
+                            >
+                                {entry.company && (
+                                    <div>
+                                        <p className="font-medium">
+                                            {entry.device.name}
+                                            {entry.device.serial_number
+                                                ? ` · ${entry.device.serial_number}`
+                                                : ''}
+                                        </p>
+                                        <p className="text-muted-foreground">
+                                            {entry.company.name}
+                                            {entry.site?.name
+                                                ? ` · ${entry.site.name}`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                )}
+                                {entry.rack_item && (
+                                    <p>
+                                        Verrà rimossa anche la posizione nel
+                                        rack «{entry.rack_item.rack.name}».
+                                    </p>
+                                )}
+                                <p>
+                                    {entry.interfaces.length} interfacce da
+                                    eliminare · {entry.ips.length} record IP da
+                                    eliminare · {entry.cables.length} cavi da
+                                    scollegare
+                                </p>
+                                {entry.cables.length > 0 && (
+                                    <p>
+                                        Cavi:{' '}
+                                        {entry.cables
+                                            .map(
+                                                (cable) =>
+                                                    `C-${cable.id}${cable.purpose ? ` · ${cable.purpose}` : ''}`,
+                                            )
+                                            .join(', ')}
+                                    </p>
+                                )}
+                                <ul className="max-h-52 overflow-y-auto">
+                                    {entry.ips.map((ip) => (
+                                        <li key={ip.id}>
+                                            {ip.ip}
+                                            {ip.hostname
+                                                ? ` · ${ip.hostname}`
+                                                : ''}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
                     </div>
                 }
             >
                 <p>
-                    «{impact.device.name}» e le sue interfacce saranno eliminati
+                    {'model' in impact
+                        ? `Il modello «${impact.model.name}», il suo pannello, le immagini e tutti i dispositivi elencati con le loro interfacce saranno eliminati`
+                        : `«${impact.device.name}» e le sue interfacce saranno eliminati`}{' '}
                     insieme ai cavi e ai record IP elencati, con hostname,
                     descrizione, MAC, stato e associazioni ai tag. Gli indirizzi
                     torneranno liberi; quelli esclusi resteranno esclusi dai
@@ -240,6 +303,7 @@ export function GuidedDeletion({
                 </p>
             </DeletionConfirmation>
         );
+    }
 
     const statuses = 'status' in impact ? impact.statuses : [];
     const lastSite =
@@ -440,7 +504,7 @@ export function GuidedDeletion({
 }
 
 function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
-    if ('device' in impact) return null;
+    if ('device' in impact || 'model' in impact) return null;
     if ('status' in impact) {
         const companies = new Map<number, { name: string; ips: ImpactIp[] }>();
         for (const ip of impact.ips) {

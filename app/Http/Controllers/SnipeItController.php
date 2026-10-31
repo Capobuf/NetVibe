@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\SnipeItCompanyLink;
 use App\Models\SnipeItConnection;
 use App\Models\SnipeItSetting;
+use App\Models\SnipeItSync;
 use App\Support\SnipeItClient;
 use Closure;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,7 @@ class SnipeItController extends Controller
         $link = $company ? SnipeItCompanyLink::where('company_id', $company->id)->latest('id')->first() : null;
         $affected = $company ? [] : Company::whereNotIn('id', SnipeItSetting::where('use_global', false)->whereNotNull('company_id')->select('company_id'))
             ->orderBy('name')->get(['id', 'name']);
+        $sync = $company ? SnipeItSync::current($company) : null;
 
         return Inertia::render('integrations/snipe-it', [
             'company' => $company?->only('id', 'name'),
@@ -46,6 +48,12 @@ class SnipeItController extends Controller
                 ] : null,
             ],
             'affectedCompanies' => $affected,
+            'sync' => $sync ? [
+                ...$sync->only('id', 'activated_at', 'synced_at', 'error'),
+                'active' => $sync->isActive(),
+                'pending_sites' => $sync->assets()->where('state', 'site')->where('present', true)->count(),
+                'excluded' => $sync->assets()->where('state', 'excluded')->count(),
+            ] : null,
         ]);
     }
 

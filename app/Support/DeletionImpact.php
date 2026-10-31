@@ -6,6 +6,7 @@ use App\Models\Cable;
 use App\Models\CableEnd;
 use App\Models\Company;
 use App\Models\Device;
+use App\Models\DeviceModel;
 use App\Models\IpStatus;
 use App\Models\Rack;
 use App\Models\RackItem;
@@ -82,6 +83,24 @@ class DeletionImpact
             'interfaces' => $device->interfaces()->orderBy('id')->lockForUpdate()->get()->toArray(),
             'ips' => $device->ipAddresses()->orderBy('id')->lockForUpdate()->get()
                 ->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)])->all(),
+        ];
+    }
+
+    public static function model(DeviceModel $model): array
+    {
+        $model = DeviceModel::query()->lockForUpdate()->findOrFail($model->id);
+        Company::query()->whereHas('sites.devices', fn ($query) => $query->where('device_model_id', $model->id))
+            ->orderBy('id')->lockForUpdate()->get();
+        $devices = $model->devices()->with(['site.company' => fn ($query) => $query->withCount('sites')])
+            ->orderBy('id')->lockForUpdate()->get();
+
+        return [
+            'model' => $model->toArray(),
+            'devices' => $devices->map(fn ($device) => [
+                ...self::device($device->site->company, $device->site, $device),
+                'company' => $device->site->company->only('id', 'name'),
+                'site' => ['id' => $device->site_id, 'name' => $device->site->company->sites_count > 1 ? $device->site->name : null],
+            ])->all(),
         ];
     }
 

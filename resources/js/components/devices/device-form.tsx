@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import InputError from '@/components/input-error';
 import { store, update } from '@/routes/companies/sites/devices';
 import { store as storeModel } from '@/routes/manufacturers/models';
@@ -25,11 +26,13 @@ export function DeviceForm({
     site,
     manufacturers,
     device,
+    linked = false,
 }: {
     company: number;
     site: number;
     manufacturers: Manufacturer[];
     device?: Device;
+    linked?: boolean;
 }) {
     const { auth, types } = usePage<{ types: ModelType[] }>().props;
     const [open, setOpen] = useState(false);
@@ -94,6 +97,7 @@ export function DeviceForm({
                                     autoFocus
                                     required
                                     disabled={processing}
+                                    readOnly={linked}
                                     aria-invalid={!!errors.name}
                                 />
                                 <InputError message={errors.name} />
@@ -121,9 +125,16 @@ export function DeviceForm({
                                               }
                                             : undefined
                                     }
-                                    disabled={processing}
+                                    disabled={processing || linked}
                                     error={errors.device_model_id}
                                 />
+                                {linked ? (
+                                    <input
+                                        type="hidden"
+                                        name="device_model_id"
+                                        value={model}
+                                    />
+                                ) : null}
                             </Field>
                             <Field data-invalid={!!errors.serial_number}>
                                 <FieldLabel htmlFor="device-serial">
@@ -135,6 +146,7 @@ export function DeviceForm({
                                     defaultValue={device?.serial_number ?? ''}
                                     maxLength={255}
                                     disabled={processing}
+                                    readOnly={linked}
                                     aria-invalid={!!errors.serial_number}
                                     aria-describedby="device-serial-error"
                                 />
@@ -142,6 +154,35 @@ export function DeviceForm({
                                     id="device-serial-error"
                                     message={errors.serial_number}
                                 />
+                            </Field>
+                            <Field data-invalid={!!errors.asset_tag}>
+                                <FieldLabel htmlFor="device-asset-tag">
+                                    Asset tag
+                                </FieldLabel>
+                                <Input
+                                    id="device-asset-tag"
+                                    name="asset_tag"
+                                    defaultValue={device?.asset_tag ?? ''}
+                                    maxLength={255}
+                                    disabled={processing}
+                                    readOnly={linked}
+                                    aria-invalid={!!errors.asset_tag}
+                                />
+                                <InputError message={errors.asset_tag} />
+                            </Field>
+                            <Field data-invalid={!!errors.notes}>
+                                <FieldLabel htmlFor="device-notes">
+                                    Note tecniche
+                                </FieldLabel>
+                                <Textarea
+                                    id="device-notes"
+                                    name="notes"
+                                    defaultValue={device?.notes ?? ''}
+                                    maxLength={10000}
+                                    disabled={processing}
+                                    aria-invalid={!!errors.notes}
+                                />
+                                <InputError message={errors.notes} />
                             </Field>
                             <DialogFooter>
                                 <DialogClose asChild>

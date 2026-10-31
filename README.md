@@ -72,6 +72,18 @@ Ricompila gli asset solo dopo modifiche frontend; esegui `composer install`/`npm
 
 Il database di sviluppo `netvibe` rimane nel volume `sail-mysql` del progetto Compose. Non usare `down -v`, `migrate:fresh`, reset o reseeding sull’istanza di revisione. Non lanciare `composer setup` su dati esistenti: lo script originale rigenera la chiave applicativa.
 
+## Sincronizzazione Snipe-IT e cron
+
+Il Superadmin acquisisce l’anteprima da **Azienda → Impostazioni → Integrazioni → Snipe-IT**, conferma i dispositivi (produttori, tipologie e modelli necessari vengono creati o riutilizzati durante l’importazione) e attiva la sincronizzazione oraria. Gli asset rimandati nella prima acquisizione restano in attesa di una scelta esplicita. «Sincronizza ora» usa la stessa logica del comando `php artisan snipe-it:sync` (quest’ultimo riguarda solo le aziende già attivate).
+
+Su hosting condiviso configura il cron dell’hosting ogni minuto, sostituendo i percorsi con quelli effettivi:
+
+```cron
+* * * * * cd /percorso/netvibe && /percorso/php artisan schedule:run >> /percorso/netvibe/storage/logs/scheduler.log 2>&1
+```
+
+Laravel avvia Snipe-IT all’inizio di ogni ora e impedisce esecuzioni sovrapposte. Non occorrono altri container, queue worker, Redis o processi Node. In sviluppo il cron dell’host può richiamare `docker compose exec -T --user sail laravel.test php artisan schedule:run` dalla directory del progetto. Una lettura incompleta o un errore API conserva l’ultima copia valida; la pagina mostra l’errore e l’ultimo aggiornamento riuscito.
+
 ## Test isolati — solo dopo approvazione manuale
 
 Sail crea `testing` sullo stesso MySQL. `docker/mysql/create-test-user.sql` crea `sail_test`, autorizzato soltanto su `testing`; lo sviluppo usa `sail` su `netvibe`. MySQL non espone porte sull’host.

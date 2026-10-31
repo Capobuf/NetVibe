@@ -349,7 +349,8 @@ export function EditorCanvas({
                             : [p.id],
                 };
         }
-        if (target.id() === 'panel-image') return { kind: 'image', ids: [] };
+        if (['panel-image', 'image-selection-area'].includes(target.id()))
+            return { kind: 'image', ids: [] };
         if (target.id() === 'shell') return { kind: 'shell', ids: [] };
         return { kind: 'canvas', ids: [] };
     }
@@ -860,6 +861,30 @@ export function EditorCanvas({
                         fontSize={12 / view.zoom}
                         fill={dark ? '#a3a3a3' : '#737373'}
                     />
+                    {/* Keep the clipped image draggable outside the shell, behind other objects. */}
+                    {image &&
+                        e.selection.kind === 'image' &&
+                        !image.hidden &&
+                        !image.locked &&
+                        !blocked && (
+                            <Rect
+                                id="image-selection-area"
+                                {...imageBounds(image)}
+                                x={imageBounds(image).x + (imageDelta?.x ?? 0)}
+                                y={imageBounds(image).y + (imageDelta?.y ?? 0)}
+                                fill="transparent"
+                                onMouseEnter={() => {
+                                    if (!pan && !space && stage.current)
+                                        stage.current.container().style.cursor =
+                                            'move';
+                                }}
+                                onMouseLeave={() => {
+                                    if (stage.current)
+                                        stage.current.container().style.cursor =
+                                            '';
+                                }}
+                            />
+                        )}
                     <PanelScene
                         shell={shell}
                         face={{

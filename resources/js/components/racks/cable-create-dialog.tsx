@@ -27,6 +27,7 @@ export function CableCreateDialog({
     devices,
     cables,
     revision,
+    removedCableIds,
     onClose,
     onDirtyChange,
     onSaving,
@@ -37,12 +38,15 @@ export function CableCreateDialog({
     devices: RackDevice[];
     cables: Cable[];
     revision: number;
+    removedCableIds: number[];
     onClose: () => void;
     onDirtyChange: (dirty: boolean) => void;
     onSaving: (saving: boolean) => void;
     onSaved: (cables: Cable[], revision: number) => void;
 }) {
-    const form = useForm<Cable & { cabling_revision: number }>({
+    const form = useForm<
+        Cable & { cabling_revision: number; removed_cable_ids: number[] }
+    >({
         id,
         a: { device_id: 0, connector_id: '' },
         b: { device_id: 0, connector_id: '' },
@@ -50,6 +54,7 @@ export function CableCreateDialog({
         color: '#2563eb',
         purpose: null,
         cabling_revision: revision,
+        removed_cable_ids: removedCableIds,
     });
     const [error, setError] = useState('');
     const [imageError, setImageError] = useState('');

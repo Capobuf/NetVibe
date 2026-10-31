@@ -22,7 +22,13 @@ import {
     destroy as destroyType,
 } from '@/routes/model-types';
 import { store as storeManufacturer } from '@/routes/manufacturers';
-import { store, update, destroy, edit } from '@/routes/manufacturers/models';
+import {
+    store,
+    update,
+    destroy,
+    edit,
+    deletionImpact,
+} from '@/routes/manufacturers/models';
 import { index as devices } from '@/routes/companies/sites/devices';
 import { index as companies } from '@/routes/companies';
 import type { Manufacturer, DeviceModel, ModelType } from '@/types/device';
@@ -257,6 +263,10 @@ export default function Models({
                                         model: m.id,
                                     })}
                                     deletion={destroy.form({
+                                        manufacturer: m.manufacturer_id,
+                                        model: m.id,
+                                    })}
+                                    deletionPreviewUrl={deletionImpact.url({
                                         manufacturer: m.manufacturer_id,
                                         model: m.id,
                                     })}

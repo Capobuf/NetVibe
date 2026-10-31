@@ -8,9 +8,32 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number'])]
+#[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes'])]
 class Device extends Model
 {
+    public function snipeItAsset(): HasOne
+    {
+        return $this->hasOne(SnipeItAsset::class);
+    }
+
+    public function modelChangeProblem(int $modelId): ?string
+    {
+        if ($this->device_model_id === $modelId) {
+            return null;
+        }
+        if (CableEnd::where('device_id', $this->id)->exists()) {
+            return 'Il dispositivo ha cavi collegati. Scollegali esplicitamente prima di cambiarne il modello.';
+        }
+        if ($this->rackItem()->exists()) {
+            return 'Rimuovi prima il dispositivo dal rack per cambiarne il modello.';
+        }
+        if ($this->interfaces()->whereNotNull('connector_id')->exists()) {
+            return 'Il dispositivo ha interfacce legate al pannello. Il cambio modello non può conservarne l’identità: mantieni il modello attuale.';
+        }
+
+        return null;
+    }
+
     public function rackItem(): HasOne
     {
         return $this->hasOne(RackItem::class);

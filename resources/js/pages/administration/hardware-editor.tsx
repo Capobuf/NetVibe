@@ -69,7 +69,7 @@ export default function HardwareEditor({
     const currentDocument = useRef(e.doc);
     currentDocument.current = e.doc;
     const exitRoute = catalogModel
-        ? modelIndex({ query: { manufacturer: catalogModel.manufacturer_id } })
+        ? modelIndex({ query: { tab: 'models' } })
         : administration();
     const canvas = useRef<CanvasApi>(null);
     const context = useRef<HTMLDivElement>(null);
@@ -838,7 +838,6 @@ export default function HardwareEditor({
                                         key={`${e.selection.kind}-${e.selected.map((p) => p.id).join(',')}`}
                                         editor={e}
                                         onImage={image}
-                                        onLabel={label}
                                         onClose={() => setInspector(false)}
                                     />
                                 </fieldset>

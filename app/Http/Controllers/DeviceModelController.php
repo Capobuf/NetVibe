@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ConfirmDeletionRequest;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
 use App\Models\RackItem;
+use App\Support\DeletionImpact;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -96,21 +99,25 @@ class DeviceModelController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, Manufacturer $manufacturer, DeviceModel $model): RedirectResponse
+    public function deletionImpact(Manufacturer $manufacturer, DeviceModel $model): JsonResponse
     {
-        $request->validate(['confirmed' => ['accepted']]);
-        $assets = DB::transaction(function () use ($model) {
+        return response()->json(DB::transaction(fn () => DeletionImpact::preview(DeletionImpact::model($model)), 3));
+    }
+
+    public function destroy(ConfirmDeletionRequest $request, Manufacturer $manufacturer, DeviceModel $model): RedirectResponse
+    {
+        $assets = DB::transaction(function () use ($request, $model) {
+            $impact = DeletionImpact::model($model);
+            $request->ensureUnchanged($impact);
+            DeletionImpact::deleteDevices(collect($impact['devices'])->pluck('device.id')->all());
             $model = DeviceModel::query()->lockForUpdate()->findOrFail($model->id);
-            if ($model->devices()->exists()) {
-                throw ValidationException::withMessages(['confirmed' => 'Il modello è usato da dispositivi. Cambia prima il loro modello o elimina esplicitamente i dispositivi.']);
-            }
             $assets = array_values($model->assets ?? []);
             $model->delete();
 
             return $assets;
         }, 3);
         Storage::disk('local')->delete($assets);
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Modello eliminato.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Modello e dispositivi collegati eliminati.']);
 
         return back();
     }

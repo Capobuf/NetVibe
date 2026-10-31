@@ -36,6 +36,8 @@ export type Device = {
     id: number;
     name: string;
     serial_number: string | null;
+    asset_tag?: string | null;
+    notes?: string | null;
     manufacturer_id: number;
     device_model_id: number | null;
     manufacturer: Manufacturer;

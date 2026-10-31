@@ -13,6 +13,8 @@ class DeviceRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'device_model_id' => ['required', 'integer', 'exists:device_models,id'],
             'serial_number' => ['nullable', 'string', 'max:255'],
+            'asset_tag' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:10000'],
         ];
     }
 

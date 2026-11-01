@@ -1,6 +1,19 @@
-import { Network } from 'lucide-react';
-import type { SVGAttributes } from 'react';
+import type { ImgHTMLAttributes } from 'react';
+import { cn } from '@/lib/utils';
 
-export default function AppLogoIcon(props: SVGAttributes<SVGElement>) {
-    return <Network {...props} fill="none" aria-hidden="true" />;
+export default function AppLogoIcon({
+    className,
+    ...props
+}: ImgHTMLAttributes<HTMLImageElement>) {
+    return (
+        <img
+            {...props}
+            src="/branding/logo.svg"
+            width={1254}
+            height={1254}
+            alt=""
+            aria-hidden="true"
+            className={cn('shrink-0 object-contain dark:invert', className)}
+        />
+    );
 }

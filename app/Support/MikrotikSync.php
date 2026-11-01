@@ -34,8 +34,9 @@ class MikrotikSync
             $attempted = now();
             $objects = [];
             $identity = null;
+            $client = app(MikrotikClient::class);
             try {
-                $snapshot = app(MikrotikClient::class)->snapshot($connection);
+                $snapshot = $client->snapshot($connection);
                 if ($snapshot['status'] !== 'ok') {
                     throw new MikrotikException($snapshot['status']);
                 }
@@ -49,7 +50,7 @@ class MikrotikSync
                 $status = $exception->status;
             }
             $device = Device::with('site')->findOrFail($connection->device_id);
-            DB::transaction(function () use ($connection, $device, $attempted, $status, $objects, $identity) {
+            DB::transaction(function () use ($connection, $device, $attempted, $status, $objects, $identity, $client) {
                 Company::query()->lockForUpdate()->findOrFail($device->site->company_id);
                 $site = Site::query()->lockForUpdate()->findOrFail($device->site_id);
                 $device = $site->devices()->lockForUpdate()->findOrFail($device->id);
@@ -61,7 +62,7 @@ class MikrotikSync
                 if ($current->sync_attempted_at?->greaterThan($attempted)) {
                     throw ValidationException::withMessages(['connection' => 'È già disponibile un tentativo più recente. Ricarica la pagina.']);
                 }
-                $current->fill(['sync_attempted_at' => $attempted, 'sync_status' => $status]);
+                $current->fill(['sync_attempted_at' => $attempted, 'sync_status' => $status, 'sync_log' => $client->diagnosticLog()]);
                 if ($status === 'source_changed') {
                     $current->activated_at = null;
                     $device->mikrotikSources()->where('generation', $current->source_generation)->where('state', 'current')->update(['state' => 'unknown']);
@@ -128,7 +129,7 @@ class MikrotikSync
         MikrotikIpam::recognizeExpected($site->id, $device->id);
 
         return ['created' => $created, 'associated' => $associated, 'updated' => $updated, 'read' => count($sources),
-            'problems' => count(array_filter($sources, fn ($source) => $source->problem !== null && ! $exclusions->target($source)))];
+            'problems' => count(array_filter($sources, fn ($source) => $source->displayProblem() !== null && ! $exclusions->target($source)))];
     }
 
     // The caller holds the device lock in the model-save transaction.

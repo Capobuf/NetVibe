@@ -10,7 +10,7 @@ import {
     Settings2,
     Shield,
     Monitor,
-    LayoutTemplate,
+    BookOpen,
     Building2,
     Tags,
     Mail,
@@ -67,7 +67,7 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             size="lg"
-                            className="h-20 justify-center"
+                            className="h-28 justify-center"
                             asChild
                         >
                             <Link
@@ -75,7 +75,7 @@ export function AppSidebar() {
                                     inAdministration ? administration() : home()
                                 }
                             >
-                                <AppLogo />
+                                <AppLogo className="size-24" />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -155,7 +155,7 @@ export function AppSidebar() {
                                                   {
                                                       title: 'Catalogo',
                                                       href: modelIndex(),
-                                                      icon: LayoutTemplate,
+                                                      icon: BookOpen,
                                                       isActive: catalogActive,
                                                   },
                                               ]

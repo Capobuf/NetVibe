@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MikrotikPortMap;
 use App\Support\MikrotikSnapshot;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,6 +34,7 @@ class MikrotikSource extends Model
         return [
             ...$this->only('id', 'kind', 'state', 'data', 'seen_at', 'problem', 'vlan_id', 'subnet_id', 'ip_address_id', 'edit_mode', 'matched_at'),
             'problem' => $this->displayProblem(),
+            'import_note' => $this->importNote(),
             'can_associate' => $this->state === 'current' && ($this->problem === 'VLAN riportata da un’altra sorgente: conferma che il contesto L2 sia lo stesso.'
                 || ($this->problem === 'VLAN documentata diversa dalla fonte. Verifica l’associazione della subnet.' && $this->data['tag'] !== null)),
             'source' => $this->device->name,
@@ -42,8 +44,36 @@ class MikrotikSource extends Model
         ];
     }
 
-    private function displayProblem(): ?string
+    public function importNote(): ?string
     {
+        $notes = [
+            'Indirizzo dinamico: non importato nell’IPAM.',
+            'Indirizzo disabilitato: non importato nell’IPAM.',
+            'Lease disabilitata: non importata nell’IPAM.',
+            'Server DHCP disabilitato: lease non importata nell’IPAM.',
+            'VLAN disabilitata: non importata.',
+            'Appartenenza VLAN disabilitata: non importata.',
+        ];
+        if (in_array($this->problem, $notes, true)) {
+            return $this->problem;
+        }
+        if ($this->problem === 'Indirizzo dinamico, disabilitato, invalido o con flag incompleti: conservato come dato esterno.') {
+            if (MikrotikSnapshot::flag($this->data['disabled'] ?? null) === true) {
+                return 'Indirizzo disabilitato: non importato nell’IPAM.';
+            }
+            if (MikrotikSnapshot::flag($this->data['dynamic'] ?? null) === true) {
+                return 'Indirizzo dinamico: non importato nell’IPAM.';
+            }
+        }
+
+        return null;
+    }
+
+    public function displayProblem(): ?string
+    {
+        if ($this->importNote() !== null) {
+            return null;
+        }
         if ($this->problem !== 'Indirizzo dinamico, disabilitato, invalido o con flag incompleti: conservato come dato esterno.') {
             return $this->problem;
         }
@@ -69,6 +99,7 @@ class MikrotikSource extends Model
             ...$this->only('id', 'device_interface_id', 'seen_at', 'problem'),
             'name' => $this->data['name'], 'default_name' => $this->data['default_name'],
             'mac_address' => $this->data['mac_address'],
+            'port_type' => MikrotikPortMap::type($this->data['default_name'] ?? ''),
             'stale' => $this->state !== 'current' || ! $connection?->activated_at
                 || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok',
         ];

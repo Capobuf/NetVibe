@@ -13,6 +13,7 @@ class MikrotikRequest extends FormRequest
     {
         return [
             'server_url' => ['required', 'string', 'max:2048'],
+            'port' => ['sometimes', 'required', 'integer', 'between:1,65535'],
             'username' => ['required', 'string', 'max:255', 'not_regex:/[:\x00-\x1F\x7F]/'],
             'password' => ['nullable', 'string', 'max:1024', 'not_regex:/[\x00\r\n]/'],
             'allow_unverified_certificate' => ['required', 'boolean'],
@@ -25,6 +26,9 @@ class MikrotikRequest extends FormRequest
         $data = $this->validated();
         try {
             $data['server_url'] = MikrotikClient::normalizeUrl($data['server_url']);
+            if (isset($data['port'])) {
+                $data['server_url'] = 'https://'.parse_url($data['server_url'], PHP_URL_HOST).((int) $data['port'] === 443 ? '' : ':'.$data['port']);
+            }
         } catch (MikrotikException $exception) {
             throw ValidationException::withMessages(['server_url' => $exception->getMessage()]);
         }
@@ -34,6 +38,6 @@ class MikrotikRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['server_url' => 'indirizzo HTTPS', 'username' => 'username', 'password' => 'password'];
+        return ['server_url' => 'indirizzo HTTPS', 'port' => 'porta', 'username' => 'username', 'password' => 'password'];
     }
 }

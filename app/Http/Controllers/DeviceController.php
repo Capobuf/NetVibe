@@ -47,7 +47,11 @@ class DeviceController extends Controller
 
     public function show(Request $request, Company $company, Site $site, Device $device): Response
     {
-        $options = $request->validate(['interface' => ['sometimes', 'integer', 'min:1'], 'tab' => ['sometimes', 'in:interfaces,ips,mikrotik']]);
+        $options = $request->validate([
+            'interface' => ['sometimes', 'integer', 'min:1'],
+            'tab' => ['sometimes', 'in:interfaces,ips,mikrotik'],
+            'manage' => ['sometimes', 'in:general,mikrotik,snipe-it'],
+        ]);
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
         $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
@@ -59,7 +63,10 @@ class DeviceController extends Controller
                 ->where('generation', $device->mikrotikConnection()->value('source_generation'))
                 ->where('state', 'current')->whereNull('problem')->with('device.mikrotikConnection')->get()
                 ->map(fn ($source) => $source->interfaceDetails()),
-            'initialTab' => $options['tab'] ?? 'interfaces',
+            'initialTab' => ($options['tab'] ?? null) === 'ips' ? 'ips' : 'interfaces',
+            'initialManagementTab' => $options['manage'] ?? (($options['tab'] ?? null) === 'mikrotik' ? 'mikrotik' : null),
+            'mikrotikSources' => $request->user()->is_superadmin
+                ? (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()) : [],
             'isMikrotik' => $device->manufacturer->isMikrotik(),
             'mikrotik' => $request->user()->is_superadmin && $device->manufacturer->isMikrotik()
                 ? $device->mikrotikConnection()->first()?->summary() : null,
@@ -71,8 +78,6 @@ class DeviceController extends Controller
                 'model' => $asset->externalModel?->snapshot,
                 'model_problem' => $asset->externalModel?->problem,
             ] : null,
-            'mikrotikSources' => $request->user()->is_superadmin
-                ? (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()) : [],
             'initialInterfaceId' => $selectedInterface?->id,
             'assetUrls' => $device->model?->assetUrls() ?? [],
             'manufacturers' => $this->catalog(),
@@ -91,6 +96,13 @@ class DeviceController extends Controller
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
         ]);
+    }
+
+    public function integrations(Request $request, Company $company, Site $site, Device $device): RedirectResponse
+    {
+        $options = $request->validate(['tab' => ['sometimes', 'in:mikrotik,snipe-it']]);
+
+        return to_route('companies.sites.devices.show', [$company, $site, $device, 'manage' => $options['tab'] ?? 'general']);
     }
 
     public function store(DeviceRequest $request, Company $company, Site $site): RedirectResponse

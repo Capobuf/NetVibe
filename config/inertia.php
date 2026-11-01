@@ -2,6 +2,9 @@
 
 return [
 
+    // Recording every observed MikroTik value adds seconds to device responses.
+    'devtools' => ['enabled' => false],
+
     /*
     |--------------------------------------------------------------------------
     | Server Side Rendering

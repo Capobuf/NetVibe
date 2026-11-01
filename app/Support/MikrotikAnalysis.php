@@ -84,7 +84,7 @@ class MikrotikAnalysis
             $comments += count(array_filter($rows, fn ($row) => isset($row['comment']) && $row['comment'] !== ''));
         }
         $findings[] = ['label' => 'Commenti negli oggetti letti', 'value' => $comments, 'detail' => 'Destinazione in NetVibe da decidere prima dell’importazione.'];
-        $findings[] = ['label' => 'Switch chip e VLAN hardware', 'value' => null, 'detail' => 'Non interrogati: da verificare con la documentazione del modello e della versione rilevati.'];
+        $findings[] = ['label' => 'Switch chip e VLAN hardware', 'value' => null, 'detail' => 'Non supportati. Le VLAN vengono lette dalle interfacce VLAN e dalle tabelle dei bridge.'];
 
         return $findings;
     }

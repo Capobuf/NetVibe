@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/utils';
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
 import { Check, Link2, RefreshCw, Trash2 } from 'lucide-react';
@@ -98,10 +99,6 @@ function defaults(settings: Settings) {
         confirm_change: false,
         connection: '',
     };
-}
-
-function date(value: string) {
-    return new Date(value).toLocaleString('it-IT');
 }
 
 export default function SnipeIt(props: Props) {
@@ -289,7 +286,7 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                             {lastCheck?.checked_at ? (
                                 <p className="text-sm text-muted-foreground">
                                     Ultima verifica:{' '}
-                                    {date(lastCheck.checked_at)} ·{' '}
+                                    {formatDateTime(lastCheck.checked_at)} ·{' '}
                                     {('status' in lastCheck
                                         ? lastCheck.status
                                         : lastCheck.check_status) === 'ok'
@@ -506,7 +503,9 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                                             </AlertTitle>
                                             <AlertDescription>
                                                 {result.message} ·{' '}
-                                                {date(result.checked_at)}
+                                                {formatDateTime(
+                                                    result.checked_at,
+                                                )}
                                             </AlertDescription>
                                         </Alert>
                                     ) : null}

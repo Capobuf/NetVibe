@@ -14,8 +14,6 @@ class MikrotikSnapshot
 
     private array $ports = [];
 
-    private bool $unverifiedSwitch = false;
-
     public function normalize(array $tables): array
     {
         foreach (MikrotikClient::MENUS as $menu => $_) {
@@ -51,10 +49,6 @@ class MikrotikSnapshot
         $this->vlans = $this->byName($tables['interface/vlan']);
         $this->bridges = $this->byName($tables['interface/bridge']);
         $this->ports = $tables['interface/bridge/port'];
-        $board = $tables['system/resource'][0]['board-name'] ?? '';
-        // RB5009 uses bridge VLAN filtering (88E6393X); other switch-chip menus need model-specific evidence.
-        $this->unverifiedSwitch = ! str_starts_with($board, 'RB5009')
-            && count(array_filter($tables['interface/ethernet'], fn ($row) => ! empty($row['switch']))) > 0;
         $objects = [];
         foreach ($tables['interface/ethernet'] as $row) {
             if (empty($row['name']) || mb_strlen($row['name']) > 255
@@ -75,7 +69,9 @@ class MikrotikSnapshot
                 $problem = 'Parentela VLAN o service tag non determinabile. Verifica la configurazione alla fonte.';
             }
             if (self::flag($row['disabled'] ?? null) !== false) {
-                $problem = 'VLAN disabilitata o stato non disponibile.';
+                $problem = self::flag($row['disabled'] ?? null) === true
+                    ? 'VLAN disabilitata: non importata.'
+                    : 'RouterOS non indica se la VLAN è disabilitata (campo disabled assente).';
             }
             $objects[] = $this->object('vlan', 'interface/vlan', $row, ['tag' => $tag, 'context_key' => $context['context_key']], [
                 'name' => $name, 'tag' => $tag, ...$context,
@@ -98,7 +94,9 @@ class MikrotikSnapshot
                 $problem = 'Filtering VLAN del bridge disattivato o non determinabile.';
             }
             if (self::flag($row['disabled'] ?? null) !== false) {
-                $problem = 'Appartenenza VLAN disabilitata o stato non disponibile.';
+                $problem = self::flag($row['disabled'] ?? null) === true
+                    ? 'Appartenenza VLAN disabilitata: non importata.'
+                    : 'RouterOS non indica se l’appartenenza VLAN è disabilitata (campo disabled assente).';
             }
             if (count($tags) > 1 && (trim((string) ($row['untagged'] ?? '')) !== '' || trim((string) ($row['current-untagged'] ?? '')) !== '')) {
                 $problem = 'Più VLAN con egress untagged: verifica puntuale del contesto richiesta.';
@@ -124,9 +122,14 @@ class MikrotikSnapshot
             $active = self::flag($row['dynamic'] ?? null) === false
                 && self::flag($row['disabled'] ?? null) === false && self::flag($row['invalid'] ?? null) === false;
             if (! $active) {
-                $problem = 'Indirizzo dinamico, disabilitato, invalido o con flag incompleti: conservato come dato esterno.';
+                $problem = match (true) {
+                    self::flag($row['disabled'] ?? null) === true => 'Indirizzo disabilitato: non importato nell’IPAM.',
+                    self::flag($row['dynamic'] ?? null) === true => 'Indirizzo dinamico: non importato nell’IPAM.',
+                    self::flag($row['invalid'] ?? null) === true => 'RouterOS segnala l’indirizzo come non valido (invalid=true). Verifica l’indirizzo e la sua interfaccia sul router.',
+                    default => 'Stato dell’indirizzo incompleto: RouterOS non riporta '.implode(', ', array_filter(['dynamic', 'disabled', 'invalid'], fn ($flag) => self::flag($row[$flag] ?? null) === null)).'. Importazione sospesa.',
+                };
             }
-            if ($tag !== null) {
+            if ($active && $tag !== null) {
                 foreach ($objects as $vlan) {
                     if ($vlan['kind'] === 'vlan' && ($vlan['data']['name'] ?? null) === $interface && $vlan['problem']) {
                         $problem = $vlan['problem'];
@@ -145,18 +148,37 @@ class MikrotikSnapshot
         foreach ($tables['ip/dhcp-server/lease'] as $row) {
             $fixed = self::flag($row['dynamic'] ?? null) === false;
             $address = self::address($row['address'] ?? null);
+            $serverMissing = empty($row['server']);
             $server = $servers[$row['server'] ?? ''] ?? null;
             $interface = $server['interface'] ?? null;
             $matches = array_values(array_filter($networks, fn ($network) => $address !== null
-                && $network['data']['interface'] === $interface && $network['data']['network_address'] <= $address
+                && ($serverMissing || $network['data']['interface'] === $interface) && $network['data']['network_address'] <= $address
                 && $network['data']['broadcast_address'] >= $address && ! $network['problem']));
             $matches = collect($matches)->unique(fn ($network) => $network['data']['cidr'].':'.($network['data']['tag'] ?? 'none').':'.$network['data']['context_key'])->values()->all();
-            $problem = $fixed && $address !== null && count($matches) !== 1 ? 'Server DHCP e subnet non associabili univocamente.' : null;
-            if ($fixed && $address !== null && (self::flag($server['disabled'] ?? null) !== false || self::flag($server['invalid'] ?? null) !== false)) {
-                $problem = 'Stato del server DHCP non attivo o non determinabile.';
-            }
-            if ($fixed && (self::mac($row['mac-address'] ?? null) === null || self::flag($row['disabled'] ?? null) !== false)) {
-                $problem = 'Lease senza MAC valido, disabilitata o con stato non disponibile: conservata come configurazione esterna.';
+            $problem = null;
+            if ($fixed) {
+                $problem = match (true) {
+                    self::flag($row['disabled'] ?? null) === true => 'Lease disabilitata: non importata nell’IPAM.',
+                    self::flag($row['disabled'] ?? null) === null => 'RouterOS non indica se il lease è disabilitato (campo disabled assente). Importazione sospesa.',
+                    empty($row['mac-address']) => 'MAC assente nel lease DHCP. Verifica il lease sul router.',
+                    self::mac($row['mac-address']) === null => 'MAC nullo nel lease DHCP (00:00:00:00:00:00). Verifica il lease sul router.',
+                    $address === null => 'Lease senza un indirizzo IPv4 fisso utilizzabile. Associazione subnet non eseguita.',
+                    $serverMissing => match (count($matches)) {
+                        0 => 'Server DHCP non specificato: nessuna subnet importabile del dispositivo contiene questo IP.',
+                        1 => null,
+                        default => 'Server DHCP non specificato: più subnet del dispositivo contengono questo IP. Associazione sospesa.',
+                    },
+                    $row['server'] === 'all' => 'Lease valido per tutti i server DHCP. Associazione a una singola subnet non determinabile.',
+                    $server === null => 'Il server DHCP «'.$row['server'].'» indicato nel lease non è presente nella lettura.',
+                    self::flag($server['disabled'] ?? null) === true => 'Server DHCP disabilitato: lease non importata nell’IPAM.',
+                    self::flag($server['disabled'] ?? null) === null => 'RouterOS non indica se il server DHCP «'.$row['server'].'» è disabilitato (campo disabled assente).',
+                    self::flag($server['invalid'] ?? null) === true => 'RouterOS segnala il server DHCP «'.$row['server'].'» come non valido (invalid=true). Verifica la sua interfaccia sul router.',
+                    self::flag($server['invalid'] ?? null) === null => 'RouterOS non riporta il campo invalid del server DHCP «'.$row['server'].'». Validità non determinabile.',
+                    empty($interface) => 'Il server DHCP «'.$row['server'].'» non riporta l’interfaccia. Associazione subnet non determinabile.',
+                    count($matches) === 0 => 'Nessuna subnet importabile contiene questo IP sull’interfaccia «'.$interface.'» del server DHCP «'.$row['server'].'». Verifica prima le subnet di questa interfaccia.',
+                    count($matches) > 1 => 'Più subnet compatibili sull’interfaccia «'.$interface.'» del server DHCP «'.$row['server'].'». Associazione sospesa.',
+                    default => null,
+                };
             }
             $objects[] = $this->object($fixed ? 'lease' : 'observation', 'ip/dhcp-server/lease', $row,
                 ['address' => $address, 'server' => $server['.id'] ?? null], [
@@ -193,7 +215,7 @@ class MikrotikSnapshot
         }
         $contexts = $cidrs = [];
         foreach ($objects as $object) {
-            if ($object['kind'] === 'vlan') {
+            if ($object['kind'] === 'vlan' && self::flag($object['data']['disabled'] ?? null) !== true) {
                 $contexts[$object['data']['tag']][$object['data']['context_key'] ?? '?'] = true;
             }
             if ($object['kind'] === 'subnet' && $object['data']['active']) {
@@ -201,6 +223,9 @@ class MikrotikSnapshot
             }
         }
         foreach ($objects as &$object) {
+            if (self::flag($object['data']['disabled'] ?? null) === true || self::flag($object['data']['dynamic'] ?? null) === true) {
+                continue;
+            }
             $tag = $object['data']['tag'] ?? null;
             if ($tag !== null && count($contexts[$tag] ?? []) > 1) {
                 $object['problem'] = 'Stesso ID VLAN in contesti L2 non dimostrati equivalenti.';
@@ -255,7 +280,7 @@ class MikrotikSnapshot
         $known = $interface && isset($interface['.id']) && ! isset($this->vlans[$name]) && count($parents) <= 1;
 
         return ['context' => $name, 'context_key' => $known ? $interface['.id'] : null,
-            'problem' => $this->unverifiedSwitch ? 'Tabelle dello switch chip non verificate per questo modello: associazione automatica sospesa.' : ($known ? null : 'Interfaccia o contesto L2 non determinabile.')];
+            'problem' => $known ? null : 'Interfaccia o contesto L2 non determinabile.'];
     }
 
     private function byName(array $rows): array

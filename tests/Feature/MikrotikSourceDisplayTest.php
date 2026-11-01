@@ -19,11 +19,13 @@ class MikrotikSourceDisplayTest extends TestCase
 
         $display = $source->display();
 
-        $this->assertSame('Importazione automatica non eseguita: l’indirizzo sul router è disabilitato.', $display['problem']);
+        $this->assertNull($display['problem']);
+        $this->assertSame('Indirizzo disabilitato: non importato nell’IPAM.', $display['import_note']);
         $this->assertSame($problem, $source->problem);
 
         $source->data = ['active' => false, 'dynamic' => true, 'disabled' => false, 'invalid' => false];
-        $this->assertSame('Importazione automatica non eseguita: l’indirizzo sul router è dinamico.', $source->display()['problem']);
+        $this->assertNull($source->display()['problem']);
+        $this->assertSame('Indirizzo dinamico: non importato nell’IPAM.', $source->display()['import_note']);
 
         $source->data = ['active' => false, 'dynamic' => false, 'disabled' => false];
         $this->assertSame('Importazione automatica non eseguita: RouterOS non ha indicato se l’indirizzo è non valido.', $source->display()['problem']);

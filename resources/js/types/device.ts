@@ -30,6 +30,7 @@ export type MikrotikInterface = {
     device_interface_id: number | null;
     name: string;
     default_name: string | null;
+    port_type: 'rj45' | 'sfp' | 'qsfp' | null;
     mac_address: string | null;
     seen_at: string;
     stale: boolean;
@@ -73,4 +74,10 @@ export function interfaceMac(item: DeviceInterface) {
         (!item.mikrotik?.problem && item.mikrotik?.mac_address) ||
         null
     );
+}
+
+export function mikrotikInterfaceName(source: MikrotikInterface) {
+    return source.default_name && source.default_name !== source.name
+        ? `${source.default_name} · ${source.name}`
+        : source.name;
 }

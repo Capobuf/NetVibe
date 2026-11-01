@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/utils';
 import { Link, useForm } from '@inertiajs/react';
 import { Link2, RefreshCw } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
@@ -68,7 +69,7 @@ export function SnipeItOverview({
             </div>
             <p className="text-sm text-muted-foreground">
                 {sync?.synced_at
-                    ? `Ultimo aggiornamento riuscito: ${new Date(sync.synced_at).toLocaleString('it-IT')}`
+                    ? `Ultimo aggiornamento riuscito: ${formatDateTime(sync.synced_at)}`
                     : 'Nessuna acquisizione completata'}
             </p>
             {sync?.error ? (

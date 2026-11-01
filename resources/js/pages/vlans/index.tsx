@@ -23,7 +23,7 @@ import { TableSearch } from '@/components/table-search';
 import { TablePagination } from '@/components/table-pagination';
 import { useTablePagination } from '@/hooks/use-table-pagination';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
 import { TableColumns } from '@/components/table-columns';
@@ -262,10 +262,8 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
                                                 ) : column.id ===
                                                   'excluded_at' ? (
                                                     vlan.excluded_at ? (
-                                                        new Date(
+                                                        formatDateTime(
                                                             vlan.excluded_at,
-                                                        ).toLocaleString(
-                                                            'it-IT',
                                                         )
                                                     ) : (
                                                         '—'

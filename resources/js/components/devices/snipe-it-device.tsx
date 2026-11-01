@@ -1,8 +1,16 @@
+import { formatDateTime } from '@/lib/utils';
 import { useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { TriangleAlert } from 'lucide-react';
-import { SnipeItMark } from '@/components/snipe-it-mark';
+import { ExternalLink, TriangleAlert, Unlink } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    CardFooter,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -40,18 +48,25 @@ export type SnipeDevice = {
     } | null;
 };
 
-export function SnipeItDevice({
-    source,
-    device,
-}: {
-    source: SnipeDevice;
-    device: Device;
-}) {
-    const problem = !source.active
+export function snipeItProblem(source: SnipeDevice) {
+    return !source.active
         ? 'Collegamento sospeso: riconferma l’azienda Snipe-IT.'
         : !source.present
           ? 'Asset non più presente nell’azienda Snipe-IT.'
           : source.error || source.problem || source.model_problem;
+}
+
+export function SnipeItDevice({
+    company,
+    source,
+    device,
+}: {
+    company: number;
+    source: SnipeDevice;
+    device: Device;
+}) {
+    const { auth } = usePage().props;
+    const problem = snipeItProblem(source);
     const differences = [
         {
             label: 'Nome',
@@ -88,77 +103,97 @@ export function SnipeItDevice({
         },
     ].filter((field) => field.current !== field.external);
     return (
-        <section
-            aria-label="Anagrafica Snipe-IT"
-            className="flex flex-col gap-3"
-        >
-            <div className="flex flex-wrap items-center gap-3">
-                <Button asChild variant="outline" size="sm">
-                    <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Apri in Snipe-IT (nuova scheda)"
-                    >
-                        <SnipeItMark className="size-6" />
-                        Apri
-                    </a>
-                </Button>
-            </div>
-            {problem ? (
-                <Alert>
-                    <TriangleAlert />
-                    <AlertTitle className="line-clamp-none">
-                        Aggiornamento da Snipe-IT da verificare
-                    </AlertTitle>
-                    <AlertDescription className="gap-3 text-foreground">
-                        <p>{problem}</p>
-                        {source.active &&
-                        source.present &&
-                        !source.error &&
-                        differences.length > 0 ? (
-                            <dl className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {differences.map((field) => (
-                                    <div
-                                        key={field.label}
-                                        className="min-w-0 rounded-md bg-muted/50 p-3"
-                                    >
-                                        <dt className="font-medium">
-                                            {field.label}
-                                        </dt>
-                                        <dd className="mt-1 break-words">
-                                            <span className="text-muted-foreground">
-                                                NetVibe:{' '}
-                                            </span>
-                                            {field.current ?? 'Non indicato'}
-                                        </dd>
-                                        <dd className="break-words">
-                                            <span className="text-muted-foreground">
-                                                Snipe-IT:{' '}
-                                            </span>
-                                            {field.external ?? 'Non indicato'}
-                                        </dd>
-                                    </div>
-                                ))}
-                            </dl>
-                        ) : null}
-                    </AlertDescription>
-                </Alert>
+        <Card>
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+                <CardTitle>Snipe-IT</CardTitle>
+                <Badge variant={problem ? 'destructive' : 'secondary'}>
+                    {problem ? 'Da verificare' : 'Collegato'}
+                </Badge>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-5">
+                {source.synced_at ? (
+                    <dl className="flex flex-col gap-1 text-sm">
+                        <dt className="text-muted-foreground">
+                            Ultimo aggiornamento
+                        </dt>
+                        <dd>
+                            <time dateTime={source.synced_at}>
+                                {formatDateTime(source.synced_at)}
+                            </time>
+                        </dd>
+                    </dl>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-3">
+                    <Button asChild variant="outline" size="sm">
+                        <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Apri in Snipe-IT (nuova scheda)"
+                        >
+                            Apri in Snipe-IT
+                            <ExternalLink data-icon="inline-end" />
+                        </a>
+                    </Button>
+                </div>
+                {problem ? (
+                    <Alert>
+                        <TriangleAlert />
+                        <AlertTitle className="line-clamp-none">
+                            Aggiornamento da Snipe-IT da verificare
+                        </AlertTitle>
+                        <AlertDescription className="gap-3 text-foreground">
+                            <p>{problem}</p>
+                            {source.active &&
+                            source.present &&
+                            !source.error &&
+                            differences.length > 0 ? (
+                                <dl className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {differences.map((field) => (
+                                        <div
+                                            key={field.label}
+                                            className="min-w-0 rounded-md bg-muted/50 p-3"
+                                        >
+                                            <dt className="font-medium">
+                                                {field.label}
+                                            </dt>
+                                            <dd className="mt-1 break-words">
+                                                <span className="text-muted-foreground">
+                                                    NetVibe:{' '}
+                                                </span>
+                                                {field.current ??
+                                                    'Non indicato'}
+                                            </dd>
+                                            <dd className="break-words">
+                                                <span className="text-muted-foreground">
+                                                    Snipe-IT:{' '}
+                                                </span>
+                                                {field.external ??
+                                                    'Non indicato'}
+                                            </dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            ) : null}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+            </CardContent>
+            {auth.user.is_superadmin ? (
+                <CardFooter className="border-t pt-6">
+                    <SnipeItDetach company={company} assetId={source.id} />
+                </CardFooter>
             ) : null}
-        </section>
+        </Card>
     );
 }
 
 export function SnipeItDetach({
     company,
     assetId,
-    disabled,
-    onDetached,
 }: {
     company: number;
     assetId: number;
-    disabled: boolean;
-    onDetached: () => void;
 }) {
     const { auth } = usePage().props;
     const [open, setOpen] = useState(false);
@@ -178,21 +213,20 @@ export function SnipeItDetach({
             <DialogTrigger asChild>
                 <Button
                     type="button"
-                    variant="ghost"
-                    disabled={disabled || form.processing}
-                    className="sm:mr-auto"
+                    variant="outline"
+                    disabled={form.processing}
                     aria-label="Scollega da Snipe-IT"
                 >
-                    <SnipeItMark className="size-6" />
-                    Scollega
+                    <Unlink data-icon="inline-start" />
+                    Scollega da Snipe-IT
                 </Button>
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Scollega da Snipe-IT</DialogTitle>
                     <DialogDescription>
-                        Il dispositivo diventa manuale. IP, interfacce,
-                        rack, cablaggi e note restano conservati.
+                        Il dispositivo diventa manuale. IP, interfacce, rack,
+                        cablaggi e note restano conservati.
                     </DialogDescription>
                 </DialogHeader>
                 <Field orientation="horizontal">
@@ -232,7 +266,6 @@ export function SnipeItDetach({
                                 preserveScroll: true,
                                 onSuccess: () => {
                                     setOpen(false);
-                                    onDetached();
                                 },
                             })
                         }

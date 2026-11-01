@@ -14,16 +14,60 @@ use App\Support\MikrotikClient;
 use App\Support\MikrotikSync;
 use App\Support\NetworkExclusions;
 use Closure;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class MikrotikController extends Controller
 {
+    public function setupCommand(Request $request, Company $company, Site $site, Device $device): JsonResponse
+    {
+        abort_unless($device->manufacturer?->isMikrotik(), 404);
+        $data = $request->validate(['port' => ['required', 'integer', 'between:1,65535']], [], ['port' => 'porta']);
+        try {
+            $response = Http::accept('text/plain')->connectTimeout(3)->timeout(5)->withoutRedirecting()
+                ->withOptions(['proxy' => '', 'force_ip_resolve' => 'v4'])->get('https://api.ipify.org');
+            $publicIp = $response->successful() ? trim($response->body()) : '';
+        } catch (ConnectionException) {
+            $publicIp = '';
+        }
+        if (! filter_var($publicIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_GLOBAL_RANGE)
+            || ip2long($publicIp) >= ip2long('224.0.0.0')) {
+            throw ValidationException::withMessages(['setup' => 'Impossibile rilevare l’IPv4 pubblico di NetVibe. Riprova.']);
+        }
+        $username = 'netvibe-rest-api';
+        $password = Str::password(48, symbols: false);
+        $port = (int) $data['port'];
+        $rule = '/ip firewall filter add chain=input action=accept protocol=tcp dst-port='.$port.' src-address='.$publicIp.'/32 comment="NetVibe REST API"';
+        $command = <<<ROS
+        {
+            :if ([:len [/user find where name="$username"]] > 0) do={ :error "Utente $username gia esistente: nessuna modifica eseguita"; };
+            :if ([:len [/user group find where name="$username"]] > 0) do={ :error "Gruppo $username gia esistente: nessuna modifica eseguita"; };
+            /user group add name="$username" policy=read,api,rest-api;
+            /user add name="$username" group="$username" password="$password" address=$publicIp/32 comment="NetVibe REST API";
+            :local firstRule [:pick [/ip firewall filter find where dynamic=no] 0];
+            :if ([:len \$firstRule] > 0) do={
+                $rule place-before=\$firstRule;
+            } else={
+                $rule;
+            };
+            /ip service set [find where name="www-ssl"] disabled=no port=$port;
+        }
+        ROS;
+
+        return response()->json([
+            'username' => $username, 'password' => $password, 'port' => $port,
+            'public_ip' => $publicIp, 'command' => $command,
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
     public function update(MikrotikRequest $request, Company $company, Site $site, Device $device): RedirectResponse
     {
         $data = $request->connectionData();
@@ -34,14 +78,14 @@ class MikrotikController extends Controller
             }
             if ($connection && $connection->server_url !== $data['server_url']) {
                 $device->mikrotikSources()->where('state', 'current')->update(['state' => 'unknown']);
-                $connection->fill(['activated_at' => null, 'source_generation' => null, 'sync_identity' => null, 'sync_status' => 'suspended']);
+                $connection->fill(['activated_at' => null, 'source_generation' => null, 'sync_identity' => null, 'sync_status' => 'suspended', 'sync_log' => null]);
             }
             $connection ??= $device->mikrotikConnection()->make();
             $connection->fill([
                 'server_url' => $data['server_url'], 'username' => $data['username'],
                 'allow_unverified_certificate' => $data['allow_unverified_certificate'],
                 'revision' => (string) Str::uuid(), 'checked_at' => null, 'check_status' => null,
-                'identity' => null, 'analyzed_at' => null, 'analysis' => null,
+                'identity' => null, 'analyzed_at' => null, 'analysis' => null, 'check_log' => null,
             ]);
             if ($password !== null) {
                 $connection->password = $password;
@@ -70,6 +114,9 @@ class MikrotikController extends Controller
             if (! $connection) {
                 throw ValidationException::withMessages(['connection' => 'Salva prima la connessione.']);
             }
+            if ($connection->check_status !== 'ok') {
+                throw ValidationException::withMessages(['connection' => 'Verifica la connessione prima di sincronizzare.']);
+            }
             if (! $connection->activated_at) {
                 $device->mikrotikSources()->where('state', 'current')->update(['state' => 'unknown']);
                 $connection->fill(['activated_at' => now(), 'source_generation' => (string) Str::uuid(), 'sync_identity' => null])->save();
@@ -87,6 +134,9 @@ class MikrotikController extends Controller
         $connection = $this->locked($request, $device, function (Device $device, ?MikrotikConnection $connection) {
             if (! $connection) {
                 throw ValidationException::withMessages(['connection' => 'Salva prima la connessione.']);
+            }
+            if ($connection->check_status !== 'ok') {
+                throw ValidationException::withMessages(['connection' => 'Verifica la connessione prima di sincronizzare.']);
             }
 
             return $connection;
@@ -160,11 +210,11 @@ class MikrotikController extends Controller
             } catch (MikrotikException $exception) {
                 $result = ['status' => $exception->status, 'identity' => null, 'analysis' => null];
             }
-            $this->locked($request, $device, function (Device $device, ?MikrotikConnection $current) use ($connection, $result, $analyze) {
+            $this->locked($request, $device, function (Device $device, ?MikrotikConnection $current) use ($connection, $result, $analyze, $client) {
                 if ($current?->id !== $connection->id) {
                     throw ValidationException::withMessages(['connection' => 'La connessione è cambiata. Ricarica la pagina.']);
                 }
-                $current->fill(['checked_at' => now(), 'check_status' => $result['status'], 'identity' => $result['identity']]);
+                $current->fill(['checked_at' => now(), 'check_status' => $result['status'], 'identity' => $result['identity'], 'check_log' => $client->diagnosticLog()]);
                 if ($analyze && $result['analysis'] !== null) {
                     $current->fill(['analyzed_at' => now(), 'analysis' => $result['analysis']]);
                 }
@@ -207,6 +257,6 @@ class MikrotikController extends Controller
     {
         Inertia::flash('toast', ['type' => $type, 'message' => $message]);
 
-        return to_route('companies.sites.devices.show', [$company, $site, $device, 'tab' => 'mikrotik']);
+        return to_route('companies.sites.devices.show', [$company, $site, $device, 'manage' => 'mikrotik']);
     }
 }

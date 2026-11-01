@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\VlanRequest;
 use App\Models\Company;
+use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\Vlan;
 use App\Support\DeletionImpact;
+use App\Support\MikrotikIpam;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -41,6 +43,7 @@ class VlanController extends Controller
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
             'vlan' => $vlan->only('id', 'tag', 'name'),
+            'mikrotikSources' => MikrotikSource::where('site_id', $site->id)->where('vlan_id', $vlan->id)->where('kind', 'vlan')->with('device.mikrotikConnection')->get()->map->display(),
             'subnets' => $site->subnets()->where('vlan_id', $vlan->id)
                 ->orderBy('network_address')->get(['id', 'cidr', 'name', 'description', 'vlan_id']),
         ]);
@@ -68,6 +71,7 @@ class VlanController extends Controller
             } else {
                 $vlan->subnets()->update(['vlan_id' => null]);
             }
+            DB::table('mikrotik_sources')->where('vlan_id', $vlan->id)->update(['vlan_id' => null]);
             $vlan->delete();
         }, 3);
 
@@ -83,7 +87,8 @@ class VlanController extends Controller
             DB::transaction(function () use ($request, $site, $vlan) {
                 $site = Site::query()->lockForUpdate()->findOrFail($site->id);
                 $record = $vlan ? $site->vlans()->findOrFail($vlan->id) : $site->vlans()->make();
-                $record->fill($request->validated())->save();
+                MikrotikIpam::networkChange($record, $request->validated(), $request->validated('mikrotik_edit_mode'));
+                $record->fill($request->safe()->only(['tag', 'name']))->save();
             });
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['tag' => 'Questo ID VLAN è già presente in questa sede.']);

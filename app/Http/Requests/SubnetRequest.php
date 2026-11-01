@@ -13,6 +13,7 @@ class SubnetRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'],
             'cidr' => ['bail', 'required', 'string', 'max:18', function (string $attribute, mixed $value, Closure $fail) {
                 if (Ipv4Cidr::parse($value) === null) {
                     $fail('Inserisci un CIDR IPv4 valido, ad esempio 192.168.1.0/24.');

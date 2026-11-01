@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 class InterfaceMac
 {
     // All callers hold the company lock, including association and interface writers.
-    public static function synchronize(DeviceInterface $interface, ?string $mac, ?IpAddress $source, ?string $confirmation): ?string
+    public static function synchronize(DeviceInterface $interface, ?string $mac, ?IpAddress $source, ?string $confirmation, ?string $mikrotikMode = null): ?string
     {
         $ips = $interface->ipAddresses()->orderBy('id')->lockForUpdate()->get();
         $sameInterface = $source?->exists && $source->device_interface_id === $interface->id;
@@ -39,6 +39,15 @@ class InterfaceMac
                     'mac_confirmation' => ($confirmation ? 'I dati sono cambiati. Verifica di nuovo. ' : '').$message,
                     'mac_confirmation_token' => $token,
                 ]);
+            }
+        }
+        foreach ($ips as $ip) {
+            if ($ip->id === $source?->id) {
+                continue;
+            }
+            MikrotikIpam::manualChange($ip, ['mac_address' => $mac], $mikrotikMode);
+            if ($ip->isDirty()) {
+                $ip->save();
             }
         }
         $interface->update(['mac_address' => $mac]);

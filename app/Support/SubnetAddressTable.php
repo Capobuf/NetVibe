@@ -2,8 +2,10 @@
 
 namespace App\Support;
 
+use App\Models\MikrotikSource;
 use App\Models\Subnet;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class SubnetAddressTable
 {
@@ -12,14 +14,17 @@ class SubnetAddressTable
         [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
         $matcher = new Ipv4Search($search);
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+        $sourceMatches = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+            ->whereRaw("CAST(data AS CHAR) LIKE ? ESCAPE '!'", [$pattern])->select('address')->distinct();
         $matching = $subnet->ipAddresses()->whereBetween('address', [$first, $last])
-            ->when($search !== '', function ($query) use ($pattern) {
-                $query->where(function ($query) use ($pattern) {
+            ->when($search !== '', function ($query) use ($pattern, $sourceMatches) {
+                $query->where(function ($query) use ($pattern, $sourceMatches) {
                     $query->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
+                        ->orWhereIn('address', $sourceMatches)
                         ->orWhereHas('status', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]))
                         ->orWhereHas('tags', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
                 });
@@ -40,7 +45,21 @@ class SubnetAddressTable
             $matching->withMin('tags', 'name');
         }
         $populated = $textSort ? (clone $matching) : null;
-        if ($populated !== null) {
+        $sourceSort = in_array($sort, ['hostname', 'mac_address'], true);
+        if ($sourceSort) {
+            $field = $sort === 'hostname' ? 'hostname_observed' : 'mac';
+            $observed = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+                ->selectRaw("address AS source_address, MIN(CASE WHEN JSON_TYPE(data->'$.{$field}') = 'STRING' THEN NULLIF(TRIM(data->>'$.{$field}'), '') END) AS sort_value")
+                ->groupBy('address');
+            $documented = (clone $matching)->leftJoinSub($observed, 'observed', fn ($join) => $join->on('ip_addresses.address', '=', 'observed.source_address'))
+                ->select('ip_addresses.address')->selectRaw("COALESCE(NULLIF(ip_addresses.{$sort}, ''), observed.sort_value) AS sort_value");
+            $external = (clone $observed)->whereNotIn('address', $subnet->ipAddresses()->select('address'))
+                ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
+                    ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)));
+            // Only addresses with metadata join this finite group; empty IPv4 ranges stay virtual.
+            $populated = DB::query()->fromSub($documented->toBase()->unionAll($external->toBase()), 'entries')->whereNotNull('sort_value');
+            $sortColumn = 'sort_value';
+        } elseif ($populated !== null) {
             $relatedSort ? $populated->has($sort) : $populated->whereNotNull($sort);
         }
         $populatedCount = $populated?->count() ?? 0;
@@ -54,8 +73,18 @@ class SubnetAddressTable
         }
         if ($search !== '') {
             $extra = (clone $matching)->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
-                ->when($textSort, fn ($query) => $relatedSort ? $query->doesntHave($sort) : $query->whereNull($sort));
+                ->when($sourceSort, fn ($query) => $query->whereNotIn('address', (clone $populated)->select('address')))
+                ->when($textSort && ! $sourceSort, fn ($query) => $relatedSort ? $query->doesntHave($sort) : $query->whereNull($sort));
             foreach ($extra->pluck('address') as $address) {
+                $exceptions[$address] = true;
+            }
+        }
+        if ($search !== '') {
+            $populatedAddresses = $populated ? (clone $populated)->pluck('address')->all() : [];
+            $external = (clone $sourceMatches)
+                ->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
+                ->whereNotIn('address', $populatedAddresses)->distinct()->pluck('address');
+            foreach ($external as $address) {
                 $exceptions[$address] = true;
             }
         }
@@ -109,6 +138,8 @@ class SubnetAddressTable
 
             return [
                 'id' => $record?->id,
+                'mikrotik_edit_mode' => $record?->mikrotik_edit_mode,
+                'mikrotik_matched_at' => $record?->mikrotik_matched_at,
                 'assignment_label' => $record?->assignment_label,
                 'ip' => long2ip($address),
                 'device_id' => $record?->device_id, 'device_interface_id' => $record?->device_interface_id,

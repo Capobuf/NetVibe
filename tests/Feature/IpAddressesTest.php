@@ -35,7 +35,7 @@ class IpAddressesTest extends TestCase
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page
             ->where('firstProposableIp', '10.0.0.2')
-            ->where('addressCounts', ['documented' => 1, 'excluded' => 0, 'proposable' => 253])
+            ->where('addressCounts', ['documented' => 1, 'excluded' => 0, 'external' => 0, 'proposable' => 253])
             ->where('ipAddresses.data.0.status.name', 'Libero')->has('ipAddresses.data.0.tags', 2)
             ->has('tags', 2)->where('ipAddresses.data.0.tags.0.color', 'red'));
         $this->get($show.'?search=Critico&sort=tags&direction=desc')->assertInertia(fn (Assert $page) => $page
@@ -92,7 +92,7 @@ class IpAddressesTest extends TestCase
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page
             ->where('query.sort', null)->where('query.direction', 'asc')
-            ->where('addressCounts', ['documented' => 52, 'excluded' => 8, 'proposable' => 194])
+            ->where('addressCounts', ['documented' => 52, 'excluded' => 8, 'external' => 0, 'proposable' => 194])
             ->where('ipAddresses.total', 254)->where('ipAddresses.data.0.ip', '10.0.0.1')
             ->where('ipAddresses.data.0.id', null)->where('ipAddresses.data.1.ip', '10.0.0.2'));
         $this->assertDatabaseCount('ip_addresses', 53);

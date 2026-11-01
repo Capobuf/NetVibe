@@ -53,6 +53,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::put('/', [MikrotikController::class, 'update'])->name('update');
                 Route::delete('/', [MikrotikController::class, 'destroy'])->name('destroy');
                 Route::post('verify', [MikrotikController::class, 'verify'])->name('verify');
+                Route::post('activate', [MikrotikController::class, 'activate'])->name('activate');
+                Route::post('sync', [MikrotikController::class, 'sync'])->name('sync');
+                Route::post('associate', [MikrotikController::class, 'associate'])->name('associate');
                 Route::post('analyze', [MikrotikController::class, 'analyze'])->name('analyze');
             });
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);

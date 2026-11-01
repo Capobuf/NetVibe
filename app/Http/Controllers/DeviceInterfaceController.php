@@ -45,18 +45,18 @@ class DeviceInterfaceController extends Controller
             'name' => [$interface?->connector_id ? 'nullable' : 'required', 'string', 'max:255'],
             'kind' => [$interface?->connector_id ? 'exclude' : 'required', 'in:physical,logical'],
             'mac_address' => ['nullable', 'string', 'mac_address'],
-            'mac_confirmation_token' => ['nullable', 'string', 'size:64'],
+            'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'], 'mac_confirmation_token' => ['nullable', 'string', 'size:64'],
         ], [], ['name' => 'nome', 'kind' => 'tipo', 'mac_address' => 'MAC']);
         DB::transaction(function () use ($company, $device, $interface, $data) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $device = Device::query()->findOrFail($device->id);
             if ($interface) {
                 $record = $device->interfaces()->lockForUpdate()->findOrFail($interface->id);
-                InterfaceMac::synchronize($record, $data['mac_address'] ?? null, null, $data['mac_confirmation_token'] ?? null);
-                unset($data['mac_confirmation_token']);
+                InterfaceMac::synchronize($record, $data['mac_address'] ?? null, null, $data['mac_confirmation_token'] ?? null, $data['mikrotik_edit_mode'] ?? null);
+                unset($data['mac_confirmation_token'], $data['mikrotik_edit_mode']);
                 $record->update($data);
             } else {
-                unset($data['mac_confirmation_token']);
+                unset($data['mac_confirmation_token'], $data['mikrotik_edit_mode']);
                 $device->interfaces()->create($data);
             }
         }, 3);

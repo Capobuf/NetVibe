@@ -32,6 +32,7 @@ class Subnet extends Model
     public function firstProposableIp(): ?string
     {
         $blocked = $this->ipAddresses()->selectRaw('address AS start_address, address AS end_address')->toBase()
+            ->unionAll(MikrotikSource::blocking($this->site_id)->selectRaw('address AS start_address, address AS end_address')->toBase())
             ->unionAll($this->excludedRanges()->select('start_address', 'end_address')->toBase())
             ->orderBy('start_address')->cursor()
             ->map(fn ($range) => [(int) $range->start_address, (int) $range->end_address]);
@@ -40,7 +41,7 @@ class Subnet extends Model
         return $address === null ? null : long2ip($address);
     }
 
-    /** @return array{documented: int, excluded: int, proposable: int} */
+    /** @return array{documented: int, excluded: int, external: int, proposable: int} */
     public function addressCounts(): array
     {
         [$first, $last] = Ipv4Ranges::usableBounds($this->network_address, $this->broadcast_address);
@@ -58,7 +59,14 @@ class Subnet extends Model
             })->count();
         $excluded -= $documentedExcluded;
 
-        return ['documented' => $documented, 'excluded' => $excluded, 'proposable' => $last - $first + 1 - $documented - $excluded];
+        $external = MikrotikSource::blocking($this->site_id)->whereBetween('address', [$first, $last])
+            ->whereNotIn('address', $this->ipAddresses()->select('address'))
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')->from('excluded_ranges')->where('subnet_id', $this->id)
+                    ->whereColumn('start_address', '<=', 'mikrotik_sources.address')->whereColumn('end_address', '>=', 'mikrotik_sources.address');
+            })->distinct()->count('address');
+
+        return ['documented' => $documented, 'excluded' => $excluded, 'external' => $external, 'proposable' => $last - $first + 1 - $documented - $excluded - $external];
     }
 
     /** @return HasMany<IpAddress, $this> */

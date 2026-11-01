@@ -161,6 +161,7 @@ class DeletionImpact
 
     public static function deleteSubnets(array $ids): void
     {
+        DB::table('mikrotik_sources')->whereIn('subnet_id', $ids)->update(['subnet_id' => null, 'ip_address_id' => null]);
         DB::table('ip_addresses')->whereIn('subnet_id', $ids)->delete();
         DB::table('excluded_ranges')->whereIn('subnet_id', $ids)->delete();
         DB::table('subnet_summary_entries')->whereIn('subnet_id', $ids)->delete();

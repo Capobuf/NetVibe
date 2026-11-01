@@ -10,7 +10,8 @@ import {
 const subnetChartConfig = {
     documented: { label: 'Documentati', color: 'var(--chart-2)' },
     excluded: { label: 'Riservati', color: 'var(--chart-5)' },
-    proposable: { label: 'Liberi', color: 'var(--muted-foreground)' },
+    external: { label: 'Fonti esterne', color: 'var(--chart-3)' },
+    proposable: { label: 'Proponibili', color: 'var(--muted-foreground)' },
 } satisfies ChartConfig;
 
 const reducedMotion =
@@ -33,7 +34,11 @@ export default function SubnetOccupancyChart({
         () => reducedMotion?.matches ?? true,
         () => true,
     );
-    const total = counts.documented + counts.excluded + counts.proposable;
+    const total =
+        counts.documented +
+        counts.excluded +
+        counts.external +
+        counts.proposable;
     const data = (
         Object.keys(subnetChartConfig) as Array<keyof typeof subnetChartConfig>
     ).map((key) => ({
@@ -56,7 +61,7 @@ export default function SubnetOccupancyChart({
                     startAngle={90}
                     endAngle={-270}
                     accessibilityLayer
-                    aria-label={`Occupazione subnet: ${counts.documented.toLocaleString('it-IT')} documentati, ${counts.excluded.toLocaleString('it-IT')} riservati, ${counts.proposable.toLocaleString('it-IT')} liberi su ${total.toLocaleString('it-IT')} IP utilizzabili`}
+                    aria-label={`Occupazione subnet: ${counts.documented.toLocaleString('it-IT')} documentati, ${counts.excluded.toLocaleString('it-IT')} riservati, ${counts.external.toLocaleString('it-IT')} nelle fonti esterne, ${counts.proposable.toLocaleString('it-IT')} proponibili su ${total.toLocaleString('it-IT')} IP utilizzabili`}
                 >
                     <ChartTooltip
                         cursor={false}

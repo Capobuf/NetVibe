@@ -66,6 +66,8 @@ class DeviceController extends Controller
                 'model' => $asset->externalModel?->snapshot,
                 'model_problem' => $asset->externalModel?->problem,
             ] : null,
+            'mikrotikSources' => $request->user()->is_superadmin
+                ? $device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()->map->display() : [],
             'initialInterfaceId' => $selectedInterface?->id,
             'assetUrls' => $device->model?->assetUrls() ?? [],
             'manufacturers' => $this->catalog(),

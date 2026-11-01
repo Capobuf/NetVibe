@@ -1,3 +1,7 @@
+import {
+    MikrotikIndicator,
+    type MikrotikSource,
+} from '@/components/networks/mikrotik-source';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowLeft, ArrowRight, Network, Search } from 'lucide-react';
 import { useState } from 'react';
@@ -43,9 +47,21 @@ import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
 
 type SubnetColumn = 'cidr' | 'name' | 'description';
-type Props = { company: Company; site: Site; vlan: Vlan; subnets: Subnet[] };
+type Props = {
+    company: Company;
+    site: Site;
+    vlan: Vlan;
+    subnets: Subnet[];
+    mikrotikSources: MikrotikSource[];
+};
 
-export default function VlanShow({ company, site, vlan, subnets }: Props) {
+export default function VlanShow({
+    company,
+    site,
+    vlan,
+    subnets,
+    mikrotikSources,
+}: Props) {
     const { companyNavigation } = usePage().props;
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<SubnetColumn>>(null);
@@ -80,6 +96,7 @@ export default function VlanShow({ company, site, vlan, subnets }: Props) {
                     <div className="flex min-w-0 flex-col gap-2">
                         <h1 className="text-2xl font-semibold tracking-tight text-balance">
                             VLAN {vlan.tag}
+                            <MikrotikIndicator sources={mikrotikSources} />
                         </h1>
                         {vlan.name ? (
                             <p className="text-lg break-words">{vlan.name}</p>

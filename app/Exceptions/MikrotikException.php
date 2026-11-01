@@ -15,6 +15,8 @@ class MikrotikException extends RuntimeException implements ShouldntReport
     public static function messageFor(string $status): string
     {
         return match ($status) {
+            'source_changed' => 'Identità della sorgente cambiata. Verifica il dispositivo e riconferma la sincronizzazione.',
+            'suspended' => 'Endpoint cambiato. Verifica e riconferma la sorgente prima di sincronizzare.',
             'ok' => 'Connessione verificata.',
             'unauthorized' => 'Credenziali non valide (401). Verifica username e password.',
             'forbidden' => 'Permessi insufficienti (403). Verifica le policy read, api e rest-api dell’utente RouterOS.',

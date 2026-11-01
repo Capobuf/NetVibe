@@ -15,6 +15,8 @@ export type Subnet = {
 };
 
 export type IpAddress = {
+    mikrotik_edit_mode?: 'planned' | 'manual' | null;
+    mikrotik_matched_at?: string | null;
     id: number;
     ip: string;
     description: string | null;

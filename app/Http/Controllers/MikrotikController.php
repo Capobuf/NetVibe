@@ -11,6 +11,7 @@ use App\Models\Manufacturer;
 use App\Models\MikrotikConnection;
 use App\Models\Site;
 use App\Support\MikrotikClient;
+use App\Support\MikrotikSync;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +30,10 @@ class MikrotikController extends Controller
             $password = $data['password'] ?? null;
             if ($password === null && (! $connection || $connection->server_url !== $data['server_url'] || $connection->username !== $data['username'])) {
                 throw ValidationException::withMessages(['password' => 'Inserisci la password per questo indirizzo e username.']);
+            }
+            if ($connection && $connection->server_url !== $data['server_url']) {
+                $device->mikrotikSources()->where('state', 'current')->update(['state' => 'unknown']);
+                $connection->fill(['activated_at' => null, 'source_generation' => null, 'sync_identity' => null, 'sync_status' => 'suspended']);
             }
             $connection ??= $device->mikrotikConnection()->make();
             $connection->fill([
@@ -49,9 +54,77 @@ class MikrotikController extends Controller
     public function destroy(Request $request, Company $company, Site $site, Device $device): RedirectResponse
     {
         $request->validate(['confirmed' => ['accepted']]);
-        $this->locked($request, $device, fn (Device $device, ?MikrotikConnection $connection) => $connection?->delete());
+        $this->locked($request, $device, function (Device $device, ?MikrotikConnection $connection) {
+            $device->mikrotikSources()->where('state', 'current')->update(['state' => 'unknown']);
+            $connection?->delete();
+        });
 
         return $this->saved($company, $site, $device, 'Connessione rimossa.');
+    }
+
+    public function activate(Request $request, Company $company, Site $site, Device $device, MikrotikSync $sync): RedirectResponse
+    {
+        $request->validate(['confirmed' => ['accepted']]);
+        $connection = $this->locked($request, $device, function (Device $device, ?MikrotikConnection $connection) {
+            if (! $connection) {
+                throw ValidationException::withMessages(['connection' => 'Salva prima la connessione.']);
+            }
+            if (! $connection->activated_at) {
+                $device->mikrotikSources()->where('state', 'current')->update(['state' => 'unknown']);
+                $connection->fill(['activated_at' => now(), 'source_generation' => (string) Str::uuid(), 'sync_identity' => null])->save();
+            }
+
+            return $connection;
+        });
+        $sync->refresh($connection);
+
+        return $this->saved($company, $site, $device, 'Sincronizzazione attivata e prima lettura completata.');
+    }
+
+    public function sync(Request $request, Company $company, Site $site, Device $device, MikrotikSync $sync): RedirectResponse
+    {
+        $connection = $this->locked($request, $device, function (Device $device, ?MikrotikConnection $connection) {
+            if (! $connection) {
+                throw ValidationException::withMessages(['connection' => 'Salva prima la connessione.']);
+            }
+
+            return $connection;
+        });
+        $sync->refresh($connection);
+
+        return $this->saved($company, $site, $device, 'Sincronizzazione completata.');
+    }
+
+    public function associate(Request $request, Company $company, Site $site, Device $device): RedirectResponse
+    {
+        $data = $request->validate(['source_id' => ['required', 'integer'], 'confirmed' => ['accepted']]);
+        DB::transaction(function () use ($request, $company, $site, $device, $data) {
+            Company::query()->lockForUpdate()->findOrFail($company->id);
+            $site = Site::query()->lockForUpdate()->findOrFail($site->id);
+            $this->locked($request, $device, function (Device $device, ?MikrotikConnection $connection) use ($site, $data) {
+                if (! $connection?->activated_at || $connection->sync_status !== 'ok') {
+                    throw ValidationException::withMessages(['connection' => 'Completa una sincronizzazione prima di confermare l’associazione.']);
+                }
+                $source = $device->mikrotikSources()->where('generation', $connection->source_generation)->where('state', 'current')->lockForUpdate()->findOrFail($data['source_id']);
+                if ($source->kind === 'vlan' && $source->problem === 'VLAN riportata da un’altra sorgente: conferma che il contesto L2 sia lo stesso.') {
+                    $vlan = $site->vlans()->where('tag', $source->data['tag'])->firstOrFail();
+                    $source->fill(['vlan_id' => $vlan->id, 'linked' => true, 'confirmed' => true, 'problem' => null])->save();
+                } elseif ($source->kind === 'subnet' && $source->subnet_id && $source->data['tag'] !== null
+                    && $source->problem === 'VLAN documentata diversa dalla fonte. Verifica l’associazione della subnet.') {
+                    $subnet = $site->subnets()->lockForUpdate()->findOrFail($source->subnet_id);
+                    $vlan = $site->vlans()->where('tag', $source->data['tag'])->firstOrFail();
+                    if ($subnet->vlan_id !== null || $subnet->cidr !== $source->data['cidr']) {
+                        throw ValidationException::withMessages(['connection' => 'La subnet ha già una VLAN o il CIDR è cambiato. Verifica il dato documentato.']);
+                    }
+                    $subnet->update(['vlan_id' => $vlan->id]);
+                    $source->fill(['vlan_id' => $vlan->id, 'linked' => true, 'confirmed' => true, 'problem' => null])->save();
+                } else {
+                    throw ValidationException::withMessages(['connection' => 'Questo caso richiede una verifica della configurazione o del record documentato.']);
+                }
+            });
+        }, 3);
+
+        return $this->saved($company, $site, $device, 'Associazione confermata. Sincronizza per aggiornare gli elementi dipendenti.');
     }
 
     public function verify(Request $request, Company $company, Site $site, Device $device, MikrotikClient $client): RedirectResponse

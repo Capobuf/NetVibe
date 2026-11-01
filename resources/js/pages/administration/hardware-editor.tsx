@@ -26,8 +26,10 @@ import { EditorLayers } from '@/components/hardware-editor/editor-layers';
 import { EditorInspector } from '@/components/hardware-editor/editor-inspector';
 import { EditorToolbar } from '@/components/hardware-editor/editor-toolbar';
 import { NumberingPanel } from '@/components/hardware-editor/numbering-panel';
+import { MikrotikPortsPanel } from '@/components/hardware-editor/mikrotik-ports-panel';
 import { useEditor } from '@/components/hardware-editor/use-editor';
 import { IconButton } from '@/components/icon-button';
+import { MikrotikMark } from '@/components/mikrotik-mark';
 import { ErrorNotification } from '@/components/error-notification';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -66,6 +69,8 @@ export default function HardwareEditor({
 }) {
     const { auth } = usePage().props;
     const e = useEditor(auth.user.id, catalogModel);
+    const mikrotik =
+        catalogModel?.manufacturer.name.trim().toLowerCase() === 'mikrotik';
     const currentDocument = useRef(e.doc);
     currentDocument.current = e.doc;
     const exitRoute = catalogModel
@@ -77,6 +82,7 @@ export default function HardwareEditor({
     const [tool, setTool] = useState('select');
     const [snap, setSnap] = useState(true);
     const [inspector, setInspector] = useState(true);
+    const [inspectorTab, setInspectorTab] = useState('properties');
     const [layers, setLayers] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [fitKey, setFitKey] = useState(0);
@@ -167,6 +173,7 @@ export default function HardwareEditor({
         afterSave();
     }
     function openBlock() {
+        setInspectorTab('properties');
         setBlock({
             ...(canvas.current?.center() ?? {
                 x: e.doc.shell.x + e.doc.shell.width / 2,
@@ -201,7 +208,10 @@ export default function HardwareEditor({
         setLayers(open);
         if (open && window.innerWidth < 1280) setInspector(false);
     }
-    const properties = () => toggleInspector(true);
+    const properties = () => {
+        setInspectorTab('properties');
+        toggleInspector(true);
+    };
     const image = () => {
         file.current?.click();
     };
@@ -223,10 +233,12 @@ export default function HardwareEditor({
         setTool('select');
     }
     function openNumbering(mode: 'quick' | 'click') {
+        const prefix = e.doc.numbering.prefix;
+        setInspectorTab('properties');
         setNumberOptions({
             ...numberOptions,
-            start: e.suggestedNumber(e.doc.numbering.prefix),
-            prefix: e.doc.numbering.prefix,
+            start: e.suggestedNumber(prefix),
+            prefix,
         });
         setNumberMode(mode);
         toggleInspector(true);
@@ -474,6 +486,47 @@ export default function HardwareEditor({
         window.addEventListener('keydown', key);
         return () => window.removeEventListener('keydown', key);
     });
+
+    const inspectorPanel = e.loading ? (
+        <Skeleton className="m-4 h-64" />
+    ) : block ? (
+        <BlockPanel
+            options={block}
+            onChange={setBlock}
+            onInsert={insertBlock}
+            onClose={() => setBlock(null)}
+        />
+    ) : numberMode ? (
+        <NumberingPanel
+            editor={e}
+            mode={numberMode}
+            options={numberOptions}
+            setOptions={setNumberOptions}
+            conflict={conflict}
+            onApply={applyNumbering}
+            onClose={closeNumbering}
+            onFinish={() => void finishNumbering()}
+        />
+    ) : (
+        <fieldset
+            disabled={!!e.crop}
+            className="h-full min-w-0 disabled:opacity-50"
+        >
+            <EditorInspector
+                key={`${e.selection.kind}-${e.selected.map((p) => p.id).join(',')}`}
+                editor={e}
+                onImage={image}
+                onClose={() => setInspector(false)}
+            />
+        </fieldset>
+    );
+    const inspectorTabsDisabled =
+        e.loading ||
+        e.saving ||
+        !!e.session ||
+        !!block ||
+        !!e.crop ||
+        !!numberMode;
 
     return (
         <TooltipProvider delayDuration={700} skipDelayDuration={0}>
@@ -809,40 +862,52 @@ export default function HardwareEditor({
                     {inspector && (
                         <aside
                             aria-label="Proprietà del pannello"
-                            className="absolute inset-y-0 right-0 w-72 max-w-[85%] border-l bg-background shadow-lg lg:relative lg:max-w-none lg:shrink-0 lg:shadow-none"
+                            className={cn(
+                                'absolute inset-y-0 right-0 max-w-[95%] border-l bg-background shadow-lg lg:relative lg:max-w-none lg:shrink-0 lg:shadow-none',
+                                mikrotik && inspectorTab === 'ports' ? 'w-96' : 'w-72',
+                            )}
                         >
-                            {e.loading ? (
-                                <Skeleton className="m-4 h-64" />
-                            ) : block ? (
-                                <BlockPanel
-                                    options={block}
-                                    onChange={setBlock}
-                                    onInsert={insertBlock}
-                                    onClose={() => setBlock(null)}
-                                />
-                            ) : numberMode ? (
-                                <NumberingPanel
-                                    editor={e}
-                                    mode={numberMode}
-                                    options={numberOptions}
-                                    setOptions={setNumberOptions}
-                                    conflict={conflict}
-                                    onApply={applyNumbering}
-                                    onClose={closeNumbering}
-                                    onFinish={() => void finishNumbering()}
-                                />
-                            ) : (
-                                <fieldset
-                                    disabled={!!e.crop}
-                                    className="h-full min-w-0 disabled:opacity-50"
+                            {mikrotik ? (
+                                <Tabs
+                                    value={inspectorTab}
+                                    onValueChange={setInspectorTab}
+                                    className="h-full min-h-0 gap-0"
                                 >
-                                    <EditorInspector
-                                        key={`${e.selection.kind}-${e.selected.map((p) => p.id).join(',')}`}
-                                        editor={e}
-                                        onImage={image}
-                                        onClose={() => setInspector(false)}
-                                    />
-                                </fieldset>
+                                    <TabsList
+                                        className="m-3 self-stretch"
+                                        aria-label="Pannello modello"
+                                    >
+                                        <TabsTrigger
+                                            value="properties"
+                                            disabled={inspectorTabsDisabled}
+                                        >
+                                            Proprietà
+                                        </TabsTrigger>
+                                        <TabsTrigger
+                                            value="ports"
+                                            disabled={inspectorTabsDisabled}
+                                        >
+                                            <MikrotikMark />
+                                            Porte
+                                        </TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent
+                                        value="properties"
+                                        className="min-h-0"
+                                    >
+                                        {inspectorPanel}
+                                    </TabsContent>
+                                    <TabsContent
+                                        value="ports"
+                                        className="min-h-0"
+                                    >
+                                        {catalogModel && (
+                                            <MikrotikPortsPanel editor={e} model={catalogModel} />
+                                        )}
+                                    </TabsContent>
+                                </Tabs>
+                            ) : (
+                                inspectorPanel
                             )}
                         </aside>
                     )}

@@ -14,6 +14,10 @@ class DeviceAssignment
         return <<<'SQL'
             (SELECT CONCAT(devices.name, IF(device_interfaces.id IS NULL, '', CONCAT('@',
                 COALESCE(NULLIF(device_interfaces.name, ''),
+                    (SELECT JSON_UNQUOTE(JSON_EXTRACT(mikrotik_sources.data, '$.name')) FROM mikrotik_sources
+                        WHERE mikrotik_sources.device_interface_id = device_interfaces.id
+                        AND mikrotik_sources.device_id = devices.id AND mikrotik_sources.kind = 'interface'
+                        AND mikrotik_sources.problem IS NULL LIMIT 1),
                     (SELECT NULLIF(port.label, '') FROM JSON_TABLE(COALESCE(device_models.panel, JSON_OBJECT()),
                         '$.faces.*.ports[*]' COLUMNS (id VARCHAR(64) PATH '$.id', label VARCHAR(255) PATH '$.label')) AS port
                         WHERE port.id = device_interfaces.connector_id LIMIT 1),

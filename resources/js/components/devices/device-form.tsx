@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import InputError from '@/components/input-error';
 import { store, update } from '@/routes/companies/sites/devices';
 import { store as storeModel } from '@/routes/manufacturers/models';
@@ -170,20 +169,6 @@ export function DeviceForm({
                                     aria-invalid={!!errors.asset_tag}
                                 />
                                 <InputError message={errors.asset_tag} />
-                            </Field>
-                            <Field data-invalid={!!errors.notes}>
-                                <FieldLabel htmlFor="device-notes">
-                                    Note tecniche
-                                </FieldLabel>
-                                <Textarea
-                                    id="device-notes"
-                                    name="notes"
-                                    defaultValue={device?.notes ?? ''}
-                                    maxLength={10000}
-                                    disabled={processing}
-                                    aria-invalid={!!errors.notes}
-                                />
-                                <InputError message={errors.notes} />
                             </Field>
                             <DialogFooter>
                                 <DialogClose asChild>

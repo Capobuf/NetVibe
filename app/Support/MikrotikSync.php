@@ -124,10 +124,69 @@ class MikrotikSync
         }
         $device->mikrotikSources()->where('generation', $connection->source_generation)
             ->whereNotIn('id', array_map(fn ($source) => $source->id, $sources))->update(['state' => 'missing']);
+        $associated += $this->associateInterfaces($device, $sources);
         MikrotikIpam::recognizeExpected($site->id, $device->id);
 
         return ['created' => $created, 'associated' => $associated, 'updated' => $updated, 'read' => count($sources),
             'problems' => count(array_filter($sources, fn ($source) => $source->problem !== null && ! $exclusions->target($source)))];
+    }
+
+    // The caller holds the device lock in the model-save transaction.
+    public function applySavedInterfaceMap(Device $device): void
+    {
+        $connection = $device->mikrotikConnection()->lockForUpdate()->first();
+        if (! $connection?->activated_at || $connection->sync_status !== 'ok' || ! $connection->source_generation) {
+            return;
+        }
+        $sources = $device->mikrotikSources()->where('kind', 'interface')
+            ->where('generation', $connection->source_generation)->where('state', 'current')
+            ->lockForUpdate()->get()->all();
+        $this->associateInterfaces($device, $sources);
+    }
+
+    private function associateInterfaces(Device $device, array $sources): int
+    {
+        $ports = collect($device->model?->connectors() ?? [])->keyBy('id');
+        if ($ports->isEmpty()) {
+            return 0;
+        }
+        $physical = collect($sources)->where('kind', 'interface');
+        $matches = MikrotikPortMap::resolve($ports->values()->all(), $physical->pluck('data.default_name')->filter()->all());
+        $interfaces = $device->interfaces()->setEagerLoads([])->where('kind', 'physical')->lockForUpdate()->get()->keyBy('id');
+        foreach ($physical as $source) {
+            $interface = $interfaces->get($source->device_interface_id);
+            $port = $interface ? $ports->get($interface->connector_id) : null;
+            if (! $source->interface_from_model || ! $port || $source->problem) {
+                continue;
+            }
+            // Apply model corrections only to model-managed links; retain observations on missing/ambiguous reads.
+            $explicit = array_key_exists('mikrotikName', $port);
+            $wanted = $explicit ? $port['mikrotikName'] : ($matches[$port['id']] ?? null);
+            $target = array_search($source->data['default_name'], $matches, true);
+            if ((($explicit || $wanted !== null) && $wanted !== $source->data['default_name'])
+                || ($target !== false && $target !== $port['id'])) {
+                $source->device_interface_id = null;
+                $source->interface_from_model = false;
+                $source->save();
+            }
+        }
+        $available = $device->interfaces()->setEagerLoads([])->where('kind', 'physical')
+            ->whereDoesntHave('mikrotikSource')->get()->keyBy('connector_id');
+        $byName = $physical->groupBy(fn ($source) => $source->data['default_name'] ?? '');
+        $associated = 0;
+        foreach ($matches as $connectorId => $name) {
+            $source = $byName[$name]->first();
+            $interface = $available->get($connectorId);
+            if (! $interface || $source->problem || $source->device_interface_id) {
+                continue;
+            }
+            $source->device_interface_id = $interface->id;
+            $source->interface_from_model = true;
+            $source->save();
+            $associated++;
+        }
+
+        return $associated;
     }
 
     private function associate(Site $site, Device $device, MikrotikSource $source, array $sources): array

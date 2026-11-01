@@ -56,6 +56,17 @@ class MikrotikSnapshot
         $this->unverifiedSwitch = ! str_starts_with($board, 'RB5009')
             && count(array_filter($tables['interface/ethernet'], fn ($row) => ! empty($row['switch']))) > 0;
         $objects = [];
+        foreach ($tables['interface/ethernet'] as $row) {
+            if (empty($row['name']) || mb_strlen($row['name']) > 255
+                || (isset($row['default-name']) && (! is_string($row['default-name']) || mb_strlen($row['default-name']) > 255))) {
+                throw new MikrotikException('format');
+            }
+            $objects[] = $this->object('interface', 'interface/ethernet', $row,
+                ['default_name' => $row['default-name'] ?? null], [
+                    'name' => $row['name'], 'default_name' => $row['default-name'] ?? null,
+                    'mac_address' => self::mac($row['mac-address'] ?? null),
+                ], empty($row['.id']) || empty($row['default-name']) ? 'Identità della porta MikroTik incompleta.' : null);
+        }
         foreach ($this->vlans as $name => $row) {
             $tag = $this->tag($row['vlan-id']);
             $context = $this->context($row['interface']);

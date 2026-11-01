@@ -55,6 +55,10 @@ class DeviceController extends Controller
         return Inertia::render('devices/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'device' => $device,
+            'mikrotikInterfaces' => $device->mikrotikSources()->where('kind', 'interface')
+                ->where('generation', $device->mikrotikConnection()->value('source_generation'))
+                ->where('state', 'current')->whereNull('problem')->with('device.mikrotikConnection')->get()
+                ->map(fn ($source) => $source->interfaceDetails()),
             'initialTab' => $options['tab'] ?? 'interfaces',
             'isMikrotik' => $device->manufacturer->isMikrotik(),
             'mikrotik' => $request->user()->is_superadmin && $device->manufacturer->isMikrotik()

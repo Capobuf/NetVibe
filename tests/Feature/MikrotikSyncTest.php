@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\Device;
+use App\Models\DeviceModel;
 use App\Models\Manufacturer;
 use App\Models\MikrotikSource;
 use App\Models\Subnet;
@@ -358,6 +359,209 @@ class MikrotikSyncTest extends TestCase
         $this->actingAs(User::factory()->create(['is_superadmin' => false]))
             ->put(route('companies.sites.subnets.exclusion.update', [$other->company, $other, $subnet]), ['excluded' => true])->assertForbidden();
         $this->assertNull($subnet->fresh()->excluded_at);
+    }
+
+    public function test_physical_interface_mapping_tracks_router_values_without_overwriting_manual_data(): void
+    {
+        $tables = $this->tables();
+        $tables['interface/ethernet'][0]['mac-address'] = '02:00:00:00:00:01';
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $interface = $this->device->interfaces()->create(['connector_id' => 'physical-port', 'kind' => 'physical']);
+        $route = [$this->device->site->company, $this->device->site, $this->device, $interface];
+        $url = route('companies.sites.devices.interfaces.update', $route);
+        $payload = ['name' => null, 'mac_address' => null, 'mikrotik_source_id' => $source->id];
+        $this->assertNull($source->device_interface_id);
+
+        $this->patch($url, $payload)->assertSessionHasNoErrors();
+        $this->getJson(route('companies.sites.devices.interfaces.show', $route))
+            ->assertOk()->assertJsonPath('interface.mikrotik.name', 'ether1')
+            ->assertJsonPath('interface.mikrotik.mac_address', '02:00:00:00:00:01')
+            ->assertJsonMissingPath('interface.mikrotik_source')
+            ->assertDontSee('synthetic-secret');
+        $this->patch($url, [...$payload, 'name' => 'Manual alias', 'mac_address' => '02:00:00:00:00:99'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame($interface->id, $source->fresh()->device_interface_id);
+
+        $tables['interface/ethernet'][0]['name'] = 'uplink';
+        $tables['interface'][0]['name'] = 'uplink';
+        foreach ($tables['interface/vlan'] as &$vlan) {
+            $vlan['interface'] = 'uplink';
+        }
+        unset($vlan);
+        $tables['interface/ethernet'][0]['mac-address'] = '02:00:00:00:00:02';
+        $this->fake($tables);
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $interface->refresh();
+        $this->assertSame('Manual alias', $interface->name);
+        $this->assertSame('02:00:00:00:00:99', $interface->mac_address);
+        $this->assertSame('uplink', $interface->mikrotik['name']);
+        $this->assertSame('02:00:00:00:00:02', $interface->mikrotik['mac_address']);
+        $this->assertFalse($interface->mikrotik['stale']);
+
+        $this->travel(61)->seconds();
+        $this->fake($tables, 'interface/ethernet');
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasErrors('connection');
+        $this->assertTrue($interface->fresh()->mikrotik['stale']);
+        $this->assertSame('uplink', $interface->fresh()->mikrotik['name']);
+        $tables['interface/ethernet'] = [];
+        $this->fake($tables);
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $this->assertTrue($interface->fresh()->mikrotik['stale']);
+        $this->assertDatabaseCount('device_interfaces', 1);
+        $this->patch($url, ['name' => 'Manual alias', 'mac_address' => '02:00:00:00:00:99', 'mikrotik_source_id' => null])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($interface->fresh()->mikrotik);
+        $this->assertModelExists($source);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    public function test_interface_mapping_rejects_duplicate_and_cross_device_links(): void
+    {
+        $this->fake($this->tables());
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $first = $this->device->interfaces()->create(['connector_id' => 'first', 'kind' => 'physical']);
+        $second = $this->device->interfaces()->create(['connector_id' => 'second', 'kind' => 'physical']);
+        $site = $this->device->site;
+        $url = fn ($device, $interface) => route('companies.sites.devices.interfaces.update', [$site->company, $site, $device, $interface]);
+        $payload = ['name' => null, 'mac_address' => null, 'mikrotik_source_id' => $source->id];
+        $this->patch($url($this->device, $first), $payload)->assertSessionHasNoErrors();
+        $this->patch($url($this->device, $second), $payload)->assertSessionHasErrors('mikrotik_source_id');
+        $other = $site->devices()->create(['name' => 'Other router', 'manufacturer_id' => $this->device->manufacturer_id]);
+        $foreign = $other->interfaces()->create(['connector_id' => 'foreign', 'kind' => 'physical']);
+        $this->patch($url($other, $foreign), $payload)->assertSessionHasErrors('mikrotik_source_id');
+        $this->assertSame($first->id, $source->fresh()->device_interface_id);
+        $source->device_interface_id = $foreign->id;
+        $this->expectException(QueryException::class);
+        $source->save();
+    }
+
+    public function test_model_labels_associate_physical_ports_by_factory_name_and_preserve_explicit_links(): void
+    {
+        $model = DeviceModel::create([
+            'name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id,
+            'panel' => ['faces' => ['front' => ['ports' => [
+                ['id' => 'first', 'type' => 'rj45', 'label' => '1'],
+                ['id' => 'second', 'type' => 'rj45', 'label' => 'ether2'],
+                ['id' => 'ambiguous', 'type' => 'rj45', 'label' => '3'],
+                ['id' => 'optical', 'type' => 'sfp', 'label' => 'SFP1'],
+                ['id' => 'ambiguous-optical', 'type' => 'sfp', 'label' => 'SFP2'],
+                ['id' => 'alias-a', 'type' => 'rj45', 'label' => '4'],
+                ['id' => 'alias-b', 'type' => 'rj45', 'label' => 'ether4'],
+            ]], 'rear' => ['ports' => []]]],
+        ]);
+        $this->device->update(['device_model_id' => $model->id]);
+        $this->device->addModelInterfaces($model);
+        $first = $this->device->interfaces()->where('connector_id', 'first')->sole();
+        $first->update(['name' => 'Manual alias', 'mac_address' => '02:00:00:00:00:99']);
+        $tables = $this->tables();
+        foreach ([['*4', 'uplink', 'ether2'], ['*5', 'third-a', 'ether3'], ['*6', 'third-b', 'ether3'], ['*7', 'fiber', 'sfp-sfpplus1'], ['*8', 'optical-a', 'sfp2'], ['*9', 'optical-b', 'sfp-sfpplus2'], ['*A', 'fourth', 'ether4']] as [$id, $name, $defaultName]) {
+            $tables['interface'][] = ['.id' => $id, 'name' => $name, 'type' => 'ether'];
+            $tables['interface/ethernet'][] = ['.id' => $id, 'name' => $name, 'default-name' => $defaultName, 'mac-address' => '02:00:00:00:00:02'];
+        }
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $interfaces = $this->device->interfaces()->get()->keyBy('connector_id');
+        $this->assertSame('ether1', $interfaces['first']->mikrotik['default_name']);
+        $this->assertSame('Manual alias', $interfaces['first']->name);
+        $this->assertSame('02:00:00:00:00:99', $interfaces['first']->mac_address);
+        $this->assertSame('uplink', $interfaces['second']->mikrotik['name']);
+        $this->assertSame('02:00:00:00:00:02', $interfaces['second']->mikrotik['mac_address']);
+        $this->assertSame('fiber', $interfaces['optical']->mikrotik['name']);
+        $this->assertNull($interfaces['ambiguous']->mikrotik);
+        $this->assertNull($interfaces['ambiguous-optical']->mikrotik);
+        $this->assertNull($interfaces['alias-a']->mikrotik);
+        $this->assertNull($interfaces['alias-b']->mikrotik);
+
+        $manual = $this->device->interfaces()->create(['name' => 'Manual port', 'kind' => 'physical']);
+        $sourceId = $interfaces['second']->mikrotik['id'];
+        $site = $this->device->site;
+        $url = fn ($interface) => route('companies.sites.devices.interfaces.update', [$site->company, $site, $this->device, $interface]);
+        $this->patch($url($interfaces['second']), ['name' => null, 'mac_address' => null, 'mikrotik_source_id' => null])->assertSessionHasNoErrors();
+        $this->patch($url($manual), ['name' => 'Manual port', 'kind' => 'physical', 'mac_address' => null, 'mikrotik_source_id' => $sourceId])->assertSessionHasNoErrors();
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $this->assertSame($manual->id, MikrotikSource::findOrFail($sourceId)->device_interface_id);
+        $this->assertNull($interfaces['second']->fresh()->mikrotik);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    public function test_catalog_mapping_preview_and_model_corrections_use_the_same_interfaces(): void
+    {
+        $ports = [
+            ['id' => 'first', 'type' => 'rj45', 'label' => '1'],
+            ['id' => 'second', 'type' => 'rj45', 'label' => '2'],
+            ['id' => 'optical', 'type' => 'sfp', 'label' => ''],
+        ];
+        $model = DeviceModel::create(['name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id,
+            'panel' => ['faces' => ['front' => ['ports' => $ports], 'rear' => ['ports' => []]]]]);
+        $this->device->update(['device_model_id' => $model->id]);
+        $this->device->addModelInterfaces($model);
+        $tables = $this->tables();
+        foreach ([['*4', 'uplink', 'ether2'], ['*5', 'fiber', 'sfp-sfpplus1']] as [$id, $name, $factory]) {
+            $tables['interface'][] = ['.id' => $id, 'name' => $name, 'type' => 'ether'];
+            $tables['interface/ethernet'][] = ['.id' => $id, 'name' => $name, 'default-name' => $factory];
+        }
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $preview = route('manufacturers.models.mikrotik-ports', [$model->manufacturer_id, $model]);
+        $this->postJson($preview, ['ports' => $ports])->assertOk()->assertJsonPath('observed', true)
+            ->assertJsonPath('matches.first', 'ether1')->assertJsonPath('matches.second', 'ether2')
+            ->assertJsonPath('matches.optical', 'sfp-sfpplus1');
+        $ports[0]['mikrotikName'] = 'ether2';
+        $ports[1]['mikrotikName'] = 'ether1';
+        $ports[2]['mikrotikName'] = null;
+        $this->postJson($preview, ['ports' => $ports])->assertOk()
+            ->assertJsonPath('matches.first', 'ether2')->assertJsonPath('matches.second', 'ether1')->assertJsonMissingPath('matches.optical');
+        $model->update(['panel' => ['faces' => ['front' => ['ports' => $ports], 'rear' => ['ports' => []]]]]);
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $interfaces = $this->device->interfaces()->get()->keyBy('connector_id');
+        $this->assertSame('ether2', $interfaces['first']->mikrotik['default_name']);
+        $this->assertSame('ether1', $interfaces['second']->mikrotik['default_name']);
+        $this->assertNull($interfaces['optical']->mikrotik);
+        $this->assertSame('1', $model->fresh()->panel['faces']['front']['ports'][0]['label']);
+        $this->actingAs(User::factory()->create(['is_superadmin' => false]))
+            ->postJson($preview, ['ports' => $ports])->assertForbidden();
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    public function test_saving_numbered_ports_applies_existing_observations_without_another_router_read(): void
+    {
+        $port = ['id' => str_repeat('a', 32), 'type' => 'rj45', 'label' => '',
+            'x' => 50, 'y' => 50, 'rotation' => 0, 'scale' => 1, 'labelPosition' => 'center',
+            'poe' => false, 'group' => null, 'opacity' => 1, 'opacityCustomized' => false,
+            'borderColor' => '#000000', 'hidden' => false, 'locked' => false];
+        $face = ['ports' => [], 'image' => null, 'order' => [], 'shellState' => ['hidden' => false, 'locked' => false]];
+        $panel = ['version' => 3, 'name' => 'Router',
+            'shell' => ['x' => 0, 'y' => 0, 'width' => 900, 'height' => 180, 'radius' => 8, 'border' => 2],
+            'faces' => ['front' => [...$face, 'ports' => [$port, [...$port, 'id' => str_repeat('b', 32)]]], 'rear' => $face],
+            'numbering' => ['next' => 1, 'prefix' => '']];
+        $model = DeviceModel::create(['name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id, 'panel' => $panel]);
+        $this->device->update(['device_model_id' => $model->id]);
+        $this->device->addModelInterfaces($model);
+        $tables = $this->tables();
+        $tables['interface/ethernet'][0]['mac-address'] = '02:00:00:00:00:01';
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $this->assertNull($source->device_interface_id);
+        $seenAt = $source->seen_at;
+        $this->fake($tables);
+        $panel['faces']['front']['ports'][0]['label'] = '1';
+        $url = route('manufacturers.models.panel.update', [$model->manufacturer_id, $model]);
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])->assertOk();
+        $interface = $this->device->interfaces()->where('connector_id', $port['id'])->sole();
+        $this->assertSame('ether1', $interface->mikrotik['name']);
+        $this->assertSame('02:00:00:00:00:01', $interface->mikrotik['mac_address']);
+        $this->assertNull($interface->name);
+        $this->assertNull($interface->mac_address);
+        $this->assertTrue($source->fresh()->interface_from_model);
+        $this->assertTrue($seenAt->equalTo($source->fresh()->seen_at));
+        $panel['faces']['front']['ports'][0]['mikrotikName'] = null;
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 1])->assertOk();
+        $this->assertNull($source->fresh()->device_interface_id);
+        Http::assertNothingSent();
     }
 
     private function tables(): array

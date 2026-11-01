@@ -30,7 +30,12 @@ import {
     update,
     destroy,
 } from '@/routes/companies/sites/devices/interfaces';
-import { interfaceName, type DeviceInterface } from '@/types/device';
+import {
+    interfaceName,
+    type DeviceInterface,
+    type MikrotikInterface,
+} from '@/types/device';
+import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-badge';
 import type { Port } from '@/lib/hardware-editor/document';
 
 export function InterfaceForm({
@@ -39,6 +44,7 @@ export function InterfaceForm({
     device,
     item,
     ports,
+    mikrotikInterfaces = [],
     linkedIps = [],
     open: controlledOpen,
     onOpenChange,
@@ -51,6 +57,7 @@ export function InterfaceForm({
     device: number;
     item?: DeviceInterface;
     ports: Port[];
+    mikrotikInterfaces?: MikrotikInterface[];
     linkedIps?: { id: number; ip: string }[];
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
@@ -63,10 +70,25 @@ export function InterfaceForm({
     const [confirmingMac, setConfirmingMac] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const id = useId();
+    const [sourceId, setSourceId] = useState(
+        String(item?.mikrotik?.id ?? 'none'),
+    );
+    const sources = mikrotikInterfaces.filter(
+        (source) =>
+            !source.device_interface_id ||
+            source.device_interface_id === item?.id,
+    );
+    if (
+        item?.mikrotik &&
+        !sources.some((source) => source.id === item.mikrotik?.id)
+    )
+        sources.push(item.mikrotik);
+    const source = sources.find((source) => String(source.id) === sourceId);
     function setOpen(value: boolean) {
         (onOpenChange ?? setInternalOpen)(value);
         setRemoving(false);
         setConfirmingMac(false);
+        setSourceId(String(item?.mikrotik?.id ?? 'none'));
     }
     const [removing, setRemoving] = useState(false);
     const route = { company, site, device };
@@ -152,6 +174,97 @@ export function InterfaceForm({
                         >
                             {({ processing, errors }) => (
                                 <FieldGroup className="grid gap-4 sm:grid-cols-2">
+                                    {item?.kind === 'physical' &&
+                                        sources.length > 0 && (
+                                            <Field
+                                                className="sm:col-span-2"
+                                                data-invalid={
+                                                    !!errors.mikrotik_source_id
+                                                }
+                                            >
+                                                <FieldLabel
+                                                    htmlFor={`${id}-mikrotik`}
+                                                >
+                                                    Interfaccia MikroTik
+                                                </FieldLabel>
+                                                <input
+                                                    type="hidden"
+                                                    name="mikrotik_source_id"
+                                                    value={
+                                                        sourceId === 'none'
+                                                            ? ''
+                                                            : sourceId
+                                                    }
+                                                />
+                                                <Select
+                                                    value={sourceId}
+                                                    onValueChange={setSourceId}
+                                                    disabled={processing}
+                                                >
+                                                    <SelectTrigger
+                                                        id={`${id}-mikrotik`}
+                                                        className="w-full"
+                                                        aria-invalid={
+                                                            !!errors.mikrotik_source_id
+                                                        }
+                                                    >
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            <SelectItem value="none">
+                                                                Nessuna
+                                                                associazione
+                                                            </SelectItem>
+                                                            {sources.map(
+                                                                (candidate) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            candidate.id
+                                                                        }
+                                                                        value={String(
+                                                                            candidate.id,
+                                                                        )}
+                                                                        disabled={
+                                                                            (candidate.stale ||
+                                                                                !!candidate.problem) &&
+                                                                            candidate.id !==
+                                                                                item
+                                                                                    .mikrotik
+                                                                                    ?.id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            candidate.default_name
+                                                                        }{' '}
+                                                                        ·{' '}
+                                                                        {
+                                                                            candidate.name
+                                                                        }
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
+                                                {source && (
+                                                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                        <MikrotikInterfaceBadge
+                                                            source={source}
+                                                        />
+                                                        <span className="tabular-nums">
+                                                            {source.mac_address ??
+                                                                '—'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <InputError
+                                                    message={
+                                                        errors.mikrotik_source_id
+                                                    }
+                                                />
+                                            </Field>
+                                        )}
                                     <Field
                                         data-invalid={!!errors.name}
                                         className={
@@ -171,7 +284,8 @@ export function InterfaceForm({
                                             defaultValue={item?.name ?? ''}
                                             placeholder={
                                                 item?.connector_id
-                                                    ? interfaceName(
+                                                    ? source?.name ||
+                                                      interfaceName(
                                                           {
                                                               ...item,
                                                               name: null,
@@ -228,6 +342,12 @@ export function InterfaceForm({
                                             name="mac_address"
                                             defaultValue={
                                                 item?.mac_address ?? ''
+                                            }
+                                            placeholder={
+                                                source?.problem
+                                                    ? undefined
+                                                    : (source?.mac_address ??
+                                                      undefined)
                                             }
                                             maxLength={17}
                                             disabled={processing}

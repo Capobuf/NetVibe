@@ -155,6 +155,7 @@ export type Port = Point &
         rotation: number;
         scale: number;
         label: string;
+        mikrotikName?: string | null;
         labelPosition: keyof typeof labelPositions;
         poe: boolean;
         group: string | null;
@@ -418,12 +419,14 @@ export function duplicatePorts(ports: Port[]): Port[] {
     const groups = new Map<string, string>();
     return ports.map((p) => {
         if (p.group && !groups.has(p.group)) groups.set(p.group, newId());
-        return {
+        const duplicate = {
             ...p,
             id: newId(),
             label: '',
             group: p.group ? groups.get(p.group)! : null,
         };
+        delete duplicate.mikrotikName;
+        return duplicate;
     });
 }
 export function pastePorts(

@@ -454,6 +454,26 @@ class DevicesTest extends TestCase
         $this->assertDatabaseCount('ip_addresses', 1);
     }
 
+    public function test_model_port_mapping_is_saved_separately_from_labels_and_rejects_duplicates(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $vendor = Manufacturer::create(['name' => 'MikroTik']);
+        $model = $vendor->models()->create(['name' => 'Synthetic router']);
+        $panel = $this->panel();
+        $panel['faces']['front']['image'] = null;
+        $panel['faces']['rear']['image'] = null;
+        $panel['faces']['front']['ports'][0]['mikrotikName'] = 'ether2';
+        $url = route('manufacturers.models.panel.update', [$vendor, $model]);
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])->assertOk();
+        $saved = $model->fresh()->panel['faces']['front']['ports'][0];
+        $this->assertSame('1', $saved['label']);
+        $this->assertSame('ether2', $saved['mikrotikName']);
+        $panel['faces']['front']['ports'][] = [...$saved, 'id' => str_repeat('d', 32), 'label' => '2'];
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 1])
+            ->assertUnprocessable()->assertJsonValidationErrors('document');
+        $this->assertCount(1, $model->fresh()->panel['faces']['front']['ports']);
+    }
+
     private function panel(): array
     {
         $face = ['ports' => [], 'image' => null, 'order' => [], 'shellState' => ['hidden' => false, 'locked' => false]];

@@ -40,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('manufacturers/{manufacturer}/models/{model}/deletion-impact', [DeviceModelController::class, 'deletionImpact'])->name('manufacturers.models.deletion-impact');
         Route::resource('manufacturers.models', DeviceModelController::class)->only(['store', 'update', 'edit', 'destroy']);
         Route::post('manufacturers/{manufacturer}/models/{model}/panel', [ModelPanelController::class, 'update'])->name('manufacturers.models.panel.update');
+        Route::post('manufacturers/{manufacturer}/models/{model}/mikrotik-ports', [ModelPanelController::class, 'mikrotikPorts'])->name('manufacturers.models.mikrotik-ports');
     });
     Route::redirect('search', '/companies');
     Route::resource('companies', CompanyController::class)->only(['index']);

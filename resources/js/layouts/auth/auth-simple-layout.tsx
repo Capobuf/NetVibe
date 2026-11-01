@@ -17,10 +17,8 @@ export default function AuthSimpleLayout({
                             href={home()}
                             className="flex items-center gap-2 rounded-md font-semibold"
                         >
-                            <div className="flex size-9 items-center justify-center rounded-md">
-                                <AppLogoIcon className="size-9 text-foreground" />
-                            </div>
-                            <span>NetVibe</span>
+                            <AppLogoIcon className="size-24" />
+                            <span className="sr-only">NetVibe</span>
                         </Link>
 
                         <div className="flex flex-col gap-2 text-center">

@@ -65,7 +65,11 @@ export function AppSidebar() {
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
+                        <SidebarMenuButton
+                            size="lg"
+                            className="h-20 justify-center"
+                            asChild
+                        >
                             <Link
                                 href={
                                     inAdministration ? administration() : home()

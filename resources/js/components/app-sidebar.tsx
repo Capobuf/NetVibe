@@ -4,21 +4,23 @@ import { index as modelIndex } from '@/routes/device-models';
 import { index as companyIndex } from '@/routes/companies';
 import { Link, usePage } from '@inertiajs/react';
 import {
-    Layers,
-    PanelsTopLeft as RackIcon,
+    Layers3,
+    Server as RackIcon,
     Network,
     Settings2,
-    Server,
-    Component,
+    Shield,
+    Monitor,
+    LayoutTemplate,
     Building2,
+    Tags,
     Mail,
     Plug,
-    Tags,
     Users,
     ArrowLeft,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
+import { SidebarNavigation } from '@/components/sidebar-navigation';
 import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
@@ -28,6 +30,7 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
 import { index as administration } from '@/routes/administration';
@@ -76,113 +79,121 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                {inAdministration ? (
-                    <NavMain
-                        label="Amministrazione"
-                        items={[
-                            {
-                                title: 'Aziende',
-                                href: adminCompanies(),
-                                icon: Building2,
-                            },
-                            {
-                                title: 'Stati IP',
-                                href: ipStatuses(),
-                                icon: Tags,
-                            },
-                            {
-                                title: 'Utenti',
-                                href: adminUsers(),
-                                icon: Users,
-                            },
-                            { title: 'Email', href: email(), icon: Mail },
-                            {
-                                title: 'Integrazioni',
-                                href: integrations(),
-                                icon: Plug,
-                            },
-                        ]}
-                    />
-                ) : (
-                    <>
+                <SidebarNavigation key={navigationArea}>
+                    {inAdministration ? (
                         <NavMain
-                            label="IPAM"
+                            label="Amministrazione"
                             items={[
                                 {
-                                    title: 'Subnet',
-                                    href: networkContext
-                                        ? subnetIndex(networkContext)
-                                        : companyIndex(),
-                                    icon: Network,
-                                    isActive:
-                                        !!networkContext &&
-                                        component.startsWith('subnets/'),
+                                    title: 'Aziende',
+                                    href: adminCompanies(),
+                                    icon: Building2,
                                 },
                                 {
-                                    title: 'VLAN',
-                                    href: networkContext
-                                        ? vlanIndex(networkContext)
-                                        : companyIndex(),
-                                    icon: Layers,
-                                    isActive:
-                                        !!networkContext &&
-                                        component.startsWith('vlans/'),
+                                    title: 'Utenti',
+                                    href: adminUsers(),
+                                    icon: Users,
                                 },
                                 {
-                                    title: 'Dispositivi',
-                                    href: networkContext
-                                        ? deviceIndex(networkContext)
-                                        : companyIndex(),
-                                    icon: Server,
-                                    isActive:
-                                        component === 'devices/index' ||
-                                        component === 'devices/show',
-                                    items: auth.user.is_superadmin
-                                        ? [
-                                              {
-                                                  title: 'Modelli',
-                                                  href: modelIndex(),
-                                                  icon: Component,
-                                                  isActive: catalogActive,
-                                              },
-                                          ]
-                                        : [],
+                                    title: 'Stati IP',
+                                    href: ipStatuses(),
+                                    icon: Tags,
                                 },
+                                { title: 'Email', href: email(), icon: Mail },
                                 {
-                                    title: 'Rack',
-                                    href: networkContext
-                                        ? rackIndex(networkContext)
-                                        : companyIndex(),
-                                    icon: RackIcon,
-                                    isActive:
-                                        !!networkContext &&
-                                        component.startsWith('racks/'),
+                                    title: 'Integrazioni',
+                                    href: integrations(),
+                                    icon: Plug,
                                 },
                             ]}
                         />
-                        <NavMain
-                            label="Azienda"
-                            items={[
-                                {
-                                    title: 'Impostazioni',
-                                    href: companyNavigation?.currentCompanyId
-                                        ? companySettings(
-                                              companyNavigation.currentCompanyId,
-                                          )
-                                        : companyIndex(),
-                                    icon: Settings2,
-                                    isActive:
-                                        companyNavigation?.currentCompanyId
-                                            ? undefined
-                                            : false,
-                                },
-                            ]}
-                        />
-                    </>
-                )}
+                    ) : (
+                        <>
+                            <NavMain
+                                label="Rete"
+                                items={[
+                                    {
+                                        title: 'Subnet',
+                                        href: networkContext
+                                            ? subnetIndex(networkContext)
+                                            : companyIndex(),
+                                        icon: Network,
+                                        isActive:
+                                            !!networkContext &&
+                                            component.startsWith('subnets/'),
+                                    },
+                                    {
+                                        title: 'VLAN',
+                                        href: networkContext
+                                            ? vlanIndex(networkContext)
+                                            : companyIndex(),
+                                        icon: Layers3,
+                                        isActive:
+                                            !!networkContext &&
+                                            component.startsWith('vlans/'),
+                                    },
+                                ]}
+                            />
+                            <NavMain
+                                label="Inventario"
+                                items={[
+                                    {
+                                        title: 'Dispositivi',
+                                        href: networkContext
+                                            ? deviceIndex(networkContext)
+                                            : companyIndex(),
+                                        icon: Monitor,
+                                        isActive:
+                                            component === 'devices/index' ||
+                                            component === 'devices/show',
+                                        items: auth.user.is_superadmin
+                                            ? [
+                                                  {
+                                                      title: 'Catalogo',
+                                                      href: modelIndex(),
+                                                      icon: LayoutTemplate,
+                                                      isActive: catalogActive,
+                                                  },
+                                              ]
+                                            : [],
+                                    },
+                                    {
+                                        title: 'Rack',
+                                        href: networkContext
+                                            ? rackIndex(networkContext)
+                                            : companyIndex(),
+                                        icon: RackIcon,
+                                        isActive:
+                                            !!networkContext &&
+                                            component.startsWith('racks/'),
+                                    },
+                                ]}
+                            />
+                        </>
+                    )}
+                </SidebarNavigation>
             </SidebarContent>
 
             <SidebarFooter>
+                {!inAdministration && (
+                    <NavMain
+                        items={[
+                            {
+                                title: 'Impostazioni',
+                                href: companyNavigation?.currentCompanyId
+                                    ? companySettings(
+                                          companyNavigation.currentCompanyId,
+                                      )
+                                    : companyIndex(),
+                                icon: Settings2,
+                                isActive: companyNavigation?.currentCompanyId
+                                    ? undefined
+                                    : false,
+                            },
+                        ]}
+                    />
+                )}
+                <SidebarSeparator />
                 {inAdministration ? (
                     <NavMain
                         items={[
@@ -203,12 +214,15 @@ export function AppSidebar() {
                             {
                                 title: 'Amministrazione',
                                 href: administration(),
-                                icon: Settings2,
+                                icon: Shield,
                             },
                         ]}
                     />
                 ) : null}
 
+                {(inAdministration || auth.user.is_superadmin) && (
+                    <SidebarSeparator />
+                )}
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

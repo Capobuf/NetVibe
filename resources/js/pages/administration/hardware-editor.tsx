@@ -483,7 +483,9 @@ export default function HardwareEditor({
                 <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <div className="flex min-w-0 items-center gap-3">
                         <IconButton
-                            label={catalogModel ? 'Modelli' : 'Amministrazione'}
+                            label={
+                                catalogModel ? 'Catalogo' : 'Amministrazione'
+                            }
                             variant="ghost"
                             asChild
                         >

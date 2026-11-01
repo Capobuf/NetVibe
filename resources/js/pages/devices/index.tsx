@@ -1,6 +1,6 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { ArrowRight, Server } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
@@ -80,16 +80,13 @@ export default function Devices({
             <Head title={`Dispositivi · ${context}`} />
             <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
                 <header className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <Server className="size-6 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                {context}
-                            </p>
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                Dispositivi
-                            </h1>
-                        </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            {context}
+                        </p>
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            Dispositivi
+                        </h1>
                     </div>
                     <DeviceForm {...route} manufacturers={manufacturers} />
                 </header>

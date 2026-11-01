@@ -58,13 +58,13 @@ export default function CompanySettingsLayout({
                     </TabsTrigger>
                     {auth.user.is_superadmin ? (
                         <>
-                            <TabsTrigger value="integrations">
-                                <Plug />
-                                Integrazioni
-                            </TabsTrigger>
                             <TabsTrigger value="users">
                                 <Users />
                                 Utenti
+                            </TabsTrigger>
+                            <TabsTrigger value="integrations">
+                                <Plug />
+                                Integrazioni
                             </TabsTrigger>
                         </>
                     ) : null}

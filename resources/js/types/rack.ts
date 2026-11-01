@@ -14,6 +14,7 @@ export type RackItem = {
 export type Rack = {
     id: number;
     name: string;
+    floor: string | null;
     height_u: number;
     numbering: 'bottom-up' | 'top-down';
     revision: number;

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'height_u', 'numbering', 'revision'])]
+#[Fillable(['name', 'floor', 'height_u', 'numbering', 'revision'])]
 class Rack extends Model
 {
     protected function casts(): array

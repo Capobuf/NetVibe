@@ -1,3 +1,4 @@
+import { RackFloorField } from './rack-floor-field';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
@@ -54,6 +55,10 @@ export function RackForm({ company, site }: { company: number; site: number }) {
                                 />
                                 <InputError message={errors.name} />
                             </Field>
+                            <RackFloorField
+                                disabled={processing}
+                                error={errors.floor}
+                            />
                             <DialogFooter>
                                 <DialogClose asChild>
                                     <Button

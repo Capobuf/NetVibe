@@ -18,8 +18,10 @@ import {
     Eye,
     Hand,
     Pencil,
+    Printer,
 } from 'lucide-react';
 import { DeviceTable } from '@/components/devices/device-table';
+import { RackFloorField } from '@/components/racks/rack-floor-field';
 import { CableInspector } from '@/components/racks/cable-inspector';
 import { CableCreateDialog } from '@/components/racks/cable-create-dialog';
 import { DevicePortsList } from '@/components/racks/device-ports-list';
@@ -72,7 +74,10 @@ import {
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { index, show, update } from '@/routes/companies/sites/racks';
-import { store as storeCable } from '@/routes/companies/sites/racks/cables';
+import {
+    store as storeCable,
+    labels as cableLabels,
+} from '@/routes/companies/sites/racks/cables';
 import { show as showDevice } from '@/routes/companies/sites/devices';
 import {
     isRackMounted,
@@ -99,7 +104,10 @@ type Props = {
     topologySuggestion: { a: CableEnd; b: CableEnd } | null;
     topologyNotice: string | null;
 };
-type Draft = Pick<Rack, 'name' | 'height_u' | 'numbering' | 'revision'> & {
+type Draft = Pick<
+    Rack,
+    'name' | 'floor' | 'height_u' | 'numbering' | 'revision'
+> & {
     items: RackItem[];
     removed_keys: string[];
     cables: Cable[];
@@ -116,6 +124,7 @@ function draftOf(rack: Rack, cables: Cable[], cablingRevision: number): Draft {
         cabling_revision: cablingRevision,
         removed_cable_ids: [],
         name: rack.name,
+        floor: rack.floor,
         height_u: rack.height_u,
         numbering: rack.numbering,
         revision: rack.revision,
@@ -460,6 +469,15 @@ function RackEditor({
         }
         deletions.current.pop();
     }
+    function printCable(cable: Cable) {
+        if (isDirty) {
+            setError(
+                'Salva le modifiche al rack e al cablaggio prima di preparare le etichette.',
+            );
+            return;
+        }
+        router.visit(cableLabels.url({ ...route, cableId: cable.id }));
+    }
     function selectCable(cable: Cable) {
         if (cableDraft) return;
         setSelectedKey(null);
@@ -486,6 +504,7 @@ function RackEditor({
                 type: 'copper',
                 color: '#2563eb',
                 purpose: null,
+                name: null,
             },
             devices,
         );
@@ -1066,6 +1085,10 @@ function RackEditor({
                                                 );
                                             }
                                         }}
+                                        onPrint={() => {
+                                            if (selectedCable)
+                                                printCable(selectedCable);
+                                        }}
                                         onConfirm={() => {
                                             if (cableDraft)
                                                 applyCable(cableDraft);
@@ -1552,6 +1575,17 @@ function RackEditor({
                                                             }
                                                         />
                                                     </Field>
+                                                    <RackFloorField
+                                                        value={data.floor}
+                                                        onChange={(floor) =>
+                                                            setData(
+                                                                'floor',
+                                                                floor,
+                                                            )
+                                                        }
+                                                        disabled={processing}
+                                                        error={errors.floor}
+                                                    />
                                                     <NumberField
                                                         label="Altezza (U)"
                                                         value={data.height_u}
@@ -1594,6 +1628,14 @@ function RackEditor({
                                                 : data.name}
                                         </h2>
                                         <dl className="grid grid-cols-2 gap-2 text-sm">
+                                            {!selected && (
+                                                <>
+                                                    <dt className="text-muted-foreground">
+                                                        Piano
+                                                    </dt>
+                                                    <dd>{data.floor ?? '—'}</dd>
+                                                </>
+                                            )}
                                             <dt className="text-muted-foreground">
                                                 Altezza
                                             </dt>
@@ -1772,6 +1814,7 @@ function RackEditor({
                         rowOpensDialog={false}
                         columns={[
                             { id: 'code', label: 'Codice', visible: true },
+                            { id: 'name', label: 'Nome', visible: true },
                             { id: 'a', label: 'Partenza', visible: true },
                             { id: 'b', label: 'Destinazione', visible: true },
                             { id: 'type', label: 'Tipo', visible: true },
@@ -1818,6 +1861,15 @@ function RackEditor({
                                 ? selectBundle(null)
                                 : selectCable(cable)
                         }
+                        actions={(cable) => (
+                            <IconButton
+                                label="Prepara etichette"
+                                disabled={processing || cable.id < 1}
+                                onClick={() => printCable(cable)}
+                            >
+                                <Printer />
+                            </IconButton>
+                        )}
                         empty="Nessun cavo documentato"
                     />
                 </section>

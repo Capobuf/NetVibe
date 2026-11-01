@@ -12,6 +12,7 @@ use App\Models\Site;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 class RackCablingTest extends TestCase
@@ -207,5 +208,41 @@ class RackCablingTest extends TestCase
         $this->actingAs(User::factory()->create())->post($url, [...$this->cable(), 'cabling_revision' => 1])->assertForbidden();
         $this->assertDatabaseCount('cables', 1);
         $this->assertDatabaseCount('cable_ends', 2);
+    }
+
+    public function test_cable_labels_use_saved_floors_names_and_ports_only_in_the_authorized_site(): void
+    {
+        $this->assertNull($this->rack->floor);
+        $createRack = route('companies.sites.racks.store', [$this->company, $this->site]);
+        $this->post($createRack, ['name' => 'Rack B', 'floor' => 'P-2'])->assertSessionHasNoErrors();
+        $otherRack = $this->site->racks()->where('name', 'Rack B')->sole();
+        $otherRack->items()->create(['key' => str_repeat('e', 32), 'kind' => 'device', 'device_id' => $this->remote->id, 'position' => 0, 'height' => 1, 'width' => 100, 'x' => 0]);
+        $this->put($this->url(), $this->payload(['floor' => 'PT', 'cables' => [[...$this->cable(), 'name' => 'Uplink']]]))->assertSessionHasNoErrors();
+        $cable = Cable::sole();
+        $url = route('companies.sites.racks.cables.labels', [$this->company, $this->site, $this->rack, $cable->id]);
+        $this->get($url)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('racks/cable-labels')->where('cable.name', 'Uplink')
+            ->where('ends.a.piano', 'PT')->where('ends.b.piano', 'P-2')
+            ->where('ends.a.dispositivo', 'SW-CORE')->where('ends.b.porta', 'A'));
+        $this->assertSame('Management', $cable->purpose);
+        $this->assertSame(1, $this->rack->items()->count());
+        $this->put($this->url(), $this->payload(['floor' => '1']))->assertSessionHasErrors('floor');
+        $this->assertSame('PT', $this->rack->fresh()->floor);
+        $this->put($this->url(), $this->payload(['floor' => 'P1']))->assertSessionHasNoErrors();
+        $this->get($url)->assertInertia(fn (AssertableInertia $page) => $page->where('ends.a.piano', 'P1'));
+        $otherRack->items()->delete();
+        $this->get($url)->assertInertia(fn (AssertableInertia $page) => $page->where('ends.b.piano', null)->where('ends.b.rack', null));
+        $saved = $cable->fresh('ends')->workspaceData();
+        $this->put($this->url(), $this->payload(['cables' => [[...$saved, 'name' => null]]]))->assertSessionHasNoErrors();
+        $this->assertNull($cable->fresh()->name);
+        $this->assertSame('Management', $cable->fresh()->purpose);
+        $user = User::factory()->create();
+        $this->actingAs($user)->get($url)->assertForbidden();
+        $this->company->users()->attach($user);
+        $this->get($url)->assertOk();
+        $foreignSite = $this->company->sites()->create(['name' => 'Altrove']);
+        $foreignCable = Cable::create(['site_id' => $foreignSite->id, 'type' => 'copper', 'color' => '#000000']);
+        $this->get(route('companies.sites.racks.cables.labels', [$this->company, $this->site, $this->rack, $foreignCable->id]))->assertNotFound();
+        $this->get(route('companies.sites.racks.cables.labels', [$this->company, $foreignSite, $this->rack, $cable->id]))->assertNotFound();
     }
 }

@@ -1,10 +1,11 @@
 import { useId, useRef } from 'react';
-import { Cable as CableIcon, Check, Unplug, X } from 'lucide-react';
+import { Cable as CableIcon, Check, Unplug, X, Printer } from 'lucide-react';
 import { Choice } from '@/components/hardware-editor/editor-fields';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { ColorField } from '@/components/color-field';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Combobox,
@@ -210,6 +211,18 @@ export function CableFields({
                     />
                 </div>
             )}
+            <Field>
+                <FieldLabel htmlFor={`${id}-name`}>Nome del cavo</FieldLabel>
+                <Input
+                    id={`${id}-name`}
+                    value={cable.name ?? ''}
+                    maxLength={255}
+                    disabled={disabled}
+                    onChange={(event) =>
+                        onChange({ ...cable, name: event.target.value || null })
+                    }
+                />
+            </Field>
             <ColorField
                 value={cable.color}
                 disabled={disabled}
@@ -242,6 +255,7 @@ export function CableInspector({
     onConfirm,
     onCancel,
     onDisconnect,
+    onPrint,
 }: {
     cable: Cable;
     devices: RackDevice[];
@@ -253,6 +267,7 @@ export function CableInspector({
     onConfirm: () => void;
     onCancel: () => void;
     onDisconnect: () => void;
+    onPrint: () => void;
 }) {
     return (
         <div className="flex flex-col gap-4 p-4">
@@ -295,6 +310,14 @@ export function CableInspector({
                 </FieldGroup>
             ) : (
                 <dl className="flex flex-col gap-3 text-sm">
+                    {cable.name && (
+                        <div>
+                            <dt className="text-xs text-muted-foreground">
+                                Nome
+                            </dt>
+                            <dd>{cable.name}</dd>
+                        </div>
+                    )}
                     <div>
                         <dt className="text-xs text-muted-foreground">A</dt>
                         <dd>{endLabel(cable.a, devices)}</dd>
@@ -330,6 +353,17 @@ export function CableInspector({
                         </div>
                     )}
                 </dl>
+            )}
+            {!pending && cable.id > 0 && (
+                <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={onPrint}
+                >
+                    <Printer />
+                    Etichette
+                </Button>
             )}
             {pending ? (
                 <div className="flex flex-wrap gap-2">

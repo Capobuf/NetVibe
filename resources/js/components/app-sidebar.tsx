@@ -1,3 +1,4 @@
+import { index as labelIndex } from '@/routes/administration/labels';
 import { index as deviceIndex } from '@/routes/companies/sites/devices';
 import { index as rackIndex } from '@/routes/companies/sites/racks';
 import { index as topologyIndex } from '@/routes/companies/sites/topology';
@@ -103,6 +104,11 @@ export function AppSidebar() {
                                 {
                                     title: 'Stati IP',
                                     href: ipStatuses(),
+                                    icon: Tags,
+                                },
+                                {
+                                    title: 'Etichette',
+                                    href: labelIndex(),
                                     icon: Tags,
                                 },
                                 { title: 'Email', href: email(), icon: Mail },

@@ -67,7 +67,7 @@ class RackCabling
         Cable::query()->whereKey($removed)->delete();
         foreach ($changed as $cable) {
             $record = $existing->get($cable['id']) ?? new Cable(['site_id' => $site->id]);
-            $record->fill(collect($cable)->only(['type', 'color', 'purpose'])->all())->save();
+            $record->fill(collect($cable)->only(['type', 'color', 'purpose', 'name'])->all())->save();
             $record->ends()->createMany([
                 ['side' => 'a', ...$cable['a']], ['side' => 'b', ...$cable['b']],
             ]);

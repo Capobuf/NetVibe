@@ -19,6 +19,7 @@ class CableRequest extends FormRequest
     public static function cableRules(): array
     {
         return [
+            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['required', 'in:copper,fiber,usb,power'],
             'color' => ['required', 'regex:/^#[a-fA-F0-9]{6}$/'],
             'purpose' => ['present', 'nullable', 'string', 'max:10000'],

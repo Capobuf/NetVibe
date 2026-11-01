@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\CableLabelController;
+use App\Http\Controllers\CableLabelTemplateController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\DeviceController;
@@ -48,6 +50,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
         Route::get('companies/{company}/sites/{site}/topology', [TopologyController::class, 'index'])->name('companies.sites.topology.index');
+        Route::get('companies/{company}/sites/{site}/racks/{rack}/cables/{cableId}/labels', [CableLabelController::class, 'show'])->whereNumber('cableId')->name('companies.sites.racks.cables.labels');
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
@@ -127,6 +130,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
             Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
         });
+        Route::get('labels', [CableLabelTemplateController::class, 'index'])->name('labels.index');
+        Route::post('labels', [CableLabelTemplateController::class, 'store'])->name('labels.store');
         Route::inertia('prototypes/hardware-editor', 'administration/hardware-editor')->name('hardware-editor');
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');

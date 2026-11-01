@@ -57,7 +57,7 @@ class RackController extends Controller
 
     public function store(Request $request, Company $company, Site $site): RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:255']]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:255'], 'floor' => RackRequest::floorRules()]);
         $rack = DB::transaction(function () use ($data, $company, $site) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
 
@@ -92,7 +92,7 @@ class RackController extends Controller
                 if (array_key_exists('cables', $data)) {
                     RackCabling::save($site, $data);
                 }
-                $rack->update([...$request->safe()->only(['name', 'height_u', 'numbering']), 'revision' => $rack->revision + 1]);
+                $rack->update([...$request->safe()->only(['name', 'floor', 'height_u', 'numbering']), 'revision' => $rack->revision + 1]);
                 if (isset($data['items'])) {
                     $rack->items()->delete();
                     $rack->items()->createMany($items);

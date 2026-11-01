@@ -55,6 +55,7 @@ export function CableCreateDialog({
         type: 'copper',
         color: '#2563eb',
         purpose: null,
+        name: null,
         cabling_revision: revision,
         removed_cable_ids: removedCableIds,
     });

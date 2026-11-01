@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Whitespace is printable template content, including separators between blocks.
+        $middleware->trimStrings(except: ['settings.endpoint_format', 'settings.front.*.blocks.*.text', 'settings.back.*.blocks.*.text', 'settings.front.*.separator', 'settings.back.*.separator']);
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [

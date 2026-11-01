@@ -47,6 +47,7 @@ test('endpoint changes infer unambiguous cable types and preserve compatible man
         type,
         color: '#2563eb',
         purpose: null,
+        name: null,
     });
     assert.deepEqual(compatibleCableTypes(cable('sfp', 'qsfp'), devices), [
         'copper',

@@ -1,3 +1,8 @@
+import {
+    SourceDetails,
+    MikrotikIndicator,
+    type MikrotikSource,
+} from '@/components/networks/mikrotik-source';
 import { Form, usePage } from '@inertiajs/react';
 import {
     ArrowRight,
@@ -74,6 +79,9 @@ export default function IpAddressForm({
 }) {
     const { auth, devices: pageDevices } = usePage<{ devices?: Device[] }>()
         .props;
+    const { mikrotikSources = [] } = usePage<{
+        mikrotikSources?: MikrotikSource[];
+    }>().props;
     const devices = providedDevices ?? pageDevices ?? [];
     const canEdit = auth.canEditIpam;
     const initialInterface = devices
@@ -89,6 +97,12 @@ export default function IpAddressForm({
     const [editing, setEditing] = useState(!ipAddress);
     const [ip, setIp] = useState(ipAddress?.ip ?? suggestedIp ?? '');
     const [mac, setMac] = useState(initialMac);
+    const sources = mikrotikSources.filter(
+        (source) =>
+            source.ip === ip ||
+            (ipAddress && source.ip_address_id === ipAddress.id),
+    );
+    const external = sources.some((source) => source.state !== 'missing');
     const address = ipv4Number(ip);
     const excluded =
         address !== null &&
@@ -208,6 +222,18 @@ export default function IpAddressForm({
                                             ) : (
                                                 '—'
                                             )}
+                                            {label === 'IPv4' ||
+                                            label === 'MAC' ? (
+                                                <MikrotikIndicator
+                                                    sources={sources}
+                                                    field={
+                                                        label === 'MAC'
+                                                            ? 'mac'
+                                                            : 'ip'
+                                                    }
+                                                    mac={ipAddress.mac_address}
+                                                />
+                                            ) : null}
                                         </dd>
                                     </div>
                                 ))}
@@ -273,6 +299,15 @@ export default function IpAddressForm({
                                     </dd>
                                 </div>
                             </dl>
+                            {ipAddress.mikrotik_edit_mode ? (
+                                <Badge variant="outline">
+                                    {ipAddress.mikrotik_edit_mode === 'manual'
+                                        ? 'Valore manuale mantenuto'
+                                        : ipAddress.mikrotik_matched_at
+                                          ? 'Modifica prevista riscontrata'
+                                          : 'Modifica prevista'}
+                                </Badge>
+                            ) : null}
                             {excluded && (
                                 <p className="text-sm text-muted-foreground">
                                     Escluso dai suggerimenti
@@ -304,6 +339,25 @@ export default function IpAddressForm({
                                         <h3 className="text-sm font-semibold">
                                             Indirizzo
                                         </h3>
+                                        {external ? (
+                                            <Alert>
+                                                <TriangleAlert />
+                                                <AlertTitle>
+                                                    Indirizzo presente nelle
+                                                    fonti MikroTik
+                                                </AlertTitle>
+                                                <AlertDescription>
+                                                    La documentazione manuale
+                                                    rimane possibile; verifica
+                                                    la configurazione e le
+                                                    osservazioni prima
+                                                    dell’assegnazione.
+                                                </AlertDescription>
+                                            </Alert>
+                                        ) : null}
+                                        {sources.length ? (
+                                            <SourceDetails sources={sources} />
+                                        ) : null}
                                         {excluded && (
                                             <Alert>
                                                 <TriangleAlert />
@@ -596,9 +650,10 @@ export default function IpAddressForm({
                                 Verrà eliminato il record di{' '}
                                 <strong>{ipAddress.ip}</strong> con descrizione,
                                 hostname, MAC, stato, associazioni ai tag e al
-                                dispositivo/interfaccia. L’indirizzo tornerà
-                                libero. Se è escluso, resterà escluso dai
-                                suggerimenti. Le modifiche al form non verranno
+                                dispositivo/interfaccia. L’indirizzo resterà
+                                escluso dai suggerimenti se presente in un
+                                intervallo escluso o nelle ultime fonti MikroTik
+                                valide. Le modifiche al form non verranno
                                 salvate.
                             </p>
                         </DeletionConfirmation>

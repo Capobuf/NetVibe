@@ -1,13 +1,20 @@
-import { useForm, usePage } from "@inertiajs/react";
-import { useState } from "react";
-import { Cable, ScanSearch, ShieldAlert, Trash2 } from "lucide-react";
-import InputError from "@/components/input-error";
-import { DeviceTable } from "@/components/devices/device-table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { MikrotikSyncPanel } from '@/components/devices/mikrotik-sync-panel';
+import { useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
+import { Cable, ScanSearch, ShieldAlert, Trash2 } from 'lucide-react';
+import InputError from '@/components/input-error';
+import { DeviceTable } from '@/components/devices/device-table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+    CardFooter,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -15,14 +22,31 @@ import {
     DialogTitle,
     DialogDescription,
     DialogFooter,
-} from "@/components/ui/dialog";
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { update, verify, analyze, destroy } from "@/routes/companies/sites/devices/mikrotik";
+} from '@/components/ui/dialog';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
+import {
+    update,
+    verify,
+    analyze,
+    destroy,
+} from '@/routes/companies/sites/devices/mikrotik';
 
 export type MikrotikConnection = {
+    activated_at: string | null;
+    sync_attempted_at: string | null;
+    synced_at: string | null;
+    sync_status: string | null;
+    sync_message: string | null;
+    sync_summary: {
+        read: number;
+        created: number;
+        associated: number;
+        updated: number;
+        problems: number;
+    } | null;
     server_url: string;
     username: string;
     has_password: boolean;
@@ -70,27 +94,33 @@ export function MikrotikDevice(props: Props) {
             </Alert>
         );
     }
-    return <MikrotikPanel key={props.connection?.revision ?? "new"} {...props} />;
+    return (
+        <MikrotikPanel key={props.connection?.revision ?? 'new'} {...props} />
+    );
 }
 
 function MikrotikPanel({ connection, ...route }: Props) {
     const [removing, setRemoving] = useState(false);
-    const [reading, setReading] = useState<"verify" | "analyze" | null>(null);
+    const [reading, setReading] = useState<'verify' | 'analyze' | null>(null);
     const form = useForm({
-        server_url: connection?.server_url ?? "",
-        username: connection?.username ?? "",
-        password: "",
-        allow_unverified_certificate: connection?.allow_unverified_certificate ?? false,
+        server_url: connection?.server_url ?? '',
+        username: connection?.username ?? '',
+        password: '',
+        allow_unverified_certificate:
+            connection?.allow_unverified_certificate ?? false,
         revision: connection?.revision ?? null,
     });
-    const operation = useForm({ revision: connection?.revision ?? null, confirmed: true });
+    const operation = useForm({
+        revision: connection?.revision ?? null,
+        confirmed: true,
+    });
     const busy = form.processing || operation.processing;
     const identity = connection?.identity;
     const report = connection?.analysis;
     const error = Object.values(operation.errors)[0];
-    function read(action: "verify" | "analyze") {
+    function read(action: 'verify' | 'analyze') {
         setReading(action);
-        operation.submit(action === "verify" ? verify(route) : analyze(route), {
+        operation.submit(action === 'verify' ? verify(route) : analyze(route), {
             preserveScroll: true,
             onFinish: () => setReading(null),
         });
@@ -107,7 +137,7 @@ function MikrotikPanel({ connection, ...route }: Props) {
                             event.preventDefault();
                             form.submit(update(route), {
                                 preserveScroll: true,
-                                onSuccess: () => form.reset("password"),
+                                onSuccess: () => form.reset('password'),
                             });
                         }}
                         className="flex flex-col gap-6"
@@ -115,7 +145,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                         <CardContent>
                             <FieldGroup>
                                 <Field data-invalid={!!form.errors.server_url}>
-                                    <FieldLabel htmlFor="mikrotik-url">Indirizzo HTTPS</FieldLabel>
+                                    <FieldLabel htmlFor="mikrotik-url">
+                                        Indirizzo HTTPS
+                                    </FieldLabel>
                                     <Input
                                         id="mikrotik-url"
                                         type="url"
@@ -127,11 +159,14 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                         aria-invalid={!!form.errors.server_url}
                                         aria-describedby={
                                             form.errors.server_url
-                                                ? "mikrotik-url-error"
+                                                ? 'mikrotik-url-error'
                                                 : undefined
                                         }
                                         onChange={(event) =>
-                                            form.setData("server_url", event.target.value)
+                                            form.setData(
+                                                'server_url',
+                                                event.target.value,
+                                            )
                                         }
                                     />
                                     <InputError
@@ -140,7 +175,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                     />
                                 </Field>
                                 <Field data-invalid={!!form.errors.username}>
-                                    <FieldLabel htmlFor="mikrotik-username">Username</FieldLabel>
+                                    <FieldLabel htmlFor="mikrotik-username">
+                                        Username
+                                    </FieldLabel>
                                     <Input
                                         id="mikrotik-username"
                                         required
@@ -151,11 +188,14 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                         aria-invalid={!!form.errors.username}
                                         aria-describedby={
                                             form.errors.username
-                                                ? "mikrotik-username-error"
+                                                ? 'mikrotik-username-error'
                                                 : undefined
                                         }
                                         onChange={(event) =>
-                                            form.setData("username", event.target.value)
+                                            form.setData(
+                                                'username',
+                                                event.target.value,
+                                            )
                                         }
                                     />
                                     <InputError
@@ -169,7 +209,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                             Password
                                         </FieldLabel>
                                         {connection?.has_password ? (
-                                            <Badge variant="secondary">Password salvata</Badge>
+                                            <Badge variant="secondary">
+                                                Password salvata
+                                            </Badge>
                                         ) : null}
                                     </div>
                                     <Input
@@ -182,11 +224,14 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                         aria-invalid={!!form.errors.password}
                                         aria-describedby={
                                             form.errors.password
-                                                ? "mikrotik-password-error"
+                                                ? 'mikrotik-password-error'
                                                 : undefined
                                         }
                                         onChange={(event) =>
-                                            form.setData("password", event.target.value)
+                                            form.setData(
+                                                'password',
+                                                event.target.value,
+                                            )
                                         }
                                     />
                                     <InputError
@@ -197,11 +242,14 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                 <Field orientation="horizontal">
                                     <Checkbox
                                         id="mikrotik-tls"
-                                        checked={form.data.allow_unverified_certificate}
+                                        checked={
+                                            form.data
+                                                .allow_unverified_certificate
+                                        }
                                         disabled={busy}
                                         onCheckedChange={(value) =>
                                             form.setData(
-                                                "allow_unverified_certificate",
+                                                'allow_unverified_certificate',
                                                 value === true,
                                             )
                                         }
@@ -214,18 +262,26 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                     <Alert variant="destructive">
                                         <ShieldAlert />
                                         <AlertDescription>
-                                            L’identità del server non sarà verificata: le
-                                            credenziali potrebbero essere intercettate.
+                                            L’identità del server non sarà
+                                            verificata: le credenziali
+                                            potrebbero essere intercettate.
                                         </AlertDescription>
                                     </Alert>
                                 ) : null}
                                 {Object.entries(form.errors)
                                     .filter(
                                         ([key]) =>
-                                            !["server_url", "username", "password"].includes(key),
+                                            ![
+                                                'server_url',
+                                                'username',
+                                                'password',
+                                            ].includes(key),
                                     )
                                     .map(([key, message]) => (
-                                        <InputError key={key} message={message} />
+                                        <InputError
+                                            key={key}
+                                            message={message}
+                                        />
                                     ))}
                             </FieldGroup>
                         </CardContent>
@@ -251,54 +307,75 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     <CardHeader>
                         <CardTitle>Stato del dispositivo</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-5" aria-live="polite">
+                    <CardContent
+                        className="flex flex-col gap-5"
+                        aria-live="polite"
+                    >
                         {connection?.checked_at ? (
                             <div className="flex flex-col gap-2">
                                 <Badge
                                     className="self-start"
                                     variant={
-                                        connection.check_status === "ok"
-                                            ? "secondary"
-                                            : "destructive"
+                                        connection.check_status === 'ok'
+                                            ? 'secondary'
+                                            : 'destructive'
                                     }
                                 >
-                                    {connection.check_status === "ok"
-                                        ? "Verificata"
-                                        : connection.check_status === "partial"
-                                          ? "Lettura parziale"
-                                          : "Verifica non riuscita"}
+                                    {connection.check_status === 'ok'
+                                        ? 'Verificata'
+                                        : connection.check_status === 'partial'
+                                          ? 'Lettura parziale'
+                                          : 'Verifica non riuscita'}
                                 </Badge>
-                                <p className="text-sm">{connection.check_message}</p>
+                                <p className="text-sm">
+                                    {connection.check_message}
+                                </p>
                                 <p className="text-xs text-muted-foreground">
-                                    Ultima verifica:{" "}
-                                    {new Date(connection.checked_at).toLocaleString("it-IT")}
+                                    Ultima verifica:{' '}
+                                    {new Date(
+                                        connection.checked_at,
+                                    ).toLocaleString('it-IT')}
                                 </p>
                             </div>
                         ) : (
                             <p className="text-sm text-muted-foreground">
                                 {connection
-                                    ? "Connessione non ancora verificata."
-                                    : "Connessione non configurata."}
+                                    ? 'Connessione non ancora verificata.'
+                                    : 'Connessione non configurata.'}
                             </p>
                         )}
                         {identity ? (
                             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 text-sm">
-                                <dt className="text-muted-foreground">Identità</dt>
-                                <dd className="break-words font-medium">{identity.name}</dd>
-                                <dt className="text-muted-foreground">RouterOS</dt>
-                                <dd>{identity.version}</dd>
-                                <dt className="text-muted-foreground">Modello rilevato</dt>
-                                <dd className="break-words">
-                                    {identity.board ?? "Non disponibile"}
+                                <dt className="text-muted-foreground">
+                                    Identità
+                                </dt>
+                                <dd className="font-medium break-words">
+                                    {identity.name}
                                 </dd>
-                                <dt className="text-muted-foreground">Architettura</dt>
-                                <dd>{identity.architecture ?? "Non disponibile"}</dd>
+                                <dt className="text-muted-foreground">
+                                    RouterOS
+                                </dt>
+                                <dd>{identity.version}</dd>
+                                <dt className="text-muted-foreground">
+                                    Modello rilevato
+                                </dt>
+                                <dd className="break-words">
+                                    {identity.board ?? 'Non disponibile'}
+                                </dd>
+                                <dt className="text-muted-foreground">
+                                    Architettura
+                                </dt>
+                                <dd>
+                                    {identity.architecture ?? 'Non disponibile'}
+                                </dd>
                             </dl>
                         ) : null}
                         {reading ? (
                             <p className="flex items-center gap-2 text-sm">
                                 <Spinner />
-                                {reading === "verify" ? "Verifica in corso…" : "Analisi in corso…"}
+                                {reading === 'verify'
+                                    ? 'Verifica in corso…'
+                                    : 'Analisi in corso…'}
                             </p>
                         ) : null}
                         {form.isDirty ? (
@@ -316,14 +393,14 @@ function MikrotikPanel({ connection, ...route }: Props) {
                         <Button
                             variant="outline"
                             disabled={!connection || busy || form.isDirty}
-                            onClick={() => read("verify")}
+                            onClick={() => read('verify')}
                         >
                             <Cable data-icon="inline-start" />
                             Verifica connessione
                         </Button>
                         <Button
                             disabled={!connection || busy || form.isDirty}
-                            onClick={() => read("analyze")}
+                            onClick={() => read('analyze')}
                         >
                             <ScanSearch data-icon="inline-start" />
                             Analizza configurazione
@@ -331,13 +408,25 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     </CardFooter>
                 </Card>
             </div>
-            <section className="flex min-w-0 flex-col gap-5" aria-label="Ricognizione RouterOS">
+            <MikrotikSyncPanel
+                connection={connection}
+                route={route}
+                disabled={busy || form.isDirty}
+            />
+            <section
+                className="flex min-w-0 flex-col gap-5"
+                aria-label="Ricognizione RouterOS"
+            >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-lg font-semibold">Ricognizione RouterOS</h2>
+                    <h2 className="text-lg font-semibold">
+                        Ricognizione RouterOS
+                    </h2>
                     {connection?.analyzed_at ? (
                         <p className="text-xs text-muted-foreground">
-                            Ultima analisi:{" "}
-                            {new Date(connection.analyzed_at).toLocaleString("it-IT")}
+                            Ultima analisi:{' '}
+                            {new Date(connection.analyzed_at).toLocaleString(
+                                'it-IT',
+                            )}
                         </p>
                     ) : null}
                 </div>
@@ -345,13 +434,16 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     <>
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                             {report.findings.map((finding) => (
-                                <Card key={finding.label} className="gap-3 py-4">
+                                <Card
+                                    key={finding.label}
+                                    className="gap-3 py-4"
+                                >
                                     <CardHeader className="px-4">
                                         <CardTitle>{finding.label}</CardTitle>
                                     </CardHeader>
                                     <CardContent className="flex flex-col gap-2 px-4">
                                         <p className="text-2xl font-semibold tabular-nums">
-                                            {finding.value ?? "—"}
+                                            {finding.value ?? '—'}
                                         </p>
                                         <p className="text-sm text-muted-foreground">
                                             {finding.detail}
@@ -362,16 +454,41 @@ function MikrotikPanel({ connection, ...route }: Props) {
                         </div>
                         <DeviceTable
                             name="mikrotik-coverage"
-                            rows={report.coverage.map((menu, id) => ({ ...menu, id }))}
+                            rows={report.coverage.map((menu, id) => ({
+                                ...menu,
+                                id,
+                            }))}
                             columns={[
-                                { id: "label", label: "Categoria", visible: true },
-                                { id: "message", label: "Esito sul dispositivo", visible: true },
-                                { id: "count", label: "Elementi", visible: true },
-                                { id: "path", label: "Menu RouterOS", visible: false },
-                                { id: "fields", label: "Proprietà riscontrate", visible: false },
+                                {
+                                    id: 'label',
+                                    label: 'Categoria',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'message',
+                                    label: 'Esito sul dispositivo',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'count',
+                                    label: 'Elementi',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'path',
+                                    label: 'Menu RouterOS',
+                                    visible: false,
+                                },
+                                {
+                                    id: 'fields',
+                                    label: 'Proprietà riscontrate',
+                                    visible: false,
+                                },
                             ]}
                             value={(row, column) =>
-                                column === "fields" ? row.fields.join(", ") : row[column]
+                                column === 'fields'
+                                    ? row.fields.join(', ')
+                                    : row[column]
                             }
                         />
                         <Card>
@@ -387,7 +504,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                         >
                                             <dt>{item.label}</dt>
                                             <dd>
-                                                <Badge variant="outline">{item.status}</Badge>
+                                                <Badge variant="outline">
+                                                    {item.status}
+                                                </Badge>
                                             </dd>
                                         </div>
                                     ))}
@@ -413,8 +532,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     <DialogHeader>
                         <DialogTitle>Rimuovi connessione MikroTik</DialogTitle>
                         <DialogDescription>
-                            Elimina le credenziali e l’ultima ricognizione. Il dispositivo, le
-                            interfacce e gli IP documentati restano conservati.
+                            Elimina le credenziali e l’ultima ricognizione. Il
+                            dispositivo, le interfacce e gli IP documentati
+                            restano conservati.
                         </DialogDescription>
                     </DialogHeader>
                     {error ? <InputError message={error} /> : null}
@@ -436,7 +556,8 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                 })
                             }
                         >
-                            {operation.processing ? <Spinner /> : null}Rimuovi connessione
+                            {operation.processing ? <Spinner /> : null}Rimuovi
+                            connessione
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -29,7 +29,7 @@ class MikrotikClient
         'ip/arp' => ['ARP', 'address,mac-address,interface,status,dynamic,complete,disabled,comment'],
         'ip/dhcp-server' => ['Server DHCP', 'name,interface,address-pool,disabled,invalid,comment'],
         'ip/dhcp-server/network' => ['Reti DHCP', 'address,gateway,netmask,dns-server,domain,comment'],
-        'ip/dhcp-server/lease' => ['Lease DHCP', 'address,mac-address,server,dynamic,status,active-address,active-mac-address,active-server,host-name,comment'],
+        'ip/dhcp-server/lease' => ['Lease DHCP', 'address,mac-address,server,dynamic,disabled,status,active-address,active-mac-address,active-server,host-name,comment'],
         'ip/pool' => ['Pool IPv4', 'name,ranges,next-pool,comment'],
         'ip/neighbor' => ['Neighbor discovery', 'interface,address,mac-address,identity,platform,board,version'],
     ];
@@ -61,6 +61,25 @@ class MikrotikClient
 
     public function inspect(#[\SensitiveParameter] MikrotikConnection $connection, bool $analyze): array
     {
+        $result = $this->collect($connection, $analyze);
+
+        return [
+            'status' => $result['status'], 'identity' => $result['identity'],
+            'analysis' => $analyze ? [
+                'coverage' => $result['coverage'],
+                'findings' => MikrotikAnalysis::summarize($result['tables']),
+                'cases' => MikrotikAnalysis::cases($result['tables']),
+            ] : null,
+        ];
+    }
+
+    public function snapshot(#[\SensitiveParameter] MikrotikConnection $connection): array
+    {
+        return $this->collect($connection, true, true);
+    }
+
+    private function collect(#[\SensitiveParameter] MikrotikConnection $connection, bool $analyze, bool $sync = false): array
+    {
         $deadline = microtime(true) + 45;
         $url = self::normalizeUrl($connection->server_url);
         $host = parse_url($url, PHP_URL_HOST);
@@ -83,7 +102,12 @@ class MikrotikClient
             $attempted = false;
             if (! $stop) {
                 try {
-                    $tables[$path] = $this->read($connection, $url, $addresses[0], $path, $properties, $deadline, $budget, $attempted);
+                    $emptyParent = $sync && (
+                        (str_starts_with($path, 'interface/bridge/') && ($tables['interface/bridge'] ?? null) === [])
+                        || (in_array($path, ['ip/dhcp-server/network', 'ip/dhcp-server/lease', 'ip/pool'], true) && ($tables['ip/dhcp-server'] ?? null) === [])
+                    );
+                    $tables[$path] = $emptyParent ? [] : $this->read($connection, $url, $addresses[0], $path,
+                        $properties.($sync && ! str_starts_with($path, 'system/') ? ',.id' : ''), $deadline, $budget, $attempted);
                     $status = 'ok';
                 } catch (MikrotikException $exception) {
                     $status = $exception->status;
@@ -119,14 +143,8 @@ class MikrotikClient
         }
         $status = $stop ?? (collect($coverage)->contains(fn ($menu) => $menu['status'] !== 'ok') ? 'partial' : 'ok');
 
-        return [
-            'status' => $status, 'identity' => $identity,
-            'analysis' => $analyze ? [
-                'coverage' => $coverage,
-                'findings' => MikrotikAnalysis::summarize($tables),
-                'cases' => MikrotikAnalysis::cases($tables),
-            ] : null,
-        ];
+        // Payloads stay in memory; only the caller's normalized records may be persisted.
+        return compact('status', 'identity', 'coverage', 'tables');
     }
 
     protected function resolve(string $host): array

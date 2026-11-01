@@ -6,9 +6,11 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceInterface;
 use App\Models\IpAddress;
+use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Support\DeviceAssignment;
 use App\Support\InterfaceMac;
+use App\Support\MikrotikIpam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +21,7 @@ class DeviceIpController extends Controller
 {
     public function store(Request $request, Company $company, Site $site, Device $device): RedirectResponse
     {
-        $data = $request->validate(['ip_address_id' => ['required', 'integer'], 'device_interface_id' => ['nullable', 'integer'], 'mac_confirmation_token' => ['nullable', 'string', 'size:64']]);
+        $data = $request->validate(['ip_address_id' => ['required', 'integer'], 'device_interface_id' => ['nullable', 'integer'], 'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'], 'mac_confirmation_token' => ['nullable', 'string', 'size:64']]);
         DB::transaction(function () use ($company, $site, $device, $data) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $ip = IpAddress::query()->whereIn('subnet_id', $site->subnets()->select('id'))->lockForUpdate()->whereKey($data['ip_address_id'])->first();
@@ -29,9 +31,10 @@ class DeviceIpController extends Controller
             $assignment = DeviceAssignment::validate($site->id, $device->id, $data['device_interface_id'] ?? null, $ip);
             if ($assignment['device_interface_id']) {
                 $interface = DeviceInterface::query()->lockForUpdate()->findOrFail($assignment['device_interface_id']);
-                $assignment['mac_address'] = InterfaceMac::synchronize($interface, $ip->mac_address, $ip, $data['mac_confirmation_token'] ?? null);
+                $assignment['mac_address'] = InterfaceMac::synchronize($interface, $ip->mac_address, $ip, $data['mac_confirmation_token'] ?? null, $data['mikrotik_edit_mode'] ?? null);
             }
-            $ip->update($assignment);
+            MikrotikIpam::manualChange($ip, $assignment, $data['mikrotik_edit_mode'] ?? null);
+            $ip->fill($assignment)->save();
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'IP collegato.']);
 
@@ -44,7 +47,8 @@ class DeviceIpController extends Controller
         $excluded = DB::transaction(function () use ($company, $device, $ipAddress) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $device->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
-            $excluded = $record->subnet->isExcluded($record->address);
+            $excluded = $record->subnet->isExcluded($record->address)
+                || MikrotikSource::blocking($record->subnet->site_id)->where('address', $record->address)->exists();
             $record->delete();
 
             return $excluded;

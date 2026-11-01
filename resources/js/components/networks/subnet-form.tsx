@@ -1,3 +1,4 @@
+import { MikrotikEditMode } from '@/components/networks/mikrotik-edit-mode';
 import { Form } from '@inertiajs/react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -298,6 +299,9 @@ export default function SubnetForm({
                                         </Field>
                                     </div>
                                 </fieldset>
+                                <MikrotikEditMode
+                                    error={errors.mikrotik_edit_mode}
+                                />
                                 <DialogFooter>
                                     {subnet ? (
                                         <IconButton

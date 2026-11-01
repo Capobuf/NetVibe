@@ -22,6 +22,7 @@ class IpAddressRequest extends FormRequest
             'device_id' => ['nullable', 'integer', Rule::exists('devices', 'id')->where('site_id', $site->id)],
             'device_interface_id' => ['nullable', 'integer', Rule::exists('device_interfaces', 'id')->where('device_id', $this->input('device_id'))],
             'mac_address' => ['nullable', 'string', 'mac_address'],
+            'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'],
             'mac_confirmation_token' => ['nullable', 'string', 'size:64'],
             'ip_status_id' => ['nullable', 'integer', 'exists:ip_statuses,id'],
             'tags' => ['sometimes', 'array'],

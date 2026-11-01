@@ -5,6 +5,11 @@ import {
     EmptyTitle,
     EmptyDescription,
 } from '@/components/ui/empty';
+import {
+    MikrotikIndicator,
+    MikrotikValue,
+    type MikrotikSource,
+} from '@/components/networks/mikrotik-source';
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import {
@@ -20,6 +25,7 @@ import {
     X,
 } from 'lucide-react';
 import { IconButton } from '@/components/icon-button';
+import { MikrotikMark } from '@/components/mikrotik-mark';
 import { DeviceAssociation } from '@/components/devices/device-association';
 import { CopyValue } from '@/components/copy-value';
 import InputError from '@/components/input-error';
@@ -90,8 +96,14 @@ type Props = {
     statuses: IpStatus[];
     tags: Tag[];
     initialIpAddress: IpRow | null;
+    mikrotikSources: MikrotikSource[];
     firstProposableIp: string | null;
-    addressCounts: { documented: number; excluded: number; proposable: number };
+    addressCounts: {
+        documented: number;
+        excluded: number;
+        external: number;
+        proposable: number;
+    };
     query: {
         search: string;
         sort: IpColumn['id'] | null;
@@ -121,6 +133,7 @@ export default function SubnetShow({
     statuses,
     tags,
     initialIpAddress,
+    mikrotikSources,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [selectedIp, setSelectedIp] = useState<IpRow | null>(
@@ -145,6 +158,14 @@ export default function SubnetShow({
             ],
             true,
         );
+    const sourcesByIp = new Map<string, MikrotikSource[]>();
+    for (const source of mikrotikSources) {
+        if (source.ip)
+            sourcesByIp.set(source.ip, [
+                ...(sourcesByIp.get(source.ip) ?? []),
+                source,
+            ]);
+    }
     const visibleColumns = columns.filter((column) => column.visible);
     const route = { company: company.id, site: site.id, subnet: subnet.id };
     const context =
@@ -204,6 +225,11 @@ export default function SubnetShow({
                                 className="font-mono text-2xl font-semibold tracking-tight break-all tabular-nums sm:text-3xl xl:text-4xl"
                             >
                                 {subnet.cidr}
+                                <MikrotikIndicator
+                                    sources={mikrotikSources.filter(
+                                        (source) => source.kind === 'subnet',
+                                    )}
+                                />
                             </h1>
                             <div className="flex flex-wrap items-center gap-3">
                                 {subnet.name ? (
@@ -370,7 +396,7 @@ export default function SubnetShow({
                     </CardHeader>
                     <CardContent className="px-0">
                         <Table
-                            className="text-center [&_td]:px-3 [&_td]:py-1 data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            className="text-center [&_td]:h-10 [&_td]:px-3 [&_td]:py-1 data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
                             data-separators={separators}
                             aria-label={`Indirizzi nella subnet ${subnet.cidr}`}
                         >
@@ -457,6 +483,37 @@ export default function SubnetShow({
                             </TableHeader>
                             <TableBody>
                                 {ipAddresses.data.map((ipAddress) => {
+                                    const sources =
+                                        sourcesByIp.get(ipAddress.ip) ?? [];
+                                    const current = sources.filter(
+                                        (source) => source.state !== 'missing',
+                                    );
+                                    const sourceNotice = current.some(
+                                        (source) => source.problem,
+                                    )
+                                        ? 'Da verificare'
+                                        : current.length &&
+                                            current.every(
+                                                (source) => source.stale,
+                                            )
+                                          ? 'Non aggiornato'
+                                          : !ipAddress.id &&
+                                              current.length &&
+                                              !current.some((source) =>
+                                                  visibleColumns.some(
+                                                      (column) =>
+                                                          (column.id ===
+                                                              'mac_address' &&
+                                                              source.data
+                                                                  .mac) ||
+                                                          (column.id ===
+                                                              'hostname' &&
+                                                              source.data
+                                                                  .hostname_observed),
+                                                  ),
+                                              )
+                                            ? 'Fonte esterna'
+                                            : null;
                                     const canOpen =
                                         ipAddress.id !== null ||
                                         auth.canEditIpam;
@@ -486,10 +543,24 @@ export default function SubnetShow({
                                             }
                                             onClick={
                                                 canOpen
-                                                    ? (event) =>
-                                                          openAddress(
-                                                              event.currentTarget,
+                                                    ? (event) => {
+                                                          if (
+                                                              event.currentTarget.contains(
+                                                                  event.target as Node,
+                                                              ) &&
+                                                              window.getSelection()
+                                                                  ?.isCollapsed !==
+                                                                  false &&
+                                                              !(
+                                                                  event.target as HTMLElement
+                                                              ).closest(
+                                                                  'a,button,input,select,textarea,[role="button"]',
+                                                              )
                                                           )
+                                                              openAddress(
+                                                                  event.currentTarget,
+                                                              );
+                                                      }
                                                     : undefined
                                             }
                                             onKeyDown={
@@ -520,11 +591,11 @@ export default function SubnetShow({
                                                         column.id ===
                                                             'mac_address'
                                                             ? 'px-4 font-mono tabular-nums'
-                                                            : 'max-w-lg break-words whitespace-pre-wrap'
+                                                            : 'whitespace-nowrap [&>span]:flex-nowrap'
                                                     }
                                                 >
                                                     {column.id === 'ip' ? (
-                                                        <div className="flex flex-wrap items-center justify-center gap-2">
+                                                        <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                                                             {ipAddress.excluded ? (
                                                                 <Tooltip>
                                                                     <TooltipTrigger
@@ -562,6 +633,20 @@ export default function SubnetShow({
                                                                 }
                                                                 className="py-1 font-mono tabular-nums"
                                                             />
+                                                            {sourceNotice ? (
+                                                                <MikrotikIndicator
+                                                                    sources={
+                                                                        sources
+                                                                    }
+                                                                >
+                                                                    <span className="inline-flex items-center gap-1.5 font-sans text-xs">
+                                                                        <MikrotikMark />
+                                                                        {
+                                                                            sourceNotice
+                                                                        }
+                                                                    </span>
+                                                                </MikrotikIndicator>
+                                                            ) : null}
                                                         </div>
                                                     ) : column.id ===
                                                       'device' ? (
@@ -582,19 +667,20 @@ export default function SubnetShow({
                                                           'hostname' ||
                                                       column.id ===
                                                           'mac_address' ? (
-                                                        ipAddress[column.id] ? (
-                                                            <CopyValue
-                                                                value={
-                                                                    ipAddress[
-                                                                        column
-                                                                            .id
-                                                                    ] ?? ''
-                                                                }
-                                                                className="py-1"
-                                                            />
-                                                        ) : (
-                                                            ''
-                                                        )
+                                                        <MikrotikValue
+                                                            value={
+                                                                ipAddress[
+                                                                    column.id
+                                                                ]
+                                                            }
+                                                            field={
+                                                                column.id ===
+                                                                'mac_address'
+                                                                    ? 'mac'
+                                                                    : 'hostname'
+                                                            }
+                                                            sources={sources}
+                                                        />
                                                     ) : column.id ===
                                                       'status' ? (
                                                         ipAddress.status ? (
@@ -611,7 +697,7 @@ export default function SubnetShow({
                                                     ) : column.id === 'tags' ? (
                                                         ipAddress.tags
                                                             .length ? (
-                                                            <div className="flex flex-wrap justify-center gap-1">
+                                                            <div className="flex justify-center gap-1 whitespace-nowrap">
                                                                 {ipAddress.tags.map(
                                                                     (tag) => (
                                                                         <TagBadge
@@ -633,8 +719,18 @@ export default function SubnetShow({
                                                             ''
                                                         )
                                                     ) : (
-                                                        (ipAddress[column.id] ??
-                                                        '')
+                                                        <span
+                                                            className="block max-w-lg truncate"
+                                                            title={
+                                                                ipAddress[
+                                                                    column.id
+                                                                ] ?? undefined
+                                                            }
+                                                        >
+                                                            {ipAddress[
+                                                                column.id
+                                                            ] ?? ''}
+                                                        </span>
                                                     )}
                                                 </TableCell>
                                             ))}

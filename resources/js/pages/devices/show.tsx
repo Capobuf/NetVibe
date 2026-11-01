@@ -2,6 +2,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
 import { ArrowLeft, Trash2, Unlink, Pencil, X } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
+import { MikrotikMark } from '@/components/mikrotik-mark';
 import {
     MikrotikDevice,
     type MikrotikConnection,
@@ -299,7 +300,12 @@ export default function DeviceShow({
                                 IP ({ips.length})
                             </TabsTrigger>
                             {isMikrotik ? (
-                                <TabsTrigger value="mikrotik">MikroTik</TabsTrigger>
+                                <TabsTrigger value="mikrotik">
+                                    <MikrotikMark
+                                        variant={activeTab === 'mikrotik' ? 'solid' : 'line'}
+                                    />
+                                    MikroTik
+                                </TabsTrigger>
                             ) : null}
                         </TabsList>
                         {activeTab !== 'mikrotik' ? <div className="flex flex-wrap gap-2">

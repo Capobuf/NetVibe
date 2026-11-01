@@ -13,6 +13,7 @@ use App\Support\DeletionImpact;
 use App\Support\DeviceAssignment;
 use App\Support\Ipv4Cidr;
 use App\Support\Ipv4Ranges;
+use App\Support\MikrotikIpam;
 use App\Support\SubnetAddressTable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -71,6 +72,7 @@ class SubnetController extends Controller
                     'start_ip' => long2ip($range->start_address),
                     'end_ip' => long2ip($range->end_address),
                 ]),
+            'mikrotikSources' => MikrotikIpam::forSubnet($subnet),
             'firstProposableIp' => $subnet->firstProposableIp(),
             'query' => compact('search', 'sort', 'direction'),
             'addressCounts' => $subnet->addressCounts(),
@@ -79,7 +81,7 @@ class SubnetController extends Controller
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
             'initialIpAddress' => $selected ? [
-                ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label'),
+                ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label', 'mikrotik_edit_mode', 'mikrotik_matched_at'),
                 'ip' => long2ip($selected->address),
                 'device_id' => $selected->device_id, 'device_interface_id' => $selected->device_interface_id,
                 'device' => $selected->device, 'device_interface' => $selected->deviceInterface,
@@ -161,6 +163,7 @@ class SubnetController extends Controller
                     $vlanId = $site->vlans()->create($data['new_vlan'])->id;
                 }
 
+                MikrotikIpam::networkChange($record, ['cidr' => $range['cidr'], 'vlan_id' => $vlanId], $data['mikrotik_edit_mode'] ?? null);
                 $record->fill([
                     ...$range,
                     'name' => $data['name'] ?? null,

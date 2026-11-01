@@ -10,6 +10,7 @@ class VlanRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'],
             'tag' => ['required', 'integer', 'between:1,4094'],
             'name' => ['nullable', 'string', 'max:255'],
         ];

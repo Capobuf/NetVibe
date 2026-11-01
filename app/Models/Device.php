@@ -11,6 +11,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes'])]
 class Device extends Model
 {
+    public function mikrotikSources(): HasMany
+    {
+        return $this->hasMany(MikrotikSource::class);
+    }
+
     public function mikrotikConnection(): HasOne
     {
         return $this->hasOne(MikrotikConnection::class);

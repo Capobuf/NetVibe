@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\MikrotikConnection;
+use App\Support\MikrotikSync;
 use App\Support\SnipeItSync;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -28,3 +30,19 @@ Artisan::command('snipe-it:sync', function (SnipeItSync $synchronizer) {
 })->purpose('Sincronizza le aziende Snipe-IT attivate');
 
 Schedule::command('snipe-it:sync')->hourly()->withoutOverlapping();
+
+Artisan::command('mikrotik:sync', function (MikrotikSync $synchronizer) {
+    $failed = false;
+    foreach (MikrotikConnection::whereNotNull('activated_at')->lazyById() as $connection) {
+        try {
+            $synchronizer->refresh($connection);
+        } catch (ValidationException $exception) {
+            $failed = true;
+            $this->error('Dispositivo '.$connection->device_id.': '.collect($exception->errors())->flatten()->first());
+        }
+    }
+
+    return $failed ? 1 : 0;
+})->purpose('Sincronizza i dispositivi MikroTik attivati');
+
+Schedule::command('mikrotik:sync')->hourly()->withoutOverlapping();

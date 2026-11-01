@@ -1,3 +1,4 @@
+import { MikrotikEditMode } from '@/components/networks/mikrotik-edit-mode';
 import { Form } from '@inertiajs/react';
 import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -133,6 +134,9 @@ export default function VlanForm({
                                         message={errors.name}
                                     />
                                 </Field>
+                                <MikrotikEditMode
+                                    error={errors.mikrotik_edit_mode}
+                                />
                                 <DialogFooter>
                                     {vlan ? (
                                         <IconButton

@@ -1,6 +1,7 @@
+import { NewItemButton } from '@/components/new-item-button';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/icon-button';
 import {
@@ -96,10 +97,7 @@ export function CatalogForm({
                             <Pencil />
                         </IconButton>
                     ) : (
-                        <Button>
-                            <Plus data-icon="inline-start" />
-                            {title}
-                        </Button>
+                        <NewItemButton aria-label={title} />
                     )}
                 </DialogTrigger>
             )}

@@ -1,6 +1,8 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowRight, Server } from 'lucide-react';
+import { ListPageHeader } from '@/components/list-page-header';
+import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
@@ -27,7 +29,11 @@ type Props = {
     manufacturers: Manufacturer[];
     snipePending: number;
 };
-export default function Devices({
+export default function Devices(props: Props) {
+    return <DeviceList key={props.site.id} {...props} />;
+}
+
+function DeviceList({
     company,
     site,
     devices,
@@ -37,6 +43,12 @@ export default function Devices({
     const { companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
     const [type, setType] = useState('all');
+    const manufacturerIds = new Set(
+        devices.map((device) => device.manufacturer_id),
+    );
+    const typeIds = new Set(
+        devices.map((device) => device.model?.model_type_id ?? null),
+    );
     const types = Array.from(
         new Map(
             devices.flatMap((device) =>
@@ -78,21 +90,14 @@ export default function Devices({
     return (
         <>
             <Head title={`Dispositivi · ${context}`} />
-            <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
-                <header className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <Server className="size-6 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                {context}
-                            </p>
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                Dispositivi
-                            </h1>
-                        </div>
-                    </div>
-                    <DeviceForm {...route} manufacturers={manufacturers} />
-                </header>
+            <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
+                <ListPageHeader
+                    title="Dispositivi"
+                    icon={Server}
+                    actions={
+                        <DeviceForm {...route} manufacturers={manufacturers} />
+                    }
+                />
                 {snipePending > 0 ? (
                     <Alert>
                         <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
@@ -114,6 +119,10 @@ export default function Devices({
                 ) : null}
                 <DeviceTable
                     name="devices"
+                    variant="list"
+                    searchLabel="Cerca dispositivi"
+                    total={devices.length}
+                    filterKey={`${manufacturer}:${type}`}
                     rows={rows}
                     columns={[
                         { id: 'name', label: 'Nome', visible: true },
@@ -132,16 +141,22 @@ export default function Devices({
                             <TextLink href={show({ ...route, device: d.id })}>
                                 {d.name}
                             </TextLink>
+                        ) : c === 'ips' ? (
+                            d.ips?.length ? (
+                                <div className="flex flex-col gap-1 tabular-nums">
+                                    {d.ips.map((ip) => (
+                                        <span key={ip}>{ip}</span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <span className="text-muted-foreground">—</span>
+                            )
+                        ) : c === 'type' && d.model?.model_type ? (
+                            <Badge variant="secondary">
+                                {d.model.model_type.name}
+                            </Badge>
                         ) : (
-                            <span
-                                className={
-                                    c === 'ips'
-                                        ? 'font-mono text-xs'
-                                        : undefined
-                                }
-                            >
-                                {value(d, c) || '—'}
-                            </span>
+                            value(d, c) || '—'
                         )
                     }
                     actions={(d) => (
@@ -151,52 +166,87 @@ export default function Devices({
                             </Link>
                         </IconButton>
                     )}
-                    empty="Nessun dispositivo. Aggiungi il primo in questa sede."
+                    empty={
+                        devices.length
+                            ? 'Nessun dispositivo trovato'
+                            : 'Nessun dispositivo'
+                    }
                     filters={
                         <>
-                            <Select
-                                value={manufacturer}
-                                onValueChange={setManufacturer}
-                            >
-                                <SelectTrigger aria-label="Filtra produttore">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            Tutti i produttori
-                                        </SelectItem>
-                                        {manufacturers.map((m) => (
-                                            <SelectItem
-                                                key={m.id}
-                                                value={String(m.id)}
-                                            >
-                                                {m.name}
+                            {manufacturerIds.size > 1 ||
+                            manufacturer !== 'all' ? (
+                                <Select
+                                    value={manufacturer}
+                                    onValueChange={setManufacturer}
+                                >
+                                    <SelectTrigger
+                                        className="w-48 max-w-full"
+                                        aria-label="Filtra produttore"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            <SelectItem value="all">
+                                                Tutti i produttori
                                             </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            <Select value={type} onValueChange={setType}>
-                                <SelectTrigger aria-label="Filtra tipo">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            Tutti i tipi
-                                        </SelectItem>
-                                        {types.map((type) => (
-                                            <SelectItem
-                                                key={type.id}
-                                                value={String(type.id)}
-                                            >
-                                                {type.name}
+                                            {manufacturers
+                                                .filter(
+                                                    (m) =>
+                                                        manufacturerIds.has(
+                                                            m.id,
+                                                        ) ||
+                                                        String(m.id) ===
+                                                            manufacturer,
+                                                )
+                                                .map((m) => (
+                                                    <SelectItem
+                                                        key={m.id}
+                                                        value={String(m.id)}
+                                                    >
+                                                        {m.name}
+                                                    </SelectItem>
+                                                ))}
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                            ) : null}
+                            {typeIds.size > 1 || type !== 'all' ? (
+                                <Select value={type} onValueChange={setType}>
+                                    <SelectTrigger
+                                        className="w-44 max-w-full"
+                                        aria-label="Filtra tipo"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            <SelectItem value="all">
+                                                Tutti i tipi
                                             </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                                            {types.map((type) => (
+                                                <SelectItem
+                                                    key={type.id}
+                                                    value={String(type.id)}
+                                                >
+                                                    {type.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                            ) : null}
+                            {manufacturer !== 'all' || type !== 'all' ? (
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setManufacturer('all');
+                                        setType('all');
+                                    }}
+                                >
+                                    Azzera filtri
+                                </Button>
+                            ) : null}
                         </>
                     }
                 />

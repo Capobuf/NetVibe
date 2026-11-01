@@ -1,31 +1,23 @@
-import { Network, Search } from 'lucide-react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Filter, Layers3, Network, X } from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { ListPageHeader } from '@/components/list-page-header';
+import { TableSearch } from '@/components/table-search';
+import { useTablePagination } from '@/hooks/use-table-pagination';
+import SubnetForm from '@/components/networks/subnet-form';
+import { TableColumns } from '@/components/table-columns';
+import { TablePagination } from '@/components/table-pagination';
+import { TableSortHead } from '@/components/table-sort-head';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Empty,
     EmptyHeader,
     EmptyMedia,
     EmptyTitle,
-    EmptyDescription,
 } from '@/components/ui/empty';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
-import { TableColumns } from '@/components/table-columns';
-import { TableSortHead } from '@/components/table-sort-head';
-import { useTablePreferences } from '@/hooks/use-table-preferences';
-import { sortTableRows, type TableSort } from '@/lib/table-sort';
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from '@/components/ui/input-group';
-import SubnetForm from '@/components/networks/subnet-form';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
     Select,
     SelectContent,
@@ -42,25 +34,49 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useTablePreferences } from '@/hooks/use-table-preferences';
+import { groupSubnetsByVlan } from '@/lib/subnet-list';
+import { sortTableRows, type TableSort } from '@/lib/table-sort';
 import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
 
-type SubnetColumn = 'cidr' | 'details' | 'vlan';
+type SubnetColumn = 'cidr' | 'vlan' | 'range' | 'documented';
 
-type Props = { company: Company; site: Site; subnets: Subnet[]; vlans: Vlan[] };
+type SubnetListItem = Subnet & {
+    first_ip: string;
+    last_ip: string;
+    usable_addresses: number;
+    ip_addresses_count: number;
+};
 
-export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
+type Props = {
+    company: Company;
+    site: Site;
+    subnets: SubnetListItem[];
+    vlans: Vlan[];
+};
+
+export default function SubnetIndex(props: Props) {
+    return <SubnetList key={props.site.id} {...props} />;
+}
+
+function SubnetList({ company, site, subnets, vlans }: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [filter, setFilter] = useState('all');
     const [search, setSearch] = useState('');
+    const [grouped, setGrouped] = useState(false);
     const [sort, setSort] = useState<TableSort<SubnetColumn>>(null);
+    const vlanIds = new Set(subnets.map((subnet) => subnet.vlan_id));
+    const hasVlans = subnets.some((subnet) => subnet.vlan_id !== null);
+    const canFilter = vlanIds.size > 1;
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences<SubnetColumn>('subnets', [
-            { id: 'cidr', label: 'CIDR', visible: true },
-            { id: 'details', label: 'Nome e descrizione', visible: true },
-            { id: 'vlan', label: 'VLAN', visible: true },
+            { id: 'cidr', label: 'Subnet', visible: true },
+            { id: 'vlan', label: 'VLAN', visible: hasVlans },
+            { id: 'range', label: 'Intervallo utilizzabile', visible: true },
+            { id: 'documented', label: 'IP documentati', visible: true },
         ]);
     const visibleColumns = columns.filter((column) => column.visible);
     const context =
@@ -74,135 +90,185 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
         vlans,
     };
     const vlansById = new Map(vlans.map((vlan) => [vlan.id, vlan]));
+    const query = search.trim().toLocaleLowerCase();
     const filteredSubnets = subnets.filter((subnet) => {
-        const vlan =
-            subnet.vlan_id === null ? null : vlansById.get(subnet.vlan_id);
-        const matchesVlan =
-            filter === 'all' ||
-            (filter === 'none'
-                ? subnet.vlan_id === null
-                : String(subnet.vlan_id) === filter);
-        const text = [
+        if (filter !== 'all' && String(subnet.vlan_id ?? 'none') !== filter)
+            return false;
+        const vlan = vlansById.get(subnet.vlan_id ?? -1);
+        return [
             subnet.cidr,
             subnet.name,
             subnet.description,
+            subnet.first_ip,
+            subnet.last_ip,
             vlan ? `VLAN ${vlan.tag} ${vlan.name ?? ''}` : 'Senza VLAN',
         ]
             .join(' ')
-            .toLocaleLowerCase();
-        return matchesVlan && text.includes(search.trim().toLocaleLowerCase());
+            .toLocaleLowerCase()
+            .includes(query);
     });
-    const visibleSubnets = sortTableRows(
+    const sortedSubnets = sortTableRows(
         filteredSubnets,
         sort,
         (subnet, column) => {
             if (column === 'cidr') return subnet.cidr;
-            if (column === 'details')
-                return [subnet.name, subnet.description]
-                    .filter(Boolean)
-                    .join(' ');
-            return subnet.vlan_id === null
-                ? null
-                : (vlansById.get(subnet.vlan_id)?.tag ?? null);
+            if (column === 'range') return subnet.first_ip;
+            if (column === 'documented') return subnet.ip_addresses_count;
+            return vlansById.get(subnet.vlan_id ?? -1)?.tag ?? null;
         },
     );
+    const rows = grouped
+        ? groupSubnetsByVlan(sortedSubnets, vlans)
+        : sortedSubnets;
+    const {
+        pageRows,
+        page,
+        pageCount,
+        pageSize,
+        needsPagination,
+        setPage,
+        setPageSize,
+    } = useTablePagination(
+        rows,
+        JSON.stringify([search, filter, sort, grouped]),
+    );
+    const filtered = search.trim() !== '' || filter !== 'all';
 
     return (
         <>
             <Head title={`Subnet · ${context}`} />
-            <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-col gap-2">
-                        <h1 className="text-2xl font-semibold tracking-tight text-balance">
-                            Subnet
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            {context}
-                        </p>
-                    </div>
-                    {auth.canEditIpam ? (
-                        <SubnetForm {...formContext} />
-                    ) : null}
-                </header>
-                <Card className="gap-0 overflow-hidden py-0">
-                    <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 py-4">
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-1">
-                            <Label htmlFor="subnet-search" className="sr-only">
-                                Cerca subnet
-                            </Label>
-                            <InputGroup className="max-w-sm">
-                                <InputGroupInput
-                                    id="subnet-search"
-                                    type="search"
-                                    placeholder="Cerca subnet…"
-                                    value={search}
-                                    onChange={(event) =>
-                                        setSearch(event.target.value)
-                                    }
-                                />
-                                <InputGroupAddon>
-                                    <Search aria-hidden="true" />
-                                </InputGroupAddon>
-                            </InputGroup>
-                            <CardDescription
-                                className="tabular-nums"
-                                role="status"
-                            >
-                                {visibleSubnets.length} di {subnets.length}{' '}
-                                subnet
-                            </CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Label htmlFor="subnet-vlan-filter">VLAN</Label>
-                            <Select value={filter} onValueChange={setFilter}>
-                                <SelectTrigger
-                                    id="subnet-vlan-filter"
-                                    className="w-48 sm:w-56"
+            <div className="flex min-w-0 flex-1 flex-col p-4 md:p-6">
+                <section
+                    aria-labelledby="subnets-title"
+                    className="flex min-w-0 flex-col"
+                >
+                    <div className="flex flex-col gap-5 pb-4">
+                        <ListPageHeader
+                            id="subnets-title"
+                            title="Subnet"
+                            icon={Network}
+                            actions={
+                                auth.canEditIpam ? (
+                                    <SubnetForm {...formContext} />
+                                ) : null
+                            }
+                        />
+                        <div className="flex flex-wrap items-center gap-3">
+                            <TableSearch
+                                label="Cerca subnet"
+                                total={subnets.length}
+                                value={search}
+                                onChange={setSearch}
+                            />
+                            {canFilter || filter !== 'all' ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <Label
+                                        htmlFor="subnet-vlan-filter"
+                                        className="sr-only"
+                                    >
+                                        Filtra per VLAN
+                                    </Label>
+                                    <Select
+                                        value={filter}
+                                        onValueChange={(value) => {
+                                            setFilter(value);
+                                            setPage(1);
+                                        }}
+                                    >
+                                        <SelectTrigger
+                                            id="subnet-vlan-filter"
+                                            className="w-52 max-w-full"
+                                        >
+                                            <Filter aria-hidden="true" />
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
+                                                <SelectItem value="all">
+                                                    Tutte le VLAN
+                                                </SelectItem>
+                                                {vlanIds.has(null) ||
+                                                filter === 'none' ? (
+                                                    <SelectItem value="none">
+                                                        Senza VLAN
+                                                    </SelectItem>
+                                                ) : null}
+                                                {vlans
+                                                    .filter(
+                                                        (vlan) =>
+                                                            vlanIds.has(
+                                                                vlan.id,
+                                                            ) ||
+                                                            String(vlan.id) ===
+                                                                filter,
+                                                    )
+                                                    .map((vlan) => (
+                                                        <SelectItem
+                                                            key={vlan.id}
+                                                            value={String(
+                                                                vlan.id,
+                                                            )}
+                                                        >
+                                                            VLAN {vlan.tag}
+                                                            {vlan.name
+                                                                ? ` · ${vlan.name}`
+                                                                : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                    {filter !== 'all' ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            aria-label="Rimuovi filtro VLAN"
+                                            onClick={() => {
+                                                setFilter('all');
+                                                setPage(1);
+                                            }}
+                                        >
+                                            <X />
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            {canFilter || grouped ? (
+                                <Button
+                                    variant={grouped ? 'secondary' : 'outline'}
+                                    aria-pressed={grouped}
+                                    aria-label="Raggruppa per VLAN"
+                                    onClick={() => {
+                                        setGrouped(!grouped);
+                                        setPage(1);
+                                    }}
                                 >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            Tutte le subnet
-                                        </SelectItem>
-                                        <SelectItem value="none">
-                                            Senza VLAN
-                                        </SelectItem>
-                                        {vlans.map((vlan) => (
-                                            <SelectItem
-                                                key={vlan.id}
-                                                value={String(vlan.id)}
-                                            >
-                                                VLAN {vlan.tag}
-                                                {vlan.name
-                                                    ? ` · ${vlan.name}`
-                                                    : ''}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                                    <Layers3 aria-hidden="true" />
+                                    Raggruppa
+                                </Button>
+                            ) : null}
                         </div>
-                    </CardHeader>
-                    <CardContent className="px-0">
+                    </div>
+                    <div className="min-w-0">
                         <Table
                             aria-label="Subnet della sede selezionata"
                             data-separators={separators}
                             className="data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
                         >
-                            <TableHeader className="bg-muted/50">
+                            <TableHeader>
                                 <TableRow>
                                     {visibleColumns.map((column) => (
                                         <TableSortHead
                                             key={column.id}
                                             column={column}
                                             sort={sort}
-                                            onSort={setSort}
+                                            onSort={(value) => {
+                                                setSort(value);
+                                                setPage(1);
+                                            }}
                                         />
                                     ))}
-                                    <TableHead className="w-12 text-right">
-                                        <span className="sr-only">Azioni</span>
+                                    <TableHead className="w-16 text-right">
                                         <TableColumns
                                             columns={columns}
                                             onChange={setColumns}
@@ -213,90 +279,161 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {visibleSubnets.map((subnet) => {
-                                    const vlan =
-                                        subnet.vlan_id === null
-                                            ? null
-                                            : vlansById.get(subnet.vlan_id);
+                                {pageRows.map((subnet, position) => {
+                                    const vlan = vlansById.get(
+                                        subnet.vlan_id ?? -1,
+                                    );
+                                    const startsGroup =
+                                        grouped &&
+                                        (position === 0 ||
+                                            pageRows[position - 1].vlan_id !==
+                                                subnet.vlan_id);
                                     return (
-                                        <TableRow key={subnet.id}>
-                                            {visibleColumns.map((column) => (
-                                                <TableCell
-                                                    key={column.id}
-                                                    className={
-                                                        column.id === 'cidr'
-                                                            ? 'whitespace-nowrap'
-                                                            : 'max-w-lg min-w-40 whitespace-normal'
-                                                    }
-                                                >
-                                                    {column.id === 'cidr' ? (
-                                                        <Link
-                                                            href={show({
-                                                                company:
-                                                                    company.id,
-                                                                site: site.id,
-                                                                subnet: subnet.id,
-                                                            })}
-                                                            className="rounded-sm font-mono font-medium tabular-nums transition-colors hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                        <Fragment key={subnet.id}>
+                                            {startsGroup ? (
+                                                <TableRow className="bg-muted/50">
+                                                    <TableHead
+                                                        scope="row"
+                                                        colSpan={
+                                                            visibleColumns.length +
+                                                            1
+                                                        }
+                                                        className="h-10 text-xs whitespace-normal"
+                                                    >
+                                                        {vlan
+                                                            ? `VLAN ${vlan.tag}${vlan.name ? ` · ${vlan.name}` : ''}`
+                                                            : 'Senza VLAN'}
+                                                    </TableHead>
+                                                </TableRow>
+                                            ) : null}
+                                            <TableRow className="even:bg-muted/20 focus-within:bg-muted/50">
+                                                {visibleColumns.map(
+                                                    (column) => (
+                                                        <TableCell
+                                                            key={column.id}
+                                                            className="max-w-lg min-w-40 py-3 whitespace-normal"
                                                         >
-                                                            {subnet.cidr}
-                                                        </Link>
-                                                    ) : column.id ===
-                                                      'details' ? (
-                                                        <div className="flex flex-col gap-1 break-words">
-                                                            {subnet.name ? (
-                                                                <span className="font-medium">
-                                                                    {
-                                                                        subnet.name
-                                                                    }
+                                                            {column.id ===
+                                                            'cidr' ? (
+                                                                <div className="flex flex-col items-start gap-1 break-words">
+                                                                    {subnet.name ? (
+                                                                        <span className="max-w-full text-xs text-muted-foreground">
+                                                                            {
+                                                                                subnet.name
+                                                                            }
+                                                                        </span>
+                                                                    ) : null}
+                                                                    <Link
+                                                                        href={show(
+                                                                            {
+                                                                                company:
+                                                                                    company.id,
+                                                                                site: site.id,
+                                                                                subnet: subnet.id,
+                                                                            },
+                                                                        )}
+                                                                        className="rounded-sm text-base font-medium whitespace-nowrap tabular-nums transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                                                    >
+                                                                        {
+                                                                            subnet.cidr
+                                                                        }
+                                                                    </Link>
+                                                                    {subnet.description ? (
+                                                                        <span className="max-w-full text-xs text-muted-foreground">
+                                                                            {
+                                                                                subnet.description
+                                                                            }
+                                                                        </span>
+                                                                    ) : null}
+                                                                </div>
+                                                            ) : column.id ===
+                                                              'range' ? (
+                                                                <div className="flex flex-col gap-1 text-sm tabular-nums">
+                                                                    <span>
+                                                                        {
+                                                                            subnet.first_ip
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-muted-foreground">
+                                                                        {
+                                                                            subnet.last_ip
+                                                                        }
+                                                                    </span>
+                                                                </div>
+                                                            ) : column.id ===
+                                                              'documented' ? (
+                                                                <div className="flex w-40 max-w-full flex-col gap-2">
+                                                                    <div className="flex items-baseline gap-1.5 tabular-nums">
+                                                                        <span className="text-base font-medium">
+                                                                            {subnet.ip_addresses_count.toLocaleString(
+                                                                                'it-IT',
+                                                                            )}
+                                                                        </span>
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            su{' '}
+                                                                            {subnet.usable_addresses.toLocaleString(
+                                                                                'it-IT',
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                    <Progress
+                                                                        value={
+                                                                            (subnet.ip_addresses_count /
+                                                                                subnet.usable_addresses) *
+                                                                            100
+                                                                        }
+                                                                        aria-label={`IP documentati in ${subnet.cidr}`}
+                                                                        getValueLabel={() =>
+                                                                            `${subnet.ip_addresses_count} su ${subnet.usable_addresses}`
+                                                                        }
+                                                                        indicatorStyle={{
+                                                                            backgroundColor:
+                                                                                'var(--chart-2)',
+                                                                        }}
+                                                                        className="h-1.5 bg-muted"
+                                                                    />
+                                                                </div>
+                                                            ) : vlan ? (
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <Badge variant="secondary">
+                                                                        VLAN{' '}
+                                                                        {
+                                                                            vlan.tag
+                                                                        }
+                                                                    </Badge>
+                                                                    {vlan.name ? (
+                                                                        <span className="text-sm break-words text-muted-foreground">
+                                                                            {
+                                                                                vlan.name
+                                                                            }
+                                                                        </span>
+                                                                    ) : null}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-sm text-muted-foreground">
+                                                                    Senza VLAN
                                                                 </span>
-                                                            ) : null}
-                                                            {subnet.description ? (
-                                                                <span className="text-muted-foreground">
-                                                                    {
-                                                                        subnet.description
-                                                                    }
-                                                                </span>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <Badge
-                                                                variant={
-                                                                    vlan
-                                                                        ? 'secondary'
-                                                                        : 'outline'
-                                                                }
-                                                            >
-                                                                {vlan
-                                                                    ? `VLAN ${vlan.tag}`
-                                                                    : 'Senza VLAN'}
-                                                            </Badge>
-                                                            {vlan?.name ? (
-                                                                <p className="mt-1 max-w-48 text-xs break-words whitespace-normal text-muted-foreground">
-                                                                    {vlan.name}
-                                                                </p>
-                                                            ) : null}
-                                                        </>
-                                                    )}
+                                                            )}
+                                                        </TableCell>
+                                                    ),
+                                                )}
+                                                <TableCell className="text-right">
+                                                    {auth.canEditIpam ? (
+                                                        <SubnetForm
+                                                            {...formContext}
+                                                            subnet={subnet}
+                                                        />
+                                                    ) : null}
                                                 </TableCell>
-                                            ))}
-                                            <TableCell className="text-right">
-                                                {auth.canEditIpam ? (
-                                                    <SubnetForm
-                                                        {...formContext}
-                                                        subnet={subnet}
-                                                    />
-                                                ) : null}
-                                            </TableCell>
-                                        </TableRow>
+                                            </TableRow>
+                                        </Fragment>
                                     );
                                 })}
-                                {visibleSubnets.length === 0 ? (
+                                {rows.length === 0 ? (
                                     <TableRow>
                                         <TableCell
                                             colSpan={visibleColumns.length + 1}
-                                            className="h-40 text-center whitespace-normal"
+                                            className="h-48 whitespace-normal"
                                         >
                                             <Empty>
                                                 <EmptyHeader>
@@ -308,21 +445,41 @@ export default function SubnetIndex({ company, site, subnets, vlans }: Props) {
                                                             ? 'Nessuna subnet'
                                                             : 'Nessuna subnet trovata'}
                                                     </EmptyTitle>
-                                                    {subnets.length > 0 ? (
-                                                        <EmptyDescription>
-                                                            Modifica la ricerca
-                                                            o il filtro VLAN.
-                                                        </EmptyDescription>
-                                                    ) : null}
                                                 </EmptyHeader>
+                                                {filtered ? (
+                                                    <Button
+                                                        variant="outline"
+                                                        onClick={() => {
+                                                            setSearch('');
+                                                            setFilter('all');
+                                                            setPage(1);
+                                                        }}
+                                                    >
+                                                        Azzera ricerca e filtri
+                                                    </Button>
+                                                ) : null}
                                             </Empty>
                                         </TableCell>
                                     </TableRow>
                                 ) : null}
                             </TableBody>
                         </Table>
-                    </CardContent>
-                </Card>
+                    </div>
+                    {needsPagination ? (
+                        <TablePagination
+                            summary={`${pageRows.length}/${rows.length}`}
+                            page={page}
+                            pageCount={pageCount}
+                            pageSize={pageSize}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
+                    ) : (
+                        <p role="status" className="sr-only">
+                            {rows.length} subnet trovate
+                        </p>
+                    )}
+                </section>
             </div>
         </>
     );

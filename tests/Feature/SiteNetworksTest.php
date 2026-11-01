@@ -75,6 +75,30 @@ class SiteNetworksTest extends TestCase
         $this->get(route('companies.sites.vlans.show', [$otherCompany, $site, $vlan]))->assertNotFound();
     }
 
+    public function test_subnet_list_shows_usable_ranges_and_documented_counts_only_for_the_selected_site(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $otherSite = $company->sites()->create(['name' => 'Roma']);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'hostname' => 'router']);
+        $other = $otherSite->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $other->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'hostname' => 'router-roma']);
+        $site->subnets()->create(Ipv4Cidr::parse('10.0.1.0/31'));
+        $site->subnets()->create(Ipv4Cidr::parse('10.0.2.1/32'));
+
+        $this->get(route('companies.sites.subnets.index', [$company, $site]))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page->component('subnets/index')
+                ->has('subnets', 3)->where('subnets.0.id', $subnet->id)
+                ->where('subnets.0.first_ip', '10.0.0.1')->where('subnets.0.last_ip', '10.0.0.254')
+                ->where('subnets.0.usable_addresses', 254)->where('subnets.0.ip_addresses_count', 1)
+                ->where('subnets.1.first_ip', '10.0.1.0')->where('subnets.1.last_ip', '10.0.1.1')
+                ->where('subnets.1.usable_addresses', 2)->where('subnets.1.ip_addresses_count', 0)
+                ->where('subnets.2.first_ip', '10.0.2.1')->where('subnets.2.last_ip', '10.0.2.1')
+                ->where('subnets.2.usable_addresses', 1));
+    }
+
     public function test_overlaps_are_rejected_across_vlans_but_not_across_sites(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

@@ -1,5 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, PanelsTopLeft, Factory, Shapes } from 'lucide-react';
+import { ListPageHeader } from '@/components/list-page-header';
+import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from '@/components/devices/catalog-form';
 import { ManufacturerTable } from '@/components/devices/manufacturer-table';
 import { DeviceTable } from '@/components/devices/device-table';
@@ -47,6 +49,15 @@ export default function Models({
     tab,
     manufacturerId,
 }: Props) {
+    const title =
+        tab === 'manufacturers'
+            ? 'Produttori'
+            : tab === 'types'
+              ? 'Tipi'
+              : 'Modelli';
+    const manufacturerIds = new Set(
+        models.map((model) => model.manufacturer_id),
+    );
     const { companyNavigation } = usePage().props;
     const context =
         companyNavigation?.currentCompanyId && companyNavigation.currentSiteId
@@ -67,8 +78,8 @@ export default function Models({
     }
     return (
         <>
-            <Head title="Modelli" />
-            <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
+            <Head title={title} />
+            <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
                 <div>
                     <Button variant="ghost" size="sm" asChild>
                         <Link href={context ? devices(context) : companies()}>
@@ -77,32 +88,17 @@ export default function Models({
                         </Link>
                     </Button>
                 </div>
-                <header>
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        Modelli
-                    </h1>
-                </header>
-                <Tabs
-                    value={tab}
-                    onValueChange={(value) => visit(value)}
-                    className="gap-6"
-                >
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                        <TabsList aria-label="Catalogo dispositivi">
-                            <TabsTrigger value="models">
-                                <PanelsTopLeft />
-                                Modelli
-                            </TabsTrigger>
-                            <TabsTrigger value="manufacturers">
-                                <Factory />
-                                Produttori
-                            </TabsTrigger>
-                            <TabsTrigger value="types">
-                                <Shapes />
-                                Tipi
-                            </TabsTrigger>
-                        </TabsList>
-                        {tab === 'types' ? (
+                <ListPageHeader
+                    title={title}
+                    icon={
+                        tab === 'manufacturers'
+                            ? Factory
+                            : tab === 'types'
+                              ? Shapes
+                              : PanelsTopLeft
+                    }
+                    actions={
+                        tab === 'types' ? (
                             <CatalogForm
                                 key="type"
                                 title="Nuovo tipo"
@@ -125,7 +121,29 @@ export default function Models({
                                     store.form(manufacturer)
                                 }
                             />
-                        )}
+                        )
+                    }
+                />
+                <Tabs
+                    value={tab}
+                    onValueChange={(value) => visit(value)}
+                    className="gap-4"
+                >
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <TabsList aria-label="Catalogo dispositivi">
+                            <TabsTrigger value="models">
+                                <PanelsTopLeft />
+                                Modelli
+                            </TabsTrigger>
+                            <TabsTrigger value="manufacturers">
+                                <Factory />
+                                Produttori
+                            </TabsTrigger>
+                            <TabsTrigger value="types">
+                                <Shapes />
+                                Tipi
+                            </TabsTrigger>
+                        </TabsList>
                     </div>
                     <TabsContent
                         value="models"
@@ -134,37 +152,72 @@ export default function Models({
                     >
                         <DeviceTable
                             name="device-models"
+                            variant="list"
+                            searchLabel="Cerca modelli"
+                            total={models.length}
+                            filterKey={String(manufacturerId ?? 'all')}
                             filters={
-                                <Select
-                                    value={String(manufacturerId ?? 'all')}
-                                    onValueChange={(value) =>
-                                        visit(
-                                            'models',
-                                            value === 'all'
-                                                ? null
-                                                : Number(value),
-                                        )
-                                    }
-                                >
-                                    <SelectTrigger aria-label="Filtra per produttore">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="all">
-                                                Tutti i produttori
-                                            </SelectItem>
-                                            {manufacturers.map((m) => (
-                                                <SelectItem
-                                                    key={m.id}
-                                                    value={String(m.id)}
-                                                >
-                                                    {m.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
+                                manufacturerIds.size > 1 ||
+                                manufacturerId !== null ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Select
+                                            value={String(
+                                                manufacturerId ?? 'all',
+                                            )}
+                                            onValueChange={(value) =>
+                                                visit(
+                                                    'models',
+                                                    value === 'all'
+                                                        ? null
+                                                        : Number(value),
+                                                )
+                                            }
+                                        >
+                                            <SelectTrigger
+                                                className="w-52 max-w-full"
+                                                aria-label="Filtra per produttore"
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup>
+                                                    <SelectItem value="all">
+                                                        Tutti i produttori
+                                                    </SelectItem>
+                                                    {manufacturers
+                                                        .filter(
+                                                            (m) =>
+                                                                manufacturerIds.has(
+                                                                    m.id,
+                                                                ) ||
+                                                                m.id ===
+                                                                    manufacturerId,
+                                                        )
+                                                        .map((m) => (
+                                                            <SelectItem
+                                                                key={m.id}
+                                                                value={String(
+                                                                    m.id,
+                                                                )}
+                                                            >
+                                                                {m.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
+                                        {manufacturerId !== null ? (
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    visit('models', null)
+                                                }
+                                            >
+                                                Azzera filtro
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                ) : null
                             }
                             rows={
                                 manufacturerId
@@ -215,12 +268,24 @@ export default function Models({
                             render={(m, c) =>
                                 c === 'rack_height_u' ? (
                                     m.rack_height_u ? (
-                                        `${m.rack_height_u}U`
+                                        <span className="tabular-nums">
+                                            {m.rack_height_u} U
+                                        </span>
                                     ) : (
-                                        'Non rackmount'
+                                        <span className="text-muted-foreground">
+                                            Non rackmount
+                                        </span>
                                     )
                                 ) : c === 'type' ? (
-                                    (m.model_type?.name ?? '—')
+                                    m.model_type ? (
+                                        <Badge variant="secondary">
+                                            {m.model_type.name}
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            —
+                                        </span>
+                                    )
                                 ) : c === 'manufacturer' ? (
                                     m.manufacturer.name
                                 ) : c === 'panel' ? (
@@ -250,7 +315,11 @@ export default function Models({
                                     m.devices_count
                                 )
                             }
-                            empty="Nessun modello. Crea un modello per disegnarne il pannello."
+                            empty={
+                                models.length
+                                    ? 'Nessun modello trovato'
+                                    : 'Nessun modello'
+                            }
                             actions={(m) => (
                                 <CatalogForm
                                     title="Modifica modello"
@@ -288,6 +357,8 @@ export default function Models({
                     >
                         <DeviceTable
                             name="model-types"
+                            variant="list"
+                            searchLabel="Cerca tipi"
                             rows={types}
                             columns={[
                                 { id: 'name', label: 'Tipo', visible: true },
@@ -298,7 +369,7 @@ export default function Models({
                                 },
                             ]}
                             value={(type, column) => type[column] ?? 0}
-                            empty="Nessun tipo. Aggiungi il primo."
+                            empty="Nessun tipo"
                             actions={(type) => (
                                 <CatalogForm
                                     title="Modifica tipo"

@@ -32,8 +32,19 @@ class SubnetController extends Controller
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
             'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name']),
-            'subnets' => $site->subnets()->orderBy('network_address')
-                ->get(['id', 'cidr', 'name', 'description', 'vlan_id']),
+            'subnets' => $site->subnets()
+                ->select(['id', 'cidr', 'name', 'description', 'vlan_id', 'network_address', 'broadcast_address'])
+                ->withCount('ipAddresses')->orderBy('network_address')->get()
+                ->map(function (Subnet $subnet) {
+                    [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
+
+                    return [
+                        ...$subnet->only('id', 'cidr', 'name', 'description', 'vlan_id', 'ip_addresses_count'),
+                        'first_ip' => long2ip($first),
+                        'last_ip' => long2ip($last),
+                        'usable_addresses' => $last - $first + 1,
+                    ];
+                }),
         ]);
     }
 

@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeft, PanelsTopLeft, Factory, Shapes } from 'lucide-react';
+import { ArrowLeft, LayoutTemplate, Factory, Shapes } from 'lucide-react';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from '@/components/devices/catalog-form';
@@ -49,12 +49,6 @@ export default function Models({
     tab,
     manufacturerId,
 }: Props) {
-    const title =
-        tab === 'manufacturers'
-            ? 'Produttori'
-            : tab === 'types'
-              ? 'Tipi'
-              : 'Modelli';
     const manufacturerIds = new Set(
         models.map((model) => model.manufacturer_id),
     );
@@ -78,7 +72,7 @@ export default function Models({
     }
     return (
         <>
-            <Head title={title} />
+            <Head title="Catalogo" />
             <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
                 <div>
                     <Button variant="ghost" size="sm" asChild>
@@ -89,14 +83,8 @@ export default function Models({
                     </Button>
                 </div>
                 <ListPageHeader
-                    title={title}
-                    icon={
-                        tab === 'manufacturers'
-                            ? Factory
-                            : tab === 'types'
-                              ? Shapes
-                              : PanelsTopLeft
-                    }
+                    title="Catalogo"
+                    icon={LayoutTemplate}
                     actions={
                         tab === 'types' ? (
                             <CatalogForm
@@ -132,7 +120,7 @@ export default function Models({
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <TabsList aria-label="Catalogo dispositivi">
                             <TabsTrigger value="models">
-                                <PanelsTopLeft />
+                                <LayoutTemplate />
                                 Modelli
                             </TabsTrigger>
                             <TabsTrigger value="manufacturers">
@@ -386,4 +374,4 @@ export default function Models({
         </>
     );
 }
-Models.layout = () => ({ breadcrumbs: [{ title: 'Modelli', href: index() }] });
+Models.layout = () => ({ breadcrumbs: [{ title: 'Catalogo', href: index() }] });

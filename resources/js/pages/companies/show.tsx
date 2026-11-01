@@ -92,9 +92,9 @@ export default function CompanyShow({
                                             Azienda
                                         </CardDescription>
                                         <CardTitle>
-                                            <h2 className="break-words">
+                                            <h1 className="break-words">
                                                 {company.name}
-                                            </h2>
+                                            </h1>
                                         </CardTitle>
                                     </div>
                                 </div>

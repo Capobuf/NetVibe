@@ -65,9 +65,9 @@ export default function IpStatusIndex({ statuses }: Props) {
             <Head title="Stati IP" />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="text-2xl font-semibold tracking-tight text-balance">
+                    <h1 className="text-2xl font-semibold tracking-tight text-balance">
                         Stati IP
-                    </h2>
+                    </h1>
                     <IpStatusForm />
                 </header>
                 <Card className="gap-0 overflow-hidden py-0">

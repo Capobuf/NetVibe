@@ -1,6 +1,6 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { ArrowRight, Server } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
@@ -93,7 +93,6 @@ function DeviceList({
             <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
                 <ListPageHeader
                     title="Dispositivi"
-                    icon={Server}
                     actions={
                         <DeviceForm {...route} manufacturers={manufacturers} />
                     }

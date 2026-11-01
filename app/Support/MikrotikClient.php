@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Exceptions\MikrotikException;
 use App\Models\MikrotikConnection;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
@@ -34,8 +35,26 @@ class MikrotikClient
         'ip/neighbor' => ['Neighbor discovery', 'interface,address,mac-address,identity,platform,board,version'],
     ];
 
+    private string $diagnosticLog = '';
+
+    private bool $anonymousTls = false;
+
+    public function diagnosticLog(): string
+    {
+        return $this->diagnosticLog;
+    }
+
+    private function log(string $line): void
+    {
+        // Bound each persisted attempt below the TEXT column's byte limit.
+        $this->diagnosticLog = mb_strcut($this->diagnosticLog.$line."\n", 0, 60000, 'UTF-8');
+    }
+
     public static function normalizeUrl(string $url): string
     {
+        if (! str_contains($url, '://')) {
+            $url = 'https://'.$url;
+        }
         $parts = parse_url($url);
         if ($parts === false || ($parts['scheme'] ?? null) !== 'https' || empty($parts['host'])
             || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
@@ -80,18 +99,25 @@ class MikrotikClient
 
     private function collect(#[\SensitiveParameter] MikrotikConnection $connection, bool $analyze, bool $sync = false): array
     {
+        $this->diagnosticLog = '';
+        $this->anonymousTls = false;
+        $this->log($sync ? 'Sincronizzazione REST' : ($analyze ? 'Analisi REST' : 'Verifica connessione REST'));
         $deadline = microtime(true) + 45;
         $url = self::normalizeUrl($connection->server_url);
         $host = parse_url($url, PHP_URL_HOST);
+        $this->log('Risoluzione IPv4: '.$host);
         $addresses = $this->resolve($host);
         if (! $addresses) {
+            $this->log('Nessun indirizzo IPv4 risolto.');
             throw new MikrotikException('network');
         }
         foreach ($addresses as $address) {
             if (! self::allowedAddress($address)) {
+                $this->log('Indirizzo IPv4 non consentito: '.$address);
                 throw new MikrotikException('unsafe_url');
             }
         }
+        $this->log('IPv4: '.implode(', ', $addresses));
         $tables = $coverage = [];
         $budget = 4_000_000;
         $identity = null;
@@ -111,6 +137,7 @@ class MikrotikClient
                     $status = 'ok';
                 } catch (MikrotikException $exception) {
                     $status = $exception->status;
+                    $this->log('/rest/'.$path.' — '.$status.': '.$exception->getMessage());
                     if (str_starts_with($path, 'system/') || in_array($status, ['unauthorized', 'network', 'tls', 'timeout', 'rate_limit', 'redirect', 'limit'], true)) {
                         $stop = $status;
                     }
@@ -143,6 +170,8 @@ class MikrotikClient
         }
         $status = $stop ?? (collect($coverage)->contains(fn ($menu) => $menu['status'] !== 'ok') ? 'partial' : 'ok');
 
+        $this->log('Esito: '.$status);
+
         // Payloads stay in memory; only the caller's normalized records may be persisted.
         return compact('status', 'identity', 'coverage', 'tables');
     }
@@ -168,14 +197,31 @@ class MikrotikClient
         RateLimiter::hit('mikrotik:'.$url, 60);
         $host = parse_url($url, PHP_URL_HOST);
         $port = parse_url($url, PHP_URL_PORT) ?? 443;
+        $trace = fopen('php://memory', 'w+');
+        $handlerError = null;
+        $retryAnonymous = false;
+        // Pin validated DNS results for both TLS attempts.
+        $curlOptions = [CURLOPT_RESOLVE => ["{$host}:{$port}:{$address}"]];
+        if ($this->anonymousTls) {
+            $curlOptions[CURLOPT_SSL_CIPHER_LIST] = 'ADH-AES256-SHA256:ADH-AES128-SHA256:@SECLEVEL=0';
+        }
+        $this->log('GET '.$url.'/rest/'.$path.'?'.http_build_query(['.proplist' => $properties]));
+        $this->log('Destinazione: '.$address.':'.$port.'; verifica certificato: '.($connection->allow_unverified_certificate ? 'disabilitata' : 'abilitata'));
         try {
             $attempted = true;
             $response = Http::withBasicAuth($connection->username, $connection->password)->acceptJson()->withUserAgent('NetVibe')
                 ->connectTimeout(min(3, $remaining))->timeout(min(8, $remaining))->withoutRedirecting()
                 ->withOptions([
                     'verify' => ! $connection->allow_unverified_certificate, 'proxy' => '', 'force_ip_resolve' => 'v4',
-                    // Pin validated DNS results; never resolve again after checking the destination.
-                    'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$address}"]],
+                    'debug' => $trace,
+                    'on_stats' => function (TransferStats $stats) use (&$handlerError): void {
+                        $handlerError = $stats->getHandlerErrorData();
+                    },
+                    'curl' => $curlOptions,
+                    ...($this->anonymousTls ? [
+                        'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
+                        'crypto_method_max' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
+                    ] : []),
                     'on_headers' => function (ResponseInterface $response) use ($limit): void {
                         if ((int) $response->getHeaderLine('Content-Length') > $limit) {
                             throw new MikrotikException('limit');
@@ -188,20 +234,47 @@ class MikrotikClient
                     },
                 ])->get($url.'/rest/'.$path, ['.proplist' => $properties]);
         } catch (ConnectionException|GuzzleException $exception) {
-            $status = 'network';
-            // Never expose upstream bodies or exceptions: both may contain credentials.
+            if ($handlerError instanceof MikrotikException) {
+                throw $handlerError;
+            }
             for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
                 if ($cause instanceof MikrotikException) {
-                    throw new MikrotikException($cause->status);
-                }
-                if (method_exists($cause, 'getHandlerContext')) {
-                    $status = match ($cause->getHandlerContext()['errno'] ?? 0) {
-                        28 => 'timeout', 35, 51, 58, 60, 77, 83, 90, 91 => 'tls', default => $status,
-                    };
+                    throw $cause;
                 }
             }
-            throw new MikrotikException($status);
+            $retryAnonymous = $handlerError === 35 && $connection->allow_unverified_certificate && ! $this->anonymousTls;
+            if (! $retryAnonymous) {
+                throw new MikrotikException(match ($handlerError) {
+                    28 => 'timeout',
+                    35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91, 98 => 'tls',
+                    default => 'network',
+                });
+            }
+        } finally {
+            rewind($trace);
+            $secrets = array_filter([
+                $connection->password,
+                rawurlencode($connection->password),
+                base64_encode($connection->username.':'.$connection->password),
+            ], fn ($secret) => $secret !== '');
+            while (($line = fgets($trace)) !== false) {
+                // Keep cURL transport lines, never authentication, response headers or bodies.
+                if (str_starts_with($line, '* ') && stripos($line, ' auth ') === false) {
+                    $this->log(str_replace($secrets, '[omesso]', rtrim(mb_convert_encoding($line, 'UTF-8', 'UTF-8'))));
+                }
+            }
+            fclose($trace);
+            if (is_int($handlerError) && $handlerError !== 0) {
+                $this->log('cURL '.$handlerError.': '.curl_strerror($handlerError));
+            }
         }
+        if ($retryAnonymous) {
+            $this->anonymousTls = true;
+            $this->log('Nuovo tentativo: TLS 1.2 anonimo senza certificato (opzione abilitata).');
+
+            return $this->read($connection, $url, $address, $path, $properties, $deadline, $budget, $attempted);
+        }
+        $this->log('HTTP '.$response->status());
         $body = $response->body();
         $budget -= strlen($body);
         if (strlen($body) > $limit) {

@@ -35,6 +35,7 @@ class MikrotikPortMap
                 }
             }
             $available = array_key_exists('mikrotikName', $port) ? $names : array_diff($names, $reserved);
+            $available = array_filter($available, fn ($name) => self::type($name) === $port['type']);
             $matches = array_values(array_intersect($available, $candidates));
             if (count($matches) === 1) {
                 $proposals[$port['id']] = $matches[0];

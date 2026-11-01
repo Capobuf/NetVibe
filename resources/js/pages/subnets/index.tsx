@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/utils';
 import {
     NetworkExclusionAction,
     NetworkVisibilityFilter,
@@ -387,11 +388,9 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                               'excluded_at' ? (
                                                                 (subnet.excluded_at ??
                                                                 vlan?.excluded_at) ? (
-                                                                    new Date(
+                                                                    formatDateTime(
                                                                         (subnet.excluded_at ??
                                                                             vlan?.excluded_at)!,
-                                                                    ).toLocaleString(
-                                                                        'it-IT',
                                                                     )
                                                                 ) : (
                                                                     '—'

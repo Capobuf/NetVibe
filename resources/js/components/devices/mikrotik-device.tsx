@@ -1,6 +1,9 @@
+import { formatDateTime } from '@/lib/utils';
+import { MikrotikSetup } from '@/components/devices/mikrotik-setup';
 import { MikrotikSyncPanel } from '@/components/devices/mikrotik-sync-panel';
 import { useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import {
     Cable,
     ChevronDown,
@@ -8,6 +11,7 @@ import {
     Settings2,
     ShieldAlert,
     Trash2,
+    Terminal,
 } from 'lucide-react';
 import InputError from '@/components/input-error';
 import { IconButton } from '@/components/icon-button';
@@ -54,6 +58,7 @@ export type MikrotikConnection = {
     synced_at: string | null;
     sync_status: string | null;
     sync_message: string | null;
+    sync_log: string | null;
     sync_summary: {
         read: number;
         created: number;
@@ -69,6 +74,7 @@ export type MikrotikConnection = {
     checked_at: string | null;
     check_status: string | null;
     check_message: string | null;
+    check_log: string | null;
     identity: {
         name: string;
         version: string;
@@ -117,9 +123,12 @@ function MikrotikPanel({ connection, ...route }: Props) {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
     const [removing, setRemoving] = useState(false);
+    const [preparing, setPreparing] = useState(false);
     const [reading, setReading] = useState<'verify' | 'analyze' | null>(null);
+    const endpoint = connection ? new URL(connection.server_url) : null;
     const form = useForm({
-        server_url: connection?.server_url ?? '',
+        server_url: endpoint?.hostname ?? '',
+        port: endpoint?.port || '443',
         username: connection?.username ?? '',
         password: '',
         allow_unverified_certificate:
@@ -130,14 +139,49 @@ function MikrotikPanel({ connection, ...route }: Props) {
         revision: connection?.revision ?? null,
         confirmed: true,
     });
-    const busy = form.processing || operation.processing;
+    const busy = form.processing || operation.processing || preparing;
     const identity = connection?.identity;
     const report = connection?.analysis;
-    const error = Object.values(operation.errors)[0];
+    const diagnosticLogs = [
+        {
+            operation: 'Controllo connessione',
+            at: connection?.checked_at,
+            status: connection?.check_status,
+            log: connection?.check_log,
+        },
+        {
+            operation: 'Sincronizzazione',
+            at: connection?.sync_attempted_at,
+            status: connection?.sync_status,
+            log: connection?.sync_log,
+        },
+    ]
+        .filter(
+            (entry) =>
+                entry.at &&
+                entry.log &&
+                entry.status &&
+                !['ok', 'suspended'].includes(entry.status),
+        )
+        .sort((a, b) => a.at!.localeCompare(b.at!))
+        .map(
+            (entry) =>
+                `[${formatDateTime(entry.at!)}] ${entry.operation} · ${entry.status}\n${entry.log}`,
+        )
+        .join('\n\n');
+    function splitAddressPort(data: typeof form.data) {
+        const match = data.server_url.match(
+            /^((?:https:\/\/)?[^:/?#@]+):(\d+)(\/?)$/,
+        );
+        return match
+            ? { ...data, server_url: match[1] + match[3], port: match[2] }
+            : data;
+    }
     function read(action: 'verify' | 'analyze') {
         setReading(action);
         operation.submit(action === 'verify' ? verify(route) : analyze(route), {
             preserveScroll: true,
+            onError: (errors) => toast.error(Object.values(errors)[0]),
             onFinish: () => setReading(null),
         });
     }
@@ -199,7 +243,28 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     connection={connection}
                     route={route}
                     disabled={busy || form.isDirty}
+                    onVerify={() => read('verify')}
+                    verifying={reading === 'verify'}
                 />
+                {diagnosticLogs && connection ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Terminal className="size-4" />
+                                Log diagnostico
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <pre
+                                tabIndex={0}
+                                aria-label="Log degli ultimi tentativi"
+                                className="max-h-72 overflow-auto rounded-md border bg-muted/50 p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap focus-visible:outline-2 focus-visible:outline-ring"
+                            >
+                                {diagnosticLogs}
+                            </pre>
+                        </CardContent>
+                    </Card>
+                ) : null}
                 {connection ? (
                     <Collapsible
                         open={diagnosticsOpen}
@@ -254,17 +319,11 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                                       ? 'Lettura parziale'
                                                       : 'Verifica non riuscita'}
                                             </Badge>
-                                            {connection.check_status !==
-                                            'ok' ? (
-                                                <p className="text-sm">
-                                                    {connection.check_message}
-                                                </p>
-                                            ) : null}
                                             <p className="text-xs text-muted-foreground">
                                                 Ultima verifica:{' '}
-                                                {new Date(
+                                                {formatDateTime(
                                                     connection.checked_at,
-                                                ).toLocaleString('it-IT')}
+                                                )}
                                             </p>
                                         </div>
                                     ) : (
@@ -310,25 +369,8 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                                 : 'Analisi in corso…'}
                                         </p>
                                     ) : null}
-                                    {error ? (
-                                        <Alert variant="destructive">
-                                            <AlertDescription>
-                                                {error}
-                                            </AlertDescription>
-                                        </Alert>
-                                    ) : null}
                                 </div>
                                 <div className="flex flex-wrap gap-3">
-                                    <Button
-                                        variant="outline"
-                                        disabled={
-                                            !connection || busy || form.isDirty
-                                        }
-                                        onClick={() => read('verify')}
-                                    >
-                                        <Cable data-icon="inline-start" />
-                                        Verifica connessione
-                                    </Button>
                                     <Button
                                         variant="outline"
                                         disabled={
@@ -352,9 +394,9 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                     {connection?.analyzed_at ? (
                                         <p className="text-xs text-muted-foreground">
                                             Ultima analisi:{' '}
-                                            {new Date(
+                                            {formatDateTime(
                                                 connection.analyzed_at,
-                                            ).toLocaleString('it-IT')}
+                                            )}
                                         </p>
                                     ) : null}
                                 </div>
@@ -480,8 +522,21 @@ function MikrotikPanel({ connection, ...route }: Props) {
                 <form
                     onSubmit={(event) => {
                         event.preventDefault();
+                        form.transform(splitAddressPort);
                         form.submit(update(route), {
                             preserveScroll: true,
+                            onError: (errors) => {
+                                const error = Object.entries(errors).find(
+                                    ([key]) =>
+                                        ![
+                                            'server_url',
+                                            'port',
+                                            'username',
+                                            'password',
+                                        ].includes(key),
+                                );
+                                if (error) toast.error(error[1]);
+                            },
                             onSuccess: () => {
                                 form.reset('password');
                                 setSettingsOpen(false);
@@ -493,14 +548,19 @@ function MikrotikPanel({ connection, ...route }: Props) {
                     <FieldGroup>
                         <Field data-invalid={!!form.errors.server_url}>
                             <FieldLabel htmlFor="mikrotik-url">
-                                Indirizzo HTTPS
+                                IP o hostname
                             </FieldLabel>
                             <Input
                                 id="mikrotik-url"
-                                type="url"
+                                type="text"
+                                inputMode="url"
+                                placeholder="192.168.1.1 o router.example.com"
                                 required
                                 autoComplete="off"
                                 spellCheck={false}
+                                onBlur={() =>
+                                    form.setData(splitAddressPort(form.data))
+                                }
                                 value={form.data.server_url}
                                 disabled={busy}
                                 aria-invalid={!!form.errors.server_url}
@@ -521,6 +581,52 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                 message={form.errors.server_url}
                             />
                         </Field>
+                        <Field data-invalid={!!form.errors.port}>
+                            <FieldLabel htmlFor="mikrotik-port">
+                                Porta
+                            </FieldLabel>
+                            <Input
+                                id="mikrotik-port"
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                max={65535}
+                                step={1}
+                                required
+                                value={form.data.port}
+                                disabled={busy}
+                                aria-invalid={!!form.errors.port}
+                                aria-describedby={
+                                    form.errors.port
+                                        ? 'mikrotik-port-error'
+                                        : undefined
+                                }
+                                onChange={(event) =>
+                                    form.setData('port', event.target.value)
+                                }
+                            />
+                            <InputError
+                                id="mikrotik-port-error"
+                                message={form.errors.port}
+                            />
+                        </Field>
+                        <MikrotikSetup
+                            route={route}
+                            port={form.data.port}
+                            username={form.data.username}
+                            password={form.data.password}
+                            disabled={busy}
+                            preparing={preparing}
+                            onPreparingChange={setPreparing}
+                            onApply={(username, password) => {
+                                form.setData((data) => ({
+                                    ...data,
+                                    username,
+                                    password,
+                                }));
+                                form.clearErrors('username', 'password');
+                            }}
+                        />
                         <Field data-invalid={!!form.errors.username}>
                             <FieldLabel htmlFor="mikrotik-username">
                                 Username
@@ -599,7 +705,8 @@ function MikrotikPanel({ connection, ...route }: Props) {
                             />
                             <div className="flex items-center gap-1">
                                 <FieldLabel htmlFor="mikrotik-tls">
-                                    Accetta certificato non verificato
+                                    Consenti certificato non verificato o
+                                    assente
                                 </FieldLabel>
                                 {form.data.allow_unverified_certificate ? (
                                     <IconButton
@@ -612,18 +719,6 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                 ) : null}
                             </div>
                         </Field>
-                        {Object.entries(form.errors)
-                            .filter(
-                                ([key]) =>
-                                    ![
-                                        'server_url',
-                                        'username',
-                                        'password',
-                                    ].includes(key),
-                            )
-                            .map(([key, message]) => (
-                                <InputError key={key} message={message} />
-                            ))}
                     </FieldGroup>
                     <DialogFooter className="sm:justify-between">
                         {connection ? (
@@ -657,9 +752,6 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                             restano conservati.
                                         </DialogDescription>
                                     </DialogHeader>
-                                    {error ? (
-                                        <InputError message={error} />
-                                    ) : null}
                                     <DialogFooter>
                                         <Button
                                             variant="outline"
@@ -679,6 +771,12 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                                     destroy(route),
                                                     {
                                                         preserveScroll: true,
+                                                        onError: (errors) =>
+                                                            toast.error(
+                                                                Object.values(
+                                                                    errors,
+                                                                )[0],
+                                                            ),
                                                         onSuccess: () =>
                                                             setSettingsOpen(
                                                                 false,

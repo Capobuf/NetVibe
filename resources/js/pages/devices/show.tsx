@@ -1,16 +1,10 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
-import { ArrowLeft, Trash2, Unlink, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Unlink, Pencil, X } from 'lucide-react';
 import { DeviceForm } from '@/components/devices/device-form';
-import { MikrotikMark } from '@/components/mikrotik-mark';
-import {
-    MikrotikDevice,
-    type MikrotikConnection,
-} from '@/components/devices/mikrotik-device';
-import {
-    SnipeItDevice,
-    type SnipeDevice,
-} from '@/components/devices/snipe-it-device';
+import { SnipeItMark } from '@/components/snipe-it-mark';
+import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
+import { type SnipeDevice } from '@/components/devices/snipe-it-device';
 import { DeviceTable } from '@/components/devices/device-table';
 import {
     PanelViewer,
@@ -23,19 +17,11 @@ import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-
 import { AddIpForm, type AvailableIp } from '@/components/devices/add-ip-form';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import { Separator } from '@/components/ui/separator';
-import { Empty, EmptyHeader, EmptyDescription } from '@/components/ui/empty';
-import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
 import {
     Popover,
     PopoverContent,
@@ -44,12 +30,7 @@ import {
     PopoverHeader,
     PopoverTitle,
 } from '@/components/ui/popover';
-import {
-    index,
-    show,
-    destroy,
-    deletionImpact,
-} from '@/routes/companies/sites/devices';
+import { index, show } from '@/routes/companies/sites/devices';
 import { ReleaseIp } from '@/components/devices/release-ip';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { connectorTypes, type Port } from '@/lib/hardware-editor/document';
@@ -85,6 +66,7 @@ type Props = {
     mikrotik: MikrotikConnection | null;
     mikrotikInterfaces: MikrotikInterface[];
     initialTab: string;
+    initialManagementTab: string | null;
     manufacturers: Manufacturer[];
     assetUrls: Record<string, string>;
     initialInterfaceId: number | null;
@@ -103,6 +85,7 @@ export default function DeviceShow({
     mikrotik,
     mikrotikInterfaces,
     initialTab,
+    initialManagementTab,
     manufacturers,
     assetUrls,
     ips,
@@ -113,11 +96,7 @@ export default function DeviceShow({
     initialInterfaceId,
 }: Props) {
     const { companyNavigation } = usePage().props;
-    const [deleting, setDeleting] = useState(false);
-    const [tab, setTab] = useState(
-        initialTab === 'mikrotik' && !isMikrotik ? 'interfaces' : initialTab,
-    );
-    const activeTab = tab === 'mikrotik' && !isMikrotik ? 'interfaces' : tab;
+    const [tab, setTab] = useState(initialTab);
     const [releasingIp, setReleasingIp] = useState<{
         id: number;
         ip: string;
@@ -261,101 +240,82 @@ export default function DeviceShow({
                         </Link>
                     </Button>
                 </div>
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex min-w-0 flex-col gap-1">
-                        <p className="text-sm text-muted-foreground">
-                            {context}
-                        </p>
-                        <h1 className="text-2xl font-medium tracking-tight break-words">
-                            {device.name}
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            {[
-                                device.manufacturer.name,
-                                device.model?.name,
-                                device.model?.model_type?.name,
-                            ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                        </p>
-                        {device.serial_number && (
+                <header className="flex min-w-0 flex-col gap-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
                             <p className="text-sm text-muted-foreground">
-                                Seriale: {device.serial_number}
+                                {context}
                             </p>
-                        )}
-                        {device.asset_tag ? (
-                            <p className="text-sm text-muted-foreground">
-                                Asset tag: {device.asset_tag}
-                            </p>
-                        ) : null}
-                        {snipeIt?.synced_at ? (
-                            <div className="mt-1 flex flex-col gap-2">
-                                <Separator className="data-[orientation=horizontal]:w-8" />
-                                <time
-                                    dateTime={snipeIt.synced_at}
-                                    className="text-xs text-muted-foreground"
-                                >
-                                    <span className="sr-only">
-                                        Ultimo aggiornamento da Snipe-IT:{' '}
-                                    </span>
-                                    {new Date(snipeIt.synced_at).toLocaleString(
-                                        'it-IT',
-                                        {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        },
-                                    )}
-                                </time>
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    {snipeIt ? (
+                                        <span
+                                            className="shrink-0"
+                                            role="img"
+                                            aria-label="Collegato a Snipe-IT"
+                                        >
+                                            <SnipeItMark className="size-8" />
+                                        </span>
+                                    ) : null}
+                                    <h1 className="min-w-0 text-3xl font-semibold tracking-tight break-words">
+                                        {device.name}
+                                    </h1>
+                                </div>
+                                {device.model?.model_type?.name ? (
+                                    <Badge variant="secondary">
+                                        {device.model.model_type.name}
+                                    </Badge>
+                                ) : null}
                             </div>
-                        ) : null}
+                            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                                <span className="text-muted-foreground">
+                                    {device.manufacturer.name}
+                                </span>
+                                {device.model?.name ? (
+                                    <span className="min-w-0 font-medium break-words">
+                                        {device.model.name}
+                                    </span>
+                                ) : null}
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <DeviceForm
+                                company={company.id}
+                                site={site.id}
+                                manufacturers={manufacturers}
+                                device={device}
+                                snipeIt={snipeIt}
+                                isMikrotik={isMikrotik}
+                                mikrotik={mikrotik}
+                                initialManagementTab={initialManagementTab}
+                            />
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <DeviceForm
-                            company={company.id}
-                            site={site.id}
-                            manufacturers={manufacturers}
-                            device={device}
-                            linked={!!snipeIt}
-                            snipeItAssetId={snipeIt?.id}
-                        />
-                        <Dialog open={deleting} onOpenChange={setDeleting}>
-                            <DialogTrigger asChild>
-                                <IconButton
-                                    label="Elimina dispositivo"
-                                    variant="outline"
-                                >
-                                    <Trash2 />
-                                </IconButton>
-                            </DialogTrigger>
-                            <DialogContent
-                                className="max-h-[90dvh] overflow-y-auto"
-                                aria-describedby={undefined}
-                            >
-                                <DialogHeader>
-                                    <DialogTitle>
-                                        Elimina {device.name}
-                                    </DialogTitle>
-                                </DialogHeader>
-                                <GuidedDeletion
-                                    kind="device"
-                                    previewUrl={deletionImpact.url(route)}
-                                    action={destroy.form(route)}
-                                    onCancel={() => setDeleting(false)}
-                                    onSuccess={() => setDeleting(false)}
-                                />
-                            </DialogContent>
-                        </Dialog>
-                    </div>
+                    {device.serial_number || device.asset_tag ? (
+                        <dl className="flex min-w-0 flex-wrap gap-x-10 gap-y-3 border-t pt-4">
+                            {device.serial_number ? (
+                                <div className="flex min-w-0 flex-col gap-1">
+                                    <dt className="text-xs text-muted-foreground">
+                                        Seriale
+                                    </dt>
+                                    <dd className="text-sm font-medium break-all">
+                                        {device.serial_number}
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {device.asset_tag ? (
+                                <div className="flex min-w-0 flex-col gap-1">
+                                    <dt className="text-xs text-muted-foreground">
+                                        Asset tag
+                                    </dt>
+                                    <dd className="text-sm font-medium break-all">
+                                        {device.asset_tag}
+                                    </dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                    ) : null}
                 </header>
-                {snipeIt ? (
-                    <SnipeItDevice
-                        source={snipeIt}
-                        device={device}
-                    />
-                ) : null}
                 {device.notes ? (
                     <p className="text-sm whitespace-pre-wrap">
                         {device.notes}
@@ -381,7 +341,9 @@ export default function DeviceShow({
                     />
                 )}
                 <Tabs
-                    value={activeTab}
+                    value={
+                        tab === 'ips' && ips.length === 0 ? 'interfaces' : tab
+                    }
                     onValueChange={setTab}
                     className="min-w-0"
                 >
@@ -393,39 +355,27 @@ export default function DeviceShow({
                             >
                                 Porte e interfacce ({interfaceRows.length})
                             </TabsTrigger>
-                            <TabsTrigger value="ips" className="flex-none px-3">
-                                IP ({ips.length})
-                            </TabsTrigger>
-                            {isMikrotik ? (
+                            {ips.length > 0 && (
                                 <TabsTrigger
-                                    value="mikrotik"
+                                    value="ips"
                                     className="flex-none px-3"
                                 >
-                                    <MikrotikMark
-                                        variant={
-                                            activeTab === 'mikrotik'
-                                                ? 'solid'
-                                                : 'line'
-                                        }
-                                    />
-                                    MikroTik
+                                    IP ({ips.length})
                                 </TabsTrigger>
-                            ) : null}
+                            )}
                         </TabsList>
-                        {activeTab !== 'mikrotik' ? (
-                            <div className="flex flex-wrap gap-2">
-                                <InterfaceForm {...route} ports={ports} />
-                                <AddIpForm
-                                    {...route}
-                                    device={device}
-                                    ports={ports}
-                                    ips={availableIps}
-                                    subnets={subnets}
-                                    statuses={statuses}
-                                    tags={tags}
-                                />
-                            </div>
-                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                            <InterfaceForm {...route} ports={ports} />
+                            <AddIpForm
+                                {...route}
+                                device={device}
+                                ports={ports}
+                                ips={availableIps}
+                                subnets={subnets}
+                                statuses={statuses}
+                                tags={tags}
+                            />
+                        </div>
                     </div>
                     <TabsContent value="interfaces" className="pt-4">
                         <DeviceTable
@@ -470,6 +420,13 @@ export default function DeviceShow({
                                 const item = 'connector_id' in row ? row : null;
                                 return (
                                     <div className="flex items-center gap-2">
+                                        {item?.mikrotik && (
+                                            <MikrotikInterfaceBadge
+                                                iconOnly
+                                                source={item.mikrotik}
+                                                manualMac={item.mac_address}
+                                            />
+                                        )}
                                         <button
                                             type="button"
                                             id={`interface-${row.id}`}
@@ -481,12 +438,6 @@ export default function DeviceShow({
                                         >
                                             {interfaceRowValue(row, 'name')}
                                         </button>
-                                        {item?.mikrotik && (
-                                            <MikrotikInterfaceBadge
-                                                source={item.mikrotik}
-                                                manualMac={item.mac_address}
-                                            />
-                                        )}
                                     </div>
                                 );
                             }}
@@ -556,11 +507,6 @@ export default function DeviceShow({
                             empty="Nessun IP collegato."
                         />
                     </TabsContent>
-                    {isMikrotik ? (
-                        <TabsContent value="mikrotik" className="pt-4">
-                            <MikrotikDevice {...route} connection={mikrotik} />
-                        </TabsContent>
-                    ) : null}
                 </Tabs>
             </div>
             {editingInterface && (
@@ -581,73 +527,69 @@ export default function DeviceShow({
                         returnFocus.current?.focus();
                     }}
                 >
-                    <Separator />
-                    <section
-                        aria-label="IPv4 collegati"
-                        className="flex min-w-0 flex-col gap-4"
-                    >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h3 className="text-sm font-medium">
-                                IPv4 collegati ({interfaceIps.length})
-                            </h3>
-                            <div className="flex flex-wrap gap-2">
-                                <AddIpForm
-                                    {...route}
-                                    device={device}
-                                    ports={ports}
-                                    ips={availableIps}
-                                    subnets={subnets}
-                                    statuses={statuses}
-                                    tags={tags}
-                                    initialInterface={editingInterface.id}
-                                />
-                            </div>
-                        </div>
-                        {interfaceIps.length ? (
-                            <ul className="divide-y rounded-lg border">
-                                {interfaceIps.map((ip) => (
-                                    <li
-                                        key={ip.id}
-                                        className="flex items-center justify-between gap-3 px-3 py-2"
-                                    >
-                                        <div className="min-w-0">
-                                            <TextLink
-                                                href={ipUrl(ip)}
-                                                className="tabular-nums"
-                                            >
-                                                {ip.ip}
-                                            </TextLink>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                                {ip.subnet.cidr}
-                                                {ip.hostname
-                                                    ? ` · ${ip.hostname}`
-                                                    : ''}
-                                            </p>
-                                        </div>
-                                        <IconButton
-                                            label={`Scollega e libera ${ip.ip}`}
-                                            onClick={(event) =>
-                                                releaseIp(
-                                                    ip,
-                                                    event.currentTarget,
-                                                )
+                    {interfaceIps.length > 0 && (
+                        <>
+                            <Separator />
+                            <section
+                                aria-label="IPv4 collegati"
+                                className="flex min-w-0 flex-col gap-4"
+                            >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <h3 className="text-sm font-medium">
+                                        IPv4 collegati ({interfaceIps.length})
+                                    </h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        <AddIpForm
+                                            {...route}
+                                            device={device}
+                                            ports={ports}
+                                            ips={availableIps}
+                                            subnets={subnets}
+                                            statuses={statuses}
+                                            tags={tags}
+                                            initialInterface={
+                                                editingInterface.id
                                             }
+                                        />
+                                    </div>
+                                </div>
+                                <ul className="divide-y rounded-lg border">
+                                    {interfaceIps.map((ip) => (
+                                        <li
+                                            key={ip.id}
+                                            className="flex items-center justify-between gap-3 px-3 py-2"
                                         >
-                                            <Unlink />
-                                        </IconButton>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <Empty className="rounded-lg border py-5">
-                                <EmptyHeader>
-                                    <EmptyDescription>
-                                        Nessun IP collegato
-                                    </EmptyDescription>
-                                </EmptyHeader>
-                            </Empty>
-                        )}
-                    </section>
+                                            <div className="min-w-0">
+                                                <TextLink
+                                                    href={ipUrl(ip)}
+                                                    className="tabular-nums"
+                                                >
+                                                    {ip.ip}
+                                                </TextLink>
+                                                <p className="truncate text-xs text-muted-foreground">
+                                                    {ip.subnet.cidr}
+                                                    {ip.hostname
+                                                        ? ` · ${ip.hostname}`
+                                                        : ''}
+                                                </p>
+                                            </div>
+                                            <IconButton
+                                                label={`Scollega e libera ${ip.ip}`}
+                                                onClick={(event) =>
+                                                    releaseIp(
+                                                        ip,
+                                                        event.currentTarget,
+                                                    )
+                                                }
+                                            >
+                                                <Unlink />
+                                            </IconButton>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        </>
+                    )}
                 </InterfaceForm>
             )}
             <Popover open={portOpen && !!port} onOpenChange={setPortOpen}>

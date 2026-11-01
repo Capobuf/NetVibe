@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\DeviceInterface;
 use App\Models\Site;
 use App\Support\InterfaceMac;
+use App\Support\MikrotikPortMap;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,6 +65,12 @@ class DeviceInterfaceController extends Controller
                     || ($source->device_interface_id && ! $unchanged)
                     || ($data['kind'] ?? $interface?->kind) !== 'physical') {
                     throw ValidationException::withMessages(['mikrotik_source_id' => 'Scegli una porta MikroTik aggiornata e non già associata di questo dispositivo.']);
+                }
+            }
+            if ($source && $interface?->connector_id) {
+                $port = collect($device->model?->connectors() ?? [])->firstWhere('id', $interface->connector_id);
+                if (! $port || MikrotikPortMap::type($source->data['default_name'] ?? '') !== $port['type']) {
+                    throw ValidationException::withMessages(['mikrotik_source_id' => 'L’interfaccia MikroTik non è compatibile con il tipo di porta. Scegli un’interfaccia compatibile o rimuovi l’associazione.']);
                 }
             }
             if ($interface) {

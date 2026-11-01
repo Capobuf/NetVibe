@@ -32,6 +32,7 @@ import {
 } from '@/routes/companies/sites/devices/interfaces';
 import {
     interfaceName,
+    mikrotikInterfaceName,
     type DeviceInterface,
     type MikrotikInterface,
 } from '@/types/device';
@@ -73,10 +74,14 @@ export function InterfaceForm({
     const [sourceId, setSourceId] = useState(
         String(item?.mikrotik?.id ?? 'none'),
     );
+    const port = ports.find((port) => port.id === item?.connector_id);
+    const compatible = (source: MikrotikInterface) =>
+        !item?.connector_id || source.port_type === port?.type;
     const sources = mikrotikInterfaces.filter(
         (source) =>
-            !source.device_interface_id ||
-            source.device_interface_id === item?.id,
+            compatible(source) &&
+            (!source.device_interface_id ||
+                source.device_interface_id === item?.id),
     );
     if (
         item?.mikrotik &&
@@ -226,21 +231,25 @@ export function InterfaceForm({
                                                                             candidate.id,
                                                                         )}
                                                                         disabled={
-                                                                            (candidate.stale ||
+                                                                            !compatible(
+                                                                                candidate,
+                                                                            ) ||
+                                                                            ((candidate.stale ||
                                                                                 !!candidate.problem) &&
-                                                                            candidate.id !==
-                                                                                item
-                                                                                    .mikrotik
-                                                                                    ?.id
+                                                                                candidate.id !==
+                                                                                    item
+                                                                                        .mikrotik
+                                                                                        ?.id)
                                                                         }
                                                                     >
-                                                                        {
-                                                                            candidate.default_name
-                                                                        }{' '}
-                                                                        ·{' '}
-                                                                        {
-                                                                            candidate.name
-                                                                        }
+                                                                        {mikrotikInterfaceName(
+                                                                            candidate,
+                                                                        )}
+                                                                        {!compatible(
+                                                                            candidate,
+                                                                        )
+                                                                            ? ' (incompatibile)'
+                                                                            : null}
                                                                     </SelectItem>
                                                                 ),
                                                             )}

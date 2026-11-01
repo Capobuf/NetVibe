@@ -9,7 +9,7 @@ import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import type { TableSort } from '@/lib/table-sort';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import TextLink from '@/components/text-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -482,9 +482,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         {sync?.synced_at ? (
                             <p className="text-sm text-muted-foreground">
                                 Ultimo aggiornamento:{' '}
-                                {new Date(sync.synced_at).toLocaleString(
-                                    'it-IT',
-                                )}
+                                {formatDateTime(sync.synced_at)}
                             </p>
                         ) : null}
                     </div>

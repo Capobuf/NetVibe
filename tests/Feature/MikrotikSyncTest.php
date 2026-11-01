@@ -17,6 +17,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class MikrotikSyncTest extends TestCase
@@ -34,14 +35,20 @@ class MikrotikSyncTest extends TestCase
         $this->device = $site->devices()->create(['name' => 'Synthetic router', 'manufacturer_id' => $manufacturer->id]);
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $this->put($this->url('update'), ['server_url' => 'https://10.2.0.1', 'username' => 'reader', 'password' => 'synthetic-secret', 'allow_unverified_certificate' => false, 'revision' => null])->assertSessionHasNoErrors();
+        $this->device->mikrotikConnection()->sole()->update(['check_status' => 'ok', 'checked_at' => now()]);
     }
 
     public function test_activation_imports_only_explicit_data_and_refresh_preserves_manual_records(): void
     {
         $tables = $this->tables();
+        $tables['system/resource'][0]['board-name'] = 'CCR2004-1G-12S+2XS';
+        $tables['interface/ethernet'][0]['switch'] = 'switch1';
         $this->fake($tables);
         $this->artisan('mikrotik:sync')->assertSuccessful();
         Http::assertNothingSent();
+        $this->device->mikrotikConnection()->sole()->update(['check_status' => null, 'checked_at' => null]);
+        $this->post($this->url('verify'), $this->operation())->assertSessionHasNoErrors();
+        $this->assertSame('ok', $this->device->mikrotikConnection()->sole()->check_status);
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
         $subnet = $this->device->site->subnets()->sole();
         $this->assertSame('192.0.2.0/29', $subnet->cidr);
@@ -117,6 +124,7 @@ class MikrotikSyncTest extends TestCase
         $first = $this->device;
         $this->device = $first->site->devices()->create(['name' => 'Second router', 'manufacturer_id' => $first->manufacturer_id]);
         $this->put($this->url('update'), ['server_url' => 'https://10.2.0.1', 'username' => 'reader', 'password' => 'synthetic-secret', 'allow_unverified_certificate' => false, 'revision' => null])->assertSessionHasNoErrors();
+        $this->device->mikrotikConnection()->sole()->update(['check_status' => 'ok', 'checked_at' => now()]);
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
         $source = $this->device->mikrotikSources()->where('kind', 'vlan')->where('data->tag', 10)->sole();
         $this->assertNotNull($source->problem);
@@ -183,6 +191,90 @@ class MikrotikSyncTest extends TestCase
         $this->assertDatabaseMissing('mikrotik_sources', ['address' => 0]);
     }
 
+    public function test_dynamic_and_disabled_addresses_remain_external_without_actionable_warnings(): void
+    {
+        $tables = $this->tables();
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*2', 'address' => '198.51.100.1/29', 'dynamic' => 'true'];
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*3', 'address' => '203.0.113.1/29', 'disabled' => 'true'];
+        $tables['ip/dhcp-server/lease'][0]['disabled'] = 'true';
+        $tables['ip/dhcp-server/lease'][] = [...$tables['ip/dhcp-server/lease'][0], '.id' => '*2', 'address' => '192.0.2.4', 'dynamic' => 'true', 'disabled' => 'false'];
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('subnets', 1);
+        $this->assertDatabaseCount('ip_addresses', 1);
+        $this->assertSame(0, $this->device->mikrotikConnection()->sole()->sync_summary['problems']);
+        $skipped = $this->device->mikrotikSources()->whereIn('kind', ['subnet', 'address', 'lease'])->whereNotNull('problem')->get();
+        $this->assertCount(5, $skipped);
+        foreach ($skipped as $source) {
+            $this->assertNull($source->ip_address_id);
+            $this->assertNull($source->subnet_id);
+            $this->assertNull($source->display()['problem']);
+            $this->assertNotNull($source->display()['import_note']);
+        }
+        $dynamic = $this->device->mikrotikSources()->where('kind', 'observation')->where('address', ip2long('192.0.2.4'))->sole();
+        $this->assertSame('true', $dynamic->display()['data']['dynamic']);
+        $this->assertNull($dynamic->ip_address_id);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    #[TestWith(['unique'])]
+    #[TestWith(['missing'])]
+    #[TestWith(['ambiguous'])]
+    public function test_lease_without_server_uses_only_an_unambiguous_device_subnet(string $scenario): void
+    {
+        $tables = $this->tables();
+        unset($tables['ip/dhcp-server/lease'][0]['server']);
+        // Inactive and dynamic networks must not make the matching subnet ambiguous.
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*2', 'address' => '192.0.2.1/28', 'disabled' => 'true'];
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*3', 'address' => '192.0.2.1/27', 'dynamic' => 'true'];
+        if ($scenario === 'missing') {
+            $tables['ip/dhcp-server/lease'][0]['address'] = '198.51.100.3';
+        } elseif ($scenario === 'ambiguous') {
+            $tables['ip/address'][1]['disabled'] = 'false';
+        }
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+
+        $source = $this->device->mikrotikSources()->where('kind', 'lease')->sole();
+        $this->assertNull($source->data['server']);
+        $this->assertNull($source->ip_address_id);
+        if ($scenario === 'unique') {
+            $this->assertNull($source->problem);
+            $this->assertSame($this->device->site->subnets()->sole()->id, $source->subnet_id);
+            $this->assertSame('ip/address:*1', $source->data['network_key']);
+        } else {
+            $this->assertNull($source->subnet_id);
+            $this->assertNull($source->data['network_key']);
+            $this->assertStringContainsString($scenario === 'missing' ? 'nessuna subnet' : 'più subnet', $source->problem);
+        }
+        $this->assertDatabaseCount('ip_addresses', 1);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    #[TestWith(['lease', 'server', 'not-present', 'non è presente nella lettura'])]
+    #[TestWith(['lease', 'mac-address', '00:00:00:00:00:00', 'MAC nullo'])]
+    #[TestWith(['server', 'invalid', null, 'non riporta il campo invalid'])]
+    #[TestWith(['server', 'invalid', 'true', 'invalid=true'])]
+    public function test_dhcp_missing_data_and_invalid_values_have_distinct_reasons(string $target, string $field, ?string $value, string $reason): void
+    {
+        $tables = $this->tables();
+        $menu = $target === 'lease' ? 'ip/dhcp-server/lease' : 'ip/dhcp-server';
+        if ($value === null) {
+            unset($tables[$menu][0][$field]);
+        } else {
+            $tables[$menu][0][$field] = $value;
+        }
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'lease')->sole();
+        $this->assertStringContainsString($reason, $source->display()['problem']);
+        $this->assertNull($source->display()['import_note']);
+        $this->assertNull($source->subnet_id);
+        $this->assertNull($source->ip_address_id);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
     public function test_concurrent_connection_change_cannot_apply_the_old_snapshot(): void
     {
         $tables = $this->tables();
@@ -202,6 +294,8 @@ class MikrotikSyncTest extends TestCase
     public function test_bridge_vlan_contexts_do_not_turn_dynamic_pvids_or_ambiguous_ranges_into_documented_vlans(): void
     {
         $tables = $this->tables();
+        $tables['system/resource'][0]['board-name'] = 'CCR2004-1G-12S+2XS';
+        $tables['interface/ethernet'][0]['switch'] = 'switch1';
         $tables['interface'][] = ['.id' => '*4', 'name' => 'bridge', 'type' => 'bridge'];
         $tables['interface/bridge'] = [['.id' => '*1', 'name' => 'bridge', 'vlan-filtering' => 'true', 'disabled' => 'false']];
         $tables['interface/bridge/vlan'] = [
@@ -368,6 +462,9 @@ class MikrotikSyncTest extends TestCase
         $this->fake($tables);
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
         $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $model = DeviceModel::create(['name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id,
+            'panel' => ['faces' => ['front' => ['ports' => [['id' => 'physical-port', 'type' => 'rj45', 'label' => '1']]], 'rear' => ['ports' => []]]]]);
+        $this->device->update(['device_model_id' => $model->id]);
         $interface = $this->device->interfaces()->create(['connector_id' => 'physical-port', 'kind' => 'physical']);
         $route = [$this->device->site->company, $this->device->site, $this->device, $interface];
         $url = route('companies.sites.devices.interfaces.update', $route);
@@ -422,6 +519,12 @@ class MikrotikSyncTest extends TestCase
         $this->fake($this->tables());
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
         $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $model = DeviceModel::create(['name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id,
+            'panel' => ['faces' => ['front' => ['ports' => [
+                ['id' => 'first', 'type' => 'rj45', 'label' => '1'],
+                ['id' => 'second', 'type' => 'rj45', 'label' => '2'],
+            ]], 'rear' => ['ports' => []]]]]);
+        $this->device->update(['device_model_id' => $model->id]);
         $first = $this->device->interfaces()->create(['connector_id' => 'first', 'kind' => 'physical']);
         $second = $this->device->interfaces()->create(['connector_id' => 'second', 'kind' => 'physical']);
         $site = $this->device->site;
@@ -436,6 +539,40 @@ class MikrotikSyncTest extends TestCase
         $source->device_interface_id = $foreign->id;
         $this->expectException(QueryException::class);
         $source->save();
+    }
+
+    #[TestWith(['rj45', 'sfp-sfpplus1', 'sfp'])]
+    #[TestWith(['sfp', 'ether1', 'rj45'])]
+    #[TestWith(['qsfp', 'sfp28-1', 'sfp'])]
+    #[TestWith(['rj45', 'unknown-port', null])]
+    public function test_port_mapping_rejects_incompatible_factory_types_even_when_labels_match(string $portType, string $factoryName, ?string $sourceType): void
+    {
+        $ports = [['id' => 'wrong', 'type' => $portType, 'label' => $factoryName]];
+        if ($sourceType !== null) {
+            $ports[] = ['id' => 'compatible', 'type' => $sourceType, 'label' => 'Manual'];
+        }
+        $model = DeviceModel::create(['name' => 'Synthetic model', 'manufacturer_id' => $this->device->manufacturer_id,
+            'panel' => ['faces' => ['front' => ['ports' => $ports], 'rear' => ['ports' => []]]]]);
+        $this->device->update(['device_model_id' => $model->id]);
+        $this->device->addModelInterfaces($model);
+        $tables = $this->tables();
+        $tables['interface/ethernet'][0]['default-name'] = $factoryName;
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'interface')->sole();
+        $this->assertNull($source->device_interface_id);
+        $this->assertSame($sourceType, $source->interfaceDetails()['port_type']);
+        $interfaces = $this->device->interfaces()->get()->keyBy('connector_id');
+        $site = $this->device->site;
+        $url = fn ($interface) => route('companies.sites.devices.interfaces.update', [$site->company, $site, $this->device, $interface]);
+        $payload = ['name' => null, 'mac_address' => null, 'mikrotik_source_id' => $source->id];
+        $this->patch($url($interfaces['wrong']), $payload)->assertSessionHasErrors('mikrotik_source_id');
+        $this->assertNull($source->fresh()->device_interface_id);
+        if ($sourceType !== null) {
+            $this->patch($url($interfaces['compatible']), $payload)->assertSessionHasNoErrors();
+            $this->assertSame($interfaces['compatible']->id, $source->fresh()->device_interface_id);
+        }
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
     }
 
     public function test_model_labels_associate_physical_ports_by_factory_name_and_preserve_explicit_links(): void

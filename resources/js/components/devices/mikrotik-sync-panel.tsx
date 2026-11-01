@@ -1,19 +1,21 @@
+import { cn, formatDateTime } from '@/lib/utils';
 import {
     NetworkExclusionAction,
     NetworkVisibilityFilter,
 } from '@/components/networks/network-exclusion';
 import { useForm, usePage, Link } from '@inertiajs/react';
-import { useState } from 'react';
-import { RefreshCw, Play } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { ArrowLeft, Cable, RefreshCw } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
 import { DeviceTable } from '@/components/devices/device-table';
 import {
     SourceDetails,
     sourceLabel,
+    sourceIsDynamic,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -25,6 +27,15 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Spinner } from '@/components/ui/spinner';
 import {
     activate,
@@ -39,15 +50,20 @@ export function MikrotikSyncPanel({
     connection,
     disabled,
     route,
+    onVerify,
+    verifying,
 }: {
     connection: MikrotikConnection | null;
     disabled: boolean;
+    onVerify: () => void;
+    verifying: boolean;
     route: { company: number; site: number; device: number };
 }) {
     const { mikrotikSources: sources = [] } = usePage<{
         mikrotikSources: Source[];
     }>().props;
     const [allOpen, setAllOpen] = useState(false);
+    const detailTitle = useRef<HTMLHeadingElement>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const selected = sources.find((source) => source.id === selectedId) ?? null;
     const [confirmed, setConfirmed] = useState(false);
@@ -60,18 +76,27 @@ export function MikrotikSyncPanel({
         (source) =>
             source.problem && source.state !== 'missing' && !source.exclusion,
     );
-    const error = Object.values(form.errors)[0];
     const active = Boolean(connection?.activated_at);
+    const verified = connection?.check_status === 'ok';
     const busy = disabled || form.processing;
     const select = (source: Source) => {
         setSelectedId(source.id);
         setConfirmed(false);
         form.clearErrors();
+        requestAnimationFrame(() => detailTitle.current?.focus());
+    };
+    const backToList = () => {
+        setSelectedId(null);
+        requestAnimationFrame(() =>
+            document
+                .getElementById(`row-mikrotik-sources-${selectedId}`)
+                ?.focus(),
+        );
     };
     return (
         <>
             {connection ? (
-                <Card aria-busy={form.processing}>
+                <Card aria-busy={verifying || form.processing}>
                     <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
                         <div className="flex flex-wrap items-center gap-3">
                             <CardTitle className="flex items-center gap-2.5">
@@ -98,28 +123,38 @@ export function MikrotikSyncPanel({
                                 </Button>
                             ) : null}
                             <Button
-                                disabled={!connection || busy}
-                                onClick={() =>
+                                disabled={busy}
+                                onClick={() => {
+                                    if (!verified) {
+                                        onVerify();
+                                        return;
+                                    }
                                     form.submit(
                                         active ? sync(route) : activate(route),
-                                        { preserveScroll: true },
-                                    )
-                                }
+                                        {
+                                            preserveScroll: true,
+                                            onError: (errors) =>
+                                                toast.error(
+                                                    Object.values(errors)[0],
+                                                ),
+                                        },
+                                    );
+                                }}
                             >
-                                {form.processing ? (
+                                {verifying || form.processing ? (
                                     <Spinner />
-                                ) : active ? (
+                                ) : verified ? (
                                     <RefreshCw data-icon="inline-start" />
                                 ) : (
-                                    <Play data-icon="inline-start" />
+                                    <Cable data-icon="inline-start" />
                                 )}
-                                {active
-                                    ? 'Sincronizza ora'
-                                    : connection?.sync_status === 'suspended' ||
-                                        connection?.sync_status ===
-                                            'source_changed'
-                                      ? 'Riconferma sorgente e attiva'
-                                      : 'Attiva sincronizzazione'}
+                                {verifying
+                                    ? 'Verifica in corso…'
+                                    : form.processing
+                                      ? 'Sincronizzazione in corso…'
+                                      : verified
+                                        ? 'Sincronizza ora'
+                                        : 'Verifica connessione'}
                             </Button>
                         </div>
                     </CardHeader>
@@ -134,9 +169,7 @@ export function MikrotikSyncPanel({
                                         Ultimo aggiornamento riuscito
                                     </dt>
                                     <dd className="tabular-nums">
-                                        {new Date(
-                                            connection.synced_at,
-                                        ).toLocaleString('it-IT')}
+                                        {formatDateTime(connection.synced_at)}
                                     </dd>
                                 </div>
                             ) : null}
@@ -145,22 +178,20 @@ export function MikrotikSyncPanel({
                                     <dt className="text-muted-foreground">
                                         Ultimo tentativo
                                     </dt>
-                                    <dd className="tabular-nums">
-                                        {new Date(
+                                    <dd className="flex flex-wrap items-center gap-2 tabular-nums">
+                                        {formatDateTime(
                                             connection.sync_attempted_at,
-                                        ).toLocaleString('it-IT')}
+                                        )}
+                                        {connection.sync_status &&
+                                        connection.sync_status !== 'ok' ? (
+                                            <Badge variant="destructive">
+                                                Non riuscito
+                                            </Badge>
+                                        ) : null}
                                     </dd>
                                 </div>
                             ) : null}
                         </dl>
-                        {connection?.sync_message &&
-                        connection.sync_status !== 'ok' ? (
-                            <Alert variant="destructive">
-                                <AlertDescription>
-                                    {connection.sync_message}
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
                         {connection?.sync_summary ? (
                             <p className="text-sm text-muted-foreground">
                                 {connection.sync_summary.read} elementi letti ·{' '}
@@ -177,11 +208,6 @@ export function MikrotikSyncPanel({
                                     ? 'Riconfermando la sorgente, le letture precedenti restano conservate con la loro provenienza.'
                                     : 'L’attivazione avvia la prima acquisizione e gli aggiornamenti orari di VLAN, subnet e IP configurati.'}
                             </p>
-                        ) : null}
-                        {error && !selected ? (
-                            <Alert variant="destructive">
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
                         ) : null}
                     </CardContent>
                 </Card>
@@ -208,36 +234,57 @@ export function MikrotikSyncPanel({
                     />
                 </section>
             ) : null}
-            <Sheet open={allOpen} onOpenChange={setAllOpen}>
-                <SheetContent
-                    className="w-full overflow-y-auto sm:max-w-3xl"
-                    aria-describedby={undefined}
-                >
-                    <SheetHeader>
-                        <SheetTitle>Dati acquisiti dal dispositivo</SheetTitle>
-                    </SheetHeader>
-                    <div className="px-4 pb-6">
-                        <SourceTable
-                            sources={sources}
-                            onSelect={select}
-                            name="mikrotik-sources"
-                        />
-                    </div>
-                </SheetContent>
-            </Sheet>
             <Sheet
-                open={selected !== null}
+                open={allOpen || selected !== null}
                 onOpenChange={(open) => {
-                    if (!open && !form.processing) setSelectedId(null);
+                    if (!open && !form.processing) {
+                        setSelectedId(null);
+                        setAllOpen(false);
+                    }
                 }}
             >
                 <SheetContent
-                    className="w-full overflow-y-auto sm:max-w-lg"
+                    className={cn(
+                        'w-full overflow-y-auto',
+                        allOpen ? 'sm:max-w-5xl' : 'sm:max-w-lg',
+                    )}
                     aria-describedby={undefined}
                 >
-                    <SheetHeader>
-                        <SheetTitle>Dettaglio della fonte</SheetTitle>
+                    <SheetHeader className="gap-3 pr-12">
+                        {selected && allOpen ? (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-fit"
+                                onClick={backToList}
+                            >
+                                <ArrowLeft data-icon="inline-start" />
+                                Torna all’elenco
+                            </Button>
+                        ) : null}
+                        <SheetTitle ref={detailTitle} tabIndex={-1}>
+                            {selected ? sourceValue(selected) : 'Dati MikroTik'}
+                        </SheetTitle>
+                        <p className="text-sm text-muted-foreground">
+                            {selected
+                                ? sourceLabel(selected)
+                                : sources[0]?.source}
+                            {selected
+                                ? ` · Rilevato il ${formatDateTime(selected.seen_at)}`
+                                : connection?.synced_at
+                                  ? ` · Ultima acquisizione ${formatDateTime(connection.synced_at)}`
+                                  : ''}
+                        </p>
                     </SheetHeader>
+                    {allOpen ? (
+                        <div hidden={selected !== null} className="px-4 pb-6">
+                            <SourceTable
+                                sources={sources}
+                                onSelect={select}
+                                name="mikrotik-sources"
+                            />
+                        </div>
+                    ) : null}
                     {selected ? (
                         <div className="flex flex-col gap-4 px-4 pb-6">
                             <SourceDetails sources={[selected]} />
@@ -322,19 +369,19 @@ export function MikrotikSyncPanel({
                                             }));
                                             form.submit(associate(route), {
                                                 preserveScroll: true,
-                                                onSuccess: () =>
-                                                    setSelectedId(null),
+                                                onError: (errors) =>
+                                                    toast.error(
+                                                        Object.values(
+                                                            errors,
+                                                        )[0],
+                                                    ),
+                                                onSuccess: backToList,
                                             });
                                         }}
                                     >
                                         Associa a esistente
                                     </Button>
                                 </>
-                            ) : null}
-                            {error ? (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
                             ) : null}
                         </div>
                     ) : null}
@@ -354,68 +401,261 @@ function SourceTable({
     name: string;
 }) {
     const [visibility, setVisibility] = useState('active');
-    const excludedCount = sources.filter((source) => source.exclusion).length;
+    const [section, setSection] = useState('configuration');
+    const [type, setType] = useState('all');
+    const catalog = name === 'mikrotik-sources';
+    const sections = [
+        { id: 'configuration', label: 'Configurazione' },
+        { id: 'observations', label: 'Osservazioni' },
+        { id: 'technical', label: 'Dettagli tecnici' },
+        { id: 'all', label: 'Tutti' },
+    ];
+    const inSection = (source: Source, section: string) =>
+        section === 'all' ||
+        (section === 'observations'
+            ? source.kind === 'observation'
+            : section === 'technical'
+              ? source.kind === 'context'
+              : source.kind !== 'observation' && source.kind !== 'context');
+    const sectionSources = catalog
+        ? sources.filter((source) => inSection(source, section))
+        : sources;
+    const types = [...new Set(sectionSources.map(sourceLabel))].sort();
+    const excludedCount = sectionSources.filter(
+        (source) => source.exclusion,
+    ).length;
+    const value = (source: Source, column: string): string | number | null => {
+        switch (column) {
+            case 'kind':
+                return sourceLabel(source);
+            case 'value':
+                return sourceValue(source);
+            case 'interface':
+                return (
+                    source.data.interface ??
+                    source.data['on-interface'] ??
+                    source.data.context ??
+                    source.data.bridge ??
+                    null
+                );
+            case 'mac':
+                return source.data.mac ?? source.data.mac_address ?? null;
+            case 'hostname':
+                return source.data.hostname_observed ?? null;
+            case 'comment':
+                return source.data.comment ?? null;
+            case 'acquisition':
+                return sourceIsDynamic(source) ? 'Dinamico' : null;
+            case 'import_note':
+                return source.import_note ?? null;
+            case 'menu':
+                return source.data.menu;
+            case 'seen':
+                return formatDateTime(source.seen_at);
+            case 'status':
+                return source.exclusion
+                    ? 'Escluso'
+                    : source.state === 'missing'
+                      ? 'Non più presente'
+                      : source.stale
+                        ? 'Non aggiornato'
+                        : source.problem
+                          ? 'Da verificare'
+                          : source.import_note
+                            ? 'Non importato'
+                            : 'Rilevato';
+            default:
+                return source.problem;
+        }
+    };
     return (
-        <DeviceTable
-            name={name}
-            rows={
-                name === 'mikrotik-sources'
-                    ? sources.filter(
-                          (source) =>
-                              Boolean(source.exclusion) ===
-                              (visibility === 'excluded'),
-                      )
-                    : sources
-            }
-            filters={
-                name === 'mikrotik-sources' ? (
-                    <NetworkVisibilityFilter
-                        value={visibility}
-                        onChange={setVisibility}
-                        count={excludedCount}
-                    />
-                ) : undefined
-            }
-            filterKey={visibility}
-            onRowClick={onSelect}
-            columns={[
-                { id: 'kind', label: 'Tipo', visible: true },
-                { id: 'value', label: 'Dato', visible: true },
-                { id: 'problem', label: 'Da verificare', visible: true },
-                { id: 'state', label: 'Stato fonte', visible: false },
-                { id: 'comment', label: 'Commento', visible: false },
-            ]}
-            value={(source, column) =>
-                column === 'kind'
-                    ? sourceLabel(source)
-                    : column === 'value'
-                      ? (source.ip ??
-                        source.data.cidr ??
-                        (source.data.tag
-                            ? `VLAN ${source.data.tag}`
-                            : (source.data.name ??
-                              source.data.mac ??
-                              source.data.context ??
-                              source.data.menu)))
-                      : column === 'comment'
-                        ? (source.data.comment ?? null)
-                        : column === 'state'
-                          ? source.state === 'missing'
-                              ? 'Non più presente'
-                              : source.stale
-                                ? 'Non aggiornato'
-                                : 'Corrente'
-                          : source.problem
-            }
-            actions={(source) => (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelect(source)}
+        <div className="flex min-w-0 flex-col gap-5">
+            {catalog ? (
+                <ToggleGroup
+                    type="single"
+                    value={section}
+                    onValueChange={(next) => {
+                        if (next) {
+                            setSection(next);
+                            setType('all');
+                        }
+                    }}
+                    variant="outline"
+                    className="w-fit max-w-full flex-wrap justify-start"
+                    aria-label="Categorie dei dati MikroTik"
                 >
-                    Dettaglio
-                </Button>
-            )}
-        />
+                    {sections.map((item) => (
+                        <ToggleGroupItem key={item.id} value={item.id}>
+                            {item.label}
+                            <Badge variant="secondary">
+                                {
+                                    sources.filter((source) =>
+                                        inSection(source, item.id),
+                                    ).length
+                                }
+                            </Badge>
+                        </ToggleGroupItem>
+                    ))}
+                </ToggleGroup>
+            ) : null}
+            <DeviceTable
+                name={name}
+                variant="list"
+                rows={
+                    catalog
+                        ? sectionSources.filter(
+                              (source) =>
+                                  Boolean(source.exclusion) ===
+                                      (visibility === 'excluded') &&
+                                  (type === 'all' ||
+                                      sourceLabel(source) === type),
+                          )
+                        : sources
+                }
+                filters={
+                    catalog ? (
+                        <>
+                            <Select value={type} onValueChange={setType}>
+                                <SelectTrigger
+                                    aria-label="Tipo di dato"
+                                    className="w-full sm:w-56"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value="all">
+                                            Tutti i tipi
+                                        </SelectItem>
+                                        {types.map((label) => (
+                                            <SelectItem
+                                                key={label}
+                                                value={label}
+                                            >
+                                                {label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                            <NetworkVisibilityFilter
+                                value={visibility}
+                                onChange={setVisibility}
+                                count={excludedCount}
+                            />
+                        </>
+                    ) : undefined
+                }
+                filterKey={`${section}:${type}:${visibility}`}
+                onRowClick={onSelect}
+                rowOpensDialog={!catalog}
+                searchLabel={
+                    catalog && section === 'all'
+                        ? 'Cerca in tutti i dati MikroTik'
+                        : 'Cerca nei dati MikroTik'
+                }
+                empty={
+                    visibility === 'excluded'
+                        ? 'Nessun dato escluso in questa categoria'
+                        : 'Nessun dato in questa categoria'
+                }
+                columns={[
+                    { id: 'value', label: 'Valore', visible: true },
+                    { id: 'kind', label: 'Tipo', visible: true },
+                    {
+                        id: 'interface',
+                        label: 'Interfaccia / bridge',
+                        visible: catalog,
+                    },
+                    { id: 'status', label: 'Stato', visible: catalog },
+                    {
+                        id: 'problem',
+                        label: 'Da verificare',
+                        visible: !catalog,
+                    },
+                    { id: 'mac', label: 'MAC', visible: false },
+                    {
+                        id: 'hostname',
+                        label: 'Hostname osservato',
+                        visible: false,
+                    },
+                    { id: 'comment', label: 'Commento', visible: false },
+                    { id: 'seen', label: 'Ultimo rilevamento', visible: false },
+                    { id: 'menu', label: 'Menu RouterOS', visible: false },
+                    {
+                        id: 'acquisition',
+                        label: 'Acquisizione',
+                        visible: false,
+                    },
+                    {
+                        id: 'import_note',
+                        label: 'Motivo mancata importazione',
+                        visible: false,
+                    },
+                ]}
+                value={value}
+                render={(source, column) =>
+                    column === 'status' ? (
+                        <Badge
+                            variant={
+                                source.problem &&
+                                !source.exclusion &&
+                                source.state !== 'missing'
+                                    ? 'secondary'
+                                    : 'outline'
+                            }
+                        >
+                            {value(source, column)}
+                        </Badge>
+                    ) : column === 'value' ? (
+                        <div className="flex flex-col gap-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span>{sourceValue(source)}</span>
+                                {sourceIsDynamic(source) ? (
+                                    <Badge variant="secondary">Dinamico</Badge>
+                                ) : null}
+                            </div>
+                            {source.ip && source.data.mac ? (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    {source.data.mac}
+                                </span>
+                            ) : null}
+                            {source.data.comment ? (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                    {source.data.comment}
+                                </span>
+                            ) : null}
+                        </div>
+                    ) : (
+                        (value(source, column) ?? '—')
+                    )
+                }
+                actions={(source) => (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onSelect(source)}
+                    >
+                        Dettaglio
+                    </Button>
+                )}
+            />
+        </div>
+    );
+}
+
+function sourceValue(source: MikrotikSource) {
+    return (
+        source.ip ??
+        source.data.cidr ??
+        (source.data.tag ? `VLAN ${source.data.tag}` : null) ??
+        source.data.name ??
+        source.data.mac ??
+        source.data.mac_address ??
+        source.data.address ??
+        source.data.interface ??
+        source.data.context ??
+        source.data.list ??
+        source.data.menu
     );
 }

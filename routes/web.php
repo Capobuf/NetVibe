@@ -49,11 +49,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
+        Route::get('companies/{company}/sites/{site}/devices/{device}/integrations', [DeviceController::class, 'integrations'])->name('companies.sites.devices.integrations');
         Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::prefix('companies/{company}/sites/{site}/devices/{device}/mikrotik')->name('companies.sites.devices.mikrotik.')
             ->middleware(['can:administer', 'throttle:10,1'])->group(function () {
                 Route::put('/', [MikrotikController::class, 'update'])->name('update');
                 Route::delete('/', [MikrotikController::class, 'destroy'])->name('destroy');
+                Route::post('setup-command', [MikrotikController::class, 'setupCommand'])->name('setup-command');
                 Route::post('verify', [MikrotikController::class, 'verify'])->name('verify');
                 Route::post('activate', [MikrotikController::class, 'activate'])->name('activate');
                 Route::post('sync', [MikrotikController::class, 'sync'])->name('sync');

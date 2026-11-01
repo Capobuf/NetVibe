@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
 import { Info, TriangleAlert } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
@@ -40,11 +41,15 @@ export type MikrotikSource = {
     seen_at: string;
     ip: string | null;
     problem: string | null;
+    import_note?: string | null;
     subnet_id: number | null;
     vlan_id: number | null;
     ip_address_id: number | null;
     data: {
         menu: string;
+        address?: string | null;
+        bridge?: string | null;
+        list?: string | null;
         comment?: string | null;
         name?: string | null;
         tag?: number | null;
@@ -59,7 +64,7 @@ export type MikrotikSource = {
         active?: boolean;
         status?: string | null;
         hostname_observed?: string | null;
-        dynamic?: string | boolean;
+        dynamic?: string | boolean | number;
         disabled?: string | boolean;
         invalid?: string | boolean;
         tagged?: string;
@@ -69,6 +74,10 @@ export type MikrotikSource = {
         'on-interface'?: string;
     };
 };
+
+export function sourceIsDynamic(source: MikrotikSource) {
+    return [true, 'true', 'yes', 1, '1'].includes(source.data.dynamic ?? false);
+}
 
 export function sourceLabel(source: MikrotikSource) {
     if (source.kind === 'lease')
@@ -82,11 +91,25 @@ export function sourceLabel(source: MikrotikSource) {
         if (source.data.menu === '/ip/neighbor') return 'Neighbor';
         return 'Osservazione DHCP';
     }
+    if (source.kind === 'context') {
+        const menus: Record<string, string> = {
+            '/interface': 'Interfaccia RouterOS',
+            '/interface/ethernet': 'Porta fisica RouterOS',
+            '/interface/bridge': 'Bridge',
+            '/interface/bridge/port': 'Porta del bridge',
+            '/interface/bridge/vlan': 'VLAN dinamica del bridge',
+            '/interface/list': 'Lista di interfacce',
+            '/interface/list/member': 'Membro di lista',
+            '/ip/dhcp-server': 'Server DHCP',
+            '/ip/dhcp-server/network': 'Rete DHCP',
+            '/ip/pool': 'Pool IP',
+        };
+        return menus[source.data.menu] ?? source.data.menu;
+    }
     const labels: Record<string, string> = {
         vlan: 'VLAN',
         subnet: 'Subnet',
         address: 'Indirizzo del dispositivo',
-        context: 'Contesto della fonte',
         interface: 'Porta fisica',
     };
     return labels[source.kind] ?? source.kind;
@@ -114,6 +137,9 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                             </IconButton>
                         </div>
                         <div className="flex flex-wrap gap-2">
+                            {sourceIsDynamic(source) ? (
+                                <Badge variant="secondary">Dinamico</Badge>
+                            ) : null}
                             {source.exclusion ? (
                                 <Badge variant="outline">
                                     {source.exclusion.kind === 'source'
@@ -147,6 +173,9 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 MAC: source.data.mac ?? source.data.mac_address,
                                 'Porta RouterOS': source.data.default_name,
                                 Subnet: source.data.cidr,
+                                Indirizzo: source.data.address,
+                                Bridge: source.data.bridge,
+                                Lista: source.data.list,
                                 VLAN: source.data.tag,
                                 Oggetto: source.data.name,
                                 'Interfaccia di base':
@@ -167,6 +196,10 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 'Untagged attuali':
                                     source.data['current-untagged'],
                                 'Commento MikroTik': source.data.comment,
+                                'Menu RouterOS': source.data.menu,
+                                'Ultimo rilevamento': formatDateTime(
+                                    source.seen_at,
+                                ),
                             })
                                 .filter(
                                     ([, value]) =>
@@ -185,6 +218,16 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                     </div>
                                 ))}
                         </dl>
+                        {source.import_note ? (
+                            <p className="text-muted-foreground">
+                                {source.import_note}
+                            </p>
+                        ) : source.kind === 'observation' &&
+                          sourceIsDynamic(source) ? (
+                            <p className="text-muted-foreground">
+                                Osservazione dinamica: non crea un record IPAM.
+                            </p>
+                        ) : null}
                         {source.problem ? (
                             <Alert>
                                 <TriangleAlert />

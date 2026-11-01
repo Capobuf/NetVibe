@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeft, PanelsTopLeft, Factory, Shapes } from 'lucide-react';
+import { ArrowLeft, LayoutTemplate, Factory, Shapes } from 'lucide-react';
 import { CatalogForm } from '@/components/devices/catalog-form';
 import { ManufacturerTable } from '@/components/devices/manufacturer-table';
 import { DeviceTable } from '@/components/devices/device-table';
@@ -67,7 +67,7 @@ export default function Models({
     }
     return (
         <>
-            <Head title="Modelli" />
+            <Head title="Catalogo" />
             <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
                 <div>
                     <Button variant="ghost" size="sm" asChild>
@@ -79,7 +79,7 @@ export default function Models({
                 </div>
                 <header>
                     <h1 className="text-2xl font-semibold tracking-tight">
-                        Modelli
+                        Catalogo
                     </h1>
                 </header>
                 <Tabs
@@ -90,7 +90,7 @@ export default function Models({
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <TabsList aria-label="Catalogo dispositivi">
                             <TabsTrigger value="models">
-                                <PanelsTopLeft />
+                                <LayoutTemplate />
                                 Modelli
                             </TabsTrigger>
                             <TabsTrigger value="manufacturers">
@@ -315,4 +315,4 @@ export default function Models({
         </>
     );
 }
-Models.layout = () => ({ breadcrumbs: [{ title: 'Modelli', href: index() }] });
+Models.layout = () => ({ breadcrumbs: [{ title: 'Catalogo', href: index() }] });

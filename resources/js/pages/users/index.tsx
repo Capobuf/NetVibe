@@ -90,6 +90,7 @@ export default function UserIndex({
     superadminCount,
 }: Props) {
     const { auth } = usePage().props;
+    const Title = company ? 'h2' : 'h1';
     const [deleting, setDeleting] = useState<ManagedUser | null>(null);
     const deleteOpener = useRef<HTMLButtonElement | null>(null);
     const { columns, setColumns, separators, setSeparators } =
@@ -113,13 +114,13 @@ export default function UserIndex({
             <Head title={`Utenti · ${company?.name ?? 'Amministrazione'}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6">
                 <header className="flex flex-wrap items-center justify-between gap-4">
-                    <h2
+                    <Title
                         id="users-heading"
                         tabIndex={-1}
                         className="text-2xl font-semibold tracking-tight"
                     >
                         Utenti
-                    </h2>
+                    </Title>
                     <InviteUser
                         key={company?.id ?? 'global'}
                         company={company}

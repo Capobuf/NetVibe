@@ -239,6 +239,11 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
         <>
             <Head title={`Snipe-IT · ${company?.name ?? 'Amministrazione'}`} />
             <div className="flex max-w-5xl flex-col gap-6 p-4 md:p-6">
+                {!company && (
+                    <h1 className="text-2xl font-semibold tracking-tight">
+                        Integrazioni
+                    </h1>
+                )}
                 <Tabs defaultValue="snipe-it" className="gap-6">
                     <TabsList aria-label="Integrazioni">
                         <TabsTrigger value="snipe-it">

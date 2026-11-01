@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { PanelsTopLeft, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { DeviceTable } from '@/components/devices/device-table';
 import { RackForm, RackDelete } from '@/components/racks/rack-form';
 import { IconButton } from '@/components/icon-button';
@@ -30,16 +30,13 @@ export default function Racks({ company, site, racks }: Props) {
             <Head title={`Rack · ${context}`} />
             <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
                 <header className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <PanelsTopLeft className="size-6 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                {context}
-                            </p>
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                Rack
-                            </h1>
-                        </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            {context}
+                        </p>
+                        <h1 className="text-2xl font-semibold tracking-tight">
+                            Rack
+                        </h1>
                     </div>
                     <RackForm {...route} />
                 </header>

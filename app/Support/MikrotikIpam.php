@@ -13,10 +13,10 @@ class MikrotikIpam
 {
     public static function forSubnet(Subnet $subnet): Collection
     {
-        return MikrotikSource::where('site_id', $subnet->site_id)
+        return (new NetworkExclusions($subnet->site_id))->display(MikrotikSource::where('site_id', $subnet->site_id)
             ->where(fn ($query) => $query->where('subnet_id', $subnet->id)
                 ->orWhereBetween('address', [$subnet->network_address, $subnet->broadcast_address]))
-            ->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()->map->display();
+            ->with('device.mikrotikConnection')->orderByDesc('seen_at')->get());
     }
 
     public static function networkChange(Subnet|Vlan $record, array $next, ?string $mode): void
@@ -90,7 +90,7 @@ class MikrotikIpam
 
     public static function recognizeExpected(int $siteId, int $deviceId): void
     {
-        $ips = IpAddress::whereIn('subnet_id', Subnet::where('site_id', $siteId)->select('id'))
+        $ips = IpAddress::whereIn('subnet_id', Subnet::where('site_id', $siteId)->visible()->select('id'))
             ->where('mikrotik_edit_mode', 'planned')->whereNull('mikrotik_matched_at')->lockForUpdate()->get();
         foreach ($ips as $ip) {
             $expected = $ip->mikrotik_expected;

@@ -1,4 +1,9 @@
 import {
+    NetworkExclusionAction,
+    NetworkVisibilityFilter,
+} from '@/components/networks/network-exclusion';
+import { Badge } from '@/components/ui/badge';
+import {
     ArrowRight,
     ChevronDown,
     ChevronRight,
@@ -40,19 +45,31 @@ import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
 
-type VlanColumn = 'tag' | 'name' | 'subnets_count';
+type VlanColumn = 'tag' | 'name' | 'subnets_count' | 'excluded_at';
 
 type Props = {
     company: Company;
     site: Site;
-    vlans: (Vlan & { subnets_count: number; subnets: Subnet[] })[];
+    vlans: (Vlan & { subnets: Subnet[] })[];
 };
 
 export default function VlanIndex(props: Props) {
     return <VlanList key={props.site.id} {...props} />;
 }
 
-function VlanList({ company, site, vlans }: Props) {
+function VlanList({ company, site, vlans: allVlans }: Props) {
+    const [visibility, setVisibility] = useState('active');
+    const excludedCount = allVlans.filter((vlan) => vlan.excluded_at).length;
+    const vlans = allVlans
+        .filter(
+            (vlan) => Boolean(vlan.excluded_at) === (visibility === 'excluded'),
+        )
+        .map((vlan) => {
+            const subnets = vlan.subnets.filter(
+                (subnet) => vlan.excluded_at || !subnet.excluded_at,
+            );
+            return { ...vlan, subnets, subnets_count: subnets.length };
+        });
     const { auth, companyNavigation } = usePage().props;
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<VlanColumn>>(null);
@@ -62,6 +79,7 @@ function VlanList({ company, site, vlans }: Props) {
             { id: 'tag', label: 'VLAN', visible: true },
             { id: 'name', label: 'Nome', visible: false },
             { id: 'subnets_count', label: 'Subnet', visible: true },
+            { id: 'excluded_at', label: 'Data esclusione', visible: false },
         ]);
     const visibleColumns = columns.filter((column) => column.visible);
     const separateName = visibleColumns.some((column) => column.id === 'name');
@@ -80,7 +98,11 @@ function VlanList({ company, site, vlans }: Props) {
             .toLocaleLowerCase()
             .includes(search.trim().toLocaleLowerCase()),
     );
-    const rows = sortTableRows(filtered, sort, (vlan, column) => vlan[column]);
+    const rows = sortTableRows(
+        filtered,
+        sort,
+        (vlan, column) => vlan[column] ?? null,
+    );
     const {
         pageRows,
         page,
@@ -89,7 +111,7 @@ function VlanList({ company, site, vlans }: Props) {
         needsPagination,
         setPage,
         setPageSize,
-    } = useTablePagination(rows, JSON.stringify([search, sort]));
+    } = useTablePagination(rows, JSON.stringify([search, sort, visibility]));
     const context =
         (companyNavigation?.sites.length ?? 0) > 1
             ? `${company.name} · ${site.name}`
@@ -120,6 +142,11 @@ function VlanList({ company, site, vlans }: Props) {
                             total={vlans.length}
                             value={search}
                             onChange={setSearch}
+                        />
+                        <NetworkVisibilityFilter
+                            value={visibility}
+                            onChange={setVisibility}
+                            count={excludedCount}
                         />
                     </div>
                 </div>
@@ -226,7 +253,23 @@ function VlanList({ company, site, vlans }: Props) {
                                                         >
                                                             VLAN {vlan.tag}
                                                         </TextLink>
+                                                        {vlan.excluded_at ? (
+                                                            <Badge variant="outline">
+                                                                Esclusa
+                                                            </Badge>
+                                                        ) : null}
                                                     </div>
+                                                ) : column.id ===
+                                                  'excluded_at' ? (
+                                                    vlan.excluded_at ? (
+                                                        new Date(
+                                                            vlan.excluded_at,
+                                                        ).toLocaleString(
+                                                            'it-IT',
+                                                        )
+                                                    ) : (
+                                                        '—'
+                                                    )
                                                 ) : (
                                                     (vlan[column.id] ?? '—')
                                                 )}
@@ -249,10 +292,25 @@ function VlanList({ company, site, vlans }: Props) {
                                                     </Link>
                                                 </IconButton>
                                                 {auth.canEditIpam ? (
-                                                    <VlanForm
-                                                        {...formContext}
-                                                        vlan={vlan}
-                                                    />
+                                                    <>
+                                                        {!vlan.excluded_at ? (
+                                                            <VlanForm
+                                                                {...formContext}
+                                                                vlan={vlan}
+                                                            />
+                                                        ) : null}
+                                                        <NetworkExclusionAction
+                                                            company={company.id}
+                                                            site={site.id}
+                                                            kind="vlan"
+                                                            id={vlan.id}
+                                                            label={`VLAN ${vlan.tag}`}
+                                                            excluded={Boolean(
+                                                                vlan.excluded_at,
+                                                            )}
+                                                            compact
+                                                        />
+                                                    </>
                                                 ) : null}
                                             </div>
                                         </TableCell>

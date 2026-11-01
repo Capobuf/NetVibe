@@ -113,6 +113,30 @@ class IpAddressesTest extends TestCase
             }));
     }
 
+    public function test_ip_table_page_size_preserves_search_and_order_and_clamps_the_last_page(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->has('ipAddresses.data', 25)->where('ipAddresses.per_page', 25));
+        $this->get($show.'?search=10.0.0.&sort=ip&direction=desc&per_page=10&page=2')
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('ipAddresses.data', 10)->where('ipAddresses.total', 254)
+                ->where('ipAddresses.data.0.ip', '10.0.0.244')
+                ->where('ipAddresses.data.9.ip', '10.0.0.235')
+                ->where('ipAddresses.per_page', 10)->where('ipAddresses.current_page', 2)
+                ->where('query.search', '10.0.0.')->where('query.direction', 'desc'));
+        $this->get($show.'?per_page=100&page=26')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.current_page', 3)->has('ipAddresses.data', 54)
+            ->where('ipAddresses.data.0.ip', '10.0.0.201')->where('ipAddresses.data.53.ip', '10.0.0.254'));
+        $this->get($show.'?per_page=1000')->assertSessionHasErrors('per_page');
+        $this->assertDatabaseCount('ip_addresses', 0);
+    }
+
     public function test_virtual_rows_and_metadata_matches_share_global_sorting_without_duplicates(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

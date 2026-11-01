@@ -1,12 +1,14 @@
 import type { DeviceInterface } from './device';
 
 export type Vlan = {
+    excluded_at?: string | null;
     id: number;
     tag: number;
     name: string | null;
 };
 
 export type Subnet = {
+    excluded_at?: string | null;
     id: number;
     cidr: string;
     name: string | null;

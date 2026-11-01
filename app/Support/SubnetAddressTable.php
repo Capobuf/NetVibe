@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class SubnetAddressTable
 {
-    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page): LengthAwarePaginator
+    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page, int $perPage = 25, bool $hideFree = false): LengthAwarePaginator
     {
         [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
         $matcher = new Ipv4Search($search);
@@ -64,49 +64,60 @@ class SubnetAddressTable
         }
         $populatedCount = $populated?->count() ?? 0;
 
-        // The virtual group includes null metadata; only stored exceptions split its ranges.
-        $exceptions = [];
-        if ($populated !== null) {
-            foreach ((clone $populated)->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->pluck('address') as $address) {
-                $exceptions[$address] = false;
+        if ($hideFree) {
+            $observed = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+                ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
+                    ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)))
+                ->distinct()->pluck('address');
+            $populatedAddresses = $populated ? (clone $populated)->pluck('address') : collect();
+            $segments = (clone $matching)->pluck('address')->merge($observed)->unique()
+                ->diff($populatedAddresses)->sort(SORT_NUMERIC)
+                ->map(fn ($address) => [$address, $address, 1, true])->values()->all();
+        } else {
+            // The virtual group includes null metadata; only stored exceptions split its ranges.
+            $exceptions = [];
+            if ($populated !== null) {
+                foreach ((clone $populated)->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->pluck('address') as $address) {
+                    $exceptions[$address] = false;
+                }
             }
-        }
-        if ($search !== '') {
-            $extra = (clone $matching)->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
-                ->when($sourceSort, fn ($query) => $query->whereNotIn('address', (clone $populated)->select('address')))
-                ->when($textSort && ! $sourceSort, fn ($query) => $relatedSort ? $query->doesntHave($sort) : $query->whereNull($sort));
-            foreach ($extra->pluck('address') as $address) {
-                $exceptions[$address] = true;
+            if ($search !== '') {
+                $extra = (clone $matching)->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
+                    ->when($sourceSort, fn ($query) => $query->whereNotIn('address', (clone $populated)->select('address')))
+                    ->when($textSort && ! $sourceSort, fn ($query) => $relatedSort ? $query->doesntHave($sort) : $query->whereNull($sort));
+                foreach ($extra->pluck('address') as $address) {
+                    $exceptions[$address] = true;
+                }
             }
-        }
-        if ($search !== '') {
-            $populatedAddresses = $populated ? (clone $populated)->pluck('address')->all() : [];
-            $external = (clone $sourceMatches)
-                ->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
-                ->whereNotIn('address', $populatedAddresses)->distinct()->pluck('address');
-            foreach ($external as $address) {
-                $exceptions[$address] = true;
+            if ($search !== '') {
+                $populatedAddresses = $populated ? (clone $populated)->pluck('address')->all() : [];
+                $external = (clone $sourceMatches)
+                    ->whereRaw("INET_NTOA(address) NOT LIKE ? ESCAPE '!'", [$pattern])
+                    ->whereNotIn('address', $populatedAddresses)->distinct()->pluck('address');
+                foreach ($external as $address) {
+                    $exceptions[$address] = true;
+                }
             }
-        }
-        ksort($exceptions, SORT_NUMERIC);
-        $segments = [];
-        $next = $first;
-        foreach ($exceptions as $address => $include) {
-            if ($next < $address) {
-                $segments[] = [$next, $address - 1, $matcher->count($next, $address - 1), false];
+            ksort($exceptions, SORT_NUMERIC);
+            $segments = [];
+            $next = $first;
+            foreach ($exceptions as $address => $include) {
+                if ($next < $address) {
+                    $segments[] = [$next, $address - 1, $matcher->count($next, $address - 1), false];
+                }
+                if ($include) {
+                    $segments[] = [$address, $address, 1, true];
+                }
+                $next = $address + 1;
             }
-            if ($include) {
-                $segments[] = [$address, $address, 1, true];
+            if ($next <= $last) {
+                $segments[] = [$next, $last, $matcher->count($next, $last), false];
             }
-            $next = $address + 1;
-        }
-        if ($next <= $last) {
-            $segments[] = [$next, $last, $matcher->count($next, $last), false];
         }
         $virtualCount = array_sum(array_column($segments, 2));
         $total = $virtualCount + $populatedCount;
-        $page = min($page, max(1, (int) ceil($total / 50)));
-        $offset = ($page - 1) * 50;
+        $page = min($page, max(1, (int) ceil($total / $perPage)));
+        $offset = ($page - 1) * $perPage;
         $addresses = [];
         $groups = $textSort && $direction === 'desc' ? ['populated', 'virtual'] : ['virtual', 'populated'];
         foreach ($groups as $group) {
@@ -116,7 +127,7 @@ class SubnetAddressTable
 
                 continue;
             }
-            $limit = 50 - count($addresses);
+            $limit = $perPage - count($addresses);
             if ($group === 'populated') {
                 $items = (clone $populated)->orderBy($sortColumn, $direction)->orderBy('address')
                     ->offset($offset)->limit($limit)->pluck('address')->all();
@@ -125,7 +136,7 @@ class SubnetAddressTable
             }
             $addresses = [...$addresses, ...$items];
             $offset = 0;
-            if (count($addresses) === 50) {
+            if (count($addresses) === $perPage) {
                 break;
             }
         }
@@ -153,7 +164,7 @@ class SubnetAddressTable
             ];
         }, $addresses);
 
-        return (new LengthAwarePaginator($rows, $total, 50, $page, [
+        return (new LengthAwarePaginator($rows, $total, $perPage, $page, [
             'path' => LengthAwarePaginator::resolveCurrentPath(),
         ]))->withQueryString();
     }

@@ -1,3 +1,7 @@
+import {
+    NetworkExclusionAction,
+    NetworkVisibilityFilter,
+} from '@/components/networks/network-exclusion';
 import { useForm, usePage, Link } from '@inertiajs/react';
 import { useState } from 'react';
 import { RefreshCw, Play } from 'lucide-react';
@@ -50,7 +54,8 @@ export function MikrotikSyncPanel({
         mikrotikSources: Source[];
     }>().props;
     const [allOpen, setAllOpen] = useState(false);
-    const [selected, setSelected] = useState<Source | null>(null);
+    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const selected = sources.find((source) => source.id === selectedId) ?? null;
     const [confirmed, setConfirmed] = useState(false);
     const form = useForm({
         revision: connection?.revision ?? null,
@@ -58,13 +63,14 @@ export function MikrotikSyncPanel({
         source_id: 0,
     });
     const problems = sources.filter(
-        (source) => source.problem && source.state !== 'missing',
+        (source) =>
+            source.problem && source.state !== 'missing' && !source.exclusion,
     );
     const error = Object.values(form.errors)[0];
     const active = Boolean(connection?.activated_at);
     const busy = disabled || form.processing;
     const select = (source: Source) => {
-        setSelected(source);
+        setSelectedId(source.id);
         setConfirmed(false);
         form.clearErrors();
     };
@@ -139,7 +145,9 @@ export function MikrotikSyncPanel({
                         onClick={() =>
                             form.submit(
                                 active ? sync(route) : activate(route),
-                                { preserveScroll: true },
+                                {
+                                    preserveScroll: true,
+                                },
                             )
                         }
                     >
@@ -187,7 +195,7 @@ export function MikrotikSyncPanel({
             <Sheet
                 open={selected !== null}
                 onOpenChange={(open) => {
-                    if (!open && !form.processing) setSelected(null);
+                    if (!open && !form.processing) setSelectedId(null);
                 }}
             >
                 <SheetContent
@@ -200,6 +208,37 @@ export function MikrotikSyncPanel({
                     {selected ? (
                         <div className="flex flex-col gap-4 px-4 pb-6">
                             <SourceDetails sources={[selected]} />
+                            {selected.exclusion ? (
+                                <NetworkExclusionAction
+                                    {...route}
+                                    {...selected.exclusion}
+                                    excluded
+                                />
+                            ) : selected.kind === 'subnet' ||
+                              selected.kind === 'vlan' ? (
+                                <NetworkExclusionAction
+                                    {...route}
+                                    kind={
+                                        selected.kind === 'subnet' &&
+                                        selected.subnet_id
+                                            ? 'subnet'
+                                            : selected.kind === 'vlan' &&
+                                                selected.vlan_id
+                                              ? 'vlan'
+                                              : 'source'
+                                    }
+                                    id={
+                                        (selected.kind === 'subnet'
+                                            ? selected.subnet_id
+                                            : selected.vlan_id) ?? selected.id
+                                    }
+                                    label={
+                                        selected.kind === 'vlan'
+                                            ? `VLAN ${selected.data.tag}`
+                                            : (selected.data.cidr ?? 'Subnet')
+                                    }
+                                />
+                            ) : null}
                             {selected.subnet_id ? (
                                 <Button variant="outline" asChild>
                                     <Link
@@ -251,7 +290,7 @@ export function MikrotikSyncPanel({
                                             form.submit(associate(route), {
                                                 preserveScroll: true,
                                                 onSuccess: () =>
-                                                    setSelected(null),
+                                                    setSelectedId(null),
                                             });
                                         }}
                                     >
@@ -281,10 +320,30 @@ function SourceTable({
     onSelect: (source: Source) => void;
     name: string;
 }) {
+    const [visibility, setVisibility] = useState('active');
+    const excludedCount = sources.filter((source) => source.exclusion).length;
     return (
         <DeviceTable
             name={name}
-            rows={sources}
+            rows={
+                name === 'mikrotik-sources'
+                    ? sources.filter(
+                          (source) =>
+                              Boolean(source.exclusion) ===
+                              (visibility === 'excluded'),
+                      )
+                    : sources
+            }
+            filters={
+                name === 'mikrotik-sources' ? (
+                    <NetworkVisibilityFilter
+                        value={visibility}
+                        onChange={setVisibility}
+                        count={excludedCount}
+                    />
+                ) : undefined
+            }
+            filterKey={visibility}
             onRowClick={onSelect}
             columns={[
                 { id: 'kind', label: 'Tipo', visible: true },

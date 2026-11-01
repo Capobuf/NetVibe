@@ -1,5 +1,5 @@
 import {
-    SourceDetails,
+    MikrotikSourcesDialog,
     MikrotikIndicator,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
@@ -48,6 +48,27 @@ import {
 import type { Device } from '@/types/device';
 import type { ExcludedRange, IpAddress, IpStatus, Tag } from '@/types/network';
 
+function observedValue(
+    sources: MikrotikSource[],
+    field: 'mac' | 'hostname_observed',
+) {
+    const values = new Map<string, string>();
+    for (const source of sources) {
+        if (
+            source.state !== 'current' ||
+            source.stale ||
+            source.data.active === false
+        )
+            continue;
+        const value = source.data[field]?.trim();
+        if (!value) continue;
+        const normalized =
+            field === 'mac' ? value.replaceAll('-', ':').toUpperCase() : value;
+        values.set(normalized.toLowerCase(), normalized);
+    }
+    return values.size === 1 ? [...values.values()][0] : '';
+}
+
 export default function IpAddressForm({
     companyId,
     siteId,
@@ -87,8 +108,10 @@ export default function IpAddressForm({
     const initialInterface = devices
         .find((device) => device.id === assignment?.deviceId)
         ?.interfaces.find((item) => item.id === assignment?.interfaceId);
-    const initialMac =
-        ipAddress?.mac_address ?? initialInterface?.mac_address ?? '';
+    const initialMac = ipAddress
+        ? (ipAddress.mac_address ?? '')
+        : (initialInterface?.mac_address ?? null);
+    const initialHostname = ipAddress ? (ipAddress.hostname ?? '') : null;
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
     const setOpen = onOpenChange ?? setInternalOpen;
@@ -96,13 +119,16 @@ export default function IpAddressForm({
     const [releasing, setReleasing] = useState(false);
     const [editing, setEditing] = useState(!ipAddress);
     const [ip, setIp] = useState(ipAddress?.ip ?? suggestedIp ?? '');
-    const [mac, setMac] = useState(initialMac);
+    const [macInput, setMac] = useState(initialMac);
+    const [hostnameInput, setHostname] = useState(initialHostname);
     const sources = mikrotikSources.filter(
         (source) =>
             source.ip === ip ||
             (ipAddress && source.ip_address_id === ipAddress.id),
     );
-    const external = sources.some((source) => source.state !== 'missing');
+    const mac = macInput ?? observedValue(sources, 'mac');
+    const hostname =
+        hostnameInput ?? observedValue(sources, 'hostname_observed');
     const address = ipv4Number(ip);
     const excluded =
         address !== null &&
@@ -117,6 +143,7 @@ export default function IpAddressForm({
         setReleasing(false);
         setIp(ipAddress?.ip ?? suggestedIp ?? '');
         setMac(initialMac);
+        setHostname(initialHostname);
         setEditing(true);
     }
     return (
@@ -130,6 +157,7 @@ export default function IpAddressForm({
                     setEditing(!ipAddress);
                     setIp(ipAddress?.ip ?? suggestedIp ?? '');
                     setMac(initialMac);
+                    setHostname(initialHostname);
                 }
             }}
         >
@@ -336,28 +364,14 @@ export default function IpAddressForm({
                             >
                                 {({ processing, errors }) => (
                                     <FieldGroup>
-                                        <h3 className="text-sm font-medium">
-                                            Indirizzo
-                                        </h3>
-                                        {external ? (
-                                            <Alert>
-                                                <TriangleAlert />
-                                                <AlertTitle>
-                                                    Indirizzo presente nelle
-                                                    fonti MikroTik
-                                                </AlertTitle>
-                                                <AlertDescription>
-                                                    La documentazione manuale
-                                                    rimane possibile; verifica
-                                                    la configurazione e le
-                                                    osservazioni prima
-                                                    dell’assegnazione.
-                                                </AlertDescription>
-                                            </Alert>
-                                        ) : null}
-                                        {sources.length ? (
-                                            <SourceDetails sources={sources} />
-                                        ) : null}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h3 className="text-sm font-medium">
+                                                Indirizzo
+                                            </h3>
+                                            <MikrotikSourcesDialog
+                                                sources={sources}
+                                            />
+                                        </div>
                                         {excluded && (
                                             <Alert>
                                                 <TriangleAlert />
@@ -417,39 +431,33 @@ export default function IpAddressForm({
                                                             processing ||
                                                             !canEdit
                                                         }
-                                                        defaultValue={
-                                                            field.name ===
-                                                            'hostname'
-                                                                ? (ipAddress?.hostname ??
-                                                                  '')
-                                                                : undefined
-                                                        }
                                                         value={
                                                             field.name === 'ip'
                                                                 ? ip
                                                                 : field.name ===
                                                                     'mac_address'
                                                                   ? mac
-                                                                  : undefined
+                                                                  : hostname
                                                         }
-                                                        onChange={
-                                                            field.name === 'ip'
-                                                                ? (event) =>
-                                                                      setIp(
-                                                                          event
-                                                                              .target
-                                                                              .value,
-                                                                      )
-                                                                : field.name ===
-                                                                    'mac_address'
-                                                                  ? (event) =>
-                                                                        setMac(
-                                                                            event
-                                                                                .target
-                                                                                .value,
-                                                                        )
-                                                                  : undefined
-                                                        }
+                                                        onChange={(event) => {
+                                                            const value =
+                                                                event.target
+                                                                    .value;
+                                                            if (
+                                                                field.name ===
+                                                                'ip'
+                                                            )
+                                                                setIp(value);
+                                                            else if (
+                                                                field.name ===
+                                                                'mac_address'
+                                                            )
+                                                                setMac(value);
+                                                            else
+                                                                setHostname(
+                                                                    value,
+                                                                );
+                                                        }}
                                                         aria-invalid={
                                                             !!errors[field.name]
                                                         }

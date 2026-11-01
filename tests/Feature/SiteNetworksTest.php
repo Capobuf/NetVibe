@@ -50,7 +50,7 @@ class SiteNetworksTest extends TestCase
         $this->get(route('companies.sites.vlans.index', [$company, $site]))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('vlans/index')
                 ->has('vlans', 3)->where('vlans.0.id', $vlan->id)
-                ->where('vlans.0.subnets_count', 1)->has('vlans.0.subnets', 1)
+                ->has('vlans.0.subnets', 1)
                 ->where('vlans.0.subnets.0.id', $subnet->id)
                 ->where('vlans.0.subnets.0.cidr', '192.168.1.0/24')
                 ->where('vlans.0.subnets.0.name', 'LAN')

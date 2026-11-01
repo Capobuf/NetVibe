@@ -12,7 +12,7 @@ class MikrotikSource extends Model
 {
     protected function casts(): array
     {
-        return ['data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
+        return ['excluded_at' => 'datetime', 'data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
     }
 
     public function device(): BelongsTo

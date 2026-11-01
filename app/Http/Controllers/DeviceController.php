@@ -14,6 +14,7 @@ use App\Models\ModelType;
 use App\Models\Site;
 use App\Models\SnipeItSync;
 use App\Support\DeletionImpact;
+use App\Support\NetworkExclusions;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -67,17 +68,17 @@ class DeviceController extends Controller
                 'model_problem' => $asset->externalModel?->problem,
             ] : null,
             'mikrotikSources' => $request->user()->is_superadmin
-                ? $device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()->map->display() : [],
+                ? (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()) : [],
             'initialInterfaceId' => $selectedInterface?->id,
             'assetUrls' => $device->model?->assetUrls() ?? [],
             'manufacturers' => $this->catalog(),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'ips' => $device->ipAddresses->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)]),
-            'availableIps' => IpAddress::query()->whereIn('subnet_id', $site->subnets()->select('id'))
+            'availableIps' => IpAddress::query()->whereIn('subnet_id', $site->subnets()->visible()->select('id'))
                 ->where(fn ($query) => $query->whereNull('device_id')->orWhere(fn ($query) => $query->where('device_id', $device->id)->whereNull('device_interface_id')))
                 ->with('subnet:id,cidr')->orderBy('address')->get()
                 ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)]),
-            'subnets' => $site->subnets()->with('excludedRanges')->orderBy('network_address')->get(['id', 'cidr', 'name'])
+            'subnets' => $site->subnets()->visible()->with('excludedRanges')->orderBy('network_address')->get(['id', 'cidr', 'name'])
                 ->map(fn ($subnet) => [...$subnet->only('id', 'cidr', 'name'),
                     'excludedRanges' => $subnet->excludedRanges->map(fn ($range) => [
                         'id' => $range->id, 'start_ip' => long2ip($range->start_address), 'end_ip' => long2ip($range->end_address),

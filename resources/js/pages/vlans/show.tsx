@@ -1,4 +1,9 @@
 import {
+    NetworkExclusionAction,
+    NetworkVisibilityFilter,
+} from '@/components/networks/network-exclusion';
+import { Badge } from '@/components/ui/badge';
+import {
     MikrotikIndicator,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
@@ -59,10 +64,19 @@ export default function VlanShow({
     company,
     site,
     vlan,
-    subnets,
+    subnets: allSubnets,
     mikrotikSources,
 }: Props) {
-    const { companyNavigation } = usePage().props;
+    const { auth, companyNavigation } = usePage().props;
+    const [visibility, setVisibility] = useState('active');
+    const subnets = allSubnets.filter(
+        (subnet) =>
+            vlan.excluded_at ||
+            Boolean(subnet.excluded_at) === (visibility === 'excluded'),
+    );
+    const excludedCount = allSubnets.filter(
+        (subnet) => subnet.excluded_at,
+    ).length;
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<SubnetColumn>>(null);
     const { columns, setColumns, separators, setSeparators } =
@@ -98,6 +112,14 @@ export default function VlanShow({
                             VLAN {vlan.tag}
                             <MikrotikIndicator sources={mikrotikSources} />
                         </h1>
+                        {vlan.excluded_at ? (
+                            <Badge variant="outline">
+                                Esclusa ·{' '}
+                                {new Date(vlan.excluded_at).toLocaleDateString(
+                                    'it-IT',
+                                )}
+                            </Badge>
+                        ) : null}
                         {vlan.name ? (
                             <p className="text-base break-words">{vlan.name}</p>
                         ) : null}
@@ -105,14 +127,30 @@ export default function VlanShow({
                             {context}
                         </p>
                     </div>
-                    <Button variant="outline" asChild>
-                        <Link
-                            href={index({ company: company.id, site: site.id })}
-                        >
-                            <ArrowLeft data-icon="inline-start" />
-                            Elenco VLAN
-                        </Link>
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {auth.canEditIpam ? (
+                            <NetworkExclusionAction
+                                company={company.id}
+                                site={site.id}
+                                kind="vlan"
+                                id={vlan.id}
+                                label={`VLAN ${vlan.tag}`}
+                                excluded={Boolean(vlan.excluded_at)}
+                                compact={!vlan.excluded_at}
+                            />
+                        ) : null}
+                        <Button variant="outline" asChild>
+                            <Link
+                                href={index({
+                                    company: company.id,
+                                    site: site.id,
+                                })}
+                            >
+                                <ArrowLeft data-icon="inline-start" />
+                                Elenco VLAN
+                            </Link>
+                        </Button>
+                    </div>
                 </header>
                 <Card className="gap-0 overflow-hidden py-0">
                     <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 py-4">
@@ -125,6 +163,13 @@ export default function VlanShow({
                                 {rows.length} di {subnets.length} subnet
                             </CardDescription>
                         </div>
+                        {!vlan.excluded_at ? (
+                            <NetworkVisibilityFilter
+                                value={visibility}
+                                onChange={setVisibility}
+                                count={excludedCount}
+                            />
+                        ) : null}
                         <div className="w-full sm:w-72">
                             <Label
                                 htmlFor="vlan-subnet-search"
@@ -203,20 +248,36 @@ export default function VlanShow({
                                             </TableCell>
                                         ))}
                                         <TableCell className="text-right">
-                                            <IconButton
-                                                label={`Apri subnet ${subnet.cidr}`}
-                                                asChild
-                                            >
-                                                <Link
-                                                    href={subnetShow({
-                                                        company: company.id,
-                                                        site: site.id,
-                                                        subnet: subnet.id,
-                                                    })}
+                                            <div className="flex items-center justify-end gap-2">
+                                                {auth.canEditIpam ? (
+                                                    <NetworkExclusionAction
+                                                        company={company.id}
+                                                        site={site.id}
+                                                        kind="subnet"
+                                                        id={subnet.id}
+                                                        label={subnet.cidr}
+                                                        excluded={Boolean(
+                                                            subnet.excluded_at ||
+                                                            vlan.excluded_at,
+                                                        )}
+                                                        compact
+                                                    />
+                                                ) : null}
+                                                <IconButton
+                                                    label={`Apri subnet ${subnet.cidr}`}
+                                                    asChild
                                                 >
-                                                    <ArrowRight />
-                                                </Link>
-                                            </IconButton>
+                                                    <Link
+                                                        href={subnetShow({
+                                                            company: company.id,
+                                                            site: site.id,
+                                                            subnet: subnet.id,
+                                                        })}
+                                                    >
+                                                        <ArrowRight />
+                                                    </Link>
+                                                </IconButton>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}

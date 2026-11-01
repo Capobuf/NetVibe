@@ -1,3 +1,7 @@
+import {
+    NetworkExclusionAction,
+    NetworkVisibilityFilter,
+} from '@/components/networks/network-exclusion';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { Filter, Layers3, Network, X } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -42,7 +46,7 @@ import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
 
-type SubnetColumn = 'cidr' | 'vlan' | 'range' | 'documented';
+type SubnetColumn = 'cidr' | 'vlan' | 'range' | 'documented' | 'excluded_at';
 
 type SubnetListItem = Subnet & {
     first_ip: string;
@@ -65,6 +69,13 @@ export default function SubnetIndex(props: Props) {
 function SubnetList({ company, site, subnets, vlans }: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [filter, setFilter] = useState('all');
+    const [visibility, setVisibility] = useState('active');
+    const isExcluded = (subnet: Subnet) =>
+        Boolean(
+            subnet.excluded_at ||
+            vlans.find((vlan) => vlan.id === subnet.vlan_id)?.excluded_at,
+        );
+    const excludedCount = subnets.filter(isExcluded).length;
     const [search, setSearch] = useState('');
     const [grouped, setGrouped] = useState(false);
     const [sort, setSort] = useState<TableSort<SubnetColumn>>(null);
@@ -77,6 +88,7 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
             { id: 'vlan', label: 'VLAN', visible: hasVlans },
             { id: 'range', label: 'Intervallo utilizzabile', visible: true },
             { id: 'documented', label: 'IP documentati', visible: true },
+            { id: 'excluded_at', label: 'Data esclusione', visible: false },
         ]);
     const visibleColumns = columns.filter((column) => column.visible);
     const context =
@@ -87,11 +99,12 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
         companyId: company.id,
         siteId: site.id,
         context,
-        vlans,
+        vlans: vlans.filter((vlan) => !vlan.excluded_at),
     };
     const vlansById = new Map(vlans.map((vlan) => [vlan.id, vlan]));
     const query = search.trim().toLocaleLowerCase();
     const filteredSubnets = subnets.filter((subnet) => {
+        if (isExcluded(subnet) !== (visibility === 'excluded')) return false;
         if (filter !== 'all' && String(subnet.vlan_id ?? 'none') !== filter)
             return false;
         const vlan = vlansById.get(subnet.vlan_id ?? -1);
@@ -114,6 +127,12 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
             if (column === 'cidr') return subnet.cidr;
             if (column === 'range') return subnet.first_ip;
             if (column === 'documented') return subnet.ip_addresses_count;
+            if (column === 'excluded_at')
+                return (
+                    subnet.excluded_at ??
+                    vlansById.get(subnet.vlan_id ?? -1)?.excluded_at ??
+                    null
+                );
             return vlansById.get(subnet.vlan_id ?? -1)?.tag ?? null;
         },
     );
@@ -130,7 +149,7 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
         setPageSize,
     } = useTablePagination(
         rows,
-        JSON.stringify([search, filter, sort, grouped]),
+        JSON.stringify([search, filter, sort, grouped, visibility]),
     );
     const filtered = search.trim() !== '' || filter !== 'all';
 
@@ -156,9 +175,18 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                         <div className="flex flex-wrap items-center gap-3">
                             <TableSearch
                                 label="Cerca subnet"
-                                total={subnets.length}
+                                total={
+                                    visibility === 'excluded'
+                                        ? excludedCount
+                                        : subnets.length - excludedCount
+                                }
                                 value={search}
                                 onChange={setSearch}
+                            />
+                            <NetworkVisibilityFilter
+                                value={visibility}
+                                onChange={setVisibility}
+                                count={excludedCount}
                             />
                             {canFilter || filter !== 'all' ? (
                                 <div className="flex min-w-0 items-center gap-2">
@@ -338,6 +366,15 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                                             subnet.cidr
                                                                         }
                                                                     </Link>
+                                                                    {isExcluded(
+                                                                        subnet,
+                                                                    ) ? (
+                                                                        <Badge variant="outline">
+                                                                            {vlan?.excluded_at
+                                                                                ? `Esclusa tramite VLAN ${vlan.tag}`
+                                                                                : 'Esclusa'}
+                                                                        </Badge>
+                                                                    ) : null}
                                                                     {subnet.description ? (
                                                                         <span className="max-w-full text-xs text-muted-foreground">
                                                                             {
@@ -346,6 +383,19 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
+                                                            ) : column.id ===
+                                                              'excluded_at' ? (
+                                                                (subnet.excluded_at ??
+                                                                vlan?.excluded_at) ? (
+                                                                    new Date(
+                                                                        (subnet.excluded_at ??
+                                                                            vlan?.excluded_at)!,
+                                                                    ).toLocaleString(
+                                                                        'it-IT',
+                                                                    )
+                                                                ) : (
+                                                                    '—'
+                                                                )
                                                             ) : column.id ===
                                                               'range' ? (
                                                                 <div className="flex flex-col gap-1 text-sm tabular-nums">
@@ -419,10 +469,33 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                 )}
                                                 <TableCell className="text-right">
                                                     {auth.canEditIpam ? (
-                                                        <SubnetForm
-                                                            {...formContext}
-                                                            subnet={subnet}
-                                                        />
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            {!isExcluded(
+                                                                subnet,
+                                                            ) ? (
+                                                                <SubnetForm
+                                                                    {...formContext}
+                                                                    subnet={
+                                                                        subnet
+                                                                    }
+                                                                />
+                                                            ) : null}
+                                                            <NetworkExclusionAction
+                                                                company={
+                                                                    company.id
+                                                                }
+                                                                site={site.id}
+                                                                kind="subnet"
+                                                                id={subnet.id}
+                                                                label={
+                                                                    subnet.cidr
+                                                                }
+                                                                excluded={isExcluded(
+                                                                    subnet,
+                                                                )}
+                                                                compact
+                                                            />
+                                                        </div>
                                                     ) : null}
                                                 </TableCell>
                                             </TableRow>

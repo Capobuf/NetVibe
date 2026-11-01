@@ -44,7 +44,7 @@ export default function SubnetSummary({
             aria-labelledby="subnet-summary-title"
         >
             <header className="flex items-center gap-1">
-                <h2 id="subnet-summary-title" className="font-semibold">
+                <h2 id="subnet-summary-title" className="text-base font-medium">
                     Riepilogo
                 </h2>
                 {auth.canEditIpam ? (

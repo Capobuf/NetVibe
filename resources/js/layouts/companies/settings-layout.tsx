@@ -28,7 +28,7 @@ export default function CompanySettingsLayout({
             <header className="flex flex-col gap-1 px-4 md:px-6">
                 <h1
                     id="company-settings-heading"
-                    className="text-2xl font-semibold tracking-tight"
+                    className="text-2xl font-medium tracking-tight"
                 >
                     Impostazioni azienda
                 </h1>

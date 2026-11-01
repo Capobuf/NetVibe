@@ -222,7 +222,7 @@ export default function SubnetShow({
                             <h1
                                 id="subnet-title"
                                 tabIndex={-1}
-                                className="font-mono text-2xl font-semibold tracking-tight break-all tabular-nums sm:text-3xl xl:text-4xl"
+                                className="text-2xl font-medium tracking-tight break-all tabular-nums"
                             >
                                 {subnet.cidr}
                                 <MikrotikIndicator
@@ -270,7 +270,7 @@ export default function SubnetShow({
                                 <p className="text-xs text-muted-foreground">
                                     Prossimo IP suggerito
                                 </p>
-                                <p className="font-mono text-base font-medium tabular-nums">
+                                <p className="text-sm font-medium tabular-nums">
                                     {firstProposableIp ??
                                         'Nessun IP proponibile'}
                                 </p>
@@ -289,7 +289,7 @@ export default function SubnetShow({
                     <CardHeader className="gap-4 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-col gap-1">
-                                <h2 className="font-semibold">Indirizzi</h2>
+                                <h2 className="text-base font-medium">Indirizzi</h2>
                                 <CardDescription className="tabular-nums">
                                     {ipAddresses.total.toLocaleString('it-IT')}{' '}
                                     {ipAddresses.total === 1
@@ -590,7 +590,7 @@ export default function SubnetShow({
                                                         column.id === 'ip' ||
                                                         column.id ===
                                                             'mac_address'
-                                                            ? 'px-4 font-mono tabular-nums'
+                                                            ? 'px-4 tabular-nums'
                                                             : 'whitespace-nowrap [&>span]:flex-nowrap'
                                                     }
                                                 >
@@ -631,7 +631,7 @@ export default function SubnetShow({
                                                                 value={
                                                                     ipAddress.ip
                                                                 }
-                                                                className="py-1 font-mono tabular-nums"
+                                                                className="py-1 tabular-nums"
                                                             />
                                                             {sourceNotice ? (
                                                                 <MikrotikIndicator

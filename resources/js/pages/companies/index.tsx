@@ -95,7 +95,7 @@ export default function Companies({
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex min-w-0 flex-col gap-2">
-                        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+                        <h1 className="text-2xl font-medium tracking-tight text-balance">
                             Aziende
                         </h1>
                         <p className="text-sm text-muted-foreground">

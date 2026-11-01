@@ -122,7 +122,7 @@ export default function SearchIndex({
             <Head title={`Ricerca IP · ${company.name}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-col gap-2">
-                    <h1 className="text-2xl font-semibold tracking-tight text-balance">
+                    <h1 className="text-2xl font-medium tracking-tight text-balance">
                         Ricerca IP
                     </h1>
                     {query.search ? (
@@ -352,7 +352,7 @@ export default function SearchIndex({
                                                                 ].includes(
                                                                     column.id,
                                                                 ) &&
-                                                                    'font-mono tabular-nums',
+                                                                    'tabular-nums',
                                                             )}
                                                         >
                                                             {column.id ===

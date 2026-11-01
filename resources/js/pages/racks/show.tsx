@@ -747,7 +747,7 @@ function RackEditor({
                             <p className="truncate text-sm text-muted-foreground">
                                 {context}
                             </p>
-                            <h1 className="truncate text-xl font-semibold tracking-tight">
+                            <h1 className="truncate text-2xl font-medium tracking-tight">
                                 {data.name}
                             </h1>
                         </div>
@@ -1071,7 +1071,7 @@ function RackEditor({
                                     <div className="flex flex-col gap-3 p-4">
                                         {focusedBundle ? (
                                             <>
-                                                <h2 className="text-sm font-semibold">
+                                                <h2 className="text-sm font-medium">
                                                     {focusedBundle
                                                         .split(':')
                                                         .map(
@@ -1132,7 +1132,7 @@ function RackEditor({
                                                         documentato
                                                     </p>
                                                 )}
-                                                <h2 className="text-sm font-semibold">
+                                                <h2 className="text-sm font-medium">
                                                     {selectedDevice?.name ??
                                                         'Porte dei dispositivi'}
                                                 </h2>
@@ -1183,7 +1183,7 @@ function RackEditor({
                                     </Button>
                                 </div>
                                 <Separator />
-                                <h2 className="text-sm font-semibold">
+                                <h2 className="text-sm font-medium">
                                     Dispositivi disponibili
                                 </h2>
                                 <InputGroup>
@@ -1280,7 +1280,7 @@ function RackEditor({
                                                 <>
                                                     <div className="flex items-start justify-between gap-2">
                                                         <div>
-                                                            <h2 className="text-sm font-semibold">
+                                                            <h2 className="text-sm font-medium">
                                                                 {itemName(
                                                                     selected,
                                                                     devices,
@@ -1518,7 +1518,7 @@ function RackEditor({
                                                 </>
                                             ) : (
                                                 <>
-                                                    <h2 className="text-sm font-semibold">
+                                                    <h2 className="text-sm font-medium">
                                                         Proprietà del rack
                                                     </h2>
                                                     <Field>
@@ -1578,7 +1578,7 @@ function RackEditor({
                                     </fieldset>
                                 ) : (
                                     <div className="flex flex-col gap-4">
-                                        <h2 className="text-sm font-semibold">
+                                        <h2 className="text-sm font-medium">
                                             {selected
                                                 ? itemName(selected, devices)
                                                 : data.name}
@@ -1745,7 +1745,7 @@ function RackEditor({
                     aria-label="Cablaggi del rack"
                 >
                     <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-lg font-semibold">Cablaggi</h2>
+                        <h2 className="text-base font-medium">Cablaggi</h2>
                         <Button
                             disabled={processing || !!cableDraft}
                             onClick={() =>

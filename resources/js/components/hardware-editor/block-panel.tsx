@@ -54,7 +54,7 @@ export function BlockPanel({
             }}
         >
             <div className="flex items-center justify-between gap-2 border-b p-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <h2 className="flex items-center gap-2 text-sm font-medium">
                     <Grid2X2 className="size-4" />
                     Blocco porte
                 </h2>

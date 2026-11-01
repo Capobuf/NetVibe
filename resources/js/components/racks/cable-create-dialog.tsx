@@ -136,7 +136,7 @@ export function CableCreateDialog({
                                     key={side}
                                     className="min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4"
                                 >
-                                    <h3 className="font-semibold">
+                                    <h3 className="text-base font-medium">
                                         {side === 'a'
                                             ? 'Partenza'
                                             : 'Destinazione'}

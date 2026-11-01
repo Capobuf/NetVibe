@@ -205,7 +205,7 @@ function VlanList({ company, site, vlans }: Props) {
                                                         ? 'max-w-lg break-words whitespace-normal'
                                                         : 'tabular-nums',
                                                     column.id === 'tag' &&
-                                                        'text-base font-medium',
+                                                        'text-sm font-medium',
                                                 )}
                                             >
                                                 {column.id === 'tag' ? (

@@ -34,7 +34,7 @@ export default function Racks({ company, site, racks }: Props) {
                         <p className="text-sm text-muted-foreground">
                             {context}
                         </p>
-                        <h1 className="text-2xl font-semibold tracking-tight">
+                        <h1 className="text-2xl font-medium tracking-tight">
                             Rack
                         </h1>
                     </div>

@@ -203,7 +203,7 @@ export default function DeviceShow({
                         <p className="text-sm text-muted-foreground">
                             {context}
                         </p>
-                        <h1 className="text-3xl font-semibold tracking-tight break-words">
+                        <h1 className="text-2xl font-medium tracking-tight break-words">
                             {device.name}
                         </h1>
                         <p className="text-sm text-muted-foreground">
@@ -447,7 +447,7 @@ export default function DeviceShow({
                                 c === 'ip' ? (
                                     <TextLink
                                         href={ipUrl(ip)}
-                                        className="font-mono"
+                                        className="tabular-nums"
                                     >
                                         {ip.ip}
                                     </TextLink>
@@ -502,7 +502,7 @@ export default function DeviceShow({
                         className="flex min-w-0 flex-col gap-4"
                     >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h3 className="text-sm font-semibold">
+                            <h3 className="text-sm font-medium">
                                 IPv4 collegati ({interfaceIps.length})
                             </h3>
                             <div className="flex flex-wrap gap-2">
@@ -535,7 +535,7 @@ export default function DeviceShow({
                                         <div className="min-w-0">
                                             <TextLink
                                                 href={ipUrl(ip)}
-                                                className="font-mono"
+                                                className="tabular-nums"
                                             >
                                                 {ip.ip}
                                             </TextLink>

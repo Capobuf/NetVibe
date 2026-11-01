@@ -94,12 +94,12 @@ export default function VlanShow({
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-wrap items-start justify-between gap-4">
                     <div className="flex min-w-0 flex-col gap-2">
-                        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+                        <h1 className="text-2xl font-medium tracking-tight text-balance">
                             VLAN {vlan.tag}
                             <MikrotikIndicator sources={mikrotikSources} />
                         </h1>
                         {vlan.name ? (
-                            <p className="text-lg break-words">{vlan.name}</p>
+                            <p className="text-base break-words">{vlan.name}</p>
                         ) : null}
                         <p className="text-sm text-muted-foreground">
                             {context}
@@ -183,7 +183,7 @@ export default function VlanShow({
                                                 key={column.id}
                                                 className={cn(
                                                     column.id === 'cidr'
-                                                        ? 'font-mono tabular-nums'
+                                                        ? 'tabular-nums'
                                                         : 'max-w-lg min-w-40 break-words whitespace-normal',
                                                 )}
                                             >

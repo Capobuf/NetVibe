@@ -136,10 +136,10 @@ export default function ExcludedRanges({
                                 <TableBody>
                                     {excludedRanges.map((range) => (
                                         <TableRow key={range.start_ip}>
-                                            <TableCell className="font-mono">
+                                            <TableCell className="tabular-nums">
                                                 {range.start_ip}
                                             </TableCell>
-                                            <TableCell className="font-mono">
+                                            <TableCell className="tabular-nums">
                                                 {range.end_ip}
                                             </TableCell>
                                             {auth.canEditIpam ? (

@@ -251,7 +251,7 @@ export function MikrotikIndicator({
                     {field === 'mac' && mac ? (
                         <p className="text-sm">
                             MAC documentato:{' '}
-                            <span className="font-mono">{mac}</span>
+                            <span className="tabular-nums">{mac}</span>
                         </p>
                     ) : null}
                     <SourceDetails sources={relevant} />

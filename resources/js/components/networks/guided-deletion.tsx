@@ -448,7 +448,7 @@ export function GuidedDeletion({
                         <h3
                             id={`${id}-impact`}
                             tabIndex={-1}
-                            className="text-sm font-semibold"
+                            className="text-sm font-medium"
                         >
                             Impatto dell’operazione
                         </h3>
@@ -530,7 +530,7 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                         <ul className="flex max-h-52 flex-col gap-2 overflow-y-auto">
                             {company.ips.map((ip) => (
                                 <li key={ip.id} className="break-words">
-                                    <span className="font-mono">{ip.ip}</span>
+                                    <span className="tabular-nums">{ip.ip}</span>
                                     {ip.hostname ? ` · ${ip.hostname}` : ''}
                                     <span className="block text-xs text-muted-foreground">
                                         {[
@@ -664,7 +664,7 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                                 className="h-auto w-full justify-between text-left whitespace-normal"
                             >
                                 <span>
-                                    <span className="font-mono">
+                                    <span className="tabular-nums">
                                         {subnet.cidr}
                                     </span>
                                     {subnet.name ? ` · ${subnet.name}` : ''}
@@ -684,7 +684,7 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto break-words">
                                 {ips.map((ip) => (
                                     <li key={`ip-${ip.id}`}>
-                                        <span className="font-mono">
+                                        <span className="tabular-nums">
                                             {ip.ip}
                                         </span>
                                         {[ip.hostname, ip.description]
@@ -700,7 +700,7 @@ function ImpactDetails({ impact, kind }: { impact: Impact; kind: string }) {
                                 {ranges.map((range) => (
                                     <li key={`range-${range.id}`}>
                                         Esclusione:{' '}
-                                        <span className="font-mono">
+                                        <span className="tabular-nums">
                                             {range.start_ip} – {range.end_ip}
                                         </span>
                                     </li>

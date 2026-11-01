@@ -29,15 +29,21 @@ export function PanelViewer({
     onPort,
     compact = false,
     initialPortId,
+    highlightPortId,
+    zoomToPort = false,
 }: {
     panel: PanelDocument;
     assetUrls: Record<string, string>;
     onPort?: (port: Port | null, anchor: PortAnchor | null) => void;
     compact?: boolean;
     initialPortId?: string;
+    highlightPortId?: string;
+    zoomToPort?: boolean;
 }) {
     const [face, setFace] = useState<Face>(
-        panel.faces.rear.ports.some((port) => port.id === initialPortId)
+        panel.faces.rear.ports.some(
+            (port) => port.id === (highlightPortId ?? initialPortId),
+        )
             ? 'rear'
             : 'front',
     );
@@ -50,19 +56,32 @@ export function PanelViewer({
     const stage = useRef<Konva.Stage>(null);
     const { resolvedAppearance } = useAppearance();
     const side = panel.faces[face];
-    const height = compact ? 48 : 360;
-    const box = boundsOf([
-        panel.shell,
-        ...side.ports.filter((p) => !p.hidden).map(portBounds),
-        ...(side.image && !side.image.hidden && !side.image.clip
-            ? [imageBounds(side.image)]
-            : []),
-    ]);
+    const focusedPort = zoomToPort
+        ? side.ports.find((port) => port.id === highlightPortId)
+        : undefined;
+    const height = compact
+        ? focusedPort
+            ? 144
+            : highlightPortId
+              ? 120
+              : 48
+        : 360;
+    const box = focusedPort
+        ? portBounds(focusedPort)
+        : boundsOf([
+              panel.shell,
+              ...side.ports
+                  .filter((p) => !p.hidden || p.id === highlightPortId)
+                  .map(portBounds),
+              ...(side.image && !side.image.hidden && !side.image.clip
+                  ? [imageBounds(side.image)]
+                  : []),
+          ]);
     const fit = Math.min(
-        (width - (compact ? 16 : 48)) / (box.width + 24),
-        (height - (compact ? 16 : 64)) / (box.height + 24),
+        (width - (compact ? 16 : 48)) / (box.width + (focusedPort ? 8 : 24)),
+        (height - (compact ? 16 : 64)) / (box.height + (focusedPort ? 8 : 24)),
     );
-    const scale = Math.max(0.01, fit) * zoom;
+    const scale = Math.max(0.01, fit) * zoom * (focusedPort ? 0.495 : 1);
     const assetKey = JSON.stringify(assetUrls);
     useEffect(() => {
         let cancelled = false;
@@ -194,7 +213,11 @@ export function PanelViewer({
             <div
                 ref={host}
                 role="img"
-                aria-label={`Pannello ${face === 'front' ? 'frontale' : 'posteriore'}`}
+                aria-label={
+                    focusedPort
+                        ? `Porta ${focusedPort.label} · dettaglio ingrandito`
+                        : `Pannello ${face === 'front' ? 'frontale' : 'posteriore'}`
+                }
             >
                 <Stage
                     ref={stage}
@@ -231,6 +254,7 @@ export function PanelViewer({
                             images={images}
                             dark={resolvedAppearance === 'dark'}
                             zoom={scale}
+                            selectedPortId={highlightPortId}
                         />
                     </Layer>
                 </Stage>

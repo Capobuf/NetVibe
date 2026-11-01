@@ -96,6 +96,17 @@ class MikrotikSync
             $updated += (int) ($source->exists && ($source->data != $object['data'] || $source->state !== 'current'));
             $source->site_id = $site->id;
             $anchorChanged = $source->exists && $source->anchor != $object['anchor'];
+            if (($object['data']['menu'] ?? null) === '/ip/neighbor') {
+                if ($object['data']['lldp_read'] ?? false) {
+                    $object['data']['lldp_seen_at'] = $object['data']['lldp'] ? now()->toIso8601String() : null;
+                } elseif (($source->data['mac'] ?? null) === ($object['data']['mac'] ?? null)
+                    && ($source->data['interface'] ?? null) === ($object['data']['interface'] ?? null)
+                    && ($source->data['identity'] ?? null) === ($object['data']['identity'] ?? null)) {
+                    // An unavailable optional menu must not erase the last known LLDP details.
+                    $object['data']['lldp'] = $source->data['lldp'] ?? null;
+                    $object['data']['lldp_seen_at'] = $source->data['lldp_seen_at'] ?? null;
+                }
+            }
             $source->fill([...$object, 'generation' => $connection->source_generation, 'state' => 'current', 'seen_at' => now()]);
             $plannedIp = $source->ip_address_id ? IpAddress::find($source->ip_address_id) : null;
             $expectedAddress = $plannedIp?->mikrotik_edit_mode === 'planned'

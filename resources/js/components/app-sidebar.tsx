@@ -1,10 +1,12 @@
 import { index as deviceIndex } from '@/routes/companies/sites/devices';
 import { index as rackIndex } from '@/routes/companies/sites/racks';
+import { index as topologyIndex } from '@/routes/companies/sites/topology';
 import { index as modelIndex } from '@/routes/device-models';
 import { index as companyIndex } from '@/routes/companies';
 import { Link, usePage } from '@inertiajs/react';
 import {
     Layers3,
+    Workflow,
     Server as RackIcon,
     Network,
     Settings2,
@@ -116,6 +118,16 @@ export function AppSidebar() {
                             <NavMain
                                 label="Rete"
                                 items={[
+                                    {
+                                        title: 'Topologia',
+                                        href: networkContext
+                                            ? topologyIndex(networkContext)
+                                            : companyIndex(),
+                                        icon: Workflow,
+                                        isActive:
+                                            !!networkContext &&
+                                            component.startsWith('topology/'),
+                                    },
                                     {
                                         title: 'Subnet',
                                         href: networkContext

@@ -22,6 +22,7 @@ use App\Http\Controllers\SnipeItController;
 use App\Http\Controllers\SnipeItSyncController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
+use App\Http\Controllers\TopologyController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
@@ -46,6 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('companies', CompanyController::class)->only(['index']);
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
+        Route::get('companies/{company}/sites/{site}/topology', [TopologyController::class, 'index'])->name('companies.sites.topology.index');
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');

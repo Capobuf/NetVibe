@@ -18,6 +18,7 @@
         "ip/dhcp-server/network": [{"address": "192.0.2.0/24", "gateway": "192.0.2.1"}],
         "ip/dhcp-server/lease": [{"address": "192.0.2.10", "dynamic": "false", "status": "waiting", "comment": "Synthetic reservation"}, {"address": "192.0.2.20", "dynamic": "true", "status": "bound"}, {"address": "pool-a", "status": "waiting"}],
         "ip/pool": [{"name": "pool-a", "ranges": "192.0.2.20-192.0.2.100"}],
-        "ip/neighbor": []
+        "ip/neighbor": [],
+        "ip/neighbor/lldp": []
     }
 }

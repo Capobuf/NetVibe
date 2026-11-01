@@ -584,7 +584,7 @@ class MikrotikSyncTest extends TestCase
                 ['id' => 'second', 'type' => 'rj45', 'label' => 'ether2'],
                 ['id' => 'ambiguous', 'type' => 'rj45', 'label' => '3'],
                 ['id' => 'optical', 'type' => 'sfp', 'label' => 'SFP1'],
-                ['id' => 'ambiguous-optical', 'type' => 'sfp', 'label' => 'SFP2'],
+                ['id' => 'preferred-optical', 'type' => 'sfp', 'label' => 'SFP+2'],
                 ['id' => 'alias-a', 'type' => 'rj45', 'label' => '4'],
                 ['id' => 'alias-b', 'type' => 'rj45', 'label' => 'ether4'],
             ]], 'rear' => ['ports' => []]]],
@@ -608,7 +608,7 @@ class MikrotikSyncTest extends TestCase
         $this->assertSame('02:00:00:00:00:02', $interfaces['second']->mikrotik['mac_address']);
         $this->assertSame('fiber', $interfaces['optical']->mikrotik['name']);
         $this->assertNull($interfaces['ambiguous']->mikrotik);
-        $this->assertNull($interfaces['ambiguous-optical']->mikrotik);
+        $this->assertSame('sfp-sfpplus2', $interfaces['preferred-optical']->mikrotik['default_name']);
         $this->assertNull($interfaces['alias-a']->mikrotik);
         $this->assertNull($interfaces['alias-b']->mikrotik);
 
@@ -622,6 +622,24 @@ class MikrotikSyncTest extends TestCase
         $this->assertSame($manual->id, MikrotikSource::findOrFail($sourceId)->device_interface_id);
         $this->assertNull($interfaces['second']->fresh()->mikrotik);
         Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    public function test_catalog_sfp_defaults_follow_label_numbers_and_preserve_manual_choices(): void
+    {
+        $ports = [
+            ['id' => 'first', 'type' => 'sfp', 'label' => 'sfp+1'],
+            ['id' => 'second', 'type' => 'sfp', 'label' => 'sfp+2'],
+        ];
+        $model = DeviceModel::create(['name' => 'SFP model', 'manufacturer_id' => $this->device->manufacturer_id]);
+        $url = route('manufacturers.models.mikrotik-ports', [$model->manufacturer_id, $model]);
+
+        $this->postJson($url, ['ports' => $ports])->assertOk()->assertJsonPath('observed', false)
+            ->assertJsonPath('matches.first', 'sfp-sfpplus1')->assertJsonPath('matches.second', 'sfp-sfpplus2');
+
+        $ports[0]['mikrotikName'] = 'sfp2';
+        $ports[1]['mikrotikName'] = null;
+        $this->postJson($url, ['ports' => $ports])->assertOk()
+            ->assertJsonPath('matches.first', 'sfp2')->assertJsonMissingPath('matches.second');
     }
 
     public function test_catalog_mapping_preview_and_model_corrections_use_the_same_interfaces(): void

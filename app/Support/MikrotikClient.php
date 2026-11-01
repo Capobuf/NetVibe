@@ -32,8 +32,12 @@ class MikrotikClient
         'ip/dhcp-server/network' => ['Reti DHCP', 'address,gateway,netmask,dns-server,domain,comment'],
         'ip/dhcp-server/lease' => ['Lease DHCP', 'address,mac-address,server,dynamic,disabled,status,active-address,active-mac-address,active-server,host-name,comment'],
         'ip/pool' => ['Pool IPv4', 'name,ranges,next-pool,comment'],
-        'ip/neighbor' => ['Neighbor discovery', 'interface,address,mac-address,identity,platform,board,version'],
+        'ip/neighbor' => ['Neighbor discovery', 'interface,address,mac-address,identity,platform,board,version,discovered-by,interface-name,age'],
     ];
+
+    public const LLDP_MENU = 'ip/neighbor/lldp';
+
+    private const LLDP_PROPERTIES = 'interface,mac-address,lldp-chassis-id,lldp-chassis-id-subtype,lldp-port-id,lldp-port-id-subtype,lldp-system-name,lldp-port-description';
 
     private string $diagnosticLog = '';
 
@@ -123,6 +127,9 @@ class MikrotikClient
         $identity = null;
         $stop = null;
         $menus = $analyze ? self::MENUS : array_slice(self::MENUS, 0, 2, true);
+        if ($sync) {
+            $menus[self::LLDP_MENU] = ['Dettagli LLDP', self::LLDP_PROPERTIES];
+        }
         foreach ($menus as $path => [$label, $properties]) {
             $status = 'not_read';
             $attempted = false;
@@ -138,7 +145,7 @@ class MikrotikClient
                 } catch (MikrotikException $exception) {
                     $status = $exception->status;
                     $this->log('/rest/'.$path.' — '.$status.': '.$exception->getMessage());
-                    if (str_starts_with($path, 'system/') || in_array($status, ['unauthorized', 'network', 'tls', 'timeout', 'rate_limit', 'redirect', 'limit'], true)) {
+                    if ($path !== self::LLDP_MENU && (str_starts_with($path, 'system/') || in_array($status, ['unauthorized', 'network', 'tls', 'timeout', 'rate_limit', 'redirect', 'limit'], true))) {
                         $stop = $status;
                     }
                 }
@@ -168,7 +175,7 @@ class MikrotikClient
                 }
             }
         }
-        $status = $stop ?? (collect($coverage)->contains(fn ($menu) => $menu['status'] !== 'ok') ? 'partial' : 'ok');
+        $status = $stop ?? (collect($coverage)->contains(fn ($menu) => $menu['path'] !== '/'.self::LLDP_MENU && $menu['status'] !== 'ok') ? 'partial' : 'ok');
 
         $this->log('Esito: '.$status);
 

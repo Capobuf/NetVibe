@@ -11,6 +11,7 @@ use App\Models\RackItem;
 use App\Models\Site;
 use App\Support\RackCabling;
 use App\Support\RackLayout;
+use App\Support\Topology;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,12 +32,22 @@ class RackController extends Controller
 
     public function show(Request $request, Company $company, Site $site, Rack $rack): Response
     {
-        $request->validate(['edit' => ['sometimes', 'boolean']]);
+        $request->validate(['edit' => ['sometimes', 'boolean'], 'topology_edge' => ['sometimes', 'string', 'max:255']]);
+        $suggestion = null;
+        if ($request->filled('topology_edge')) {
+            $edge = collect((new Topology)->forSite($site)['edges'])->firstWhere('id', $request->string('topology_edge')->toString());
+            if (($edge['suggestion']['rack_id'] ?? null) === $rack->id) {
+                $suggestion = $edge['suggestion'];
+            }
+        }
 
         return DB::transaction(fn () => Inertia::render('racks/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'rack' => $rack->fresh('items'),
             'editing' => $request->boolean('edit'),
+            'topologySuggestion' => $suggestion,
+            'topologyNotice' => $request->filled('topology_edge') && ! $suggestion
+                ? 'Il suggerimento non è più disponibile. Verifica le osservazioni e i cablaggi aggiornati.' : null,
             'cablingRevision' => (int) $site->fresh()->cabling_revision,
             'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
             'devices' => $site->devices()->with(['model', 'interfaces', 'manufacturer:id,name', 'rackItem.rack:id,name'])->orderBy('name')->get()

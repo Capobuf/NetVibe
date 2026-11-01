@@ -61,3 +61,21 @@ I controlli sono in `tests/Feature/MikrotikTest.php` e `tests/Unit/MikrotikAnaly
 ## Collaudo reale
 
 La lettura reale del 31 ottobre 2026, eseguita dopo la configurazione nell’applicazione, è documentata nel [rapporto anonimizzato](mikrotik-real-report.md): RouterOS 7.25 su RB5009UG+S+, tutti i 18 menu letti. Il rapporto conserva solo dati aggregati e modello/versione, separati da questa matrice e dalle fixture sintetiche. Il collaudo non certifica altre configurazioni, piattaforme o versioni.
+
+## Topologia — letture e correlazioni
+
+La vista Topologia usa soltanto dati già acquisiti e cavi documentati della sede selezionata. Non interroga apparati durante il rendering e non crea dispositivi o cavi dalla discovery.
+
+La sincronizzazione estende il GET `/ip/neighbor` con `discovered-by`, `interface-name` e `age`. Aggiunge un GET opzionale `/ip/neighbor/lldp`, con `interface`, `mac-address`, `lldp-chassis-id`, `lldp-chassis-id-subtype`, `lldp-port-id`, `lldp-port-id-subtype`, `lldp-system-name` e `lldp-port-description`. La lista resta chiusa e riusa autenticazione, TLS, controllo destinazione, limiti e timeout del client. Il menu opzionale non rende incompleta una sincronizzazione altrimenti riuscita.
+
+Il manuale documenta [i dettagli LLDP](https://manual.mikrotik.com/docs/cli-reference/ip/neighbor/lldp/) e [la lettura REST dei menu](https://manual.mikrotik.com/docs/developer-guides/rest-api/). Il 1 novembre 2026 una lettura di sola ricognizione sul gateway dell’istanza di sviluppo ha restituito 13 neighbor e 6 righe LLDP; sono stati effettivamente osservati i sottotipi `mac-address` per chassis e `interface-name` per porta. Questa verifica non certifica altri apparati/versioni.
+
+I dettagli LLDP arricchiscono l’osservazione neighbor esistente soltanto quando interfacce locali e MAC mittente coincidono in modo univoco. Non viene duplicato il record neighbor. Se il menu supplementare fallisce, si conserva l’ultimo dettaglio dello stesso neighbor con la sua data originale, marcandolo non aggiornato; se cambia l’identità dell’osservazione, non si trasferiscono i vecchi dettagli. I neighbor scomparsi restano consultabili come non più rilevati.
+
+Il riconoscimento inventariale usa l’accordo univoco tra identità esatta (nome documentato o identità RouterOS acquisita) e MAC già noto alle interfacce dello stesso dispositivo, esclusivamente nella stessa sede. Quando il dispositivo non ha MAC inventariati e il MAC osservato non identifica altri apparati, ammette anche nome esatto e modello `board` coincidenti, purché individuino un solo dispositivo nella sede. Il criterio usato rimane consultabile nelle osservazioni e non scrive MAC o altri dati nell’inventario. Il solo nome, MAC o IP non basta. I neighbor non riconosciuti sono nodi di consultazione, senza inserimenti nell’inventario. La porta locale deve corrispondere a un’unica interfaccia fisica tra quelle riportate dal neighbor, senza scambiare bridge e porta. La porta remota richiede un nome esatto da LLDP con sottotipo `interface-name`, oppure da CDP; non si ricava dal MAC mittente, da somiglianze nei nomi o da etichette arbitrarie del pannello.
+
+Due osservazioni compatibili con terminazioni inverse sono mostrate insieme e indicate come reciproche soltanto se aggiornate. ARP, DHCP e FDB sono presentati come osservazioni indirette, senza archi di adiacenza. Le connessioni documentate mostrate sono i cavi di rete rame/fibra; alimentazione e USB restano nel Rack.
+
+«Verifica nel Rack» richiede entrambe le interfacce associate a connettori esistenti, porte libere e compatibili, almeno un dispositivo montato, dati aggiornati e assenza di ambiguità. Un’evidenza unidirezionale resta esplicitamente tale. L’apertura del Rack ricalcola il suggerimento e precompila esclusivamente le terminazioni nel dialogo esistente: nessuna scrittura avviene sul GET. Il salvataggio richiede conferma del tecnico e riutilizza controlli, revisione e transazione di `RackCabling`. Porte occupate da altri cavi vengono segnalate come terminazioni da verificare: non si esclude la presenza di patch panel intermedi e non si sovrascrive alcun cablaggio.
+
+Le posizioni nel diagramma sono temporanee e non modificano l’inventario. Freschezza e ultima acquisizione restano visibili per fonte e osservazione, senza introdurre una scadenza temporale arbitraria.

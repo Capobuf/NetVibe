@@ -197,17 +197,7 @@ export default function DeviceShow({
     function openInterfaceRow(row: InterfaceRow) {
         if ('connector_id' in row) {
             editInterface(row.id);
-            return;
         }
-        const trigger = document.getElementById(`interface-${row.id}`);
-        if (!trigger) return;
-        portAnchor.current = {
-            contextElement: trigger,
-            getBoundingClientRect: () => trigger.getBoundingClientRect(),
-        };
-        portFocus.current = trigger;
-        setPort(row);
-        setPortOpen(true);
     }
     const selected = port
         ? device.interfaces.find((i) => i.connector_id === port.id)
@@ -411,13 +401,29 @@ export default function DeviceShow({
                                 { id: 'ips', label: 'IPv4', visible: true },
                             ]}
                             value={interfaceRowValue}
+                            hiddenColumns={
+                                new Set(
+                                    interfaceRows.map((row) =>
+                                        interfaceRowValue(row, 'kind'),
+                                    ),
+                                ).size > 1
+                                    ? []
+                                    : ['kind']
+                            }
                             onRowClick={openInterfaceRow}
+                            isRowClickable={(row) => 'connector_id' in row}
                             render={(row, column) => {
                                 if (column !== 'name')
                                     return (
                                         interfaceRowValue(row, column) || '—'
                                     );
                                 const item = 'connector_id' in row ? row : null;
+                                if (!item)
+                                    return (
+                                        <span className="font-medium">
+                                            {interfaceRowValue(row, 'name')}
+                                        </span>
+                                    );
                                 return (
                                     <div className="flex items-center gap-2">
                                         {item?.mikrotik && (

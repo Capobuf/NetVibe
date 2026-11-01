@@ -96,6 +96,8 @@ type Props = {
     cables: Cable[];
     cablingRevision: number;
     editing: boolean;
+    topologySuggestion: { a: CableEnd; b: CableEnd } | null;
+    topologyNotice: string | null;
 };
 type Draft = Pick<Rack, 'name' | 'height_u' | 'numbering' | 'revision'> & {
     items: RackItem[];
@@ -153,6 +155,8 @@ function RackEditor({
     cables,
     cablingRevision,
     editing: initialEditing,
+    topologySuggestion,
+    topologyNotice,
 }: Props) {
     const { companyNavigation } = usePage().props;
     const route = { company: company.id, site: site.id, rack: rack.id };
@@ -170,9 +174,11 @@ function RackEditor({
     const [cableDraft, setCableDraft] = useState<Cable | null>(null);
     const [selectedPort, setSelectedPort] = useState<CableEnd | null>(null);
     const [disconnecting, setDisconnecting] = useState<Cable | null>(null);
-    const [creatingCable, setCreatingCable] = useState<number | null>(null);
+    const [creatingCable, setCreatingCable] = useState<number | null>(
+        topologySuggestion ? -1 : null,
+    );
     const [modalDirty, setModalDirty] = useState(false);
-    const nextCableId = useRef(-1);
+    const nextCableId = useRef(topologySuggestion ? -2 : -1);
     const deletions = useRef<Deletion[]>([]);
     const isDirty = form.isDirty || cableDraft !== null || modalDirty;
     const selectedCable = data.cables.find((c) => c.id === selectedCableId);
@@ -245,7 +251,11 @@ function RackEditor({
               ? null
               : device.rack_item,
     }));
-    const feedback = error || Object.values(errors).join(' ') || imageError;
+    const feedback =
+        error ||
+        Object.values(errors).join(' ') ||
+        imageError ||
+        topologyNotice;
 
     useEffect(() => {
         const stop = router.on('before', (event) => {
@@ -1815,6 +1825,11 @@ function RackEditor({
             {creatingCable !== null && (
                 <CableCreateDialog
                     id={creatingCable}
+                    initialEnds={
+                        creatingCable === -1
+                            ? (topologySuggestion ?? undefined)
+                            : undefined
+                    }
                     route={route}
                     devices={devices}
                     cables={[

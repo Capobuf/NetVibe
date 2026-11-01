@@ -59,6 +59,7 @@ export default function VlanIndex(props: Props) {
 
 function VlanList({ company, site, vlans: allVlans }: Props) {
     const [visibility, setVisibility] = useState('active');
+    const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
     const excludedCount = allVlans.filter((vlan) => vlan.excluded_at).length;
     const vlans = allVlans
         .filter(
@@ -68,12 +69,16 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
             const subnets = vlan.subnets.filter(
                 (subnet) => vlan.excluded_at || !subnet.excluded_at,
             );
-            return { ...vlan, subnets, subnets_count: subnets.length };
+            return {
+                ...vlan,
+                subnets,
+                subnets_count: subnets.length,
+                isCollapsed: collapsed[vlan.id] ?? subnets.length === 0,
+            };
         });
     const { auth, companyNavigation } = usePage().props;
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<VlanColumn>>(null);
-    const [expanded, setExpanded] = useState<Record<number, boolean>>({});
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences<VlanColumn>('vlans', [
             { id: 'tag', label: 'VLAN', visible: true },
@@ -118,8 +123,8 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
             : company.name;
     const formContext = { companyId: company.id, siteId: site.id, context };
 
-    function toggleVlan(id: number) {
-        setExpanded((current) => ({ ...current, [id]: !current[id] }));
+    function toggleVlan(id: number, isCollapsed: boolean) {
+        setCollapsed((current) => ({ ...current, [id]: !isCollapsed }));
     }
 
     return (
@@ -201,22 +206,28 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
                                                     ?.isCollapsed !== false &&
                                                 !target.closest('a, button')
                                             ) {
-                                                toggleVlan(vlan.id);
+                                                toggleVlan(
+                                                    vlan.id,
+                                                    vlan.isCollapsed,
+                                                );
                                             }
                                         }}
                                     >
                                         <TableCell>
                                             <IconButton
                                                 variant="ghost"
-                                                label={`${expanded[vlan.id] ? 'Nascondi' : 'Mostra'} subnet della VLAN ${vlan.tag}`}
-                                                aria-expanded={Boolean(
-                                                    expanded[vlan.id],
-                                                )}
+                                                label={`${vlan.isCollapsed ? 'Mostra' : 'Nascondi'} subnet della VLAN ${vlan.tag}`}
+                                                aria-expanded={
+                                                    !vlan.isCollapsed
+                                                }
                                                 onClick={() =>
-                                                    toggleVlan(vlan.id)
+                                                    toggleVlan(
+                                                        vlan.id,
+                                                        vlan.isCollapsed,
+                                                    )
                                                 }
                                             >
-                                                {expanded[vlan.id] ? (
+                                                {!vlan.isCollapsed ? (
                                                     <ChevronDown />
                                                 ) : (
                                                     <ChevronRight />
@@ -313,7 +324,7 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
                                             </div>
                                         </TableCell>
                                     </TableRow>
-                                    {expanded[vlan.id] ? (
+                                    {!vlan.isCollapsed ? (
                                         vlan.subnets.length > 0 ? (
                                             vlan.subnets.map((subnet) => (
                                                 <TableRow

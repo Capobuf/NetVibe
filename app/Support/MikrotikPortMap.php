@@ -28,8 +28,11 @@ class MikrotikPortMap
                 $candidates = [$label];
                 if ($port['type'] === 'rj45' && preg_match('/^(?:ether)?([1-9][0-9]*)$/i', $label, $match)) {
                     $candidates = ['ether'.$match[1]];
-                } elseif ($port['type'] === 'sfp' && preg_match('/^(?:sfp[- ]?)?([1-9][0-9]*)$/i', $label, $match)) {
-                    $candidates = ['sfp'.$match[1], 'sfpplus'.$match[1], 'sfp-sfpplus'.$match[1], 'sfp28-'.$match[1]];
+                } elseif ($port['type'] === 'sfp' && preg_match('/^(?:sfp[-+ ]?)?([1-9][0-9]*)$/i', $label, $match)) {
+                    $preferred = 'sfp-sfpplus'.$match[1];
+                    $candidates = in_array($preferred, $names, true)
+                        ? [$preferred]
+                        : ['sfp'.$match[1], 'sfpplus'.$match[1], 'sfp28-'.$match[1]];
                 } elseif ($label === '' && $networkPorts->where('type', $port['type'])->count() === 1) {
                     $candidates = array_values(array_filter($names, fn ($name) => self::type($name) === $port['type']));
                 }

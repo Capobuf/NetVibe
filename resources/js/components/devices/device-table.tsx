@@ -24,14 +24,19 @@ import {
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
-export function DeviceTable<Row extends { id: number | string }, Column extends string>({
+export function DeviceTable<
+    Row extends { id: number | string },
+    Column extends string,
+>({
     name,
     rows,
     columns: defaults,
+    hiddenColumns = [],
     value,
     render,
     actions,
-    onRowClick,
+    onRowClick: handleRowClick,
+    isRowClickable,
     rowOpensDialog = true,
     filters,
     empty = 'Nessun risultato',
@@ -44,10 +49,12 @@ export function DeviceTable<Row extends { id: number | string }, Column extends 
     name: string;
     rows: Row[];
     columns: TableColumn<Column>[];
+    hiddenColumns?: Column[];
     value: (row: Row, column: Column) => string | number | null;
     render?: (row: Row, column: Column) => ReactNode;
     actions?: (row: Row) => ReactNode;
     onRowClick?: (row: Row) => void;
+    isRowClickable?: (row: Row) => boolean;
     rowOpensDialog?: boolean;
     filters?: ReactNode;
     empty?: string;
@@ -61,7 +68,13 @@ export function DeviceTable<Row extends { id: number | string }, Column extends 
     const [sort, setSort] = useState<TableSort<Column>>(defaultSort);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences(name, defaults);
-    const visible = columns.filter((c) => c.visible);
+    const availableColumns = columns.filter(
+        (c) => !hiddenColumns.includes(c.id),
+    );
+    if (availableColumns.length && !availableColumns.some((c) => c.visible)) {
+        availableColumns[0] = { ...availableColumns[0], visible: true };
+    }
+    const visible = availableColumns.filter((c) => c.visible);
     const filtered = rows.filter((row) =>
         defaults
             .map((c) => value(row, c.id))
@@ -133,8 +146,19 @@ export function DeviceTable<Row extends { id: number | string }, Column extends 
                             ))}
                             <TableHead className="w-16 text-right">
                                 <TableColumns
-                                    columns={columns}
-                                    onChange={setColumns}
+                                    columns={availableColumns}
+                                    onChange={(next) => {
+                                        let index = 0;
+                                        setColumns(
+                                            columns.map((column) =>
+                                                hiddenColumns.includes(
+                                                    column.id,
+                                                )
+                                                    ? column
+                                                    : next[index++],
+                                            ),
+                                        );
+                                    }}
                                     separators={separators}
                                     onSeparatorsChange={setSeparators}
                                 />
@@ -142,87 +166,94 @@ export function DeviceTable<Row extends { id: number | string }, Column extends 
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(isList ? pageRows : sorted).map((row) => (
-                            <TableRow
-                                key={row.id}
-                                id={
-                                    onRowClick
-                                        ? `row-${name}-${row.id}`
-                                        : undefined
-                                }
-                                tabIndex={onRowClick ? 0 : undefined}
-                                aria-haspopup={
-                                    onRowClick && rowOpensDialog
-                                        ? 'dialog'
-                                        : undefined
-                                }
-                                className={cn(
-                                    isList &&
-                                        'even:bg-muted/20 focus-within:bg-muted/40',
-                                    onRowClick &&
-                                        'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
-                                )}
-                                onKeyDown={
-                                    onRowClick
-                                        ? (event) => {
-                                              if (
-                                                  event.target ===
-                                                      event.currentTarget &&
-                                                  (event.key === 'Enter' ||
-                                                      event.key === ' ')
-                                              ) {
-                                                  event.preventDefault();
-                                                  onRowClick(row);
+                        {(isList ? pageRows : sorted).map((row) => {
+                            const onRowClick =
+                                isRowClickable?.(row) === false
+                                    ? undefined
+                                    : handleRowClick;
+                            return (
+                                <TableRow
+                                    key={row.id}
+                                    id={
+                                        onRowClick
+                                            ? `row-${name}-${row.id}`
+                                            : undefined
+                                    }
+                                    tabIndex={onRowClick ? 0 : undefined}
+                                    aria-haspopup={
+                                        onRowClick && rowOpensDialog
+                                            ? 'dialog'
+                                            : undefined
+                                    }
+                                    className={cn(
+                                        isList &&
+                                            'even:bg-muted/20 focus-within:bg-muted/40',
+                                        onRowClick &&
+                                            'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                                    )}
+                                    onKeyDown={
+                                        onRowClick
+                                            ? (event) => {
+                                                  if (
+                                                      event.target ===
+                                                          event.currentTarget &&
+                                                      (event.key === 'Enter' ||
+                                                          event.key === ' ')
+                                                  ) {
+                                                      event.preventDefault();
+                                                      onRowClick(row);
+                                                  }
                                               }
-                                          }
-                                        : undefined
-                                }
-                                onClick={
-                                    onRowClick
-                                        ? (event) => {
-                                              if (
-                                                  event.currentTarget.contains(
-                                                      event.target as Node,
-                                                  ) &&
-                                                  window.getSelection()
-                                                      ?.isCollapsed !== false &&
-                                                  !(
-                                                      event.target as HTMLElement
-                                                  ).closest(
-                                                      'a,button,input,select,textarea,[role="button"]',
+                                            : undefined
+                                    }
+                                    onClick={
+                                        onRowClick
+                                            ? (event) => {
+                                                  if (
+                                                      event.currentTarget.contains(
+                                                          event.target as Node,
+                                                      ) &&
+                                                      window.getSelection()
+                                                          ?.isCollapsed !==
+                                                          false &&
+                                                      !(
+                                                          event.target as HTMLElement
+                                                      ).closest(
+                                                          'a,button,input,select,textarea,[role="button"]',
+                                                      )
                                                   )
-                                              )
-                                                  onRowClick(row);
-                                          }
-                                        : undefined
-                                }
-                            >
-                                {visible.map((c) => (
-                                    <TableCell
-                                        key={c.id}
-                                        className={cn(
-                                            'max-w-lg py-4 break-words whitespace-normal',
-                                            isList &&
-                                                c.id === defaults[0]?.id &&
-                                                'text-sm font-medium',
-                                            isList &&
-                                                typeof value(row, c.id) ===
-                                                    'number' &&
-                                                'tabular-nums',
-                                        )}
-                                    >
-                                        {render
-                                            ? render(row, c.id)
-                                            : (value(row, c.id) ?? '—')}
+                                                      onRowClick(row);
+                                              }
+                                            : undefined
+                                    }
+                                >
+                                    {visible.map((c) => (
+                                        <TableCell
+                                            key={c.id}
+                                            className={cn(
+                                                'max-w-lg py-4 break-words whitespace-normal',
+                                                isList &&
+                                                    c.id === defaults[0]?.id &&
+                                                    'text-sm font-medium',
+                                                isList &&
+                                                    typeof value(row, c.id) ===
+                                                        'number' &&
+                                                    'tabular-nums',
+                                            )}
+                                        >
+                                            {render
+                                                ? render(row, c.id)
+                                                : (value(row, c.id) ?? '—')}
+                                        </TableCell>
+                                    ))}
+                                    <TableCell>
+                                        <div className="flex justify-end gap-1">
+                                            {actions?.(row)}
+                                        </div>
                                     </TableCell>
-                                ))}
-                                <TableCell>
-                                    <div className="flex justify-end gap-1">
-                                        {actions?.(row)}
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                                </TableRow>
+                            );
+                        })}
                         {!sorted.length && (
                             <TableRow>
                                 <TableCell colSpan={visible.length + 1}>

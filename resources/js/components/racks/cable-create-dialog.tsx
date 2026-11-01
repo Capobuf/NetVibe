@@ -28,6 +28,7 @@ export function CableCreateDialog({
     cables,
     revision,
     removedCableIds,
+    initialEnds,
     onClose,
     onDirtyChange,
     onSaving,
@@ -39,6 +40,7 @@ export function CableCreateDialog({
     cables: Cable[];
     revision: number;
     removedCableIds: number[];
+    initialEnds?: { a: CableEnd; b: CableEnd };
     onClose: () => void;
     onDirtyChange: (dirty: boolean) => void;
     onSaving: (saving: boolean) => void;
@@ -48,8 +50,8 @@ export function CableCreateDialog({
         Cable & { cabling_revision: number; removed_cable_ids: number[] }
     >({
         id,
-        a: { device_id: 0, connector_id: '' },
-        b: { device_id: 0, connector_id: '' },
+        a: initialEnds?.a ?? { device_id: 0, connector_id: '' },
+        b: initialEnds?.b ?? { device_id: 0, connector_id: '' },
         type: 'copper',
         color: '#2563eb',
         purpose: null,

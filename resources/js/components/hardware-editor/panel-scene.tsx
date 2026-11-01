@@ -2,6 +2,7 @@ import { Group, Image as CanvasImage, Rect } from 'react-konva';
 import {
     faceLayers,
     imageBounds,
+    portBounds,
     type PanelDocument,
     type Face,
     type Point,
@@ -19,6 +20,7 @@ export function PanelScene({
     imageOpacity,
     numbering = false,
     preview,
+    selectedPortId,
 }: {
     shell: PanelDocument['shell'];
     face: PanelDocument['faces'][Face];
@@ -30,8 +32,10 @@ export function PanelScene({
     imageOpacity?: number;
     numbering?: boolean;
     preview?: Map<string, string>;
+    selectedPortId?: string;
 }) {
     const image = face.image;
+    const selected = face.ports.find((port) => port.id === selectedPortId);
     return (
         <>
             <Rect
@@ -75,7 +79,7 @@ export function PanelScene({
                     <Group key={layer.id}>
                         {layer.ids
                             .map((id) => face.ports.find((p) => p.id === id)!)
-                            .filter((p) => !p.hidden)
+                            .filter((p) => !p.hidden || p.id === selectedPortId)
                             .map((port) => (
                                 <PortSymbol
                                     key={port.id}
@@ -88,6 +92,15 @@ export function PanelScene({
                             ))}
                     </Group>
                 ),
+            )}
+            {selected && (
+                <Rect
+                    {...portBounds(selected)}
+                    fill="#3b82f633"
+                    stroke={dark ? '#93c5fd' : '#2563eb'}
+                    strokeWidth={2.5 / zoom}
+                    listening={false}
+                />
             )}
         </>
     );

@@ -199,10 +199,25 @@ class MikrotikSnapshot
         foreach (['ip/arp', 'interface/bridge/host', 'ip/neighbor'] as $menu) {
             foreach ($tables[$menu] as $row) {
                 $address = self::address($row['address'] ?? null);
+                $neighbor = [];
+                if ($menu === 'ip/neighbor') {
+                    // Join only an unambiguous observation on the same receiving interfaces and sender MAC.
+                    $lldp = array_values(array_filter($tables[MikrotikClient::LLDP_MENU] ?? [], fn ($item) => self::mac($row['mac-address'] ?? null) !== null && self::mac($item['mac-address'] ?? null) === self::mac($row['mac-address'])
+                        && ($item['interface'] ?? null) === ($row['interface'] ?? null)));
+                    $neighbor = [
+                        ...array_intersect_key($row, array_flip(['discovered-by', 'interface-name', 'age', 'platform', 'board', 'version'])),
+                        'lldp_read' => isset($tables[MikrotikClient::LLDP_MENU]),
+                        'lldp' => count($lldp) === 1 ? array_intersect_key($lldp[0], array_flip([
+                            'lldp-chassis-id', 'lldp-chassis-id-subtype', 'lldp-port-id', 'lldp-port-id-subtype',
+                            'lldp-system-name', 'lldp-port-description',
+                        ])) : null,
+                    ];
+                }
                 $objects[] = $this->object('observation', $menu, $row, [], [
                     'ip' => $address === null ? null : long2ip($address),
                     'mac' => self::mac($row['mac-address'] ?? null),
                     ...array_intersect_key($row, array_flip(['interface', 'on-interface', 'bridge', 'vid', 'status', 'identity', 'local', 'external', 'complete'])),
+                    ...$neighbor,
                 ], address: $address);
             }
         }

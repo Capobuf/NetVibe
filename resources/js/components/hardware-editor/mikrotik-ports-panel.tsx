@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import type { CatalogModel } from '@/lib/hardware-editor/catalog-storage';
 import { connectorTypes } from '@/lib/hardware-editor/document';
+import { sortTableRows } from '@/lib/table-sort';
 import type { Editor } from './use-editor';
 
 type Mapping = {
@@ -49,8 +50,10 @@ export function MikrotikPortsPanel({
     const [retry, setRetry] = useState(0);
     const loading = result?.payload !== payload;
     const data = result?.data;
-    const ports = e.ports.filter((port) =>
-        ['rj45', 'sfp', 'qsfp'].includes(port.type),
+    const ports = sortTableRows(
+        e.ports.filter((port) => ['rj45', 'sfp', 'qsfp'].includes(port.type)),
+        { column: 'label', direction: 'asc' },
+        (port) => port.label,
     );
 
     useEffect(() => {

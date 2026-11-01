@@ -1,5 +1,6 @@
 import { Link, useForm } from '@inertiajs/react';
 import { Link2, RefreshCw } from 'lucide-react';
+import { SnipeItMark } from '@/components/snipe-it-mark';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,10 @@ export function SnipeItOverview({
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-base font-medium">Snipe-IT</h2>
+                    <h2 className="flex items-center gap-2 text-base font-medium">
+                        <SnipeItMark />
+                        Snipe-IT
+                    </h2>
                     <Badge variant="outline">
                         {!confirmed
                             ? 'Da riconfermare'

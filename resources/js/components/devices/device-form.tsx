@@ -19,6 +19,7 @@ import { store, update } from '@/routes/companies/sites/devices';
 import { store as storeModel } from '@/routes/manufacturers/models';
 import { CatalogCombobox } from '@/components/devices/catalog-combobox';
 import { CatalogForm } from '@/components/devices/catalog-form';
+import { SnipeItDetach } from '@/components/devices/snipe-it-device';
 import type { Manufacturer, Device, ModelType } from '@/types/device';
 
 export function DeviceForm({
@@ -27,12 +28,14 @@ export function DeviceForm({
     manufacturers,
     device,
     linked = false,
+    snipeItAssetId,
 }: {
     company: number;
     site: number;
     manufacturers: Manufacturer[];
     device?: Device;
     linked?: boolean;
+    snipeItAssetId?: number;
 }) {
     const { auth, types } = usePage<{ types: ModelType[] }>().props;
     const [open, setOpen] = useState(false);
@@ -171,6 +174,14 @@ export function DeviceForm({
                                 <InputError message={errors.asset_tag} />
                             </Field>
                             <DialogFooter>
+                                {linked && snipeItAssetId !== undefined ? (
+                                    <SnipeItDetach
+                                        company={company}
+                                        assetId={snipeItAssetId}
+                                        disabled={processing}
+                                        onDetached={() => setOpen(false)}
+                                    />
+                                ) : null}
                                 <DialogClose asChild>
                                     <Button
                                         type="button"

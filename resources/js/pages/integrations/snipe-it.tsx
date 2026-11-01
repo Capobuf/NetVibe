@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
-import { Check, Link2, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, Link2, RefreshCw, Trash2 } from 'lucide-react';
+import { SnipeItMark } from '@/components/snipe-it-mark';
 import PasswordInput from '@/components/password-input';
 import {
     SnipeItOverview,
@@ -247,7 +248,7 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                 <Tabs defaultValue="snipe-it" className="gap-6">
                     <TabsList aria-label="Integrazioni">
                         <TabsTrigger value="snipe-it">
-                            <Plug />
+                            <SnipeItMark />
                             Snipe-IT
                         </TabsTrigger>
                     </TabsList>

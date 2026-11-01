@@ -10,6 +10,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { CopyValue } from '@/components/copy-value';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -115,7 +116,9 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                         <div className="flex flex-wrap gap-2">
                             {source.exclusion ? (
                                 <Badge variant="outline">
-                                    Esclusa · {source.exclusion.label}
+                                    {source.exclusion.kind === 'source'
+                                        ? 'Ignorata nelle sincronizzazioni'
+                                        : `Esclusa · ${source.exclusion.label}`}
                                 </Badge>
                             ) : null}
                             {source.edit_mode ? (
@@ -135,12 +138,6 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                             {source.stale ? (
                                 <Badge variant="outline">Non aggiornato</Badge>
                             ) : null}
-                            {source.data.active === false ? (
-                                <Badge variant="outline">
-                                    Configurazione non attiva o non
-                                    determinabile
-                                </Badge>
-                            ) : null}
                         </div>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3 px-4 text-sm">
@@ -152,8 +149,13 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 Subnet: source.data.cidr,
                                 VLAN: source.data.tag,
                                 Oggetto: source.data.name,
-                                Contesto: source.data.context,
-                                Interfaccia:
+                                'Interfaccia di base':
+                                    source.data.context !==
+                                    (source.data.interface ??
+                                        source.data['on-interface'])
+                                        ? source.data.context
+                                        : null,
+                                'Interfaccia RouterOS':
                                     source.data.interface ??
                                     source.data['on-interface'],
                                 'Server DHCP': source.data.server,
@@ -184,7 +186,12 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 ))}
                         </dl>
                         {source.problem ? (
-                            <p className="text-destructive">{source.problem}</p>
+                            <Alert>
+                                <TriangleAlert />
+                                <AlertDescription>
+                                    <p>{source.problem}</p>
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                     </CardContent>
                 </Card>

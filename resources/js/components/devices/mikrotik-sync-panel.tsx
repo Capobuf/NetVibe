@@ -16,13 +16,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardHeader,
-    CardTitle,
-    CardContent,
-    CardFooter,
-} from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import {
@@ -76,112 +70,151 @@ export function MikrotikSyncPanel({
     };
     return (
         <>
-            <Card aria-busy={form.processing}>
-                <CardHeader className="flex-row items-center justify-between gap-3">
-                    <CardTitle className="flex items-center gap-2.5">
-                        <MikrotikMark className="h-5" />
-                        Sincronizzazione IPAM
-                    </CardTitle>
-                    <Badge variant={active ? 'secondary' : 'outline'}>
-                        {active
-                            ? 'Attiva · ogni ora'
-                            : connection?.sync_status === 'suspended' ||
-                                connection?.sync_status === 'source_changed'
-                              ? 'Sospesa'
-                              : 'Non attiva'}
-                    </Badge>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4" aria-live="polite">
-                    {connection?.synced_at ? (
-                        <p className="text-sm">
-                            Ultimo aggiornamento riuscito:{' '}
-                            {new Date(connection.synced_at).toLocaleString(
-                                'it-IT',
-                            )}
-                        </p>
-                    ) : null}
-                    {connection?.sync_attempted_at ? (
-                        <p className="text-sm text-muted-foreground">
-                            Ultimo tentativo:{' '}
-                            {new Date(
-                                connection.sync_attempted_at,
-                            ).toLocaleString('it-IT')}{' '}
-                            · {connection.sync_message}
-                        </p>
-                    ) : null}
-                    {connection?.sync_summary ? (
-                        <p className="text-sm">
-                            {connection.sync_summary.read} elementi letti ·{' '}
-                            {connection.sync_summary.updated} aggiornati ·{' '}
-                            {connection.sync_summary.created} creati ·{' '}
-                            {connection.sync_summary.associated} nuove
-                            associazioni
-                        </p>
-                    ) : null}
-                    {!active && connection ? (
-                        <p className="text-sm">
-                            {connection.sync_status === 'suspended' ||
-                            connection.sync_status === 'source_changed'
-                                ? 'Riconfermando la sorgente, le letture precedenti restano conservate con la loro provenienza.'
-                                : 'L’attivazione avvia la prima acquisizione e gli aggiornamenti orari di VLAN, subnet e IP configurati.'}
-                        </p>
-                    ) : null}
-                    {error && !selected ? (
-                        <Alert variant="destructive">
-                            <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                    ) : null}
-                    {problems.length ? (
-                        <SourceTable
-                            sources={problems}
-                            onSelect={select}
-                            name="mikrotik-problems"
-                        />
-                    ) : null}
-                </CardContent>
-                <CardFooter className="flex-wrap gap-3">
-                    <Button
-                        disabled={!connection || busy}
-                        onClick={() =>
-                            form.submit(
-                                active ? sync(route) : activate(route),
-                                {
-                                    preserveScroll: true,
-                                },
-                            )
-                        }
+            {connection ? (
+                <Card aria-busy={form.processing}>
+                    <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <CardTitle className="flex items-center gap-2.5">
+                                <MikrotikMark className="h-5" />
+                                Sincronizzazione IPAM
+                            </CardTitle>
+                            <Badge variant={active ? 'secondary' : 'outline'}>
+                                {active
+                                    ? 'Attiva · ogni ora'
+                                    : connection?.sync_status === 'suspended' ||
+                                        connection?.sync_status ===
+                                            'source_changed'
+                                      ? 'Sospesa'
+                                      : 'Non attiva'}
+                            </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {sources.length ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setAllOpen(true)}
+                                >
+                                    Dati acquisiti
+                                </Button>
+                            ) : null}
+                            <Button
+                                disabled={!connection || busy}
+                                onClick={() =>
+                                    form.submit(
+                                        active ? sync(route) : activate(route),
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                {form.processing ? (
+                                    <Spinner />
+                                ) : active ? (
+                                    <RefreshCw data-icon="inline-start" />
+                                ) : (
+                                    <Play data-icon="inline-start" />
+                                )}
+                                {active
+                                    ? 'Sincronizza ora'
+                                    : connection?.sync_status === 'suspended' ||
+                                        connection?.sync_status ===
+                                            'source_changed'
+                                      ? 'Riconferma sorgente e attiva'
+                                      : 'Attiva sincronizzazione'}
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent
+                        className="flex flex-col gap-4"
+                        aria-live="polite"
                     >
-                        {form.processing ? (
-                            <Spinner />
-                        ) : active ? (
-                            <RefreshCw data-icon="inline-start" />
-                        ) : (
-                            <Play data-icon="inline-start" />
-                        )}
-                        {active
-                            ? 'Sincronizza ora'
-                            : connection?.sync_status === 'suspended' ||
-                                connection?.sync_status === 'source_changed'
-                              ? 'Riconferma sorgente e attiva'
-                              : 'Attiva sincronizzazione'}
+                        <dl className="flex flex-wrap gap-x-10 gap-y-3 text-sm">
+                            {connection?.synced_at ? (
+                                <div className="flex flex-col gap-1">
+                                    <dt className="text-muted-foreground">
+                                        Ultimo aggiornamento riuscito
+                                    </dt>
+                                    <dd className="tabular-nums">
+                                        {new Date(
+                                            connection.synced_at,
+                                        ).toLocaleString('it-IT')}
+                                    </dd>
+                                </div>
+                            ) : null}
+                            {connection?.sync_attempted_at ? (
+                                <div className="flex flex-col gap-1">
+                                    <dt className="text-muted-foreground">
+                                        Ultimo tentativo
+                                    </dt>
+                                    <dd className="tabular-nums">
+                                        {new Date(
+                                            connection.sync_attempted_at,
+                                        ).toLocaleString('it-IT')}
+                                    </dd>
+                                </div>
+                            ) : null}
+                        </dl>
+                        {connection?.sync_message &&
+                        connection.sync_status !== 'ok' ? (
+                            <Alert variant="destructive">
+                                <AlertDescription>
+                                    {connection.sync_message}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        {connection?.sync_summary ? (
+                            <p className="text-sm text-muted-foreground">
+                                {connection.sync_summary.read} elementi letti ·{' '}
+                                {connection.sync_summary.updated} aggiornati ·{' '}
+                                {connection.sync_summary.created} creati ·{' '}
+                                {connection.sync_summary.associated} nuove
+                                associazioni
+                            </p>
+                        ) : null}
+                        {!active && connection ? (
+                            <p className="text-sm">
+                                {connection.sync_status === 'suspended' ||
+                                connection.sync_status === 'source_changed'
+                                    ? 'Riconfermando la sorgente, le letture precedenti restano conservate con la loro provenienza.'
+                                    : 'L’attivazione avvia la prima acquisizione e gli aggiornamenti orari di VLAN, subnet e IP configurati.'}
+                            </p>
+                        ) : null}
+                        {error && !selected ? (
+                            <Alert variant="destructive">
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
+                        ) : null}
+                    </CardContent>
+                </Card>
+            ) : sources.length ? (
+                <div>
+                    <Button variant="outline" onClick={() => setAllOpen(true)}>
+                        Dati acquisiti
                     </Button>
-                    {sources.length ? (
-                        <Button
-                            variant="outline"
-                            onClick={() => setAllOpen(true)}
-                        >
-                            Consulta fonti
-                        </Button>
-                    ) : null}
-                </CardFooter>
-            </Card>
+                </div>
+            ) : null}
+            {problems.length ? (
+                <section
+                    className="flex min-w-0 flex-col gap-3"
+                    aria-label="Dati da verificare"
+                >
+                    <h2 className="flex items-center gap-2 text-base font-medium">
+                        Da verificare{' '}
+                        <Badge variant="secondary">{problems.length}</Badge>
+                    </h2>
+                    <SourceTable
+                        sources={problems}
+                        onSelect={select}
+                        name="mikrotik-problems"
+                    />
+                </section>
+            ) : null}
             <Sheet open={allOpen} onOpenChange={setAllOpen}>
                 <SheetContent
                     className="w-full overflow-y-auto sm:max-w-3xl"
                     aria-describedby={undefined}
                 >
                     <SheetHeader>
-                        <SheetTitle>Fonti raccolte dal dispositivo</SheetTitle>
+                        <SheetTitle>Dati acquisiti dal dispositivo</SheetTitle>
                     </SheetHeader>
                     <div className="px-4 pb-6">
                         <SourceTable

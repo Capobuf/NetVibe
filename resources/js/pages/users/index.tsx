@@ -117,7 +117,7 @@ export default function UserIndex({
                     <Title
                         id="users-heading"
                         tabIndex={-1}
-                        className="text-2xl font-semibold tracking-tight"
+                        className="text-2xl font-medium tracking-tight"
                     >
                         Utenti
                     </Title>

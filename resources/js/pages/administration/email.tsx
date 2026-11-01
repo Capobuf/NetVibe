@@ -71,7 +71,7 @@ export default function Email({
             <Head title="Email · Amministrazione" />
             <div className="flex max-w-5xl flex-col gap-6 p-4 md:p-6">
                 <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="text-2xl font-semibold tracking-tight">
+                    <h1 className="text-2xl font-medium tracking-tight">
                         Email
                     </h1>
                     <Badge variant="secondary">

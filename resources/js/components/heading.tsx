@@ -18,8 +18,8 @@ export default function Heading({
             <h2
                 className={
                     variant === 'small'
-                        ? 'text-base font-semibold text-balance'
-                        : 'text-2xl font-semibold tracking-tight text-balance'
+                        ? 'text-base font-medium text-balance'
+                        : 'text-2xl font-medium tracking-tight text-balance'
                 }
             >
                 {title}

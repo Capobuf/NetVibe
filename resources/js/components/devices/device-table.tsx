@@ -202,7 +202,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                             'max-w-lg py-4 break-words whitespace-normal',
                                             isList &&
                                                 c.id === defaults[0]?.id &&
-                                                'text-base font-medium',
+                                                'text-sm font-medium',
                                             isList &&
                                                 typeof value(row, c.id) ===
                                                     'number' &&

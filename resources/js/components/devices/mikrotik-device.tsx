@@ -418,7 +418,7 @@ function MikrotikPanel({ connection, ...route }: Props) {
                 aria-label="Ricognizione RouterOS"
             >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-lg font-semibold">
+                    <h2 className="text-base font-medium">
                         Ricognizione RouterOS
                     </h2>
                     {connection?.analyzed_at ? (
@@ -442,7 +442,7 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                         <CardTitle>{finding.label}</CardTitle>
                                     </CardHeader>
                                     <CardContent className="flex flex-col gap-2 px-4">
-                                        <p className="text-2xl font-semibold tabular-nums">
+                                        <p className="text-2xl font-medium tabular-nums">
                                             {finding.value ?? '—'}
                                         </p>
                                         <p className="text-sm text-muted-foreground">

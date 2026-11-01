@@ -355,7 +355,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
         }
         if (column === 'serial')
             return (
-                <span className="font-mono text-xs">{row.snapshot.serial || '—'}</span>
+                <span className="tabular-nums">{row.snapshot.serial || '—'}</span>
             );
         if (column === 'state')
             return (
@@ -476,7 +476,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         <p className="text-sm text-muted-foreground">
                             {company.name} · Snipe-IT
                         </p>
-                        <h1 className="text-2xl font-semibold tracking-tight">
+                        <h1 className="text-2xl font-medium tracking-tight">
                             {titles[view]}
                         </h1>
                         {sync?.synced_at ? (
@@ -697,7 +697,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                 <Fragment key={row.id}>
                                     {startsGroup ? (
                                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                            <TableHead colSpan={visible.length + 2} scope="rowgroup" className="h-auto py-3 font-semibold text-foreground max-lg:w-full">
+                                            <TableHead colSpan={visible.length + 2} scope="rowgroup" className="h-auto py-3 font-medium text-foreground max-lg:w-full">
                                                 <div className="flex items-center gap-3">
                                                     <Checkbox
                                                         id={`snipe-group-${row.id}`}

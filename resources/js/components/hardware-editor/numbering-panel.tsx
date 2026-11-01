@@ -33,7 +33,7 @@ export function NumberingPanel({
     return (
         <div className="flex h-full flex-col">
             <div className="flex items-center justify-between gap-2 border-b p-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <h2 className="flex items-center gap-2 text-sm font-medium">
                     {mode === 'quick' ? (
                         <Hash className="size-4" />
                     ) : (
@@ -62,7 +62,7 @@ export function NumberingPanel({
                             <p className="text-xs text-muted-foreground">
                                 Prossima etichetta
                             </p>
-                            <p className="mt-2 truncate text-3xl font-semibold tabular-nums">
+                            <p className="mt-2 truncate text-2xl font-medium tabular-nums">
                                 {e.doc.numbering.prefix}
                                 {e.doc.numbering.next}
                             </p>

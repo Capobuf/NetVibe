@@ -257,7 +257,7 @@ export function CableInspector({
     return (
         <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <h2 className="flex items-center gap-2 text-sm font-medium">
                     <CableIcon className="size-4" />
                     {cableCode(cable)}
                 </h2>

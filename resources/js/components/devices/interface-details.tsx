@@ -61,7 +61,7 @@ export function InterfaceDetails({
                             {item.mac_address ? (
                                 <CopyValue
                                     value={item.mac_address}
-                                    className="font-mono"
+                                    className="tabular-nums"
                                 />
                             ) : (
                                 '—'
@@ -87,7 +87,7 @@ export function InterfaceDetails({
                                         { company, site, subnet: ip.subnet.id },
                                         { query: { ip_address: ip.id } },
                                     )}
-                                    className="font-mono"
+                                    className="tabular-nums"
                                 >
                                     {ip.ip}
                                 </TextLink>

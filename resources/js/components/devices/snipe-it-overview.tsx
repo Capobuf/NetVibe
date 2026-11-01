@@ -36,7 +36,7 @@ export function SnipeItOverview({
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-xl font-semibold">Snipe-IT</h2>
+                    <h2 className="text-base font-medium">Snipe-IT</h2>
                     <Badge variant="outline">
                         {!confirmed
                             ? 'Da riconfermare'

@@ -495,7 +495,7 @@ export default function HardwareEditor({
                         </IconButton>
                         <PanelsTopLeft className="hidden size-5 text-muted-foreground sm:block" />
                         <div className="min-w-0">
-                            <h1 className="truncate text-base font-semibold">
+                            <h1 className="truncate text-base font-medium">
                                 Editor
                             </h1>
                             <p className="truncate text-xs text-muted-foreground">

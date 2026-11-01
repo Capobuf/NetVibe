@@ -181,7 +181,7 @@ export default function IpAddressForm({
                     {ipAddress && !editing ? (
                         <>
                             <div className="flex items-center justify-between gap-3">
-                                <h3 className="text-sm font-semibold">
+                                <h3 className="text-sm font-medium">
                                     Indirizzo
                                 </h3>
                                 {canEdit && (
@@ -240,7 +240,7 @@ export default function IpAddressForm({
                             </dl>
                             <Separator />
                             <section className="flex flex-col gap-3">
-                                <h3 className="text-sm font-semibold">
+                                <h3 className="text-sm font-medium">
                                     Dispositivo / Interfaccia
                                 </h3>
                                 <div className="text-sm">
@@ -336,7 +336,7 @@ export default function IpAddressForm({
                             >
                                 {({ processing, errors }) => (
                                     <FieldGroup>
-                                        <h3 className="text-sm font-semibold">
+                                        <h3 className="text-sm font-medium">
                                             Indirizzo
                                         </h3>
                                         {external ? (
@@ -494,7 +494,7 @@ export default function IpAddressForm({
                                             />
                                         </Field>
                                         <Separator />
-                                        <h3 className="text-sm font-semibold">
+                                        <h3 className="text-sm font-medium">
                                             Dispositivo / Interfaccia
                                         </h3>
                                         <IpAssignmentFields

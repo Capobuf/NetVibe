@@ -92,7 +92,7 @@ export default function CompanyShow({
                                             Azienda
                                         </CardDescription>
                                         <CardTitle>
-                                            <h1 className="break-words">
+                                            <h1 className="text-2xl font-medium tracking-tight break-words">
                                                 {company.name}
                                             </h1>
                                         </CardTitle>
@@ -125,7 +125,7 @@ export default function CompanyShow({
                                 <MapPin className="size-5 text-muted-foreground" />
                                 <h2
                                     id="sites-heading"
-                                    className="text-lg font-semibold"
+                                    className="text-base font-medium"
                                 >
                                     Sedi
                                 </h2>

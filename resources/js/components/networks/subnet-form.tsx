@@ -113,7 +113,7 @@ export default function SubnetForm({
                                         maxLength={18}
                                         defaultValue={subnet?.cidr ?? ''}
                                         placeholder="192.168.1.0/24"
-                                        className="font-mono"
+                                        className="tabular-nums"
                                         aria-invalid={Boolean(errors.cidr)}
                                         aria-describedby={`${id}-cidr-help ${id}-cidr-error`}
                                     />

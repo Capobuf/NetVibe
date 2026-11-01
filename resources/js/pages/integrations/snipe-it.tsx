@@ -240,7 +240,7 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
             <Head title={`Snipe-IT · ${company?.name ?? 'Amministrazione'}`} />
             <div className="flex max-w-5xl flex-col gap-6 p-4 md:p-6">
                 {!company && (
-                    <h1 className="text-2xl font-semibold tracking-tight">
+                    <h1 className="text-2xl font-medium tracking-tight">
                         Integrazioni
                     </h1>
                 )}
@@ -266,7 +266,7 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                         ) : null}
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-3">
-                                <h2 className="text-lg font-semibold">
+                                <h2 className="text-base font-medium">
                                     Connessione{' '}
                                     {company
                                         ? settings.use_global

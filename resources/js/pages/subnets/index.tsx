@@ -332,7 +332,7 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                                                 subnet: subnet.id,
                                                                             },
                                                                         )}
-                                                                        className="rounded-sm text-base font-medium whitespace-nowrap tabular-nums transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                                                        className="rounded-sm text-sm font-medium whitespace-nowrap tabular-nums transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
                                                                     >
                                                                         {
                                                                             subnet.cidr
@@ -364,7 +364,7 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                               'documented' ? (
                                                                 <div className="flex w-40 max-w-full flex-col gap-2">
                                                                     <div className="flex items-baseline gap-1.5 tabular-nums">
-                                                                        <span className="text-base font-medium">
+                                                                        <span className="text-sm font-medium">
                                                                             {subnet.ip_addresses_count.toLocaleString(
                                                                                 'it-IT',
                                                                             )}

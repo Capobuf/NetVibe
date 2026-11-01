@@ -12,7 +12,7 @@ class MikrotikSource extends Model
 {
     protected function casts(): array
     {
-        return ['excluded_at' => 'datetime', 'data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
+        return ['interface_from_model' => 'boolean', 'excluded_at' => 'datetime', 'data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
     }
 
     public function device(): BelongsTo
@@ -36,6 +36,19 @@ class MikrotikSource extends Model
             'source' => $this->device->name,
             'ip' => $this->address === null ? null : long2ip($this->address),
             'stale' => $this->state === 'unknown' || ! $connection?->activated_at
+                || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok',
+        ];
+    }
+
+    public function interfaceDetails(): array
+    {
+        $connection = $this->device->mikrotikConnection;
+
+        return [
+            ...$this->only('id', 'device_interface_id', 'seen_at', 'problem'),
+            'name' => $this->data['name'], 'default_name' => $this->data['default_name'],
+            'mac_address' => $this->data['mac_address'],
+            'stale' => $this->state !== 'current' || ! $connection?->activated_at
                 || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok',
         ];
     }

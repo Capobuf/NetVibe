@@ -25,12 +25,23 @@ export type DeviceModel = {
     devices_count?: number;
 };
 export type CreatedModel = Pick<DeviceModel, 'id' | 'name' | 'manufacturer_id'>;
+export type MikrotikInterface = {
+    id: number;
+    device_interface_id: number | null;
+    name: string;
+    default_name: string | null;
+    mac_address: string | null;
+    seen_at: string;
+    stale: boolean;
+    problem: string | null;
+};
 export type DeviceInterface = {
     id: number;
     connector_id: string | null;
     name: string | null;
     kind: 'physical' | 'logical';
     mac_address: string | null;
+    mikrotik?: MikrotikInterface | null;
 };
 export type Device = {
     id: number;
@@ -48,9 +59,18 @@ export type Device = {
 export function interfaceName(item: DeviceInterface, ports: Port[] = []) {
     return (
         item.name ||
+        (!item.mikrotik?.problem && item.mikrotik?.name) ||
         ports.find((p) => p.id === item.connector_id)?.label ||
         (item.connector_id
             ? `Porta ${item.connector_id.slice(0, 8)}`
             : 'Interfaccia')
+    );
+}
+
+export function interfaceMac(item: DeviceInterface) {
+    return (
+        item.mac_address ||
+        (!item.mikrotik?.problem && item.mikrotik?.mac_address) ||
+        null
     );
 }

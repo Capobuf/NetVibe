@@ -19,10 +19,8 @@ import {
 import { NewIpMenu } from '@/components/devices/new-ip-menu';
 import { InterfaceDetails } from '@/components/devices/interface-details';
 import { InterfaceForm } from '@/components/devices/interface-form';
-import {
-    LinkIpForm,
-    type AvailableIp,
-} from '@/components/devices/link-ip-form';
+import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-badge';
+import { AddIpForm, type AvailableIp } from '@/components/devices/add-ip-form';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import { Separator } from '@/components/ui/separator';
 import { Empty, EmptyHeader, EmptyDescription } from '@/components/ui/empty';
@@ -55,7 +53,14 @@ import {
 import { ReleaseIp } from '@/components/devices/release-ip';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { connectorTypes, type Port } from '@/lib/hardware-editor/document';
-import { interfaceName, type Device, type Manufacturer } from '@/types/device';
+import {
+    interfaceName,
+    interfaceMac,
+    type Device,
+    type DeviceInterface,
+    type Manufacturer,
+    type MikrotikInterface,
+} from '@/types/device';
 import type { Company, Site } from '@/types/company';
 import type {
     Subnet,
@@ -70,6 +75,7 @@ type LinkedIp = AvailableIp & {
     mac_address: string | null;
     subnet: Subnet & { vlan: Vlan | null };
 };
+type InterfaceRow = DeviceInterface | Port;
 type Props = {
     company: Company;
     site: Site;
@@ -77,6 +83,7 @@ type Props = {
     snipeIt: SnipeDevice | null;
     isMikrotik: boolean;
     mikrotik: MikrotikConnection | null;
+    mikrotikInterfaces: MikrotikInterface[];
     initialTab: string;
     manufacturers: Manufacturer[];
     assetUrls: Record<string, string>;
@@ -94,6 +101,7 @@ export default function DeviceShow({
     snipeIt,
     isMikrotik,
     mikrotik,
+    mikrotikInterfaces,
     initialTab,
     manufacturers,
     assetUrls,
@@ -147,7 +155,6 @@ export default function DeviceShow({
         Props['subnets'][number] | null
     >(null);
     const returnFocus = useRef<HTMLElement | null>(null);
-    const documentIpTrigger = useRef<HTMLButtonElement | null>(null);
     const editingInterface = device.interfaces.find(
         (item) => item.id === interfaceId,
     );
@@ -167,6 +174,62 @@ export default function DeviceShow({
     const ports = panel
         ? [...panel.faces.front.ports, ...panel.faces.rear.ports]
         : [];
+    const interfaceRows: InterfaceRow[] = [
+        ...device.interfaces,
+        ...ports.filter(
+            (port) =>
+                !device.interfaces.some(
+                    (item) => item.connector_id === port.id,
+                ),
+        ),
+    ];
+    function interfaceRowValue(row: InterfaceRow, column: string) {
+        const item = 'connector_id' in row ? row : null;
+        const connector =
+            'connector_id' in row
+                ? ports.find((port) => port.id === row.connector_id)
+                : row;
+        switch (column) {
+            case 'name':
+                return 'connector_id' in row
+                    ? interfaceName(row, ports)
+                    : row.label || connectorTypes[row.type].name;
+            case 'connector':
+                return connector?.label || '—';
+            case 'port_type':
+                return connector?.type === 'rj45'
+                    ? 'Ethernet (RJ45)'
+                    : connector
+                      ? connectorTypes[connector.type].name
+                      : '—';
+            case 'kind':
+                return item?.kind === 'logical' ? 'Logica' : 'Fisica';
+            case 'ips':
+                return item
+                    ? ips
+                          .filter((ip) => ip.device_interface_id === item.id)
+                          .map((ip) => ip.ip)
+                          .join(', ')
+                    : null;
+            default:
+                return item ? interfaceMac(item) : null;
+        }
+    }
+    function openInterfaceRow(row: InterfaceRow) {
+        if ('connector_id' in row) {
+            editInterface(row.id);
+            return;
+        }
+        const trigger = document.getElementById(`interface-${row.id}`);
+        if (!trigger) return;
+        portAnchor.current = {
+            contextElement: trigger,
+            getBoundingClientRect: () => trigger.getBoundingClientRect(),
+        };
+        portFocus.current = trigger;
+        setPort(row);
+        setPortOpen(true);
+    }
     const selected = port
         ? device.interfaces.find((i) => i.connector_id === port.id)
         : null;
@@ -290,58 +353,79 @@ export default function DeviceShow({
                         }}
                     />
                 )}
-                <Tabs value={activeTab} onValueChange={setTab} className="min-w-0">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={setTab}
+                    className="min-w-0"
+                >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <TabsList>
-                            <TabsTrigger value="interfaces">
-                                Interfacce ({device.interfaces.length})
+                            <TabsTrigger
+                                value="interfaces"
+                                className="flex-none px-3"
+                            >
+                                Porte e interfacce ({interfaceRows.length})
                             </TabsTrigger>
-                            <TabsTrigger value="ips">
+                            <TabsTrigger value="ips" className="flex-none px-3">
                                 IP ({ips.length})
                             </TabsTrigger>
                             {isMikrotik ? (
-                                <TabsTrigger value="mikrotik">
+                                <TabsTrigger
+                                    value="mikrotik"
+                                    className="flex-none px-3"
+                                >
                                     <MikrotikMark
-                                        variant={activeTab === 'mikrotik' ? 'solid' : 'line'}
+                                        variant={
+                                            activeTab === 'mikrotik'
+                                                ? 'solid'
+                                                : 'line'
+                                        }
                                     />
                                     MikroTik
                                 </TabsTrigger>
                             ) : null}
                         </TabsList>
-                        {activeTab !== 'mikrotik' ? <div className="flex flex-wrap gap-2">
-                            <InterfaceForm {...route} ports={ports} />
-                            <LinkIpForm
-                                {...route}
-                                interfaces={device.interfaces}
-                                ports={ports}
-                                ips={availableIps}
-                            />
-                            <NewIpMenu
-                                subnets={subnets}
-                                onSelect={(subnet, trigger) => {
-                                    documentIpTrigger.current = trigger;
-                                    setDocumentingInterfaceId(undefined);
-                                    setDocumentingSubnet(subnet);
-                                }}
-                            />
-                        </div> : null}
+                        {activeTab !== 'mikrotik' ? (
+                            <div className="flex flex-wrap gap-2">
+                                <InterfaceForm {...route} ports={ports} />
+                                <AddIpForm
+                                    {...route}
+                                    device={device}
+                                    ports={ports}
+                                    ips={availableIps}
+                                    subnets={subnets}
+                                    statuses={statuses}
+                                    tags={tags}
+                                />
+                            </div>
+                        ) : null}
                     </div>
                     <TabsContent value="interfaces" className="pt-4">
                         <DeviceTable
                             name="device-interfaces"
-                            rows={device.interfaces}
+                            defaultSort={{ column: 'name', direction: 'asc' }}
+                            rows={interfaceRows}
                             columns={[
                                 {
                                     id: 'name',
-                                    label: 'Interfaccia',
+                                    label: 'Porta / interfaccia',
                                     visible: true,
                                 },
                                 {
                                     id: 'connector',
-                                    label: 'Porta modello',
+                                    label: 'Porta fisica',
                                     visible: true,
                                 },
-                                { id: 'kind', label: 'Tipo', visible: true },
+                                {
+                                    id: 'port_type',
+                                    label: 'Tipo porta',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'kind',
+                                    label: 'Tipo interfaccia',
+                                    visible: true,
+                                },
                                 {
                                     id: 'mac_address',
                                     label: 'MAC interfaccia',
@@ -349,64 +433,37 @@ export default function DeviceShow({
                                 },
                                 { id: 'ips', label: 'IPv4', visible: true },
                             ]}
-                            value={(i, c) =>
-                                c === 'name'
-                                    ? interfaceName(i, ports)
-                                    : c === 'connector'
-                                      ? (ports.find(
-                                            (p) => p.id === i.connector_id,
-                                        )?.label ?? '—')
-                                      : c === 'kind'
-                                        ? i.kind === 'logical'
-                                            ? 'Logica'
-                                            : 'Fisica'
-                                        : c === 'ips'
-                                          ? ips
-                                                .filter(
-                                                    (ip) =>
-                                                        ip.device_interface_id ===
-                                                        i.id,
-                                                )
-                                                .map((ip) => ip.ip)
-                                                .join(', ')
-                                          : i.mac_address
-                            }
-                            onRowClick={(item) => editInterface(item.id)}
-                            render={(item, column) =>
-                                column === 'name' ? (
-                                    <button
-                                        type="button"
-                                        id={`interface-${item.id}`}
-                                        aria-haspopup="dialog"
-                                        onClick={() => editInterface(item.id)}
-                                        className="rounded-sm text-left font-medium transition-colors hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                    >
-                                        {interfaceName(item, ports)}
-                                    </button>
-                                ) : column === 'connector' ? (
-                                    ports.find(
-                                        (port) => port.id === item.connector_id,
-                                    )?.label || '—'
-                                ) : column === 'kind' ? (
-                                    item.kind === 'logical' ? (
-                                        'Logica'
-                                    ) : (
-                                        'Fisica'
-                                    )
-                                ) : column === 'ips' ? (
-                                    ips
-                                        .filter(
-                                            (ip) =>
-                                                ip.device_interface_id ===
-                                                item.id,
-                                        )
-                                        .map((ip) => ip.ip)
-                                        .join(', ') || '—'
-                                ) : (
-                                    item.mac_address || '—'
-                                )
-                            }
-                            empty="Nessuna interfaccia. Aggiungi un’interfaccia fisica o logica."
+                            value={interfaceRowValue}
+                            onRowClick={openInterfaceRow}
+                            render={(row, column) => {
+                                if (column !== 'name')
+                                    return (
+                                        interfaceRowValue(row, column) || '—'
+                                    );
+                                const item = 'connector_id' in row ? row : null;
+                                return (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            id={`interface-${row.id}`}
+                                            aria-haspopup="dialog"
+                                            onClick={() =>
+                                                openInterfaceRow(row)
+                                            }
+                                            className="rounded-sm text-left font-medium transition-colors hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                        >
+                                            {interfaceRowValue(row, 'name')}
+                                        </button>
+                                        {item?.mikrotik && (
+                                            <MikrotikInterfaceBadge
+                                                source={item.mikrotik}
+                                                manualMac={item.mac_address}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            }}
+                            empty="Nessuna porta o interfaccia."
                         />
                     </TabsContent>
                     <TabsContent value="ips" className="pt-4">
@@ -484,6 +541,7 @@ export default function DeviceShow({
                     {...route}
                     key={editingInterface.id}
                     item={editingInterface}
+                    mikrotikInterfaces={mikrotikInterfaces}
                     ports={ports}
                     linkedIps={interfaceIps}
                     open
@@ -506,22 +564,15 @@ export default function DeviceShow({
                                 IPv4 collegati ({interfaceIps.length})
                             </h3>
                             <div className="flex flex-wrap gap-2">
-                                <LinkIpForm
+                                <AddIpForm
                                     {...route}
-                                    interfaces={device.interfaces}
+                                    device={device}
                                     ports={ports}
                                     ips={availableIps}
-                                    initialInterface={editingInterface.id}
-                                />
-                                <NewIpMenu
                                     subnets={subnets}
-                                    onSelect={(subnet, trigger) => {
-                                        documentIpTrigger.current = trigger;
-                                        setDocumentingInterfaceId(
-                                            editingInterface.id,
-                                        );
-                                        setDocumentingSubnet(subnet);
-                                    }}
+                                    statuses={statuses}
+                                    tags={tags}
+                                    initialInterface={editingInterface.id}
                                 />
                             </div>
                         </div>
@@ -578,7 +629,7 @@ export default function DeviceShow({
                     side="top"
                     sideOffset={10}
                     collisionPadding={12}
-                    className="w-80 max-w-[calc(100vw-2rem)] p-0"
+                    className="flex max-h-[min(32rem,var(--radix-popover-content-available-height))] w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl p-0"
                     aria-labelledby={portTitleId}
                     aria-describedby={undefined}
                     onInteractOutside={(event) => {
@@ -600,27 +651,29 @@ export default function DeviceShow({
                             portFocus.current?.focus({ preventScroll: true });
                     }}
                 >
-                    <div className="max-h-[min(24rem,var(--radix-popover-content-available-height))] overflow-y-auto p-4">
-                        <PopoverHeader className="mb-3 flex-row items-start justify-between gap-3">
-                            <PopoverTitle
-                                id={portTitleId}
-                                className="min-w-0 flex-1 break-words"
-                            >
-                                {port?.label ||
-                                    (port
-                                        ? connectorTypes[port.type].name
-                                        : 'Porta')}
-                            </PopoverTitle>
-                            <Button
-                                type="button"
-                                size="icon"
-                                aria-label="Chiudi porta"
-                                variant="ghost"
-                                onClick={() => setPortOpen(false)}
-                            >
-                                <X />
-                            </Button>
-                        </PopoverHeader>
+                    <PopoverHeader className="shrink-0 flex-row items-center justify-between gap-3 rounded-t-xl bg-muted/40 px-4 py-3">
+                        <PopoverTitle
+                            id={portTitleId}
+                            className="min-w-0 flex-1 break-words"
+                        >
+                            {port?.label ||
+                                (port
+                                    ? connectorTypes[port.type].name
+                                    : 'Porta')}
+                        </PopoverTitle>
+                        <Button
+                            type="button"
+                            size="icon"
+                            className="shrink-0"
+                            aria-label="Chiudi porta"
+                            variant="ghost"
+                            onClick={() => setPortOpen(false)}
+                        >
+                            <X />
+                        </Button>
+                    </PopoverHeader>
+                    <Separator />
+                    <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
                         {port && (
                             <InterfaceDetails
                                 company={company.id}
@@ -634,9 +687,9 @@ export default function DeviceShow({
                                 actions={
                                     selected && (
                                         <>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
+                                            <IconButton
+                                                label="Modifica interfaccia"
+                                                className="size-8"
                                                 onClick={() => {
                                                     setPortOpen(false);
                                                     editInterface(
@@ -645,14 +698,11 @@ export default function DeviceShow({
                                                     );
                                                 }}
                                             >
-                                                <Pencil data-icon="inline-start" />
-                                                Modifica interfaccia
-                                            </Button>
+                                                <Pencil />
+                                            </IconButton>
                                             <NewIpMenu
                                                 subnets={subnets}
                                                 onSelect={(subnet) => {
-                                                    documentIpTrigger.current =
-                                                        null;
                                                     setDocumentingInterfaceId(
                                                         selected.id,
                                                     );
@@ -716,9 +766,7 @@ export default function DeviceShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        (
-                            documentIpTrigger.current ?? portFocus.current
-                        )?.focus();
+                        portFocus.current?.focus();
                     }}
                 />
             )}

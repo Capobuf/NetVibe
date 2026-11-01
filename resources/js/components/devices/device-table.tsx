@@ -24,7 +24,7 @@ import {
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
-export function DeviceTable<Row extends { id: number }, Column extends string>({
+export function DeviceTable<Row extends { id: number | string }, Column extends string>({
     name,
     rows,
     columns: defaults,
@@ -39,6 +39,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     total = rows.length,
     filterKey = '',
     searchLabel = 'Cerca nell’elenco',
+    defaultSort = null,
 }: {
     name: string;
     rows: Row[];
@@ -54,9 +55,10 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     total?: number;
     filterKey?: string;
     searchLabel?: string;
+    defaultSort?: TableSort<Column>;
 }) {
     const [search, setSearch] = useState('');
-    const [sort, setSort] = useState<TableSort<Column>>(null);
+    const [sort, setSort] = useState<TableSort<Column>>(defaultSort);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences(name, defaults);
     const visible = columns.filter((c) => c.visible);
@@ -67,7 +69,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
             .toLocaleLowerCase()
             .includes(search.trim().toLocaleLowerCase()),
     );
-    const sorted = sortTableRows(filtered, sort, value);
+    const sorted = sortTableRows(filtered, sort ?? defaultSort, value);
     const {
         pageRows,
         page,

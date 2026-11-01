@@ -45,19 +45,49 @@ class DeviceInterfaceController extends Controller
             'name' => [$interface?->connector_id ? 'nullable' : 'required', 'string', 'max:255'],
             'kind' => [$interface?->connector_id ? 'exclude' : 'required', 'in:physical,logical'],
             'mac_address' => ['nullable', 'string', 'mac_address'],
+            'mikrotik_source_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'mikrotik_edit_mode' => ['nullable', 'in:planned,manual'], 'mac_confirmation_token' => ['nullable', 'string', 'size:64'],
         ], [], ['name' => 'nome', 'kind' => 'tipo', 'mac_address' => 'MAC']);
         DB::transaction(function () use ($company, $device, $interface, $data) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
-            $device = Device::query()->findOrFail($device->id);
+            $device = Device::query()->lockForUpdate()->findOrFail($device->id);
+            $hasSource = array_key_exists('mikrotik_source_id', $data);
+            $sourceId = $data['mikrotik_source_id'] ?? null;
+            unset($data['mikrotik_source_id']);
+            $source = null;
+            if ($hasSource && $sourceId) {
+                $source = $device->mikrotikSources()->where('kind', 'interface')->lockForUpdate()->find($sourceId);
+                $connection = $device->mikrotikConnection;
+                $unchanged = $interface && $source?->device_interface_id === $interface->id;
+                if (! $source || (! $unchanged && (! $connection?->activated_at || $connection->sync_status !== 'ok'
+                    || $source->generation !== $connection->source_generation || $source->state !== 'current' || $source->problem))
+                    || ($source->device_interface_id && ! $unchanged)
+                    || ($data['kind'] ?? $interface?->kind) !== 'physical') {
+                    throw ValidationException::withMessages(['mikrotik_source_id' => 'Scegli una porta MikroTik aggiornata e non già associata di questo dispositivo.']);
+                }
+            }
             if ($interface) {
                 $record = $device->interfaces()->lockForUpdate()->findOrFail($interface->id);
+                if (($data['kind'] ?? $record->kind) !== 'physical' && ! $hasSource && $record->mikrotikSource) {
+                    throw ValidationException::withMessages(['kind' => 'Rimuovi l’associazione alla porta MikroTik prima di cambiare tipo.']);
+                }
                 InterfaceMac::synchronize($record, $data['mac_address'] ?? null, null, $data['mac_confirmation_token'] ?? null, $data['mikrotik_edit_mode'] ?? null);
                 unset($data['mac_confirmation_token'], $data['mikrotik_edit_mode']);
                 $record->update($data);
             } else {
                 unset($data['mac_confirmation_token'], $data['mikrotik_edit_mode']);
-                $device->interfaces()->create($data);
+                $record = $device->interfaces()->create($data);
+            }
+            if ($hasSource) {
+                $device->mikrotikSources()->where('device_interface_id', $record->id)
+                    ->when($source, fn ($query) => $query->where('id', '!=', $source->id))->update(['device_interface_id' => null, 'interface_from_model' => false]);
+                if ($source) {
+                    if ($source->device_interface_id !== $record->id) {
+                        $source->interface_from_model = false;
+                    }
+                    $source->device_interface_id = $record->id;
+                    $source->save();
+                }
             }
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Interfaccia salvata.']);

@@ -51,6 +51,8 @@ export type MikrotikSource = {
         context?: string | null;
         interface?: string | null;
         mac?: string | null;
+        mac_address?: string | null;
+        default_name?: string | null;
         server?: string | null;
         fixed?: boolean;
         active?: boolean;
@@ -84,6 +86,7 @@ export function sourceLabel(source: MikrotikSource) {
         subnet: 'Subnet',
         address: 'Indirizzo del dispositivo',
         context: 'Contesto della fonte',
+        interface: 'Porta fisica',
     };
     return labels[source.kind] ?? source.kind;
 }
@@ -144,7 +147,8 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
                             {Object.entries({
                                 IPv4: source.ip,
-                                MAC: source.data.mac,
+                                MAC: source.data.mac ?? source.data.mac_address,
+                                'Porta RouterOS': source.data.default_name,
                                 Subnet: source.data.cidr,
                                 VLAN: source.data.tag,
                                 Oggetto: source.data.name,

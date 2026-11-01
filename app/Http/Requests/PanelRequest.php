@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\MikrotikPortMap;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
@@ -59,13 +60,14 @@ class PanelRequest extends FormRequest
                 "$f.shellState" => ['required', 'array:hidden,locked'],
                 "$f.shellState.hidden" => ['required', 'boolean:strict'],
                 "$f.shellState.locked" => ['required', 'boolean:strict'],
-                "$f.ports.*" => ['required', 'array:id,type,x,y,rotation,scale,label,labelPosition,poe,group,opacity,opacityCustomized,borderColor,hidden,locked'],
+                "$f.ports.*" => ['required', 'array:id,type,x,y,rotation,scale,label,labelPosition,poe,group,opacity,opacityCustomized,borderColor,hidden,locked,mikrotikName'],
                 "$f.ports.*.id" => ['required', 'string', 'regex:/^[a-f0-9]{32}$/', 'distinct'],
                 "$f.ports.*.type" => ['required', Rule::in(['rj45', 'sfp', 'qsfp', 'console', 'usbA', 'usbC', 'usbMiniB', 'usbMicroB', 'ac', 'acC19', 'acC7', 'acC5', 'dc'])],
                 "$f.ports.*.x" => $coordinate, "$f.ports.*.y" => $coordinate,
                 "$f.ports.*.rotation" => ['required', 'integer:strict', 'in:0,90,180,270'],
                 "$f.ports.*.scale" => ['required', 'numeric:strict', 'between:0.2,8'],
                 "$f.ports.*.label" => ['present', 'string', 'max:255'],
+                "$f.ports.*.mikrotikName" => ['sometimes', 'nullable', 'string', 'regex:/^[a-zA-Z0-9_.-]+$/', 'max:255'],
                 "$f.ports.*.labelPosition" => ['required', 'in:center,top,bottom,left,right,hidden'],
                 "$f.ports.*.poe" => ['required', 'boolean:strict'],
                 "$f.ports.*.group" => ['present', 'nullable', 'string', 'regex:/^[a-f0-9]{32}$/'],
@@ -107,10 +109,17 @@ class PanelRequest extends FormRequest
             if ($validator->errors()->isNotEmpty()) {
                 return;
             }
-            $ids = $labels = $groups = $assetIds = [];
+            $ids = $labels = $groups = $assetIds = $mikrotikNames = [];
             foreach (['front', 'rear'] as $side) {
                 $face = $this->input("panel.faces.$side");
                 foreach ($face['ports'] as $port) {
+                    if ($name = $port['mikrotikName'] ?? null) {
+                        if (! in_array($port['type'], ['rj45', 'sfp', 'qsfp'], true) || in_array($name, $mikrotikNames, true)
+                            || (MikrotikPortMap::type($name) !== null && MikrotikPortMap::type($name) !== $port['type'])) {
+                            $validator->errors()->add('document', 'Ogni interfaccia MikroTik può essere associata a una sola porta di rete.');
+                        }
+                        $mikrotikNames[] = $name;
+                    }
                     if (in_array($port['id'], $ids, true) || ($port['label'] !== '' && in_array(trim($port['label'] ?? ''), $labels, true))) {
                         $validator->errors()->add('document', 'ID o etichette delle porte duplicati.');
                     }

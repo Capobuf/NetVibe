@@ -1,6 +1,7 @@
+import { NewItemButton } from '@/components/new-item-button';
 import { MikrotikEditMode } from '@/components/networks/mikrotik-edit-mode';
 import { Form } from '@inertiajs/react';
-import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, Pencil, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
@@ -57,10 +58,7 @@ export default function VlanForm({
                         <Pencil />
                     </IconButton>
                 ) : (
-                    <Button variant="outline">
-                        <Plus data-icon="inline-start" />
-                        Nuova VLAN
-                    </Button>
+                    <NewItemButton aria-label="Nuovo: crea VLAN" />
                 )}
             </DialogTrigger>
             <DialogContent className="max-h-[90dvh] overflow-y-auto">

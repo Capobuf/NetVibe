@@ -2,6 +2,10 @@ import { useState, type ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
+import { TableSearch } from '@/components/table-search';
+import { TablePagination } from '@/components/table-pagination';
+import { Button } from '@/components/ui/button';
+import { useTablePagination } from '@/hooks/use-table-pagination';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
 import {
@@ -31,6 +35,10 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     rowOpensDialog = true,
     filters,
     empty = 'Nessun risultato',
+    variant = 'default',
+    total = rows.length,
+    filterKey = '',
+    searchLabel = 'Cerca nell’elenco',
 }: {
     name: string;
     rows: Row[];
@@ -42,6 +50,10 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
     rowOpensDialog?: boolean;
     filters?: ReactNode;
     empty?: string;
+    variant?: 'default' | 'list';
+    total?: number;
+    filterKey?: string;
+    searchLabel?: string;
 }) {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<Column>>(null);
@@ -56,26 +68,52 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
             .includes(search.trim().toLocaleLowerCase()),
     );
     const sorted = sortTableRows(filtered, sort, value);
+    const {
+        pageRows,
+        page,
+        pageCount,
+        pageSize,
+        needsPagination,
+        setPage,
+        setPageSize,
+    } = useTablePagination(sorted, JSON.stringify([search, sort, filterKey]));
+    const isList = variant === 'list';
     return (
         <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-                <InputGroup className="max-w-sm">
-                    <InputGroupAddon>
-                        <Search />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                        aria-label="Cerca nell’elenco"
-                        placeholder="Cerca nell’elenco…"
+                {isList ? (
+                    <TableSearch
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={setSearch}
+                        total={total}
+                        label={searchLabel}
                     />
-                </InputGroup>
+                ) : (
+                    <InputGroup className="max-w-sm">
+                        <InputGroupAddon>
+                            <Search />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            aria-label="Cerca nell’elenco"
+                            placeholder="Cerca nell’elenco…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </InputGroup>
+                )}
                 {filters}
-                <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-                    {sorted.length} risultati
-                </span>
+                {!isList ? (
+                    <span className="ml-auto text-sm text-muted-foreground tabular-nums">
+                        {sorted.length} risultati
+                    </span>
+                ) : null}
             </div>
-            <div className="overflow-hidden rounded-xl border">
+            <div
+                className={cn(
+                    'min-w-0',
+                    !isList && 'overflow-hidden rounded-xl border',
+                )}
+            >
                 <Table
                     className={cn(
                         separators && '[&_td+td]:border-l [&_th+th]:border-l',
@@ -102,7 +140,7 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {sorted.map((row) => (
+                        {(isList ? pageRows : sorted).map((row) => (
                             <TableRow
                                 key={row.id}
                                 id={
@@ -116,11 +154,12 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                         ? 'dialog'
                                         : undefined
                                 }
-                                className={
-                                    onRowClick
-                                        ? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-                                        : undefined
-                                }
+                                className={cn(
+                                    isList &&
+                                        'even:bg-muted/20 focus-within:bg-muted/40',
+                                    onRowClick &&
+                                        'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                                )}
                                 onKeyDown={
                                     onRowClick
                                         ? (event) => {
@@ -159,7 +198,16 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                 {visible.map((c) => (
                                     <TableCell
                                         key={c.id}
-                                        className="max-w-lg py-4 break-words whitespace-normal"
+                                        className={cn(
+                                            'max-w-lg py-4 break-words whitespace-normal',
+                                            isList &&
+                                                c.id === defaults[0]?.id &&
+                                                'text-base font-medium',
+                                            isList &&
+                                                typeof value(row, c.id) ===
+                                                    'number' &&
+                                                'tabular-nums',
+                                        )}
                                     >
                                         {render
                                             ? render(row, c.id)
@@ -184,6 +232,14 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                                                     : empty}
                                             </EmptyTitle>
                                         </EmptyHeader>
+                                        {isList && search ? (
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setSearch('')}
+                                            >
+                                                Azzera ricerca
+                                            </Button>
+                                        ) : null}
                                     </Empty>
                                 </TableCell>
                             </TableRow>
@@ -191,6 +247,22 @@ export function DeviceTable<Row extends { id: number }, Column extends string>({
                     </TableBody>
                 </Table>
             </div>
+            {isList ? (
+                needsPagination ? (
+                    <TablePagination
+                        summary={`${pageRows.length}/${sorted.length}`}
+                        page={page}
+                        pageCount={pageCount}
+                        pageSize={pageSize}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                ) : (
+                    <p role="status" className="sr-only">
+                        {sorted.length} risultati
+                    </p>
+                )
+            ) : null}
         </div>
     );
 }

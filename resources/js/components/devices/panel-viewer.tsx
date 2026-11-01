@@ -16,6 +16,7 @@ import {
     type Port,
 } from '@/lib/hardware-editor/document';
 import { connectorTypes } from '@/lib/hardware-editor/document';
+import { cn } from '@/lib/utils';
 
 export type PortAnchor = {
     contextElement: HTMLElement;
@@ -131,7 +132,12 @@ export function PanelViewer({
         return () => cancelAnimationFrame(frame);
     }, [initialPortId]);
     return (
-        <div className="min-w-0 overflow-hidden rounded-xl border bg-muted/20">
+        <div
+            className={cn(
+                'min-w-0 overflow-hidden',
+                !compact && 'rounded-xl border bg-muted/20',
+            )}
+        >
             {!compact && (
                 <div className="flex items-center justify-between gap-2 border-b bg-background p-3">
                     <ToggleGroup

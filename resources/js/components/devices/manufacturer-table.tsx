@@ -16,6 +16,8 @@ export function ManufacturerTable({
     return (
         <DeviceTable
             name="manufacturers"
+            variant="list"
+            searchLabel="Cerca produttori"
             rows={manufacturers}
             columns={[
                 { id: 'name', label: 'Produttore', visible: true },
@@ -36,7 +38,7 @@ export function ManufacturerTable({
                     m[c]
                 )
             }
-            empty="Nessun produttore. Aggiungi il primo per creare modelli e dispositivi."
+            empty="Nessun produttore"
             actions={(m) => (
                 <>
                     <CatalogForm

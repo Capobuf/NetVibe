@@ -1,6 +1,7 @@
+import { NewItemButton } from '@/components/new-item-button';
 import { Form, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -55,14 +56,14 @@ export function DeviceForm({
             }}
         >
             <DialogTrigger asChild>
-                <Button variant={device ? 'outline' : 'default'}>
-                    {device ? (
+                {device ? (
+                    <Button variant="outline">
                         <Pencil data-icon="inline-start" />
-                    ) : (
-                        <Plus data-icon="inline-start" />
-                    )}
-                    {device ? 'Modifica' : 'Nuovo'}
-                </Button>
+                        Modifica
+                    </Button>
+                ) : (
+                    <NewItemButton aria-label="Nuovo: crea dispositivo" />
+                )}
             </DialogTrigger>
             <DialogContent
                 className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"

@@ -288,6 +288,29 @@ export default function DeviceShow({
                                 Asset tag: {device.asset_tag}
                             </p>
                         ) : null}
+                        {snipeIt?.synced_at ? (
+                            <div className="mt-1 flex flex-col gap-2">
+                                <Separator className="data-[orientation=horizontal]:w-8" />
+                                <time
+                                    dateTime={snipeIt.synced_at}
+                                    className="text-xs text-muted-foreground"
+                                >
+                                    <span className="sr-only">
+                                        Ultimo aggiornamento da Snipe-IT:{' '}
+                                    </span>
+                                    {new Date(snipeIt.synced_at).toLocaleString(
+                                        'it-IT',
+                                        {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        },
+                                    )}
+                                </time>
+                            </div>
+                        ) : null}
                     </div>
                     <div className="flex gap-2">
                         <DeviceForm
@@ -296,6 +319,7 @@ export default function DeviceShow({
                             manufacturers={manufacturers}
                             device={device}
                             linked={!!snipeIt}
+                            snipeItAssetId={snipeIt?.id}
                         />
                         <Dialog open={deleting} onOpenChange={setDeleting}>
                             <DialogTrigger asChild>
@@ -327,7 +351,10 @@ export default function DeviceShow({
                     </div>
                 </header>
                 {snipeIt ? (
-                    <SnipeItDevice company={company.id} source={snipeIt} />
+                    <SnipeItDevice
+                        source={snipeIt}
+                        device={device}
+                    />
                 ) : null}
                 {device.notes ? (
                     <p className="text-sm whitespace-pre-wrap">

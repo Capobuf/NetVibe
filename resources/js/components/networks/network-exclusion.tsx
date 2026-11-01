@@ -55,7 +55,7 @@ export function NetworkVisibilityFilter({
             }}
             aria-label="Visibilità delle reti"
         >
-            <ToggleGroupItem value="active">Attive</ToggleGroupItem>
+            <ToggleGroupItem value="active">Non escluse</ToggleGroupItem>
             <ToggleGroupItem value="excluded">
                 Escluse <Badge variant="secondary">{count}</Badge>
             </ToggleGroupItem>
@@ -97,7 +97,14 @@ export function NetworkExclusionAction({
             : kind === 'vlan'
               ? vlanUpdate({ ...route, vlan: id })
               : sourceUpdate({ ...route, device: device!, source: id });
-    const actionLabel = excluded ? 'Reincludi' : 'Escludi da NetVibe…';
+    const actionLabel =
+        kind === 'source'
+            ? excluded
+                ? 'Riprendi acquisizione'
+                : 'Ignora questa rete…'
+            : excluded
+              ? 'Reincludi'
+              : 'Escludi da NetVibe…';
 
     return (
         <>
@@ -228,7 +235,13 @@ function ExclusionDialog({
             onSuccess: () => {
                 onClose();
                 toast.success(
-                    restore ? 'Rete reinclusa.' : 'Rete esclusa da NetVibe.',
+                    impact?.source
+                        ? restore
+                            ? 'Acquisizione della rete riattivata.'
+                            : 'Rete ignorata nelle sincronizzazioni.'
+                        : restore
+                          ? 'Rete reinclusa.'
+                          : 'Rete esclusa da NetVibe.',
                     {
                         action: restore
                             ? undefined
@@ -269,18 +282,22 @@ function ExclusionDialog({
         >
             <DialogHeader>
                 <DialogTitle>
-                    {impact
+                    {impact?.source
                         ? restore
-                            ? 'Reincludere'
-                            : 'Escludere'
-                        : 'Gestisci'}{' '}
+                            ? 'Riprendere l’acquisizione di'
+                            : 'Ignorare'
+                        : impact
+                          ? restore
+                              ? 'Reincludere'
+                              : 'Escludere'
+                          : 'Gestisci'}{' '}
                     {impact?.label ?? label}?
                 </DialogTitle>
                 <DialogDescription>
                     {impact?.source
                         ? restore
-                            ? `La fonte ${impact.source} potrà alimentare di nuovo l’IPAM per questa rete.`
-                            : `Questa rete e i dati dipendenti dalla fonte ${impact.source} non alimenteranno l’IPAM fino alla reinclusione.`
+                            ? `Le prossime sincronizzazioni da ${impact.source} potranno nuovamente importare questa rete e i suoi indirizzi, se i dati lo consentono.`
+                            : `NetVibe ignorerà questa rete e i suoi indirizzi nelle prossime sincronizzazioni da ${impact.source}. I dati già acquisiti resteranno consultabili in «Escluse», dove potrai riprendere l’acquisizione.`
                         : impact?.inherited_vlan
                           ? `Esclusa tramite VLAN ${impact.inherited_vlan.tag}.`
                           : restore
@@ -363,7 +380,13 @@ function ExclusionDialog({
                         ) : (
                             <EyeOff />
                         )}
-                        {restore ? 'Reincludi' : 'Escludi'}
+                        {impact?.source
+                            ? restore
+                                ? 'Riprendi acquisizione'
+                                : 'Ignora rete'
+                            : restore
+                              ? 'Reincludi'
+                              : 'Escludi'}
                     </Button>
                 )}
             </DialogFooter>

@@ -156,6 +156,25 @@ class SnipeItSyncTest extends TestCase
         $this->assertDatabaseCount('devices', 1);
     }
 
+    public function test_json_key_order_does_not_block_matching_or_updated_models_but_local_changes_do(): void
+    {
+        $this->activate();
+        $this->assertNull(SnipeItModel::sole()->problem);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertNull(SnipeItModel::sole()->problem);
+
+        $this->server([$this->asset(1)], modelName: 'Updated upstream');
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertSame('Updated upstream', DeviceModel::sole()->name);
+        $this->assertNull(SnipeItModel::sole()->problem);
+
+        DeviceModel::sole()->update(['name' => 'Edited locally']);
+        $this->server([$this->asset(1)], modelName: 'Changed again');
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertSame('Edited locally', DeviceModel::sole()->name);
+        $this->assertNotNull(SnipeItModel::sole()->problem);
+    }
+
     public function test_catalog_shared_with_manual_devices_and_new_connection_identity_are_preserved(): void
     {
         $this->activate();

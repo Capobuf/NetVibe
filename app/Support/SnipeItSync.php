@@ -15,6 +15,7 @@ use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync as Sync;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -227,16 +228,18 @@ class SnipeItSync
             $current = $this->modelData($model);
         }
         $data['category'] ??= $current['category'];
+        $data = Arr::sortRecursive($data);
         // A confirmed mapping must not grant permission to rewrite a different local catalog entry.
         $external->update(['device_model_id' => $model->id, 'applied' => $data,
-            'problem' => $current === $data ? null : 'Anagrafica diversa: conservati i dati del modello NetVibe.']);
+            'problem' => $current === $data ? null : 'Il modello associato in NetVibe ha dati diversi da Snipe-IT. Verifica il modello scelto nel catalogo.']);
 
         return $model;
     }
 
     private function modelData(DeviceModel $model): array
     {
-        return ['name' => $model->name, 'manufacturer' => $model->manufacturer->name, 'category' => $model->modelType?->name];
+        // MySQL JSON objects can return keys in a different order. Keep value comparisons strict.
+        return Arr::sortRecursive(['name' => $model->name, 'manufacturer' => $model->manufacturer->name, 'category' => $model->modelType?->name]);
     }
 
     private function updateModel(SnipeItModel $external): void
@@ -245,19 +248,20 @@ class SnipeItSync
         $current = $this->modelData($model);
         $desired = $external->snapshot;
         $desired['category'] ??= $current['category'];
+        $desired = Arr::sortRecursive($desired);
         if ($current === $desired) {
             $external->update(['applied' => $current, 'problem' => null]);
 
             return;
         }
         $otherSources = SnipeItModel::where('device_model_id', $model->id)->whereKeyNot($external->id)->get();
-        $compatibleSources = [...$otherSources->filter(fn ($source) => [...$source->snapshot, 'category' => $source->snapshot['category'] ?? $current['category']] === $desired)->modelKeys(), $external->id];
+        $compatibleSources = [...$otherSources->filter(fn ($source) => Arr::sortRecursive([...$source->snapshot, 'category' => $source->snapshot['category'] ?? $current['category']]) === $desired)->modelKeys(), $external->id];
         $manualDevices = $model->devices()->whereDoesntHave('snipeItAsset', fn ($q) => $q->whereIn('snipe_it_model_id', $compatibleSources))->exists();
         if ($desired['name'] === null || $desired['manufacturer'] === null || collect($desired)->contains(fn ($value) => mb_strlen($value ?? '') > 255)
-            || $current !== $external->applied || $manualDevices
-            || $otherSources->contains(fn ($source) => [...$source->snapshot, 'category' => $source->snapshot['category'] ?? $current['category']] !== $desired)
+            || $current !== Arr::sortRecursive($external->applied ?? []) || $manualDevices
+            || $otherSources->contains(fn ($source) => Arr::sortRecursive([...$source->snapshot, 'category' => $source->snapshot['category'] ?? $current['category']]) !== $desired)
             || $this->modelCandidates($external)->whereKeyNot($model->id)->exists()) {
-            $external->update(['problem' => 'Anagrafica diversa: il catalogo attuale è conservato perché condiviso o non compatibile.']);
+            $external->update(['problem' => 'Il modello non è stato aggiornato. Verifica le differenze con Snipe-IT nel catalogo NetVibe.']);
 
             return;
         }

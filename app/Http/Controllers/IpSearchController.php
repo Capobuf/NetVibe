@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\IpAddress;
 use App\Models\Site;
+use App\Models\Subnet;
 use App\Support\DeviceAssignment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -39,6 +40,7 @@ class IpSearchController extends Controller
             ->join('subnets', 'subnets.id', '=', 'ip_addresses.subnet_id')
             ->join('sites', 'sites.id', '=', 'subnets.site_id')
             ->where('sites.company_id', $company->id)
+            ->whereIn('ip_addresses.subnet_id', Subnet::visible()->select('id'))
             ->select([
                 'ip_addresses.device_id', 'ip_addresses.device_interface_id', 'ip_addresses.id', 'ip_addresses.address', 'ip_addresses.hostname', 'ip_addresses.mac_address',
                 'sites.id as site_id', 'sites.name as site',

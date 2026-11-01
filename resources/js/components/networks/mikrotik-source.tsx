@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { TriangleAlert } from 'lucide-react';
+import { Info, TriangleAlert } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
+import { IconButton } from '@/components/icon-button';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { CopyValue } from '@/components/copy-value';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +22,13 @@ import {
 } from '@/components/ui/sheet';
 
 export type MikrotikSource = {
+    excluded_at?: string | null;
+    exclusion?: {
+        kind: 'subnet' | 'vlan' | 'source';
+        id: number;
+        label: string;
+        device?: number;
+    } | null;
     id: number;
     edit_mode?: 'planned' | 'manual' | null;
     matched_at?: string | null;
@@ -79,13 +94,27 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
             {sources.map((source) => (
                 <Card key={source.id} className="gap-3 py-4">
                     <CardHeader className="gap-2 px-4">
-                        <CardTitle className="flex items-start gap-2.5">
-                            <MikrotikMark className="h-5" />
-                            <span className="min-w-0 break-words">
-                                {source.source} · {sourceLabel(source)}
-                            </span>
-                        </CardTitle>
+                        <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="flex min-w-0 items-start gap-2.5">
+                                <MikrotikMark />
+                                <span className="min-w-0 break-words">
+                                    {source.source} · {sourceLabel(source)}
+                                </span>
+                            </CardTitle>
+                            <IconButton
+                                variant="ghost"
+                                className="-mt-2 -mr-2 shrink-0"
+                                label={`Ultimo rilevamento: ${new Date(source.seen_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}`}
+                            >
+                                <Info />
+                            </IconButton>
+                        </div>
                         <div className="flex flex-wrap gap-2">
+                            {source.exclusion ? (
+                                <Badge variant="outline">
+                                    Esclusa · {source.exclusion.label}
+                                </Badge>
+                            ) : null}
                             {source.edit_mode ? (
                                 <Badge variant="outline">
                                     {source.edit_mode === 'manual'
@@ -107,11 +136,6 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 <Badge variant="outline">
                                     Configurazione non attiva o non
                                     determinabile
-                                </Badge>
-                            ) : null}
-                            {source.data.status ? (
-                                <Badge variant="secondary">
-                                    {source.data.status}
                                 </Badge>
                             ) : null}
                         </div>
@@ -158,14 +182,34 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                         {source.problem ? (
                             <p className="text-destructive">{source.problem}</p>
                         ) : null}
-                        <p className="text-xs text-muted-foreground">
-                            Ultimo rilevamento:{' '}
-                            {new Date(source.seen_at).toLocaleString('it-IT')}
-                        </p>
                     </CardContent>
                 </Card>
             ))}
         </div>
+    );
+}
+
+export function MikrotikSourcesDialog({
+    sources,
+}: {
+    sources: MikrotikSource[];
+}) {
+    if (!sources.length) return null;
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <Button type="button" variant="ghost" size="sm">
+                    <MikrotikMark />
+                    Fonti MikroTik
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+                <DialogHeader>
+                    <DialogTitle>Fonti MikroTik</DialogTitle>
+                </DialogHeader>
+                <SourceDetails sources={sources} />
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -210,7 +254,7 @@ export function MikrotikIndicator({
                     size={children ? 'sm' : 'icon'}
                     className={
                         children
-                            ? 'h-8 max-w-full min-w-0 gap-1.5 px-2 py-1 font-normal hover:bg-transparent'
+                            ? 'h-8 max-w-full min-w-0 gap-2 px-2 py-1 font-normal hover:bg-transparent'
                             : undefined
                     }
                     aria-label={
@@ -228,7 +272,7 @@ export function MikrotikIndicator({
                         (mismatch ? (
                             <TriangleAlert className="text-destructive" />
                         ) : (
-                            <MikrotikMark className="h-5" />
+                            <MikrotikMark />
                         ))}
                 </Button>
             </SheetTrigger>
@@ -265,10 +309,12 @@ export function MikrotikValue({
     value,
     field,
     sources,
+    showIndicator = true,
 }: {
     value: string | null;
     field: 'mac' | 'hostname';
     sources: MikrotikSource[];
+    showIndicator?: boolean;
 }) {
     const current = sources.filter((source) => source.state !== 'missing');
     const documented =
@@ -299,11 +345,11 @@ export function MikrotikValue({
         ),
     );
     return (
-        <div className="inline-flex max-w-full items-center gap-1 whitespace-nowrap">
+        <div className="inline-flex max-w-full flex-col items-start gap-1 whitespace-nowrap">
             {value ? (
                 <CopyValue
                     value={value}
-                    className="h-8 max-w-96 py-1 whitespace-nowrap [&>span]:truncate"
+                    className="ml-10 h-8 max-w-96 py-1 whitespace-nowrap [&>span]:truncate"
                 />
             ) : null}
             {values.length ? (
@@ -312,13 +358,15 @@ export function MikrotikValue({
                     field={field}
                     mac={field === 'mac' ? value : undefined}
                 >
+                    <span className="flex w-8 shrink-0 items-center justify-center">
+                        {showIndicator ? <MikrotikMark /> : null}
+                    </span>
                     <span
                         className="max-w-96 truncate"
                         title={values.join(', ')}
                     >
                         {values.join(', ')}
                     </span>
-                    <MikrotikMark />
                     <span className="sr-only">Fonti MikroTik</span>
                     {valueSources.every((source) => source.stale) ? (
                         <span className="font-sans text-xs text-muted-foreground">

@@ -31,15 +31,15 @@ class SubnetController extends Controller
         return Inertia::render('subnets/index', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
-            'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name']),
+            'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name', 'excluded_at']),
             'subnets' => $site->subnets()
-                ->select(['id', 'cidr', 'name', 'description', 'vlan_id', 'network_address', 'broadcast_address'])
+                ->select(['id', 'cidr', 'name', 'description', 'vlan_id', 'network_address', 'broadcast_address', 'excluded_at'])
                 ->withCount('ipAddresses')->orderBy('network_address')->get()
                 ->map(function (Subnet $subnet) {
                     [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
 
                     return [
-                        ...$subnet->only('id', 'cidr', 'name', 'description', 'vlan_id', 'ip_addresses_count'),
+                        ...$subnet->only('id', 'cidr', 'name', 'description', 'vlan_id', 'ip_addresses_count', 'excluded_at'),
                         'first_ip' => long2ip($first),
                         'last_ip' => long2ip($last),
                         'usable_addresses' => $last - $first + 1,
@@ -59,9 +59,12 @@ class SubnetController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'sort' => ['nullable', 'in:ip,hostname,mac_address,description,status,tags,device'],
             'direction' => ['sometimes', 'in:asc,desc'],
-            'page' => ['sometimes', 'integer', 'min:1', 'max:85899346'],
+            'page' => ['sometimes', 'integer', 'min:1', 'max:429496730'],
+            'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
+            'hide_free' => ['sometimes', 'boolean'],
             'ip_address' => ['sometimes', 'integer', 'min:1'],
         ]);
+        $hideFree = (bool) ($options['hide_free'] ?? false);
         $search = $options['search'] ?? '';
         $sort = $options['sort'] ?? null;
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
@@ -74,8 +77,8 @@ class SubnetController extends Controller
         return Inertia::render('subnets/show', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
-            'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id'),
-            'vlan' => $subnet->vlan?->only('id', 'tag', 'name'),
+            'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id', 'excluded_at'),
+            'vlan' => $subnet->vlan?->only('id', 'tag', 'name', 'excluded_at'),
             'summaryEntries' => $subnet->summaryEntries()->orderBy('id')->get(['id', 'name', 'values']),
             'excludedRanges' => $subnet->excludedRanges
                 ->map(fn (ExcludedRange $range) => [
@@ -85,12 +88,12 @@ class SubnetController extends Controller
                 ]),
             'mikrotikSources' => MikrotikIpam::forSubnet($subnet),
             'firstProposableIp' => $subnet->firstProposableIp(),
-            'query' => compact('search', 'sort', 'direction'),
+            'query' => [...compact('search', 'sort', 'direction'), 'hide_free' => (int) $hideFree],
             'addressCounts' => $subnet->addressCounts(),
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
-            'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1)),
+            'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1), (int) ($options['per_page'] ?? 25), $hideFree),
             'initialIpAddress' => $selected ? [
                 ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label', 'mikrotik_edit_mode', 'mikrotik_matched_at'),
                 'ip' => long2ip($selected->address),

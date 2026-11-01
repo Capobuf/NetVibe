@@ -14,6 +14,7 @@ use App\Http\Controllers\ManufacturerController;
 use App\Http\Controllers\MikrotikController;
 use App\Http\Controllers\ModelPanelController;
 use App\Http\Controllers\ModelTypeController;
+use App\Http\Controllers\NetworkExclusionController;
 use App\Http\Controllers\RackController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
@@ -57,6 +58,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::post('sync', [MikrotikController::class, 'sync'])->name('sync');
                 Route::post('associate', [MikrotikController::class, 'associate'])->name('associate');
                 Route::post('analyze', [MikrotikController::class, 'analyze'])->name('analyze');
+                Route::get('sources/{source}/exclusion', [NetworkExclusionController::class, 'sourcePreview'])->name('sources.exclusion.preview');
+                Route::put('sources/{source}/exclusion', [NetworkExclusionController::class, 'source'])->name('sources.exclusion.update');
             });
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
@@ -84,6 +87,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->scopeBindings()->name('companies.sites.show');
 
         Route::scopeBindings()->group(function () {
+            Route::get('companies/{company}/sites/{site}/subnets/{subnet}/exclusion', [NetworkExclusionController::class, 'subnetPreview'])->name('companies.sites.subnets.exclusion.preview');
+            Route::put('companies/{company}/sites/{site}/subnets/{subnet}/exclusion', [NetworkExclusionController::class, 'subnet'])->name('companies.sites.subnets.exclusion.update');
+            Route::get('companies/{company}/sites/{site}/vlans/{vlan}/exclusion', [NetworkExclusionController::class, 'vlanPreview'])->name('companies.sites.vlans.exclusion.preview');
+            Route::put('companies/{company}/sites/{site}/vlans/{vlan}/exclusion', [NetworkExclusionController::class, 'vlan'])->name('companies.sites.vlans.exclusion.update');
             Route::get('companies/{company}/sites/{site}/search', [IpSearchController::class, 'index'])
                 ->name('companies.sites.search.index');
             Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);

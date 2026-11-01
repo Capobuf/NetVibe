@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Support\Ipv4Ranges;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -11,6 +13,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['cidr', 'network_address', 'broadcast_address', 'name', 'description', 'vlan_id'])]
 class Subnet extends Model
 {
+    protected function casts(): array
+    {
+        return ['excluded_at' => 'datetime'];
+    }
+
+    #[Scope]
+    protected function visible(Builder $query): void
+    {
+        $query->whereNull('subnets.excluded_at')
+            ->whereDoesntHave('vlan', fn ($vlan) => $vlan->whereNotNull('excluded_at'));
+    }
+
+    #[Scope]
+    protected function excluded(Builder $query): void
+    {
+        $query->where(fn ($query) => $query->whereNotNull('subnets.excluded_at')
+            ->orWhereHas('vlan', fn ($vlan) => $vlan->whereNotNull('excluded_at')));
+    }
+
     /** @return HasMany<SubnetSummaryEntry, $this> */
     public function summaryEntries(): HasMany
     {

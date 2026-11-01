@@ -9,17 +9,22 @@ import {
 } from '@/components/ui/input-group';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import InputError from '@/components/input-error';
 
 export function TableSearch({
     value,
     onChange,
     total,
     label,
+    maxLength,
+    error,
 }: {
     value: string;
     onChange: (value: string) => void;
     total: number;
     label: string;
+    maxLength?: number;
+    error?: string;
 }) {
     const id = useId();
     const [open, setOpen] = useState(false);
@@ -111,6 +116,9 @@ export function TableSearch({
                             ref={input}
                             id={id}
                             type="search"
+                            maxLength={maxLength}
+                            aria-invalid={Boolean(error)}
+                            aria-describedby={error ? `${id}-error` : undefined}
                             placeholder={`${label}…`}
                             value={value}
                             onChange={(event) => onChange(event.target.value)}
@@ -134,6 +142,7 @@ export function TableSearch({
                             </InputGroupAddon>
                         ) : null}
                     </InputGroup>
+                    <InputError id={`${id}-error`} message={error} />
                 </div>
             </div>
         </div>

@@ -10,6 +10,7 @@ use App\Models\Site;
 use App\Models\Vlan;
 use App\Support\DeletionImpact;
 use App\Support\MikrotikIpam;
+use App\Support\NetworkExclusions;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -25,9 +26,9 @@ class VlanController extends Controller
         return Inertia::render('vlans/index', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
-            'vlans' => $site->vlans()->select('id', 'tag', 'name')->withCount('subnets')
+            'vlans' => $site->vlans()->select('id', 'tag', 'name', 'excluded_at')
                 ->with(['subnets' => fn ($query) => $query->where('site_id', $site->id)
-                    ->orderBy('network_address')->select('id', 'vlan_id', 'cidr', 'name', 'description')])
+                    ->orderBy('network_address')->select('id', 'vlan_id', 'cidr', 'name', 'description', 'excluded_at')])
                 ->orderBy('tag')->get(),
         ]);
     }
@@ -42,10 +43,10 @@ class VlanController extends Controller
         return Inertia::render('vlans/show', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
-            'vlan' => $vlan->only('id', 'tag', 'name'),
-            'mikrotikSources' => MikrotikSource::where('site_id', $site->id)->where('vlan_id', $vlan->id)->where('kind', 'vlan')->with('device.mikrotikConnection')->get()->map->display(),
+            'vlan' => $vlan->only('id', 'tag', 'name', 'excluded_at'),
+            'mikrotikSources' => (new NetworkExclusions($site->id))->display(MikrotikSource::where('site_id', $site->id)->where('vlan_id', $vlan->id)->where('kind', 'vlan')->with('device.mikrotikConnection')->get()),
             'subnets' => $site->subnets()->where('vlan_id', $vlan->id)
-                ->orderBy('network_address')->get(['id', 'cidr', 'name', 'description', 'vlan_id']),
+                ->orderBy('network_address')->get(['id', 'cidr', 'name', 'description', 'vlan_id', 'excluded_at']),
         ]);
     }
 

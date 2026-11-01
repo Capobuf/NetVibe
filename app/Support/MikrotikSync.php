@@ -82,6 +82,7 @@ class MikrotikSync
 
     private function apply(Site $site, Device $device, MikrotikConnection $connection, array $objects): array
     {
+        $exclusions = new NetworkExclusions($site->id);
         $previous = $device->mikrotikSources()->where('generation', $connection->source_generation)->lockForUpdate()->get()->keyBy(fn ($source) => $source->kind.':'.$source->source_key);
         $sources = [];
         $created = $associated = $updated = 0;
@@ -104,7 +105,7 @@ class MikrotikSync
             $expectedMatch = $source->edit_mode === 'planned' && $source->expected !== null
                 && array_intersect_key($object['data'], $source->expected) == $source->expected
                 && ($source->getOriginal('anchor')['context_key'] ?? null) === ($object['anchor']['context_key'] ?? null);
-            if ($expectedMatch) {
+            if ($expectedMatch && ! $exclusions->target($source)) {
                 $source->matched_at = now();
             }
             if ($anchorChanged && ! $expectedMatch && ! $expectedAddress) {
@@ -113,7 +114,7 @@ class MikrotikSync
                 $source->confirmed = false;
                 $source->problem = 'La configurazione o identità dell’oggetto sorgente è cambiata. Verifica l’associazione esistente.';
             }
-            if (! $source->problem) {
+            if (! $source->problem && ! $exclusions->target($source)) {
                 [$new, $linked] = $this->associate($site, $device, $source, $sources);
                 $created += $new;
                 $associated += $linked;
@@ -126,7 +127,7 @@ class MikrotikSync
         MikrotikIpam::recognizeExpected($site->id, $device->id);
 
         return ['created' => $created, 'associated' => $associated, 'updated' => $updated, 'read' => count($sources),
-            'problems' => count(array_filter($sources, fn ($source) => $source->problem !== null))];
+            'problems' => count(array_filter($sources, fn ($source) => $source->problem !== null && ! $exclusions->target($source)))];
     }
 
     private function associate(Site $site, Device $device, MikrotikSource $source, array $sources): array

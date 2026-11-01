@@ -12,6 +12,7 @@ use App\Models\MikrotikConnection;
 use App\Models\Site;
 use App\Support\MikrotikClient;
 use App\Support\MikrotikSync;
+use App\Support\NetworkExclusions;
 use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -106,6 +107,9 @@ class MikrotikController extends Controller
                     throw ValidationException::withMessages(['connection' => 'Completa una sincronizzazione prima di confermare l’associazione.']);
                 }
                 $source = $device->mikrotikSources()->where('generation', $connection->source_generation)->where('state', 'current')->lockForUpdate()->findOrFail($data['source_id']);
+                if ((new NetworkExclusions($site->id))->target($source)) {
+                    throw ValidationException::withMessages(['connection' => 'Reincludi la rete prima di associarla.']);
+                }
                 if ($source->kind === 'vlan' && $source->problem === 'VLAN riportata da un’altra sorgente: conferma che il contesto L2 sia lo stesso.') {
                     $vlan = $site->vlans()->where('tag', $source->data['tag'])->firstOrFail();
                     $source->fill(['vlan_id' => $vlan->id, 'linked' => true, 'confirmed' => true, 'problem' => null])->save();

@@ -246,7 +246,7 @@ class MikrotikSyncTest extends TestCase
             ->where('ipAddresses.total', 55)->where('ipAddresses.data.0.ip', '192.0.2.3')
             ->where('ipAddresses.data.0.hostname', 'zz-manual')->where('ipAddresses.data.1.ip', '192.0.2.56')
             ->where('ipAddresses.data.1.id', null)->where('ipAddresses.data.1.hostname', null));
-        $this->get($url.'?search=host&sort=hostname&direction=desc&page=2')->assertInertia(fn (Assert $page) => $page
+        $this->get($url.'?hide_free=1&search=host&sort=hostname&direction=desc&per_page=50&page=2')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 55)->has('ipAddresses.data', 5)
             ->where('ipAddresses.data.0.ip', '192.0.2.7')->where('ipAddresses.data.4.ip', '192.0.2.2'));
         $this->get($url.'?search=host&sort=hostname')->assertInertia(fn (Assert $page) => $page
@@ -255,6 +255,109 @@ class MikrotikSyncTest extends TestCase
             ->where('ipAddresses.total', 55)->where('ipAddresses.data.0.mac_address', '02:00:00:00:00:FF')
             ->where('ipAddresses.data.1.ip', '192.0.2.56'));
         $this->assertDatabaseCount('ip_addresses', 2);
+    }
+
+    public function test_hiding_free_ips_keeps_documented_and_external_addresses_without_duplicates(): void
+    {
+        $this->fake($this->tables());
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $subnet = $this->device->site->subnets()->sole();
+        $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.5'), 'description' => 'Manual']);
+        $subnet->excludedRanges()->create(['start_address' => ip2long('192.0.2.4'), 'end_address' => ip2long('192.0.2.4')]);
+        $url = route('companies.sites.subnets.show', [$this->device->site->company, $this->device->site, $subnet]);
+
+        $this->get($url.'?hide_free=1')->assertInertia(fn (Assert $page) => $page
+            ->where('query.hide_free', 1)->where('ipAddresses.total', 4)
+            ->where('ipAddresses.data.0.ip', '192.0.2.1')
+            ->where('ipAddresses.data.1.ip', '192.0.2.2')
+            ->where('ipAddresses.data.2.ip', '192.0.2.3')
+            ->where('ipAddresses.data.3.ip', '192.0.2.5'));
+        $this->get($url.'?hide_free=1&sort=description&direction=desc')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 4)->where('ipAddresses.data.0.ip', '192.0.2.5')
+            ->where('ipAddresses.data.1.ip', '192.0.2.1'));
+        $this->get($url.'?hide_free=1&search=192.0.2.4')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 0)->has('ipAddresses.data', 0));
+        $this->get($url.'?hide_free=0&search=192.0.2.4')->assertInertia(fn (Assert $page) => $page
+            ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.ip', '192.0.2.4'));
+        $this->assertDatabaseCount('ip_addresses', 2);
+    }
+
+    public function test_exclusions_preserve_documentation_and_survive_sync_until_explicitly_reincluded(): void
+    {
+        $tables = $this->tables();
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $site = $this->device->site;
+        $subnet = $site->subnets()->sole();
+        $vlan = $subnet->vlan;
+        $manual = $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.5'), 'hostname' => 'preserved-host', 'description' => 'Manual notes']);
+        $subnetUrl = route('companies.sites.subnets.exclusion.update', [$site->company, $site, $subnet]);
+        $vlanUrl = route('companies.sites.vlans.exclusion.update', [$site->company, $site, $vlan]);
+        $searchUrl = route('companies.sites.search.index', [$site->company, $site, 'search' => 'preserved-host']);
+        $this->get($searchUrl)->assertInertia(fn (Assert $page) => $page->where('results.total', 1));
+
+        $this->put($subnetUrl, ['excluded' => true])->assertSessionHasNoErrors();
+        $this->put($vlanUrl, ['excluded' => true])->assertSessionHasNoErrors();
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*2', 'address' => '192.0.2.6/29'];
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*3', 'address' => '198.51.100.1/29'];
+        $this->fake($tables);
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('subnets', 1);
+        $this->assertDatabaseCount('ip_addresses', 2);
+        $this->assertSame('Manual notes', $manual->fresh()->description);
+        $this->assertSame($vlan->id, $subnet->fresh()->vlan_id);
+        $this->assertSame('192.0.2.4', $subnet->firstProposableIp());
+        $this->get($searchUrl)->assertInertia(fn (Assert $page) => $page->where('results.total', 0));
+        $this->post(route('companies.sites.subnets.store', [$site->company, $site]), ['cidr' => $subnet->cidr])->assertSessionHasErrors('cidr');
+        $this->put($subnetUrl, ['excluded' => false])->assertSessionHasErrors('excluded');
+
+        $this->fake($tables);
+        $this->put($vlanUrl, ['excluded' => false])->assertSessionHasNoErrors();
+        $this->assertNotNull($subnet->fresh()->excluded_at);
+        $this->put($subnetUrl, ['excluded' => false])->assertSessionHasNoErrors();
+        Http::assertNothingSent();
+        $this->get($searchUrl)->assertInertia(fn (Assert $page) => $page->where('results.total', 1));
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('subnets', 2);
+        $this->assertDatabaseHas('ip_addresses', ['subnet_id' => $subnet->id, 'address' => ip2long('192.0.2.6')]);
+        $this->assertSame('Manual notes', $manual->fresh()->description);
+    }
+
+    public function test_an_unassociated_source_can_be_excluded_and_restored_without_importing_its_children(): void
+    {
+        $tables = $this->tables();
+        $tables['interface/vlan'][1]['disabled'] = 'true';
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $source = $this->device->mikrotikSources()->where('kind', 'vlan')->where('data->tag', 20)->sole();
+        $site = $this->device->site;
+        $url = route('companies.sites.devices.mikrotik.sources.exclusion.update', [$site->company, $site, $this->device, $source->id]);
+        $this->put($url, ['excluded' => true])->assertSessionHasNoErrors();
+        $tables['interface/vlan'][1]['disabled'] = 'false';
+        $tables['ip/address'][] = [...$tables['ip/address'][0], '.id' => '*2', 'address' => '198.51.100.1/29', 'interface' => 'vlan20'];
+        $this->fake($tables);
+
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('vlans', ['site_id' => $site->id, 'tag' => 20]);
+        $this->assertDatabaseMissing('subnets', ['site_id' => $site->id, 'cidr' => '198.51.100.0/29']);
+        $this->put($url, ['excluded' => false])->assertSessionHasNoErrors();
+        $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('subnets', ['site_id' => $site->id, 'cidr' => '198.51.100.0/29']);
+    }
+
+    public function test_exclusion_endpoints_reject_other_sites_and_unauthorized_users(): void
+    {
+        $site = $this->device->site;
+        $other = Company::create(['name' => 'Other company'])->sites()->create(['name' => 'Other site']);
+        $subnet = $other->subnets()->create(Ipv4Cidr::parse('203.0.113.0/24'));
+        $wrong = [$site->company, $site, $subnet];
+        $this->get(route('companies.sites.subnets.exclusion.preview', $wrong))->assertNotFound();
+        $this->put(route('companies.sites.subnets.exclusion.update', $wrong), ['excluded' => true])->assertNotFound();
+        $this->actingAs(User::factory()->create(['is_superadmin' => false]))
+            ->put(route('companies.sites.subnets.exclusion.update', [$other->company, $other, $subnet]), ['excluded' => true])->assertForbidden();
+        $this->assertNull($subnet->fresh()->excluded_at);
     }
 
     private function tables(): array

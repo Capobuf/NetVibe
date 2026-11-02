@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\MikrotikConnection;
+use App\Models\UnifiConnection;
 use App\Support\MikrotikSync;
 use App\Support\SnipeItSync;
+use App\Support\UnifiSync;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -46,3 +48,20 @@ Artisan::command('mikrotik:sync', function (MikrotikSync $synchronizer) {
 })->purpose('Sincronizza i dispositivi MikroTik attivati');
 
 Schedule::command('mikrotik:sync')->hourly()->withoutOverlapping();
+
+Artisan::command('unifi:sync', function (UnifiSync $synchronizer) {
+    $failed = false;
+    foreach (UnifiConnection::where('enabled', true)->whereHas('unifiSites', fn ($query) => $query
+        ->whereNotNull('inventory_activated_at')->whereNotNull('site_id')->where('available', true))->lazyById() as $connection) {
+        try {
+            $synchronizer->refresh($connection, activatedOnly: true);
+        } catch (ValidationException $exception) {
+            $failed = true;
+            $this->error('Connessione '.$connection->id.': '.collect($exception->errors())->flatten()->first());
+        }
+    }
+
+    return $failed ? 1 : 0;
+})->purpose('Sincronizza le sedi UniFi attivate');
+
+Schedule::command('unifi:sync')->hourly()->withoutOverlapping();

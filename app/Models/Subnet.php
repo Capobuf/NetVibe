@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Ipv4Ranges;
+use App\Support\UnifiIpam;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -53,7 +54,7 @@ class Subnet extends Model
     public function firstProposableIp(): ?string
     {
         $blocked = $this->ipAddresses()->selectRaw('address AS start_address, address AS end_address')->toBase()
-            ->unionAll(MikrotikSource::blocking($this->site_id)->selectRaw('address AS start_address, address AS end_address')->toBase())
+            ->unionAll(UnifiIpam::addressSources($this->site_id, true)->selectRaw('address AS start_address, address AS end_address'))
             ->unionAll($this->excludedRanges()->select('start_address', 'end_address')->toBase())
             ->orderBy('start_address')->cursor()
             ->map(fn ($range) => [(int) $range->start_address, (int) $range->end_address]);
@@ -80,11 +81,11 @@ class Subnet extends Model
             })->count();
         $excluded -= $documentedExcluded;
 
-        $external = MikrotikSource::blocking($this->site_id)->whereBetween('address', [$first, $last])
+        $external = UnifiIpam::addressSources($this->site_id, true)->whereBetween('address', [$first, $last])
             ->whereNotIn('address', $this->ipAddresses()->select('address'))
             ->whereNotExists(function ($query) {
                 $query->selectRaw('1')->from('excluded_ranges')->where('subnet_id', $this->id)
-                    ->whereColumn('start_address', '<=', 'mikrotik_sources.address')->whereColumn('end_address', '>=', 'mikrotik_sources.address');
+                    ->whereColumn('start_address', '<=', 'observations.address')->whereColumn('end_address', '>=', 'observations.address');
             })->distinct()->count('address');
 
         return ['documented' => $documented, 'excluded' => $excluded, 'external' => $external, 'proposable' => $last - $first + 1 - $documented - $excluded - $external];

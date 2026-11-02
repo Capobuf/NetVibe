@@ -1,3 +1,7 @@
+import {
+    UnifiObservationIndicator,
+    type UnifiObservation,
+} from '@/components/networks/unifi-observation';
 import { SaveButton } from '@/components/save-button';
 import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import {
@@ -43,7 +47,7 @@ import type { Device } from '@/types/device';
 import type { ExcludedRange, IpAddress, IpStatus, Tag } from '@/types/network';
 
 function observedValue(
-    sources: MikrotikSource[],
+    sources: (MikrotikSource | UnifiObservation)[],
     field: 'mac' | 'hostname_observed',
 ) {
     const values = new Map<string, string>();
@@ -51,7 +55,7 @@ function observedValue(
         if (
             source.state !== 'current' ||
             source.stale ||
-            source.data.active === false
+            ('active' in source.data && source.data.active === false)
         )
             continue;
         const value = source.data[field]?.trim();
@@ -96,8 +100,9 @@ export default function IpAddressForm({
 }) {
     const { auth, devices: pageDevices } = usePage<{ devices?: Device[] }>()
         .props;
-    const { mikrotikSources = [] } = usePage<{
+    const { mikrotikSources = [], unifiObservations = [] } = usePage<{
         mikrotikSources?: MikrotikSource[];
+        unifiObservations?: UnifiObservation[];
     }>().props;
     const devices = providedDevices ?? pageDevices ?? [];
     const canEdit = auth.canEditIpam;
@@ -122,9 +127,15 @@ export default function IpAddressForm({
             source.ip === ip ||
             (ipAddress && source.ip_address_id === ipAddress.id),
     );
-    const mac = macInput ?? observedValue(sources, 'mac');
+    const unifi = unifiObservations.filter(
+        (source) =>
+            source.ip === ip ||
+            (ipAddress && source.ip_address_id === ipAddress.id),
+    );
+    const observations = [...sources, ...unifi];
+    const mac = macInput ?? observedValue(observations, 'mac');
     const hostname =
-        hostnameInput ?? observedValue(sources, 'hostname_observed');
+        hostnameInput ?? observedValue(observations, 'hostname_observed');
     const address = ipv4Number(ip);
     const excluded =
         address !== null &&
@@ -192,6 +203,13 @@ export default function IpAddressForm({
                                     ) : (
                                         '—'
                                     )}
+                                    {label === 'IPv4' ? (
+                                        <UnifiObservationIndicator
+                                            observations={unifi}
+                                            company={companyId}
+                                            site={siteId}
+                                        />
+                                    ) : null}
                                     {label === 'IPv4' || label === 'MAC' ? (
                                         <MikrotikIndicator
                                             sources={sources}
@@ -307,7 +325,18 @@ export default function IpAddressForm({
                                     <h3 className="text-sm font-medium">
                                         Indirizzo
                                     </h3>
-                                    <MikrotikSourcesDialog sources={sources} />
+                                    <div className="flex flex-wrap gap-2">
+                                        <MikrotikSourcesDialog
+                                            sources={sources}
+                                        />
+                                        <UnifiObservationIndicator
+                                            observations={unifi}
+                                            company={companyId}
+                                            site={siteId}
+                                        >
+                                            UniFi
+                                        </UnifiObservationIndicator>
+                                    </div>
                                 </div>
                                 {excluded && (
                                     <Alert>
@@ -550,7 +579,7 @@ export default function IpAddressForm({
                         hostname, MAC, stato, associazioni ai tag e al
                         dispositivo/interfaccia. L’indirizzo resterà escluso dai
                         suggerimenti se presente in un intervallo escluso o
-                        nelle ultime fonti MikroTik valide. Le modifiche al form
+                        nelle ultime osservazioni valide. Le modifiche al form
                         non verranno salvate.
                     </p>
                 </DeletionConfirmation>

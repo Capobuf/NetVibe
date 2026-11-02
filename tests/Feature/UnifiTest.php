@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\UnifiConnection;
 use App\Models\UnifiSite;
 use App\Models\User;
+use App\Support\UnifiSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -25,6 +26,7 @@ class UnifiTest extends TestCase
     public function test_site_identity_cannot_be_mapped_through_two_connections_and_reassignment_clears_old_preview(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $this->mock(UnifiSync::class)->shouldReceive('refresh')->once();
         $alfa = Company::create(['name' => 'Alfa'])->sites()->create(['name' => 'Sede Alfa']);
         $beta = Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Sede Beta']);
         $first = $this->connection();
@@ -41,12 +43,18 @@ class UnifiTest extends TestCase
         $this->assertNull($duplicate->fresh()->site_id);
         $this->assertSame($alfa->id, $source->fresh()->site_id);
 
+        $inventory = $source->unifiDevices()->create(['external_id' => (string) Str::uuid(), 'status' => 'pending',
+            'observed' => ['name' => 'Private old device'], 'present' => true, 'synced_at' => now()]);
+
         $this->put($this->url('associate', $first, $source), [
             'revision' => $first->fresh()->revision, 'site_id' => $beta->id, 'confirmed' => true,
         ])->assertSessionHasNoErrors();
         $this->assertSame($beta->id, $source->fresh()->site_id);
         $this->assertNull($source->fresh()->preview);
         $this->assertFalse($source->fresh()->available);
+        $this->assertSame([], $inventory->fresh()->observed);
+        $this->assertSame('deleted', $inventory->fresh()->status);
+        $this->assertFalse($inventory->fresh()->present);
         Http::assertNothingSent();
     }
 

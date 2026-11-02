@@ -1,6 +1,12 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
 import { ArrowLeft, Unlink, Pencil, X } from 'lucide-react';
+import {
+    UnifiDeviceSummary,
+    UnifiPorts,
+    UnifiPortDetails,
+} from '@/components/devices/unifi-device';
+import type { UnifiDeviceDetail } from '@/components/unifi/types';
 import { DeviceForm } from '@/components/devices/device-form';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
@@ -60,7 +66,7 @@ type InterfaceRow = DeviceInterface | Port;
 type Props = {
     company: Company;
     site: Site;
-    device: Device;
+    device: Device & { unifi?: UnifiDeviceDetail | null };
     snipeIt: SnipeDevice | null;
     isMikrotik: boolean;
     mikrotik: MikrotikConnection | null;
@@ -306,6 +312,9 @@ export default function DeviceShow({
                         </dl>
                     ) : null}
                 </header>
+                {device.unifi ? (
+                    <UnifiDeviceSummary source={device.unifi} />
+                ) : null}
                 {device.notes ? (
                     <p className="text-sm whitespace-pre-wrap">
                         {device.notes}
@@ -330,6 +339,27 @@ export default function DeviceShow({
                         }}
                     />
                 )}
+                {device.unifi ? (
+                    <UnifiPorts
+                        source={device.unifi}
+                        ports={device.unifi.ports.filter(
+                            (observed) =>
+                                !panel ||
+                                !device.interfaces.some(
+                                    (item) =>
+                                        item.id ===
+                                            observed.device_interface_id &&
+                                        ports.some(
+                                            (port) =>
+                                                port.id === item.connector_id &&
+                                                !port.hidden,
+                                        ),
+                                ),
+                        )}
+                        interfaces={device.interfaces}
+                        onInterface={editInterface}
+                    />
+                ) : null}
                 <Tabs
                     value={
                         tab === 'ips' && ips.length === 0 ? 'interfaces' : tab
@@ -649,6 +679,25 @@ export default function DeviceShow({
                     </PopoverHeader>
                     <Separator />
                     <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
+                        {device.unifi &&
+                        selected &&
+                        device.unifi.ports.find(
+                            (observed) =>
+                                observed.device_interface_id === selected.id,
+                        ) ? (
+                            <div className="mb-4">
+                                <UnifiPortDetails
+                                    source={device.unifi}
+                                    port={device.unifi.ports.find(
+                                        (observed) =>
+                                            observed.device_interface_id ===
+                                            selected.id,
+                                    )!}
+                                    interfaces={device.interfaces}
+                                />
+                                <Separator className="mt-4" />
+                            </div>
+                        ) : null}
                         {port && (
                             <InterfaceDetails
                                 company={company.id}

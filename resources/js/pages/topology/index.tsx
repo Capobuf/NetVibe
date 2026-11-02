@@ -505,7 +505,14 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     onSelect={(next, anchor) => {
                                         if (anchor)
                                             popupAnchor.current = anchor;
-                                        setPanelOpen(false);
+                                        setPanelOpen(
+                                            next?.kind === 'edge' &&
+                                                edges.some(
+                                                    (edge) =>
+                                                        edge.id === next.id &&
+                                                        edge.kind === 'logical',
+                                                ),
+                                        );
                                         setSelection(next);
                                     }}
                                     api={canvas}
@@ -544,17 +551,33 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     key={value}
                                     className="flex items-center gap-2"
                                 >
-                                    <span
+                                    <svg
                                         aria-hidden
                                         className={cn(
-                                            'w-6 border-t-2',
-                                            value === 'documented'
-                                                ? 'border-primary'
-                                                : value === 'discovered'
-                                                  ? 'border-dashed'
-                                                  : 'border-dotted',
+                                            'h-2 w-6',
+                                            value === 'documented' &&
+                                                'text-primary',
                                         )}
-                                    />
+                                        viewBox="0 0 24 8"
+                                    >
+                                        <line
+                                            x1="0"
+                                            y1="4"
+                                            x2="24"
+                                            y2="4"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeDasharray={
+                                                value === 'discovered'
+                                                    ? '10 6'
+                                                    : value === 'partial'
+                                                      ? '2 6'
+                                                      : value === 'logical'
+                                                        ? '12 4 2 4'
+                                                        : undefined
+                                            }
+                                        />
+                                    </svg>
                                     {label}
                                 </span>
                             ))}
@@ -917,26 +940,34 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                                         </dt>
                                                                         <dd>
                                                                             {evidence.inventory_match ===
-                                                                            'name_model'
-                                                                                ? 'Nome e modello'
-                                                                                : 'Nome e MAC'}
+                                                                            'external_id'
+                                                                                ? 'Identità UniFi'
+                                                                                : evidence.inventory_match ===
+                                                                                    'name_model'
+                                                                                  ? 'Nome e modello'
+                                                                                  : 'Nome e MAC'}
                                                                         </dd>
                                                                     </>
                                                                 )}
-                                                                <dt className="text-muted-foreground">
-                                                                    Locale
-                                                                </dt>
-                                                                <dd className="break-words">
-                                                                    {evidence.local_port ??
-                                                                        '—'}
-                                                                </dd>
-                                                                <dt className="text-muted-foreground">
-                                                                    Remota
-                                                                </dt>
-                                                                <dd className="break-words">
-                                                                    {evidence.remote_port ??
-                                                                        '—'}
-                                                                </dd>
+                                                                {selectedEdge.kind !==
+                                                                    'logical' && (
+                                                                    <>
+                                                                        <dt className="text-muted-foreground">
+                                                                            Locale
+                                                                        </dt>
+                                                                        <dd className="break-words">
+                                                                            {evidence.local_port ??
+                                                                                '—'}
+                                                                        </dd>
+                                                                        <dt className="text-muted-foreground">
+                                                                            Remota
+                                                                        </dt>
+                                                                        <dd className="break-words">
+                                                                            {evidence.remote_port ??
+                                                                                '—'}
+                                                                        </dd>
+                                                                    </>
+                                                                )}
                                                                 {evidence.chassis_id && (
                                                                     <>
                                                                         <dt className="text-muted-foreground">
@@ -953,9 +984,10 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                                     Sorgente
                                                                 </dt>
                                                                 <dd className="break-words">
-                                                                    {
-                                                                        evidence.menu
-                                                                    }
+                                                                    {selectedEdge.kind ===
+                                                                    'logical'
+                                                                        ? 'Uplink UniFi'
+                                                                        : evidence.menu}
                                                                 </dd>
                                                                 {evidence.lldp_seen_at && (
                                                                     <>
@@ -1037,7 +1069,7 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                 >
                                     {topology.integrations.map((source) => (
                                         <div
-                                            key={source.device_id}
+                                            key={`${source.vendor ?? 'mikrotik'}-${source.device_id}`}
                                             className="flex flex-col gap-2"
                                         >
                                             <p className="text-sm font-medium">
@@ -1059,17 +1091,25 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 asChild
                                             >
                                                 <Link
-                                                    href={deviceIntegrations(
-                                                        {
-                                                            ...route,
-                                                            device: source.device_id,
-                                                        },
-                                                        {
-                                                            query: {
-                                                                tab: 'mikrotik',
-                                                            },
-                                                        },
-                                                    )}
+                                                    href={
+                                                        source.vendor ===
+                                                        'unifi'
+                                                            ? deviceShow({
+                                                                  ...route,
+                                                                  device: source.device_id,
+                                                              })
+                                                            : deviceIntegrations(
+                                                                  {
+                                                                      ...route,
+                                                                      device: source.device_id,
+                                                                  },
+                                                                  {
+                                                                      query: {
+                                                                          tab: 'mikrotik',
+                                                                      },
+                                                                  },
+                                                              )
+                                                    }
                                                 >
                                                     Apri integrazione
                                                     <ArrowUpRight data-icon="inline-end" />

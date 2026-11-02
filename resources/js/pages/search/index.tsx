@@ -1,3 +1,8 @@
+import {
+    UnifiObservationIndicator,
+    UnifiObservedValue,
+    type UnifiObservation,
+} from '@/components/networks/unifi-observation';
 import { DeviceAssociation } from '@/components/devices/device-association';
 import type { DeviceInterface } from '@/types/device';
 import { Head, Link, router } from '@inertiajs/react';
@@ -57,7 +62,8 @@ const groupLabels = {
 
 type Column = 'ip' | 'hostname' | 'mac_address' | 'site' | 'subnet' | 'device';
 type Result = {
-    id: number;
+    id: number | null;
+    unifi_observations?: UnifiObservation[];
     ip: string;
     hostname: string | null;
     mac_address: string | null;
@@ -277,12 +283,15 @@ export default function SearchIndex({
                                         {
                                             query: {
                                                 search: result.ip,
-                                                ip_address: result.id,
+                                                ip_address:
+                                                    result.id ?? undefined,
                                             },
                                         },
                                     );
                                     return (
-                                        <Fragment key={result.id}>
+                                        <Fragment
+                                            key={`${result.site_id}:${result.subnet_id}:${result.ip}`}
+                                        >
                                             {startsGroup ? (
                                                 <TableRow className="bg-muted/40">
                                                     <TableCell
@@ -357,12 +366,30 @@ export default function SearchIndex({
                                                         >
                                                             {column.id ===
                                                             'ip' ? (
-                                                                <Link
-                                                                    href={href}
-                                                                    className="rounded-sm font-medium transition-colors hover:text-primary focus-visible:outline-ring"
-                                                                >
-                                                                    {result.ip}
-                                                                </Link>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Link
+                                                                        href={
+                                                                            href
+                                                                        }
+                                                                        className="rounded-sm font-medium transition-colors hover:text-primary focus-visible:outline-ring"
+                                                                    >
+                                                                        {
+                                                                            result.ip
+                                                                        }
+                                                                    </Link>
+                                                                    <UnifiObservationIndicator
+                                                                        company={
+                                                                            company.id
+                                                                        }
+                                                                        site={
+                                                                            result.site_id
+                                                                        }
+                                                                        observations={
+                                                                            result.unifi_observations ??
+                                                                            []
+                                                                        }
+                                                                    />
+                                                                </div>
                                                             ) : column.id ===
                                                               'device' ? (
                                                                 <DeviceAssociation
@@ -382,6 +409,42 @@ export default function SearchIndex({
                                                                         result.assignment_label
                                                                     }
                                                                 />
+                                                            ) : column.id ===
+                                                                  'hostname' ||
+                                                              column.id ===
+                                                                  'mac_address' ? (
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    {
+                                                                        result[
+                                                                            column
+                                                                                .id
+                                                                        ]
+                                                                    }
+                                                                    <UnifiObservedValue
+                                                                        company={
+                                                                            company.id
+                                                                        }
+                                                                        site={
+                                                                            result.site_id
+                                                                        }
+                                                                        observations={
+                                                                            result.unifi_observations ??
+                                                                            []
+                                                                        }
+                                                                        field={
+                                                                            column.id ===
+                                                                            'mac_address'
+                                                                                ? 'mac'
+                                                                                : 'hostname_observed'
+                                                                        }
+                                                                        value={
+                                                                            result[
+                                                                                column
+                                                                                    .id
+                                                                            ]
+                                                                        }
+                                                                    />
+                                                                </div>
                                                             ) : (
                                                                 (result[
                                                                     column.id

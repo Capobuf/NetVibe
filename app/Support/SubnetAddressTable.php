@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\MikrotikSource;
 use App\Models\Subnet;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +13,7 @@ class SubnetAddressTable
         [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
         $matcher = new Ipv4Search($search);
         $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
-        $sourceMatches = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+        $sourceMatches = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
             ->whereRaw("CAST(data AS CHAR) LIKE ? ESCAPE '!'", [$pattern])->select('address')->distinct();
         $matching = $subnet->ipAddresses()->whereBetween('address', [$first, $last])
             ->when($search !== '', function ($query) use ($pattern, $sourceMatches) {
@@ -50,7 +49,7 @@ class SubnetAddressTable
         $sourceSort = in_array($sort, ['hostname', 'mac_address'], true);
         if ($sourceSort) {
             $field = $sort === 'hostname' ? 'hostname_observed' : 'mac';
-            $observed = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+            $observed = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
                 ->selectRaw("address AS source_address, MIN(CASE WHEN JSON_TYPE(data->'$.{$field}') = 'STRING' THEN NULLIF(TRIM(data->>'$.{$field}'), '') END) AS sort_value")
                 ->groupBy('address');
             $documented = (clone $matching)->leftJoinSub($observed, 'observed', fn ($join) => $join->on('ip_addresses.address', '=', 'observed.source_address'))
@@ -59,7 +58,7 @@ class SubnetAddressTable
                 ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                     ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)));
             // Only addresses with metadata join this finite group; empty IPv4 ranges stay virtual.
-            $populated = DB::query()->fromSub($documented->toBase()->unionAll($external->toBase()), 'entries')->whereNotNull('sort_value');
+            $populated = DB::query()->fromSub($documented->toBase()->unionAll($external), 'entries')->whereNotNull('sort_value');
             $sortColumn = 'sort_value';
         } elseif ($populated !== null) {
             $relatedSort ? $populated->has($sort) : $populated->whereNotNull($sort);
@@ -67,7 +66,7 @@ class SubnetAddressTable
         $populatedCount = $populated?->count() ?? 0;
 
         if ($hideFree) {
-            $observed = MikrotikSource::blocking($subnet->site_id)->whereBetween('address', [$first, $last])
+            $observed = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
                 ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                     ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)))
                 ->distinct()->pluck('address');

@@ -26,6 +26,11 @@ class Device extends Model
         return $this->hasOne(SnipeItAsset::class);
     }
 
+    public function unifiDevice(): HasOne
+    {
+        return $this->hasOne(UnifiDevice::class);
+    }
+
     public function modelChangeProblem(int $modelId): ?string
     {
         if ($this->mikrotikConnection()->exists() && ! DeviceModel::findOrFail($modelId)->manufacturer->isMikrotik()) {

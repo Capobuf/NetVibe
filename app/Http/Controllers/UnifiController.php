@@ -9,6 +9,9 @@ use App\Models\Site;
 use App\Models\UnifiConnection;
 use App\Models\UnifiSite;
 use App\Support\UnifiClient;
+use App\Support\UnifiInventory;
+use App\Support\UnifiIpam;
+use App\Support\UnifiSync;
 use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +30,7 @@ class UnifiController extends Controller
     {
         $company ? Gate::authorize('access-company', $company) : Gate::authorize('administer');
         $query = UnifiConnection::query()->orderBy('name');
-        $sites = fn ($query) => $query->with('site.company')->orderBy('console_name')->orderBy('name')
+        $sites = fn ($query) => $query->with(['site.company', 'unifiDevices.device', 'unifiConnection'])->orderBy('console_name')->orderBy('name')
             ->when($company, fn ($query) => $query->whereHas('site', fn ($query) => $query->where('company_id', $company->id)));
         $query->with(['unifiSites' => $sites]);
         if ($company) {
@@ -130,12 +133,22 @@ class UnifiController extends Controller
                     throw ValidationException::withMessages(['site_id' => 'Questo sito UniFi è già collegato tramite un’altra connessione. Revoca prima quel collegamento.']);
                 }
                 if ($source->confirmed_at !== null && $source->site_id !== $site->id) {
+                    UnifiInventory::resetForMapping($source);
+                    UnifiIpam::resetForMapping($source);
                     $source->fill(['preview' => null, 'available' => false]);
                 }
                 $source->fill(['site_id' => $site->id, 'confirmed_at' => now(), 'mapped_site_uuid' => $source->external_site_id])->save();
             });
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['site_id' => 'Questo sito UniFi è già collegato tramite un’altra connessione. Ricarica la pagina.']);
+        }
+
+        if ($unifiSite->fresh()->available) {
+            try {
+                app(UnifiSync::class)->refresh($unifiConnection->fresh(), $unifiSite->id);
+            } catch (ValidationException $exception) {
+                return $this->saved('Sito collegato. '.collect($exception->errors())->flatten()->first(), 'warning');
+            }
         }
 
         return $this->saved('Sito collegato.');
@@ -146,6 +159,8 @@ class UnifiController extends Controller
         $request->validate(['confirmed' => ['accepted']]);
         $this->locked($request, $unifiConnection, function (UnifiConnection $connection) use ($unifiSite) {
             $source = $connection->unifiSites()->lockForUpdate()->findOrFail($unifiSite->id);
+            UnifiInventory::resetForMapping($source);
+            UnifiIpam::resetForMapping($source);
             $source->fill(['site_id' => null, 'confirmed_at' => null, 'mapped_site_uuid' => null, 'preview' => null, 'available' => false])->save();
         });
 

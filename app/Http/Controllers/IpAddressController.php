@@ -10,10 +10,12 @@ use App\Models\IpStatus;
 use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\Subnet;
+use App\Models\UnifiObservation;
 use App\Support\DeviceAssignment;
 use App\Support\InterfaceMac;
 use App\Support\Ipv4Ranges;
 use App\Support\MikrotikIpam;
+use App\Support\UnifiIpam;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,7 +44,8 @@ class IpAddressController extends Controller
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $subnet->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
             $excluded = $subnet->isExcluded($record->address)
-                || MikrotikSource::blocking($subnet->site_id)->where('address', $record->address)->exists();
+                || MikrotikSource::blocking($subnet->site_id)->where('address', $record->address)->exists()
+                || UnifiObservation::blocking($subnet->site_id)->where('address', $record->address)->exists();
             $record->delete();
 
             return $excluded;
@@ -79,6 +82,7 @@ class IpAddressController extends Controller
                     : $subnet->ipAddresses()->make();
                 $assignment = DeviceAssignment::validate($subnet->site_id, $data['device_id'] ?? null, $data['device_interface_id'] ?? null, $record);
                 MikrotikIpam::manualChange($record, ['address' => $address, 'mac_address' => $data['mac_address'] ?? null, ...$assignment], $data['mikrotik_edit_mode'] ?? null);
+                UnifiIpam::manualChange($record, ['address' => $address, 'mac_address' => $data['mac_address'] ?? null], $data['mikrotik_edit_mode'] ?? null);
                 $record->address = $address;
                 $mac = $data['mac_address'] ?? null;
                 if ($assignment['device_interface_id']) {
@@ -104,7 +108,8 @@ class IpAddressController extends Controller
                 }
                 $record->tags()->sync(array_unique($tagIds));
 
-                return $subnet->isExcluded($address) || MikrotikSource::blocking($subnet->site_id)->where('address', $address)->exists();
+                return $subnet->isExcluded($address) || MikrotikSource::blocking($subnet->site_id)->where('address', $address)->exists()
+                    || UnifiObservation::blocking($subnet->site_id)->where('address', $address)->exists();
             }, 3);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages([
@@ -114,7 +119,7 @@ class IpAddressController extends Controller
 
         Inertia::flash('toast', [
             'type' => $excluded ? 'warning' : 'success',
-            'message' => $excluded ? 'IP salvato. L’indirizzo è escluso dai suggerimenti per un intervallo o una configurazione/osservazione MikroTik.'
+            'message' => $excluded ? 'IP salvato. L’indirizzo resta escluso dai suggerimenti.'
                 : ($ipAddress ? 'IP documentato aggiornato.' : 'IP documentato.'),
         ]);
 

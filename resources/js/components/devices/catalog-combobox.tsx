@@ -47,6 +47,7 @@ export function CatalogCombobox({
     value,
     onChange,
     onCreate,
+    createLabel = 'Aggiungi',
     onCreatingChange,
     placeholder,
     required = false,
@@ -61,6 +62,7 @@ export function CatalogCombobox({
     onCreate?: (
         name: string,
     ) => CatalogItem | void | Promise<CatalogItem | void>;
+    createLabel?: string;
     onCreatingChange?: (creating: boolean) => void;
     placeholder: string;
     required?: boolean;
@@ -153,7 +155,9 @@ export function CatalogCombobox({
                                 {item.create ? (
                                     <>
                                         <Plus />
-                                        <span>Aggiungi «{item.name}»</span>
+                                        <span>
+                                            {createLabel} «{item.name}»
+                                        </span>
                                     </>
                                 ) : (
                                     item.name

@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { show } from '@/routes/companies/settings';
 import { edit as integrations } from '@/routes/companies/settings/integrations/snipe-it';
+import { index as unifi } from '@/routes/companies/settings/integrations/unifi';
 import { index as users } from '@/routes/companies/settings/users';
 import type { Company } from '@/types/company';
 
@@ -14,11 +15,13 @@ export default function CompanySettingsLayout({
 }: PropsWithChildren<{ company: Company }>) {
     const { auth } = usePage().props;
     const { isCurrentOrParentUrl } = useCurrentUrl();
-    const tab = isCurrentOrParentUrl(integrations(company.id))
-        ? 'integrations'
-        : isCurrentOrParentUrl(users(company.id))
-          ? 'users'
-          : 'sites';
+    const tab =
+        isCurrentOrParentUrl(integrations(company.id)) ||
+        isCurrentOrParentUrl(unifi(company.id))
+            ? 'integrations'
+            : isCurrentOrParentUrl(users(company.id))
+              ? 'users'
+              : 'sites';
 
     return (
         <section
@@ -40,7 +43,9 @@ export default function CompanySettingsLayout({
                 onValueChange={(value) =>
                     router.visit(
                         value === 'integrations'
-                            ? integrations(company.id)
+                            ? auth.user.is_superadmin
+                                ? integrations(company.id)
+                                : unifi(company.id)
                             : value === 'users'
                               ? users(company.id)
                               : show(company.id),
@@ -62,12 +67,12 @@ export default function CompanySettingsLayout({
                                 <Users />
                                 Utenti
                             </TabsTrigger>
-                            <TabsTrigger value="integrations">
-                                <Plug />
-                                Integrazioni
-                            </TabsTrigger>
                         </>
                     ) : null}
+                    <TabsTrigger value="integrations">
+                        <Plug />
+                        Integrazioni
+                    </TabsTrigger>
                 </TabsList>
                 <TabsContent value={tab} className="min-w-0">
                     {children}

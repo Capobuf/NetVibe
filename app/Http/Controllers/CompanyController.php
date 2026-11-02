@@ -42,6 +42,7 @@ class CompanyController extends Controller
 
     public function store(CompanyRequest $request): RedirectResponse
     {
+        $inline = $request->validate(['inline' => ['sometimes', 'boolean']])['inline'] ?? false;
         $company = DB::transaction(function () use ($request) {
             $company = Company::create($request->validated());
             $company->sites()->create(['name' => null]);
@@ -50,6 +51,12 @@ class CompanyController extends Controller
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Azienda creata.']);
+
+        if ($inline) {
+            Inertia::flash('createdCompany', [...$company->only('id', 'name'), 'site_id' => $company->sites()->sole()->id]);
+
+            return back();
+        }
 
         return to_route('administration.companies.show', $company);
     }

@@ -3,7 +3,9 @@ import { formatDateTime } from '@/lib/utils';
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
 import { Link2, RefreshCw, Trash2 } from 'lucide-react';
-import { SnipeItMark } from '@/components/snipe-it-mark';
+import { IntegrationTabs } from '@/components/integration-tabs';
+import { index as administration } from '@/routes/administration';
+import { index as integrationIndex } from '@/routes/administration/integrations';
 import PasswordInput from '@/components/password-input';
 import { SnipeItFields } from '@/components/devices/snipe-it-fields';
 import {
@@ -254,16 +256,10 @@ function SnipeItForm({
             <div className="flex max-w-5xl flex-col gap-6 p-4 md:p-6">
                 {!company && (
                     <h1 className="text-2xl font-medium tracking-tight">
-                        Integrazioni
+                        Snipe-IT
                     </h1>
                 )}
-                <Tabs defaultValue="snipe-it" className="gap-6">
-                    <TabsList aria-label="Integrazioni">
-                        <TabsTrigger value="snipe-it">
-                            <SnipeItMark />
-                            Snipe-IT
-                        </TabsTrigger>
-                    </TabsList>
+                <IntegrationTabs value="snipe-it" company={company}>
                     <TabsContent
                         value="snipe-it"
                         className="flex flex-col gap-6"
@@ -837,7 +833,7 @@ function SnipeItForm({
                             </TabsContent>
                         </Tabs>
                     </TabsContent>
-                </Tabs>
+                </IntegrationTabs>
             </div>
             <Dialog
                 open={confirm !== null}
@@ -919,3 +915,13 @@ function SnipeItForm({
         </>
     );
 }
+
+SnipeIt.layout = ({ company }: Props) => ({
+    breadcrumbs: company
+        ? []
+        : [
+              { title: 'Amministrazione', href: administration() },
+              { title: 'Integrazioni', href: integrationIndex() },
+              { title: 'Snipe-IT', href: globalRoutes.edit() },
+          ],
+});

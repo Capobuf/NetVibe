@@ -19,6 +19,25 @@ class CompanySitesTest extends TestCase
         $this->get(route('administration.index'))->assertRedirect('/administration/companies');
     }
 
+    public function test_inline_company_creation_returns_to_unifi_with_its_local_site_without_linking_it(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $returnUrl = route('administration.integrations.unifi.index');
+
+        $response = $this->from($returnUrl)->post(route('administration.companies.store'), [
+            'name' => 'Nuova azienda UniFi', 'inline' => true,
+        ]);
+
+        $company = Company::where('name', 'Nuova azienda UniFi')->sole();
+        $site = $company->sites()->sole();
+        $response->assertSessionHasNoErrors()->assertRedirect($returnUrl)
+            ->assertInertiaFlash('createdCompany.id', $company->id)
+            ->assertInertiaFlash('createdCompany.name', 'Nuova azienda UniFi')
+            ->assertInertiaFlash('createdCompany.site_id', $site->id);
+        $this->assertNull($site->name);
+        $this->assertDatabaseCount('unifi_sites', 0);
+    }
+
     public function test_company_search_and_sort_apply_before_pagination(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

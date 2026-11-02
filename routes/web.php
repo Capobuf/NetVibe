@@ -26,6 +26,7 @@ use App\Http\Controllers\SnipeItSyncController;
 use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\TopologyController;
+use App\Http\Controllers\UnifiController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
@@ -75,6 +76,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');
+        Route::get('companies/{company}/settings/integrations/unifi', [UnifiController::class, 'index'])->name('companies.settings.integrations.unifi.index');
         Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])->name('companies.sites.deletion-impact');
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
@@ -128,6 +130,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
+        Route::inertia('integrations', 'integrations/index')->name('integrations.index');
+        Route::prefix('integrations/unifi')->name('integrations.unifi.')->group(function () {
+            Route::get('/', [UnifiController::class, 'index'])->name('index');
+            Route::post('/', [UnifiController::class, 'store'])->middleware('throttle:20,1')->name('store');
+            Route::put('{unifiConnection}', [UnifiController::class, 'update'])->middleware('throttle:20,1')->name('update');
+            Route::delete('{unifiConnection}', [UnifiController::class, 'destroy'])->name('destroy');
+            Route::post('{unifiConnection}/verify', [UnifiController::class, 'verify'])->middleware('throttle:10,1')->name('verify');
+            Route::post('{unifiConnection}/discover', [UnifiController::class, 'discover'])->middleware('throttle:5,1')->name('discover');
+            Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->name('select-consoles');
+            Route::put('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'associate'])->name('associate');
+            Route::delete('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'revoke'])->name('revoke');
+        });
         Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
             Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
             Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');

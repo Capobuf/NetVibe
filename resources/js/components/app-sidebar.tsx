@@ -40,7 +40,7 @@ import { index as administration } from '@/routes/administration';
 import { index as adminCompanies } from '@/routes/administration/companies';
 import { index as adminUsers } from '@/routes/administration/users';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
-import { edit as integrations } from '@/routes/administration/integrations/snipe-it';
+import { index as integrations } from '@/routes/administration/integrations';
 import { edit as email } from '@/routes/administration/email';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';

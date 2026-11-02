@@ -3,6 +3,8 @@ export type Company = {
     name: string;
 };
 
+export type CreatedCompany = Company & { site_id: number };
+
 export type Site = {
     id: number;
     name: string | null;

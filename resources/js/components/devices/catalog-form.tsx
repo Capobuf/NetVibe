@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
@@ -306,15 +307,10 @@ export function CatalogForm({
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button
-                                        disabled={
-                                            processing ||
-                                            creating ||
-                                            !formAction
-                                        }
-                                    >
-                                        Salva
-                                    </Button>
+                                    <SaveButton
+                                        processing={processing}
+                                        disabled={creating || !formAction}
+                                    />
                                 </DialogFooter>
                             </FieldGroup>
                         )}

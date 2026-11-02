@@ -11,6 +11,7 @@ class RackRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'floor' => self::floorRules(),
             'height_u' => ['sometimes', 'required', 'integer', 'between:1,100'],
             'numbering' => ['sometimes', 'required', 'in:bottom-up,top-down'],
             'revision' => ['required', 'integer', 'min:0'],
@@ -28,7 +29,7 @@ class RackRequest extends FormRequest
             'removed_keys.*' => ['string', 'regex:/^[a-f0-9]{32}$/', 'distinct:strict'],
             'cabling_revision' => [Rule::requiredIf(fn () => $this->has('cables')), 'integer', 'min:0'],
             'cables' => ['sometimes', 'array', 'max:10000'],
-            'cables.*' => ['array:id,a,b,type,color,purpose'],
+            'cables.*' => ['array:id,a,b,type,color,purpose,name'],
             'cables.*.id' => ['required', 'integer', 'not_in:0', 'distinct'],
             ...collect(CableRequest::cableRules())->mapWithKeys(fn ($rules, $field) => ["cables.*.$field" => $rules])->all(),
             'removed_cable_ids' => ['sometimes', 'array', 'max:10000'],
@@ -36,8 +37,13 @@ class RackRequest extends FormRequest
         ];
     }
 
+    public static function floorRules(): array
+    {
+        return ['sometimes', 'nullable', 'string', 'max:12', 'regex:/\A(?:PT|P-?[1-9][0-9]*)\z/'];
+    }
+
     public function attributes(): array
     {
-        return ['name' => 'nome', 'height_u' => 'altezza rack', 'numbering' => 'numerazione', 'items' => 'disposizione'];
+        return ['name' => 'nome', 'floor' => 'piano', 'height_u' => 'altezza rack', 'numbering' => 'numerazione', 'items' => 'disposizione'];
     }
 }

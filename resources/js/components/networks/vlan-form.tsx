@@ -1,7 +1,8 @@
+import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { MikrotikEditMode } from '@/components/networks/mikrotik-edit-mode';
 import { Form } from '@inertiajs/react';
-import { Check, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
@@ -19,7 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Spinner } from '@/components/ui/spinner';
 import {
     deletionImpact,
     destroy,
@@ -156,14 +156,9 @@ export default function VlanForm({
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button type="submit" disabled={processing}>
-                                        {processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <Check data-icon="inline-start" />
-                                        )}
+                                    <SaveButton processing={processing}>
                                         {vlan ? 'Salva VLAN' : 'Crea VLAN'}
-                                    </Button>
+                                    </SaveButton>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

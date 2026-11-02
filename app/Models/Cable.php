@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['site_id', 'type', 'color', 'purpose'])]
+#[Fillable(['site_id', 'type', 'color', 'purpose', 'name'])]
 class Cable extends Model
 {
     public function ends(): HasMany
@@ -19,7 +19,7 @@ class Cable extends Model
         $ends = $this->ends->keyBy('side');
 
         return [
-            ...$this->only('id', 'type', 'color', 'purpose'),
+            ...$this->only('id', 'type', 'color', 'purpose', 'name'),
             'a' => $ends['a']->only('device_id', 'connector_id'),
             'b' => $ends['b']->only('device_id', 'connector_id'),
         ];

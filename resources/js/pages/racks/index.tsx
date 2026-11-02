@@ -18,13 +18,15 @@ export default function Racks({ company, site, racks }: Props) {
             : company.name;
     const value = (
         rack: Rack,
-        column: 'name' | 'height_u' | 'numbering' | 'devices_count',
+        column: 'name' | 'floor' | 'height_u' | 'numbering' | 'devices_count',
     ) =>
-        column === 'numbering'
-            ? rack.numbering === 'bottom-up'
-                ? 'Dal basso verso l’alto'
-                : 'Dall’alto verso il basso'
-            : (rack[column] ?? 0);
+        column === 'floor'
+            ? (rack.floor ?? '—')
+            : column === 'numbering'
+              ? rack.numbering === 'bottom-up'
+                  ? 'Dal basso verso l’alto'
+                  : 'Dall’alto verso il basso'
+              : (rack[column] ?? 0);
     return (
         <>
             <Head title={`Rack · ${context}`} />
@@ -45,6 +47,7 @@ export default function Racks({ company, site, racks }: Props) {
                     rows={racks}
                     columns={[
                         { id: 'name', label: 'Nome', visible: true },
+                        { id: 'floor', label: 'Piano', visible: true },
                         { id: 'height_u', label: 'Altezza (U)', visible: true },
                         {
                             id: 'numbering',

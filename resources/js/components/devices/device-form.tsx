@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { CopyValue } from '@/components/copy-value';
 import { Form, usePage } from '@inertiajs/react';
@@ -394,13 +395,10 @@ export function DeviceForm({
                                             </Button>
                                         </DialogClose>
                                         {!linked ? (
-                                            <Button
-                                                disabled={
-                                                    processing || !!modelDraft
-                                                }
-                                            >
-                                                Salva
-                                            </Button>
+                                            <SaveButton
+                                                processing={processing}
+                                                disabled={!!modelDraft}
+                                            />
                                         ) : null}
                                     </DialogFooter>
                                 </>

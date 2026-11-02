@@ -1,7 +1,8 @@
+import { SaveButton } from '@/components/save-button';
 import { formatDateTime } from '@/lib/utils';
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
-import { Check, Link2, RefreshCw, Trash2 } from 'lucide-react';
+import { Link2, RefreshCw, Trash2 } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import PasswordInput from '@/components/password-input';
 import {
@@ -277,11 +278,6 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                                         Non configurata
                                     </Badge>
                                 ) : null}
-                                {changed ? (
-                                    <Badge variant="outline">
-                                        Modifiche non salvate
-                                    </Badge>
-                                ) : null}
                             </div>
                             {lastCheck?.checked_at ? (
                                 <p className="text-sm text-muted-foreground">
@@ -511,17 +507,13 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                                     ) : null}
                                 </CardContent>
                                 <CardFooter className="flex flex-wrap gap-3">
-                                    <Button
-                                        type="submit"
+                                    <SaveButton
+                                        processing={form.processing}
+                                        saved={
+                                            !!settings.connection && !changed
+                                        }
                                         disabled={busy || !changed}
-                                    >
-                                        {form.processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <Check />
-                                        )}
-                                        Salva
-                                    </Button>
+                                    />
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -754,38 +746,41 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                         >
                             Annulla
                         </Button>
-                        <Button
-                            variant={
-                                confirm === 'remove' ? 'destructive' : 'default'
-                            }
-                            disabled={busy}
-                            onClick={() => {
-                                if (confirm === 'save') {
-                                    save(true);
-                                    return;
-                                }
-                                form.transform((data) => ({
-                                    revision: data.revision,
-                                    global_revision: data.global_revision,
-                                    confirm_change: true,
-                                }));
-                                form.submit(
-                                    company
-                                        ? companyRoutes.destroy(company.id)
-                                        : globalRoutes.destroy(),
-                                    {
-                                        preserveScroll: true,
-                                        onSuccess: () => setConfirm(null),
-                                        onError: () => setConfirm(null),
-                                    },
-                                );
-                            }}
-                        >
-                            {busy ? <Spinner /> : null}
-                            {confirm === 'remove'
-                                ? 'Rimuovi connessione'
-                                : 'Cambia server'}
-                        </Button>
+                        {confirm === 'save' ? (
+                            <SaveButton
+                                type="button"
+                                processing={form.processing}
+                                disabled={busy}
+                                onClick={() => save(true)}
+                            >
+                                Cambia server
+                            </SaveButton>
+                        ) : (
+                            <Button
+                                variant="destructive"
+                                disabled={busy}
+                                onClick={() => {
+                                    form.transform((data) => ({
+                                        revision: data.revision,
+                                        global_revision: data.global_revision,
+                                        confirm_change: true,
+                                    }));
+                                    form.submit(
+                                        company
+                                            ? companyRoutes.destroy(company.id)
+                                            : globalRoutes.destroy(),
+                                        {
+                                            preserveScroll: true,
+                                            onSuccess: () => setConfirm(null),
+                                            onError: () => setConfirm(null),
+                                        },
+                                    );
+                                }}
+                            >
+                                {busy ? <Spinner /> : null}
+                                Rimuovi connessione
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

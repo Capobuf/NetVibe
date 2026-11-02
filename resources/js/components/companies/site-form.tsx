@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { Form } from '@inertiajs/react';
 import { MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -17,7 +18,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Spinner } from '@/components/ui/spinner';
 import {
     deletionImpact as adminDeletionImpact,
     destroy as adminDestroy,
@@ -187,12 +187,11 @@ export default function SiteForm({
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button type="submit" disabled={processing}>
-                                        {processing ? <Spinner /> : null}
+                                    <SaveButton processing={processing}>
                                         {site
                                             ? 'Salva modifiche'
                                             : 'Aggiungi sede'}
-                                    </Button>
+                                    </SaveButton>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

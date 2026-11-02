@@ -1,5 +1,6 @@
+import { SaveButton } from '@/components/save-button';
 import { Form } from '@inertiajs/react';
-import { Check, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useId, useRef, useState, type ComponentProps } from 'react';
 import { IconButton } from '@/components/icon-button';
 import InputError from '@/components/input-error';
@@ -228,14 +229,9 @@ export default function SubnetSummaryEntryForm({
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button type="submit" disabled={processing}>
-                                        {processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <Check data-icon="inline-start" />
-                                        )}
+                                    <SaveButton processing={processing}>
                                         Salva voce
-                                    </Button>
+                                    </SaveButton>
                                 </DialogFooter>
                             </>
                         );

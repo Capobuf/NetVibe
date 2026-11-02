@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { MacConfirmation } from '@/components/devices/mac-confirmation';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
@@ -340,15 +341,14 @@ export function AddIpForm({
                                                     Annulla
                                                 </Button>
                                             </DialogClose>
-                                            <Button
-                                                disabled={
-                                                    processing || !selection
-                                                }
+                                            <SaveButton
+                                                processing={processing}
+                                                disabled={!selection}
                                             >
                                                 {errors.mac_confirmation
                                                     ? 'Sostituisci MAC'
                                                     : 'Collega'}
-                                            </Button>
+                                            </SaveButton>
                                         </DialogFooter>
                                     </FieldGroup>
                                 )}

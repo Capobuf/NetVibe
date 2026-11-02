@@ -1,4 +1,5 @@
-import { Pipette, Save, X } from 'lucide-react';
+import { SaveButton } from '@/components/save-button';
+import { Pipette, X } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
@@ -157,18 +158,18 @@ export function ColorField({
                 !colors.some(
                     ({ color }) => color === display.toLowerCase(),
                 ) && (
-                    <Button
+                    <SaveButton
                         type="button"
                         variant="outline"
                         size="sm"
+                        processing={false}
                         disabled={disabled || !paletteReady}
                         onClick={() =>
                             saveCustomColors([...customColors, display])
                         }
                     >
-                        <Save />
                         Salva colore nella palette
-                    </Button>
+                    </SaveButton>
                 )}
             <InputError message={error} />
         </Field>

@@ -1,10 +1,10 @@
+import { SaveButton } from '@/components/save-button';
 import { Form, Head, usePage } from '@inertiajs/react';
 import { Link } from '@inertiajs/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
@@ -43,8 +43,9 @@ export default function Profile({
                         preserveScroll: true,
                     }}
                     className="space-y-6"
+                    setDefaultsOnSuccess
                 >
-                    {({ processing, errors }) => (
+                    {({ processing, errors, isDirty }) => (
                         <>
                             <div className="grid gap-2">
                                 <Label htmlFor="name">Nome</Label>
@@ -54,6 +55,7 @@ export default function Profile({
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.name}
                                     name="name"
+                                    readOnly={processing}
                                     required
                                     autoComplete="name"
                                     placeholder="Nome completo"
@@ -74,6 +76,7 @@ export default function Profile({
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.email}
                                     name="email"
+                                    readOnly={processing}
                                     required
                                     autoComplete="username"
                                     placeholder="Indirizzo email"
@@ -112,12 +115,11 @@ export default function Profile({
                                 )}
 
                             <div className="flex items-center gap-4">
-                                <Button
-                                    disabled={processing}
+                                <SaveButton
+                                    processing={processing}
+                                    saved={!isDirty}
                                     data-test="update-profile-button"
-                                >
-                                    Salva
-                                </Button>
+                                />
                             </div>
                         </>
                     )}

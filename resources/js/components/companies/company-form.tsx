@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { Form } from '@inertiajs/react';
 import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -17,7 +18,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Spinner } from '@/components/ui/spinner';
 import {
     deletionImpact,
     destroy,
@@ -126,12 +126,11 @@ export default function CompanyForm({
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button type="submit" disabled={processing}>
-                                        {processing ? <Spinner /> : null}
+                                    <SaveButton processing={processing}>
                                         {company
                                             ? 'Salva modifiche'
                                             : 'Crea azienda'}
-                                    </Button>
+                                    </SaveButton>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

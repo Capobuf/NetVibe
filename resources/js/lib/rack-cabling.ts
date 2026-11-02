@@ -25,6 +25,7 @@ export type Cable = {
     type: keyof typeof cableTypes;
     color: string;
     purpose: string | null;
+    name: string | null;
 };
 export const RACK_LEFT = 104;
 export const RACK_TOP = 48;

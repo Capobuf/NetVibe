@@ -121,7 +121,7 @@ export function cableBundles(cables: Cable[]) {
 
 // The drawing and the anchors must use exactly the same transform, including protruding ports/images.
 export function panelTransform(
-    device: RackDevice,
+    device: Pick<RackDevice, 'model'>,
     face: Face,
     width: number,
     height: number,

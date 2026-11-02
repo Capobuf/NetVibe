@@ -73,7 +73,12 @@ import {
     ContextMenuItem,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { index, show, update } from '@/routes/companies/sites/racks';
+import {
+    documentation,
+    index,
+    show,
+    update,
+} from '@/routes/companies/sites/racks';
 import {
     store as storeCable,
     labels as cableLabels,
@@ -218,6 +223,7 @@ function RackEditor({
     const [fieldRevision, setFieldRevision] = useState(0);
     const [leave, setLeave] = useState<(() => void) | null>(null);
     const [discard, setDiscard] = useState(false);
+    const [printingDocument, setPrintingDocument] = useState(false);
     const allowLeave = useRef(false);
     const selected = data.items.find((item) => item.key === selectedKey);
     const selectedDevice = devices.find(
@@ -783,6 +789,17 @@ function RackEditor({
                         <Badge variant="secondary">{data.height_u}U</Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            variant="outline"
+                            disabled={processing}
+                            onClick={() => {
+                                setPrintingDocument(true);
+                                router.visit(documentation(route));
+                            }}
+                        >
+                            <Printer data-icon="inline-start" />
+                            Stampa documentazione
+                        </Button>
                         <ToggleGroup
                             type="single"
                             variant="outline"
@@ -1942,6 +1959,7 @@ function RackEditor({
                     if (!processing && !open) {
                         setLeave(null);
                         setDiscard(false);
+                        setPrintingDocument(false);
                     }
                 }}
             >
@@ -1958,6 +1976,13 @@ function RackEditor({
                                 : 'Scartare le modifiche non salvate?'}
                         </DialogTitle>
                     </DialogHeader>
+                    {leave && printingDocument && (
+                        <p className="text-sm">
+                            Il PDF userà lo stato salvato. Salva prima di uscire
+                            per includere queste modifiche, oppure scartale per
+                            stampare la versione precedente.
+                        </p>
+                    )}
                     {feedback && (
                         <Alert variant="destructive">
                             <AlertDescription>{feedback}</AlertDescription>

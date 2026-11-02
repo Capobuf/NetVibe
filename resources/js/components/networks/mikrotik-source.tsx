@@ -1,8 +1,7 @@
 import { formatDateTime } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
-import { Info, TriangleAlert } from 'lucide-react';
+import { ChevronDown, TriangleAlert } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
-import { IconButton } from '@/components/icon-button';
 import {
     Dialog,
     DialogContent,
@@ -15,6 +14,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
     SheetContent,
@@ -119,23 +124,9 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
     return (
         <div className="flex flex-col gap-3">
             {sources.map((source) => (
-                <Card key={source.id} className="gap-3 py-4">
-                    <CardHeader className="gap-2 px-4">
-                        <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="flex min-w-0 items-start gap-2.5">
-                                <MikrotikMark />
-                                <span className="min-w-0 break-words">
-                                    {source.source} · {sourceLabel(source)}
-                                </span>
-                            </CardTitle>
-                            <IconButton
-                                variant="ghost"
-                                className="-mt-2 -mr-2 shrink-0"
-                                label={`Ultimo rilevamento: ${new Date(source.seen_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}`}
-                            >
-                                <Info />
-                            </IconButton>
-                        </div>
+                <Card key={source.id} className="gap-5 py-5">
+                    <CardHeader className="gap-3 px-5">
+                        <CardTitle>{sourceLabel(source)}</CardTitle>
                         <div className="flex flex-wrap gap-2">
                             {sourceIsDynamic(source) ? (
                                 <Badge variant="secondary">Dinamico</Badge>
@@ -166,58 +157,131 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                             ) : null}
                         </div>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3 px-4 text-sm">
-                        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
+                    <CardContent className="flex flex-col gap-5 px-5 text-sm">
+                        {source.data.hostname_observed ? (
+                            <dl>
+                                <dt className="mb-1 text-muted-foreground">
+                                    Hostname riportato
+                                </dt>
+                                <dd className="text-xl font-semibold break-words">
+                                    {source.data.hostname_observed}
+                                </dd>
+                            </dl>
+                        ) : null}
+                        <dl className="grid gap-4 sm:grid-cols-2">
                             {Object.entries({
                                 IPv4: source.ip,
                                 MAC: source.data.mac ?? source.data.mac_address,
-                                'Porta RouterOS': source.data.default_name,
-                                Subnet: source.data.cidr,
-                                Indirizzo: source.data.address,
-                                Bridge: source.data.bridge,
-                                Lista: source.data.list,
-                                VLAN: source.data.tag,
-                                Oggetto: source.data.name,
-                                'Interfaccia di base':
-                                    source.data.context !==
-                                    (source.data.interface ??
-                                        source.data['on-interface'])
-                                        ? source.data.context
-                                        : null,
-                                'Interfaccia RouterOS':
-                                    source.data.interface ??
-                                    source.data['on-interface'],
-                                'Server DHCP': source.data.server,
-                                'Hostname osservato':
-                                    source.data.hostname_observed,
-                                Tagged: source.data.tagged,
-                                Untagged: source.data.untagged,
-                                'Tagged attuali': source.data['current-tagged'],
-                                'Untagged attuali':
-                                    source.data['current-untagged'],
-                                'Commento MikroTik': source.data.comment,
-                                'Menu RouterOS': source.data.menu,
-                                'Ultimo rilevamento': formatDateTime(
-                                    source.seen_at,
-                                ),
                             })
-                                .filter(
-                                    ([, value]) =>
-                                        value !== undefined &&
-                                        value !== null &&
-                                        value !== '',
-                                )
+                                .filter(([, value]) => value)
                                 .map(([label, value]) => (
-                                    <div className="contents" key={label}>
+                                    <div key={label} className="min-w-0">
                                         <dt className="text-muted-foreground">
                                             {label}
                                         </dt>
-                                        <dd className="break-words whitespace-pre-wrap">
-                                            {String(value)}
+                                        <dd className="-ml-2 tabular-nums">
+                                            <CopyValue value={value!} />
                                         </dd>
                                     </div>
                                 ))}
                         </dl>
+                        {source.data.comment ? (
+                            <dl>
+                                <dt className="mb-1 text-muted-foreground">
+                                    Commento in MikroTik
+                                </dt>
+                                <dd className="break-words whitespace-pre-wrap">
+                                    {source.data.comment}
+                                </dd>
+                            </dl>
+                        ) : null}
+                        <Separator />
+                        <dl className="grid gap-4 sm:grid-cols-2">
+                            <div className="min-w-0">
+                                <dt className="mb-1 text-muted-foreground">
+                                    Letto da
+                                </dt>
+                                <dd className="flex items-start gap-2">
+                                    <MikrotikMark />
+                                    <span className="min-w-0 break-words">
+                                        {source.source}
+                                    </span>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="mb-1 text-muted-foreground">
+                                    Ultima lettura
+                                </dt>
+                                <dd>
+                                    <time dateTime={source.seen_at}>
+                                        {formatDateTime(source.seen_at)}
+                                    </time>
+                                </dd>
+                            </div>
+                        </dl>
+                        <Collapsible>
+                            <CollapsibleTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full justify-between [&[data-state=open]>svg]:rotate-180"
+                                >
+                                    Dettagli di rete
+                                    <ChevronDown data-icon="inline-end" />
+                                </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                                <dl className="grid gap-4 pt-4 sm:grid-cols-2">
+                                    {Object.entries({
+                                        'Server DHCP': source.data.server,
+                                        'Porta RouterOS':
+                                            source.data.default_name,
+                                        Subnet: source.data.cidr,
+                                        Indirizzo: source.data.address,
+                                        Bridge: source.data.bridge,
+                                        Lista: source.data.list,
+                                        VLAN: source.data.tag,
+                                        Oggetto: source.data.name,
+                                        'Interfaccia di base':
+                                            source.data.context !==
+                                            (source.data.interface ??
+                                                source.data['on-interface'])
+                                                ? source.data.context
+                                                : null,
+                                        'Interfaccia RouterOS':
+                                            source.data.interface ??
+                                            source.data['on-interface'],
+                                        Tagged: source.data.tagged,
+                                        Untagged: source.data.untagged,
+                                        'Tagged attuali':
+                                            source.data['current-tagged'],
+                                        'Untagged attuali':
+                                            source.data['current-untagged'],
+                                        'Menu RouterOS': source.data.menu,
+                                    })
+                                        .filter(
+                                            ([, value]) =>
+                                                value !== undefined &&
+                                                value !== null &&
+                                                value !== '',
+                                        )
+                                        .map(([label, value]) => (
+                                            <div
+                                                key={label}
+                                                className="min-w-0"
+                                            >
+                                                <dt className="mb-1 text-muted-foreground">
+                                                    {label}
+                                                </dt>
+                                                <dd className="break-words whitespace-pre-wrap">
+                                                    {String(value)}
+                                                </dd>
+                                            </div>
+                                        ))}
+                                </dl>
+                            </CollapsibleContent>
+                        </Collapsible>
                         {source.import_note ? (
                             <p className="text-muted-foreground">
                                 {source.import_note}
@@ -331,26 +395,28 @@ export function MikrotikIndicator({
                 </Button>
             </SheetTrigger>
             <SheetContent
-                className="w-full overflow-y-auto sm:max-w-lg"
+                className="w-full gap-5 overflow-y-auto sm:max-w-xl"
                 aria-describedby={undefined}
                 onClick={(event) => event.stopPropagation()}
             >
-                <SheetHeader>
+                <SheetHeader className="px-5 pt-6 pr-12">
                     <SheetTitle className="flex items-center gap-2.5">
                         <MikrotikMark variant="solid" className="h-5" />
                         {field === 'mac'
-                            ? 'MAC · Fonti MikroTik'
+                            ? 'MAC rilevato da MikroTik'
                             : field === 'hostname'
-                              ? 'Hostname · Fonti MikroTik'
-                              : 'Fonti MikroTik'}
+                              ? 'Hostname riportato da MikroTik'
+                              : 'Dati riportati da MikroTik'}
                     </SheetTitle>
                 </SheetHeader>
-                <div className="flex flex-col gap-4 px-4 pb-6">
+                <div className="flex flex-col gap-4 px-5 pb-6">
                     {field === 'mac' && mac ? (
-                        <p className="text-sm">
-                            MAC documentato:{' '}
-                            <span className="tabular-nums">{mac}</span>
-                        </p>
+                        <dl className="rounded-lg border p-4 text-sm">
+                            <dt className="mb-1 text-muted-foreground">
+                                MAC documentato in NetVibe
+                            </dt>
+                            <dd className="tabular-nums">{mac}</dd>
+                        </dl>
                     ) : null}
                     <SourceDetails sources={relevant} />
                 </div>

@@ -17,6 +17,17 @@ export type Subnet = {
 };
 
 export type IpAddress = {
+    snipe_it?: {
+        name: string | null;
+        mac: string | null;
+        ip: string | null;
+        notes: string | null;
+        url: string;
+        problem: string | null;
+        present: boolean;
+        active: boolean;
+        synced_at: string | null;
+    } | null;
     mikrotik_edit_mode?: 'planned' | 'manual' | null;
     mikrotik_matched_at?: string | null;
     id: number;

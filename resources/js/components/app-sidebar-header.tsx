@@ -20,15 +20,13 @@ export function AppSidebarHeader({
                 <Separator orientation="vertical" className="h-4" />
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
-            {navigationArea !== 'administration' && (
-                <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center xl:ml-auto xl:w-auto">
-                    <GlobalSearch />
-                    <div className="flex min-w-0 items-center gap-2">
-                        <CompanySwitcher />
-                        <SiteSwitcher />
-                    </div>
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center xl:ml-auto xl:w-auto">
+                {navigationArea !== 'administration' && <GlobalSearch />}
+                <div className="flex min-w-0 items-center gap-2">
+                    <CompanySwitcher />
+                    {navigationArea !== 'administration' && <SiteSwitcher />}
                 </div>
-            )}
+            </div>
         </header>
     );
 }

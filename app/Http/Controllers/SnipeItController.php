@@ -14,6 +14,7 @@ use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -51,8 +52,11 @@ class SnipeItController extends Controller
             'sync' => $sync ? [
                 ...$sync->only('id', 'activated_at', 'synced_at', 'error'),
                 'active' => $sync->isActive(),
-                'pending_sites' => $sync->assets()->where('state', 'site')->where('present', true)->count(),
-                'excluded' => $sync->assets()->where('state', 'excluded')->count(),
+                'ipam' => $sync->assets()->forView('ipam')->count(),
+                'linked' => $sync->assets()->forView('linked')->count(),
+                'review' => $sync->assets()->forView('review')->count(),
+                'without_ip' => $sync->assets()->forView('no-ip')->count(),
+                'excluded' => $sync->assets()->forView('excluded')->count(),
             ] : null,
         ]);
     }
@@ -113,6 +117,62 @@ class SnipeItController extends Controller
         });
 
         return $this->saved($company, 'Connessione rimossa.');
+    }
+
+    public function fields(Request $request, ?Company $company = null): JsonResponse
+    {
+        return $this->locked($request, $company, function ($setting, $global) {
+            $connection = $this->activeConnection($setting, $global);
+            $fields = $this->availableFields($connection);
+            $mapping = $connection->mapping();
+            foreach ($mapping as $key => $value) {
+                if ($value !== null && str_starts_with($value, 'label:')) {
+                    $mapping[$key] = collect($fields)->firstWhere('label', substr($value, 6))['value'] ?? $value;
+                }
+            }
+
+            return response()->json(['fields' => $fields, 'mapping' => $mapping]);
+        });
+    }
+
+    public function mapFields(Request $request, ?Company $company = null): RedirectResponse
+    {
+        $data = $request->validate([
+            'field_mapping' => ['required', 'array:ip,mac,name,description'],
+            'field_mapping.ip' => ['required', 'string', 'max:262'],
+            'field_mapping.mac' => ['present', 'nullable', 'string', 'max:262'],
+            'field_mapping.name' => ['required', 'string', 'max:262'],
+            'field_mapping.description' => ['present', 'nullable', 'string', 'max:262'],
+        ]);
+        $this->locked($request, $company, function ($setting, $global) use ($data, $company) {
+            if ($company && $setting->use_global) {
+                throw ValidationException::withMessages(['connection' => 'Modifica i campi nella connessione globale.']);
+            }
+            $connection = $this->activeConnection($setting, $global);
+            $available = array_column($this->availableFields($connection), 'value');
+            foreach ($data['field_mapping'] as $key => $value) {
+                if ($value !== null && ! in_array($value, $available, true)) {
+                    throw ValidationException::withMessages(['field_mapping.'.$key => 'Il campo non è disponibile in Snipe-IT. Ricarica l’elenco e scegli un campo.']);
+                }
+            }
+            if (Arr::sortRecursive($connection->mapping()) !== Arr::sortRecursive($data['field_mapping'])) {
+                $connection->update(['field_mapping' => $data['field_mapping']]);
+                SnipeItSync::where('connection_id', $connection->id)->increment('revision');
+            }
+            $setting->revision++;
+            $setting->save();
+        });
+
+        return $this->saved($company, 'Campi salvati. Saranno utilizzati dalla prossima sincronizzazione.');
+    }
+
+    private function availableFields(SnipeItConnection $connection): array
+    {
+        try {
+            return $this->client->fields($connection->server_url, $connection->api_key);
+        } catch (SnipeItException $exception) {
+            throw ValidationException::withMessages(['connection' => $exception->getMessage()]);
+        }
     }
 
     public function test(SnipeItRequest $request, ?Company $company = null): JsonResponse

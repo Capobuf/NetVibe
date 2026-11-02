@@ -53,7 +53,9 @@ class IpSearchController extends Controller
                 $query->whereRaw("INET_NTOA(ip_addresses.address) LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereRaw("ip_addresses.hostname LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereRaw("ip_addresses.mac_address LIKE ? ESCAPE '!'", [$pattern])
-                    ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern]);
+                    ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
+                    ->orWhereHas('snipeItAsset', fn ($query) => $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.name')) LIKE ? ESCAPE '!'", [$pattern])
+                        ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.network.mac')) LIKE ? ESCAPE '!'", [$pattern]));
             })
             ->when($group === 'site', fn ($query) => $query
                 ->orderBy('sites.name', $sort === 'site' ? $direction : 'asc')->orderBy('sites.id'))

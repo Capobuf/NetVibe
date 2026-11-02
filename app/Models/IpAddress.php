@@ -6,10 +6,16 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['address', 'description', 'hostname', 'mac_address', 'ip_status_id', 'device_id', 'device_interface_id'])]
 class IpAddress extends Model
 {
+    public function snipeItAsset(): HasOne
+    {
+        return $this->hasOne(SnipeItAsset::class);
+    }
+
     /** @return BelongsTo<Subnet, $this> */
     public function subnet(): BelongsTo
     {

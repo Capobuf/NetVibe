@@ -84,6 +84,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
                 Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
                 Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+                Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
+                Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');
                 Route::post('companies', [SnipeItController::class, 'companies'])->middleware('throttle:10,1')->name('companies');
                 Route::post('association', [SnipeItController::class, 'associate'])->middleware('throttle:10,1')->name('associate');
                 Route::get('records', [SnipeItSyncController::class, 'index'])->name('records');
@@ -131,6 +133,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
             Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
             Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+            Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
+            Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');
         });
         Route::get('labels', [CableLabelTemplateController::class, 'index'])->name('labels.index');
         Route::post('labels', [CableLabelTemplateController::class, 'store'])->name('labels.store');

@@ -82,33 +82,79 @@ class UnifiClient
 
     public function devices(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
     {
-        return array_map(fn (array $device) => [
-            'id' => $this->uuid($device['id'] ?? null),
-            'name' => $this->text($device['name'] ?? null),
-            'model' => $this->text($device['model'] ?? null),
-            'mac_address' => $this->text($device['macAddress'] ?? null),
+        return array_map(fn (array $device) => $this->deviceData($device),
+            $this->pages($connection, '/sites/'.$this->uuid($siteId).'/devices', $consoleId));
+    }
+
+    public function device(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, string $deviceId, ?string $consoleId = null): array
+    {
+        $data = $this->read($connection, '/sites/'.$this->uuid($siteId).'/devices/'.$this->uuid($deviceId), $consoleId);
+        if ($this->uuid($data['id'] ?? null) !== $deviceId) {
+            throw new UnifiException('format');
+        }
+        $ports = data_get($data, 'interfaces.ports', []);
+        if (! is_array($ports) || ! array_is_list($ports) || count($ports) > 1024) {
+            throw new UnifiException('format');
+        }
+        $normalized = [];
+        foreach ($ports as $port) {
+            if (! is_array($port) || ! is_int($port['idx'] ?? null) || $port['idx'] < 1 || isset($normalized[$port['idx']])
+                || ! in_array($port['state'] ?? null, ['UP', 'DOWN', 'UNKNOWN'], true)) {
+                throw new UnifiException('format');
+            }
+            foreach (['speedMbps', 'maxSpeedMbps'] as $key) {
+                if (isset($port[$key]) && (! is_int($port[$key]) || $port[$key] < 0)) {
+                    throw new UnifiException('format');
+                }
+            }
+            $poe = $port['poe'] ?? null;
+            if ($poe !== null && (! is_array($poe) || ! is_bool($poe['enabled'] ?? null)
+                || ! is_int($poe['type'] ?? null) || ! is_string($poe['standard'] ?? null)
+                || ! in_array($poe['state'] ?? null, ['UP', 'DOWN', 'LIMITED', 'UNKNOWN'], true))) {
+                throw new UnifiException('format');
+            }
+            $normalized[$port['idx']] = [
+                'idx' => $port['idx'], 'connector' => $this->text($port['connector'] ?? null, 40), 'state' => $port['state'],
+                'speed_mbps' => $port['speedMbps'] ?? null, 'max_speed_mbps' => $port['maxSpeedMbps'] ?? null,
+                'poe' => $poe === null ? null : array_intersect_key($poe, array_flip(['standard', 'type', 'enabled', 'state'])),
+            ];
+        }
+        ksort($normalized);
+
+        return [...$this->deviceData($data), 'ports' => array_values($normalized),
+            'uplink_device_id' => data_get($data, 'uplink.deviceId') === null ? null : $this->uuid(data_get($data, 'uplink.deviceId'))];
+    }
+
+    private function deviceData(array $device): array
+    {
+        $features = $device['features'] ?? [];
+        if (! is_array($features)) {
+            throw new UnifiException('format');
+        }
+        $features = array_is_list($features) ? $features : array_keys($features);
+        foreach ($features as $feature) {
+            $this->text($feature, 80);
+        }
+        $mac = strtoupper(str_replace('-', ':', $this->text($device['macAddress'] ?? null, 17)));
+        if (! preg_match('/\A(?:[0-9A-F]{2}:){5}[0-9A-F]{2}\z/', $mac)) {
+            throw new UnifiException('format');
+        }
+
+        return [
+            'id' => $this->uuid($device['id'] ?? null), 'name' => $this->text($device['name'] ?? null),
+            'model' => $this->text($device['model'] ?? null), 'mac_address' => $mac,
             'ip_address' => filter_var($device['ipAddress'] ?? null, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ?: null,
-            'state' => $this->text($device['state'] ?? null),
-        ], $this->pages($connection, '/sites/'.$this->uuid($siteId).'/devices', $consoleId));
+            'state' => $this->text($device['state'] ?? null, 80), 'features' => $features,
+            'firmware_version' => isset($device['firmwareVersion']) ? $this->text($device['firmwareVersion'], 80) : null,
+        ];
     }
 
     public function networks(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, string $version, ?string $consoleId = null): array
     {
-        // shortcut: network endpoints are verified from 10.0.162; extend only with an earlier official schema.
-        if (version_compare($version, '10.0.162', '<')) {
-            throw new UnifiException('unsupported');
-        }
-        $path = '/sites/'.$this->uuid($siteId).'/networks';
         $networks = [];
-        try {
-            $overview = $this->pages($connection, $path, $consoleId);
-        } catch (UnifiException $exception) {
-            throw $exception->status === 'not_found' ? new UnifiException('unsupported') : $exception;
-        }
-        foreach ($overview as $network) {
-            $id = $this->uuid($network['id'] ?? null);
-            $detail = $this->read($connection, $path.'/'.$id, $consoleId);
-            if ($this->uuid($detail['id'] ?? null) !== $id || ! is_int($detail['vlanId'] ?? null)
+        foreach ($this->networkDetails($connection, $siteId, $version, $consoleId) as $detail) {
+            $id = $detail['id'];
+            if (! is_int($detail['vlanId'] ?? null)
                 || $detail['vlanId'] < 1 || $detail['vlanId'] > 4094
                 || ! in_array($detail['management'] ?? null, ['GATEWAY', 'SWITCH', 'UNMANAGED'], true)
                 || ! is_bool($detail['default'] ?? null)) {
@@ -137,18 +183,53 @@ class UnifiClient
         return $networks;
     }
 
+    public function networkDetails(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, string $version, ?string $consoleId = null): array
+    {
+        // shortcut: network endpoints are verified from 10.0.162; extend only with an earlier official schema.
+        if (version_compare($version, '10.0.162', '<')) {
+            throw new UnifiException('unsupported');
+        }
+        $path = '/sites/'.$this->uuid($siteId).'/networks';
+        try {
+            $overview = $this->pages($connection, $path, $consoleId);
+        } catch (UnifiException $exception) {
+            throw $exception->status === 'not_found' ? new UnifiException('unsupported') : $exception;
+        }
+        $networks = [];
+        foreach ($overview as $network) {
+            $id = $this->uuid($network['id'] ?? null);
+            $detail = $this->read($connection, $path.'/'.$id, $consoleId);
+            if ($this->uuid($detail['id'] ?? null) !== $id) {
+                throw new UnifiException('format');
+            }
+            $networks[] = array_intersect_key($detail, array_flip(['id', 'name', 'management', 'vlanId', 'default', 'enabled', 'deviceId', 'ipv4Configuration']));
+        }
+
+        return $networks;
+    }
+
+    public function clients(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
+    {
+        return array_map(fn ($client) => array_intersect_key($client, array_flip([
+            'id', 'type', 'name', 'ipAddress', 'macAddress', 'connectedAt', 'access',
+        ])), $this->pages($connection, '/sites/'.$this->uuid($siteId).'/clients', $consoleId));
+    }
+
     private function pages(#[\SensitiveParameter] UnifiConnection $connection, string $path, ?string $consoleId): array
     {
         $rows = [];
         $offset = 0;
+        $total = null;
         do {
             $page = $this->read($connection, $path, $consoleId, ['offset' => $offset, 'limit' => 200]);
             $data = $this->rows($page);
             if (($page['offset'] ?? null) !== $offset || ($page['count'] ?? null) !== count($data)
                 || ! is_int($page['totalCount'] ?? null) || $page['totalCount'] < $offset + count($data)
+                || ($total !== null && $page['totalCount'] !== $total)
                 || ($data === [] && $offset < $page['totalCount'])) {
                 throw new UnifiException('format');
             }
+            $total = $page['totalCount'];
             foreach ($data as $row) {
                 $id = $this->uuid($row['id'] ?? null);
                 if (isset($rows[$id])) {
@@ -175,7 +256,7 @@ class UnifiClient
         if (! $connection->enabled) {
             throw new UnifiException('suspended');
         }
-        if (! preg_match('~\A(?:/v1/hosts|/info|/sites(?:/[a-f0-9-]{36}/(?:devices|networks)(?:/[a-f0-9-]{36})?)?)\z~i', $path)) {
+        if (! preg_match('~\A(?:/v1/hosts|/info|/sites(?:/[a-f0-9-]{36}/(?:devices|networks|clients)(?:/[a-f0-9-]{36})?)?)\z~i', $path)) {
             throw new UnifiException('unsafe_url');
         }
         $cloud = $connection->mode === 'cloud';
@@ -193,6 +274,10 @@ class UnifiClient
             } else {
                 $path = '/proxy/network/integration/v1'.$path;
             }
+        }
+        $cooldownKey = 'unifi-retry:'.$connection->id.':'.($consoleId ?? ($cloud ? 'hosts' : 'direct'));
+        if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
+            throw new UnifiException('rate_limit');
         }
         $this->deadline ??= microtime(true) + 45;
         $remaining = $this->deadline - microtime(true);
@@ -263,6 +348,20 @@ class UnifiClient
         $this->budget -= strlen($body);
         if (strlen($body) > $limit) {
             throw new UnifiException('limit');
+        }
+        if ($response->status() === 429) {
+            $retryAfter = trim((string) $response->header('Retry-After'));
+            $seconds = 60;
+            if (preg_match('/\A[0-9]{1,9}\z/', $retryAfter)) {
+                $seconds = max(1, (int) $retryAfter);
+            } elseif (preg_match('/\A[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT\z/', $retryAfter)) {
+                $date = \DateTimeImmutable::createFromFormat('!D, d M Y H:i:s \G\M\T', $retryAfter, new \DateTimeZone('UTC'));
+                if ($date && $date->format('D, d M Y H:i:s \G\M\T') === $retryAfter) {
+                    $seconds = max(1, $date->getTimestamp() - now()->timestamp);
+                }
+            }
+            // Keep a server-requested pause across requests and cron runs; never sleep inside an HTTP request.
+            RateLimiter::hit($cooldownKey, $seconds);
         }
         $status = match (true) {
             $response->status() === 401 => 'unauthorized',

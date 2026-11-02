@@ -15,6 +15,7 @@ use App\Models\Site;
 use App\Models\SnipeItSync;
 use App\Support\DeletionImpact;
 use App\Support\NetworkExclusions;
+use App\Support\UnifiInventory;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -40,8 +41,13 @@ class DeviceController extends Controller
             'snipePending' => $request->user()->is_superadmin
                 ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'ipAddresses:id,device_id,address'])->orderBy('name')->get()
-                ->map(fn ($device) => [...$device->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))]),
+            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'ipAddresses:id,device_id,address', 'unifiDevice.unifiSite.unifiConnection'])->orderBy('name')->get()
+                ->map(fn ($device) => [...$device->makeHidden('unifiDevice')->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
+                    'unifi' => $device->unifiDevice && $device->unifiDevice->unifiSite->site_id === $site->id ? [
+                        'state' => $device->unifiDevice->observed['state'] ?? null,
+                        'stale' => $device->unifiDevice->stale(), 'synced_at' => $device->unifiDevice->synced_at,
+                    ] : null,
+                ]),
         ]);
     }
 
@@ -55,6 +61,15 @@ class DeviceController extends Controller
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
         $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
+        $unifiSource = $device->unifiDevice()->with('unifiSite.unifiConnection')->first();
+        if ($unifiSource) {
+            $unifiSource->setRelation('device', $device);
+        }
+        $unifi = $unifiSource ? app(UnifiInventory::class)->deviceDetails($unifiSource) : null;
+        if ($unifi && ! $request->user()->is_superadmin) {
+            $unifi['revision'] = null;
+        }
+        $device->setAttribute('unifi', $unifi);
 
         return Inertia::render('devices/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),

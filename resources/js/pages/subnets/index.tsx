@@ -1,3 +1,7 @@
+import {
+    UnifiObservationIndicator,
+    type UnifiObservation,
+} from '@/components/networks/unifi-observation';
 import { formatDateTime } from '@/lib/utils';
 import {
     NetworkExclusionAction,
@@ -61,13 +65,20 @@ type Props = {
     site: Site;
     subnets: SubnetListItem[];
     vlans: Vlan[];
+    unifiNetworks: UnifiObservation[];
 };
 
 export default function SubnetIndex(props: Props) {
     return <SubnetList key={props.site.id} {...props} />;
 }
 
-function SubnetList({ company, site, subnets, vlans }: Props) {
+function SubnetList({
+    company,
+    site,
+    subnets,
+    vlans,
+    unifiNetworks = [],
+}: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [filter, setFilter] = useState('all');
     const [visibility, setVisibility] = useState('active');
@@ -168,9 +179,20 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                             title="Subnet"
                             icon={Network}
                             actions={
-                                auth.canEditIpam ? (
-                                    <SubnetForm {...formContext} />
-                                ) : null
+                                <div className="flex flex-wrap gap-2">
+                                    <UnifiObservationIndicator
+                                        observations={unifiNetworks.filter(
+                                            (source) => !source.subnet_id,
+                                        )}
+                                        company={company.id}
+                                        site={site.id}
+                                    >
+                                        Reti rilevate da UniFi
+                                    </UnifiObservationIndicator>
+                                    {auth.canEditIpam ? (
+                                        <SubnetForm {...formContext} />
+                                    ) : null}
+                                </div>
                             }
                         />
                         <div className="flex flex-wrap items-center gap-3">
@@ -352,21 +374,43 @@ function SubnetList({ company, site, subnets, vlans }: Props) {
                                                                             }
                                                                         </span>
                                                                     ) : null}
-                                                                    <Link
-                                                                        href={show(
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Link
+                                                                            href={show(
+                                                                                {
+                                                                                    company:
+                                                                                        company.id,
+                                                                                    site: site.id,
+                                                                                    subnet: subnet.id,
+                                                                                },
+                                                                            )}
+                                                                            className="rounded-sm text-sm font-medium whitespace-nowrap tabular-nums transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+                                                                        >
                                                                             {
-                                                                                company:
-                                                                                    company.id,
-                                                                                site: site.id,
-                                                                                subnet: subnet.id,
-                                                                            },
-                                                                        )}
-                                                                        className="rounded-sm text-sm font-medium whitespace-nowrap tabular-nums transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                                                                    >
-                                                                        {
-                                                                            subnet.cidr
-                                                                        }
-                                                                    </Link>
+                                                                                subnet.cidr
+                                                                            }
+                                                                        </Link>
+                                                                        <UnifiObservationIndicator
+                                                                            observations={unifiNetworks.filter(
+                                                                                (
+                                                                                    source,
+                                                                                ) =>
+                                                                                    source.subnet_id ===
+                                                                                    subnet.id,
+                                                                            )}
+                                                                            company={
+                                                                                company.id
+                                                                            }
+                                                                            site={
+                                                                                site.id
+                                                                            }
+                                                                            documented={
+                                                                                vlan
+                                                                                    ? `VLAN ${vlan.tag}${vlan.name ? ` · ${vlan.name}` : ''}`
+                                                                                    : 'Senza VLAN'
+                                                                            }
+                                                                        />
+                                                                    </div>
                                                                     {isExcluded(
                                                                         subnet,
                                                                     ) ? (

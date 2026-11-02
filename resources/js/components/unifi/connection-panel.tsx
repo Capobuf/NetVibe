@@ -42,6 +42,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/utils';
 import { UnifiSiteList } from './site-list';
+import { UnifiInventoryPreview } from './inventory-preview';
 import type { UnifiCompany, UnifiConnection } from './types';
 
 export function UnifiConnectionPanel({
@@ -261,6 +262,12 @@ export function UnifiConnectionPanel({
                     </AlertDescription>
                 </Alert>
             ) : null}
+            <div className="flex flex-wrap gap-2">
+                <UnifiInventoryPreview
+                    connection={connection}
+                    readonly={readonly}
+                />
+            </div>
             <UnifiSiteList
                 connection={connection}
                 companies={companies}

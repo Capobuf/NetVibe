@@ -6,6 +6,7 @@ use App\Models\Cable;
 use App\Models\Device;
 use App\Models\MikrotikSource;
 use App\Models\Site;
+use App\Models\UnifiDevice;
 use Illuminate\Support\Collection;
 
 class Topology
@@ -174,6 +175,34 @@ class Topology
             }
             $edges[$key] = $edge;
         }
+        $unifi = UnifiDevice::whereIn('device_id', $devices->keys())
+            ->whereHas('unifiSite', fn ($query) => $query->where('site_id', $site->id))
+            ->with('unifiSite.unifiConnection')->get();
+        $byExternalId = $unifi->groupBy(fn ($source) => $source->unifi_site_id.':'.$source->external_id);
+        foreach ($unifi as $source) {
+            $parentId = $source->observed['uplink_device_id'] ?? null;
+            $matches = $parentId ? $byExternalId->get($source->unifi_site_id.':'.$parentId, collect()) : collect();
+            if ($matches->count() !== 1 || $matches->first()->device_id === $source->device_id) {
+                continue;
+            }
+            $parent = $matches->first();
+            $stale = $source->stale() || $parent->stale();
+            $edges['unifi:'.$source->id] = [
+                'id' => 'unifi:'.$source->id, 'kind' => 'logical',
+                'source' => 'device:'.$source->device_id, 'target' => 'device:'.$parent->device_id,
+                'a' => null, 'b' => null, 'protocols' => ['unifi'], 'reciprocal' => false,
+                'stale' => $stale, 'issues' => [], 'cable_ids' => [], 'suggestion' => null, 'purpose' => null,
+                'evidence' => [[
+                    'device_id' => $source->device_id, 'source' => 'UniFi · '.$source->unifiSite->name,
+                    'seen_at' => $source->synced_at?->toIso8601String(), 'inventory_match' => 'external_id',
+                    'state' => $source->present ? 'current' : 'missing', 'stale' => $stale,
+                    'protocols' => ['unifi'], 'local_port' => null, 'remote_port' => null,
+                    'remote_port_description' => null, 'remote_port_mac' => null,
+                    'remote_identity' => $parent->observed['name'] ?? null, 'remote_mac' => null,
+                    'chassis_id' => null, 'lldp_seen_at' => null, 'menu' => 'Uplink UniFi',
+                ]],
+            ];
+        }
         $peers = [];
         foreach ($edges as $edge) {
             if ($edge['kind'] === 'discovered' && ! $edge['stale']) {
@@ -231,9 +260,15 @@ class Topology
         $integrations = $devices->filter(fn ($device) => $device->mikrotikConnection)->map(function ($device) {
             $connection = $device->mikrotikConnection;
 
-            return ['device_id' => $device->id, 'name' => $device->name, 'seen_at' => $connection->synced_at?->toIso8601String(),
+            return ['device_id' => $device->id, 'vendor' => 'mikrotik', 'name' => $device->name, 'seen_at' => $connection->synced_at?->toIso8601String(),
                 'stale' => ! $connection->activated_at || $connection->sync_status !== 'ok', 'status' => $connection->sync_status];
         })->values()->all();
+
+        foreach ($unifi as $source) {
+            $integrations[] = ['device_id' => $source->device_id, 'vendor' => 'unifi', 'name' => 'UniFi · '.$devices[$source->device_id]->name,
+                'seen_at' => $source->synced_at?->toIso8601String(), 'stale' => $source->stale(),
+                'status' => $source->unifiSite->sync_status];
+        }
 
         $models = $devices->pluck('model')->filter(fn ($model) => $model?->panel)->unique('id')
             ->mapWithKeys(fn ($model) => [$model->id => ['panel' => $model->panel, 'assetUrls' => $model->assetUrls()]])->all();

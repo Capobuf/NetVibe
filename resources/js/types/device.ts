@@ -56,6 +56,11 @@ export type Device = {
     model: DeviceModel | null;
     interfaces: DeviceInterface[];
     ips?: string[];
+    unifi?: {
+        state?: string | null;
+        stale: boolean;
+        synced_at: string | null;
+    } | null;
 };
 export function interfaceName(item: DeviceInterface, ports: Port[] = []) {
     return (

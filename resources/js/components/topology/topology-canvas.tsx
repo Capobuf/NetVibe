@@ -443,7 +443,9 @@ export function TopologyCanvas({
                                             ? []
                                             : edge.kind === 'discovered'
                                               ? [10, 6]
-                                              : [2, 6]
+                                              : edge.kind === 'logical'
+                                                ? [12, 4, 2, 4]
+                                                : [2, 6]
                                     }
                                     opacity={
                                         (selected
@@ -661,6 +663,7 @@ export function TopologyCanvas({
                 </Layer>
             </Stage>
             {selectedEdge &&
+                selectedEdge.kind !== 'logical' &&
                 (['source', 'target'] as const).map((side) => {
                     const node = nodes.find(
                         (item) => item.id === selectedEdge[side],

@@ -1,6 +1,8 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { UnifiMark } from '@/components/unifi-mark';
+import { unifiState } from '@/components/unifi/types';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
@@ -76,17 +78,32 @@ function DeviceList({
     );
     const value = (
         d: Device,
-        c: 'name' | 'manufacturer' | 'model' | 'type' | 'ips',
+        c:
+            | 'name'
+            | 'manufacturer'
+            | 'model'
+            | 'type'
+            | 'ips'
+            | 'source'
+            | 'state',
     ) =>
-        c === 'manufacturer'
-            ? d.manufacturer.name
-            : c === 'model'
-              ? (d.model?.name ?? '—')
-              : c === 'type'
-                ? (d.model?.model_type?.name ?? '—')
-                : c === 'ips'
-                  ? (d.ips?.join(', ') ?? '')
-                  : d.name;
+        c === 'state'
+            ? d.unifi
+                ? unifiState(d.unifi.state, d.unifi.stale)
+                : null
+            : c === 'source'
+              ? d.unifi
+                  ? 'UniFi'
+                  : null
+              : c === 'manufacturer'
+                ? d.manufacturer.name
+                : c === 'model'
+                  ? (d.model?.name ?? '—')
+                  : c === 'type'
+                    ? (d.model?.model_type?.name ?? '—')
+                    : c === 'ips'
+                      ? (d.ips?.join(', ') ?? '')
+                      : d.name;
     return (
         <>
             <Head title={`Dispositivi · ${context}`} />
@@ -133,13 +150,33 @@ function DeviceList({
                         { id: 'model', label: 'Modello', visible: true },
                         { id: 'type', label: 'Tipo', visible: true },
                         { id: 'ips', label: 'IP documentati', visible: true },
+                        { id: 'source', label: 'Fonte', visible: false },
+                        {
+                            id: 'state',
+                            label: 'Stato osservato',
+                            visible: true,
+                        },
                     ]}
+                    hiddenColumns={
+                        devices.some((device) => device.unifi)
+                            ? []
+                            : ['source', 'state']
+                    }
                     value={value}
                     render={(d, c) =>
                         c === 'name' ? (
-                            <TextLink href={show({ ...route, device: d.id })}>
-                                {d.name}
-                            </TextLink>
+                            <div className="flex items-center gap-2">
+                                {d.unifi ? (
+                                    <span role="img" aria-label="Fonte UniFi">
+                                        <UnifiMark className="size-4 shrink-0" />
+                                    </span>
+                                ) : null}
+                                <TextLink
+                                    href={show({ ...route, device: d.id })}
+                                >
+                                    {d.name}
+                                </TextLink>
+                            </div>
                         ) : c === 'ips' ? (
                             d.ips?.length ? (
                                 <div className="flex flex-col gap-1 tabular-nums">

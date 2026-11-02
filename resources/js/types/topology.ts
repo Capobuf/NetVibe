@@ -25,7 +25,7 @@ export type TopologyEnd = {
     stale: boolean;
 };
 export type TopologyEvidence = {
-    inventory_match: 'name_mac' | 'name_model' | null;
+    inventory_match: 'name_mac' | 'name_model' | 'external_id' | null;
     device_id: number;
     source: string;
     seen_at: string | null;
@@ -44,7 +44,7 @@ export type TopologyEvidence = {
 };
 export type TopologyEdge = {
     id: string;
-    kind: 'documented' | 'discovered' | 'partial';
+    kind: 'documented' | 'discovered' | 'partial' | 'logical';
     source: string;
     target: string;
     a: TopologyEnd | null;
@@ -63,6 +63,7 @@ export type TopologyData = {
     nodes: TopologyNode[];
     edges: TopologyEdge[];
     integrations: {
+        vendor?: 'mikrotik' | 'unifi';
         device_id: number;
         name: string;
         seen_at: string | null;
@@ -75,6 +76,7 @@ export const linkKinds = {
     documented: 'Documentati',
     discovered: 'Porte riconosciute',
     partial: 'Parziali',
+    logical: 'Logici UniFi',
 } as const;
 
 export function topologyPortLabel(
@@ -104,6 +106,7 @@ export function topologyPortMessage(
     edge: TopologyEdge,
     node: TopologyNode,
 ): string {
+    if (edge.kind === 'logical') return 'Uplink logico';
     if (node.device_id === null)
         return 'Dispositivo rilevato, non associato all’inventario';
     if (!topologyPortLabel(edge, node)) {

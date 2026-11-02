@@ -46,6 +46,7 @@ class InterfaceMac
                 continue;
             }
             MikrotikIpam::manualChange($ip, ['mac_address' => $mac], $mikrotikMode);
+            UnifiIpam::manualChange($ip, ['mac_address' => $mac], $mikrotikMode);
             if ($ip->isDirty()) {
                 $ip->save();
             }

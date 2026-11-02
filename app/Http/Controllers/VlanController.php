@@ -11,6 +11,7 @@ use App\Models\Vlan;
 use App\Support\DeletionImpact;
 use App\Support\MikrotikIpam;
 use App\Support\NetworkExclusions;
+use App\Support\UnifiIpam;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -89,6 +90,7 @@ class VlanController extends Controller
                 $site = Site::query()->lockForUpdate()->findOrFail($site->id);
                 $record = $vlan ? $site->vlans()->findOrFail($vlan->id) : $site->vlans()->make();
                 MikrotikIpam::networkChange($record, $request->validated(), $request->validated('mikrotik_edit_mode'));
+                UnifiIpam::networkChange($record, $request->validated(), $request->validated('mikrotik_edit_mode'));
                 $record->fill($request->safe()->only(['tag', 'name']))->save();
             });
         } catch (UniqueConstraintViolationException) {

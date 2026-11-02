@@ -27,6 +27,7 @@ use App\Http\Controllers\SubnetController;
 use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\TopologyController;
 use App\Http\Controllers\UnifiController;
+use App\Http\Controllers\UnifiInventoryController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
@@ -138,6 +139,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('{unifiConnection}', [UnifiController::class, 'destroy'])->name('destroy');
             Route::post('{unifiConnection}/verify', [UnifiController::class, 'verify'])->middleware('throttle:10,1')->name('verify');
             Route::post('{unifiConnection}/discover', [UnifiController::class, 'discover'])->middleware('throttle:5,1')->name('discover');
+            Route::post('{unifiConnection}/sync', [UnifiInventoryController::class, 'refresh'])->middleware('throttle:5,1')->name('sync');
+            Route::post('{unifiConnection}/inventory/activate', [UnifiInventoryController::class, 'activate'])->name('inventory.activate');
+            Route::post('{unifiConnection}/inventory/{unifiDevice}/resolve', [UnifiInventoryController::class, 'resolve'])->name('inventory.resolve');
+            Route::post('{unifiConnection}/inventory/{unifiDevice}/adopt', [UnifiInventoryController::class, 'adopt'])->name('inventory.adopt');
+            Route::post('{unifiConnection}/inventory/{unifiDevice}/port', [UnifiInventoryController::class, 'port'])->name('inventory.port');
             Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->name('select-consoles');
             Route::put('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'associate'])->name('associate');
             Route::delete('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'revoke'])->name('revoke');
@@ -172,3 +178,4 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 require __DIR__.'/settings.php';
+require __DIR__.'/unifi-ipam.php';

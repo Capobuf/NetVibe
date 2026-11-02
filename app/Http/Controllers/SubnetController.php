@@ -15,6 +15,7 @@ use App\Support\Ipv4Cidr;
 use App\Support\Ipv4Ranges;
 use App\Support\MikrotikIpam;
 use App\Support\SubnetAddressTable;
+use App\Support\UnifiIpam;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -31,6 +32,7 @@ class SubnetController extends Controller
         return Inertia::render('subnets/index', [
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
+            'unifiNetworks' => UnifiIpam::networks($site->id),
             'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name', 'excluded_at']),
             'subnets' => $site->subnets()
                 ->select(['id', 'cidr', 'name', 'description', 'vlan_id', 'network_address', 'broadcast_address', 'excluded_at'])
@@ -87,6 +89,7 @@ class SubnetController extends Controller
                     'end_ip' => long2ip($range->end_address),
                 ]),
             'mikrotikSources' => MikrotikIpam::forSubnet($subnet),
+            'unifiObservations' => UnifiIpam::forSubnet($subnet),
             'firstProposableIp' => $subnet->firstProposableIp(),
             'query' => [...compact('search', 'sort', 'direction'), 'hide_free' => (int) $hideFree],
             'addressCounts' => $subnet->addressCounts(),
@@ -179,6 +182,7 @@ class SubnetController extends Controller
                 }
 
                 MikrotikIpam::networkChange($record, ['cidr' => $range['cidr'], 'vlan_id' => $vlanId], $data['mikrotik_edit_mode'] ?? null);
+                UnifiIpam::networkChange($record, ['cidr' => $range['cidr'], 'vlan_id' => $vlanId], $data['mikrotik_edit_mode'] ?? null);
                 $record->fill([
                     ...$range,
                     'name' => $data['name'] ?? null,

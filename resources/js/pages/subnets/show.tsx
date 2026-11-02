@@ -1,3 +1,8 @@
+import {
+    UnifiObservationIndicator,
+    UnifiObservedValue,
+    type UnifiObservation,
+} from '@/components/networks/unifi-observation';
 import { NetworkExclusionAction } from '@/components/networks/network-exclusion';
 import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import { show as vlanShow } from '@/routes/companies/sites/vlans';
@@ -96,6 +101,7 @@ type Props = {
     tags: Tag[];
     initialIpAddress: IpRow | null;
     mikrotikSources: MikrotikSource[];
+    unifiObservations: UnifiObservation[];
     firstProposableIp: string | null;
     addressCounts: {
         documented: number;
@@ -135,6 +141,7 @@ export default function SubnetShow({
     tags,
     initialIpAddress,
     mikrotikSources,
+    unifiObservations = [],
 }: Props) {
     const { auth, companyNavigation, errors } = usePage().props;
     const [selectedIp, setSelectedIp] = useState<IpRow | null>(
@@ -168,6 +175,14 @@ export default function SubnetShow({
             sourcesByIp.set(source.ip, [
                 ...(sourcesByIp.get(source.ip) ?? []),
                 source,
+            ]);
+    }
+    const unifiByIp = new Map<string, UnifiObservation[]>();
+    for (const observation of unifiObservations) {
+        if (observation.ip)
+            unifiByIp.set(observation.ip, [
+                ...(unifiByIp.get(observation.ip) ?? []),
+                observation,
             ]);
     }
     const visibleColumns = columns.filter((column) => column.visible);
@@ -277,6 +292,19 @@ export default function SubnetShow({
                                     sources={mikrotikSources.filter(
                                         (source) => source.kind === 'subnet',
                                     )}
+                                />
+                                <UnifiObservationIndicator
+                                    company={company.id}
+                                    site={site.id}
+                                    observations={unifiObservations.filter(
+                                        (observation) =>
+                                            observation.kind === 'network',
+                                    )}
+                                    documented={
+                                        vlan
+                                            ? `VLAN ${vlan.tag}${vlan.name ? ` · ${vlan.name}` : ''}`
+                                            : 'Senza VLAN'
+                                    }
                                 />
                             </h1>
                             <div className="flex flex-wrap items-center gap-3">
@@ -472,6 +500,8 @@ export default function SubnetShow({
                                 {ipAddresses.data.map((ipAddress) => {
                                     const sources =
                                         sourcesByIp.get(ipAddress.ip) ?? [];
+                                    const unifi =
+                                        unifiByIp.get(ipAddress.ip) ?? [];
                                     const current = sources.filter(
                                         (source) => source.state !== 'missing',
                                     );
@@ -558,6 +588,11 @@ export default function SubnetShow({
                                             }
                                         >
                                             <TableCell>
+                                                <UnifiObservationIndicator
+                                                    observations={unifi}
+                                                    company={company.id}
+                                                    site={site.id}
+                                                />
                                                 {externalOnly ||
                                                 sourceNotice ? (
                                                     <MikrotikIndicator
@@ -648,23 +683,49 @@ export default function SubnetShow({
                                                           'hostname' ||
                                                       column.id ===
                                                           'mac_address' ? (
-                                                        <MikrotikValue
-                                                            showIndicator={
-                                                                !externalOnly
-                                                            }
-                                                            value={
-                                                                ipAddress[
-                                                                    column.id
-                                                                ]
-                                                            }
-                                                            field={
-                                                                column.id ===
-                                                                'mac_address'
-                                                                    ? 'mac'
-                                                                    : 'hostname'
-                                                            }
-                                                            sources={sources}
-                                                        />
+                                                        <div className="flex flex-col items-start">
+                                                            <MikrotikValue
+                                                                showIndicator={
+                                                                    !externalOnly
+                                                                }
+                                                                value={
+                                                                    ipAddress[
+                                                                        column
+                                                                            .id
+                                                                    ]
+                                                                }
+                                                                field={
+                                                                    column.id ===
+                                                                    'mac_address'
+                                                                        ? 'mac'
+                                                                        : 'hostname'
+                                                                }
+                                                                sources={
+                                                                    sources
+                                                                }
+                                                            />
+                                                            <UnifiObservedValue
+                                                                observations={
+                                                                    unifi
+                                                                }
+                                                                company={
+                                                                    company.id
+                                                                }
+                                                                site={site.id}
+                                                                value={
+                                                                    ipAddress[
+                                                                        column
+                                                                            .id
+                                                                    ]
+                                                                }
+                                                                field={
+                                                                    column.id ===
+                                                                    'mac_address'
+                                                                        ? 'mac'
+                                                                        : 'hostname_observed'
+                                                                }
+                                                            />
+                                                        </div>
                                                     ) : column.id ===
                                                       'status' ? (
                                                         ipAddress.status ? (

@@ -17,10 +17,11 @@ class CableLabelTemplatesTest extends TestCase
             'endpoint_format' => '[{{piano}}] {{rack}}\\{{dispositivo}}@{{porta}}',
             'diameter' => 6, 'wrap' => 21, 'profile' => 'round', 'max_length' => 100,
             'back_mode' => 'repeat', 'back_rotation' => 0,
+            'length_mode' => 'auto', 'face_length' => 45, 'fit' => 'extend',
             'front' => [['blocks' => [['text' => '{{estremita}}', 'size' => 2.5, 'align' => 'center']], 'separator' => ' | ']],
             'back' => [['blocks' => [['text' => '{{nome_cavo}}', 'size' => 2.5, 'align' => 'center']], 'separator' => ' / ']],
         ];
-        $data = ['width' => 12, 'cable_type' => 'copper', 'revision' => 0, 'settings' => $settings];
+        $data = ['name' => 'Rete completa', 'width' => 12, 'cable_type' => 'copper', 'revision' => 0, 'settings' => $settings];
         $url = route('administration.labels.store');
         $this->actingAs(User::factory()->create())->post($url, $data)->assertForbidden();
         $this->get(route('administration.labels.index'))->assertForbidden();
@@ -29,14 +30,29 @@ class CableLabelTemplatesTest extends TestCase
         $template = CableLabelTemplate::sole();
         $this->assertSame($settings['endpoint_format'], $template->settings['endpoint_format']);
         $this->assertSame(' | ', $template->settings['front'][0]['separator']);
-        $this->post($url, $data)->assertSessionHasErrors('revision');
-        $this->post($url, [...$data, 'revision' => 1, 'settings' => [...$settings, 'endpoint_format' => '{{esegui_codice}}']])->assertSessionHasErrors('settings.endpoint_format');
+        $updateUrl = route('administration.labels.update', $template);
+        $deleteUrl = route('administration.labels.destroy', $template);
+        $this->post($url, [...$data, 'name' => 'Rete sintetica'])->assertSessionHasNoErrors();
+        $copy = CableLabelTemplate::query()->whereKeyNot($template->id)->sole();
+        $this->put($updateUrl, $data)->assertSessionHasErrors('revision');
+        $this->put($updateUrl, [...$data, 'revision' => 1, 'settings' => [...$settings, 'endpoint_format' => '{{esegui_codice}}']])->assertSessionHasErrors('settings.endpoint_format');
         $this->assertSame(1, $template->fresh()->revision);
         $settings['front'][0]['blocks'][0]['text'] = ' {{a.dispositivo}} @ {{b.porta}} ';
-        $this->post($url, [...$data, 'revision' => 1, 'settings' => $settings])->assertSessionHasNoErrors();
+        $this->put($updateUrl, [...$data, 'revision' => 1, 'settings' => $settings])->assertSessionHasNoErrors();
         $this->assertSame(' {{a.dispositivo}} @ {{b.porta}} ', $template->fresh()->settings['front'][0]['blocks'][0]['text']);
         $this->assertSame(2, $template->fresh()->revision);
-        $this->post($url, [...$data, 'width' => 18])->assertSessionHasNoErrors();
-        $this->assertDatabaseCount('cable_label_templates', 2);
+        $this->assertSame('{{estremita}}', $copy->fresh()->settings['front'][0]['blocks'][0]['text']);
+        $this->put($updateUrl, [...$data, 'revision' => 1])->assertSessionHasErrors('revision');
+        $this->delete($deleteUrl, ['revision' => 1])->assertSessionHasErrors('revision');
+        $this->actingAs(User::factory()->create());
+        $this->put($updateUrl, [...$data, 'revision' => 2])->assertForbidden();
+        $this->delete($deleteUrl, ['revision' => 2])->assertForbidden();
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $this->put($updateUrl, [...$data, 'revision' => 2, 'name' => 'Rinominato', 'settings' => [...$settings, 'print_mode' => 'single', 'length_mode' => 'fixed', 'fit' => 'shrink']])->assertSessionHasNoErrors();
+        $this->assertSame('Rinominato', $template->fresh()->name);
+        $this->assertArrayNotHasKey('print_mode', $template->fresh()->settings);
+        $this->delete($deleteUrl, ['revision' => 3])->assertSessionHasNoErrors();
+        $this->assertModelMissing($template);
+        $this->assertModelExists($copy);
     }
 }

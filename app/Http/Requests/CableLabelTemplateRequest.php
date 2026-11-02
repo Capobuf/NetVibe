@@ -28,15 +28,21 @@ class CableLabelTemplateRequest extends FormRequest
         };
 
         return [
+            'name' => ['required', 'string', 'max:255'],
             'width' => ['required', 'integer', 'in:12,18,24'],
             'cable_type' => ['required', 'in:copper,fiber,usb,power'],
             'revision' => ['required', 'integer', 'min:0'],
-            'settings' => ['required', 'array:endpoint_format,diameter,wrap,profile,max_length,back_mode,back_rotation,front,back'],
+            'settings' => ['required', 'array:endpoint_format,diameter,wrap,profile,max_length,back_mode,back_rotation,front,back,length_mode,face_length,fit,print_mode'],
             'settings.endpoint_format' => ['required', 'string', 'max:500', $format($fields)],
             'settings.diameter' => ['required', 'numeric', 'between:0.5,30'],
             'settings.wrap' => ['required', 'numeric', 'between:2,160'],
             'settings.profile' => ['required', 'in:round,duplex'],
             'settings.max_length' => ['required', 'numeric', 'between:8,150'],
+            'settings.length_mode' => ['required', 'in:auto,fixed'],
+            'settings.face_length' => ['required', 'numeric', 'between:8,150', 'lte:settings.max_length'],
+            'settings.fit' => ['required', 'in:extend,shrink,wrap'],
+            // Older profiles may still submit this print-only option.
+            'settings.print_mode' => ['exclude'],
             'settings.back_mode' => ['required', 'in:repeat,opposite,custom'],
             'settings.back_rotation' => ['required', 'integer', 'in:0,180'],
             ...collect(['front', 'back'])->flatMap(fn ($face) => [
@@ -58,7 +64,9 @@ class CableLabelTemplateRequest extends FormRequest
             'settings.endpoint_format' => 'formato delle estremità',
             'settings.diameter' => 'diametro',
             'settings.wrap' => 'avvolgimento',
+            'name' => 'nome del profilo',
             'settings.max_length' => 'lunghezza massima',
+            'settings.face_length' => 'lunghezza della faccia',
             'settings.front.*.blocks.*.text' => 'testo della prima faccia',
             'settings.back.*.blocks.*.text' => 'testo della seconda faccia',
             'settings.front.*.blocks.*.size' => 'dimensione testo della prima faccia',

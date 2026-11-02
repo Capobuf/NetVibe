@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { Head, useForm } from '@inertiajs/react';
 import { Send } from 'lucide-react';
 import PasswordInput from '@/components/password-input';
@@ -79,9 +80,6 @@ export default function Email({
                             ? 'SMTP configurato'
                             : 'Configurazione di sistema'}
                     </Badge>
-                    {form.isDirty ? (
-                        <Badge variant="outline">Modifiche non salvate</Badge>
-                    ) : null}
                 </div>
                 <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <form
@@ -413,18 +411,13 @@ export default function Email({
                                 </FieldSet>
                             </CardContent>
                             <CardFooter>
-                                <Button
-                                    type="submit"
-                                    disabled={
-                                        busy ||
-                                        (settings !== null && !form.isDirty)
-                                    }
+                                <SaveButton
+                                    processing={form.processing}
+                                    saved={settings !== null && !form.isDirty}
+                                    disabled={busy}
                                 >
-                                    {form.processing ? (
-                                        <Spinner data-icon="inline-start" />
-                                    ) : null}
                                     Salva impostazioni
-                                </Button>
+                                </SaveButton>
                             </CardFooter>
                         </Card>
                     </form>

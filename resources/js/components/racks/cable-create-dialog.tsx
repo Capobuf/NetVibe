@@ -1,6 +1,6 @@
+import { SaveButton } from '@/components/save-button';
 import { useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import { Save } from 'lucide-react';
 import { CableFields, EndpointPicker } from './cable-inspector';
 import { CablePreview } from './cable-preview';
 import { Button } from '@/components/ui/button';
@@ -203,12 +203,9 @@ export function CableCreateDialog({
                             >
                                 Annulla
                             </Button>
-                            <Button type="submit" disabled={form.processing}>
-                                <Save />
-                                {form.processing
-                                    ? 'Salvataggio…'
-                                    : 'Salva collegamento'}
-                            </Button>
+                            <SaveButton processing={form.processing}>
+                                Salva collegamento
+                            </SaveButton>
                         </DialogFooter>
                     </form>
                 </DialogContent>

@@ -4,24 +4,58 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CableLabelTemplateRequest;
 use App\Models\CableLabelTemplate;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CableLabelTemplateController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        return Inertia::render('administration/labels', ['templates' => CableLabelTemplate::all()]);
+        return Inertia::render('administration/labels', [
+            'templates' => CableLabelTemplate::query()->orderBy('name')->orderBy('id')->get(),
+            'selectedTemplateId' => $request->integer('profile') ?: null,
+        ]);
     }
 
     public function store(CableLabelTemplateRequest $request): RedirectResponse
     {
-        $data = $request->validated();
-        $data['revision'] = $request->integer('revision');
-        foreach (['diameter', 'wrap', 'max_length'] as $field) {
+        $template = CableLabelTemplate::create([...$this->data($request), 'revision' => 1]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Profilo creato.']);
+
+        return to_route('administration.labels.index', ['profile' => $template->id]);
+    }
+
+    public function update(CableLabelTemplateRequest $request, CableLabelTemplate $template): RedirectResponse
+    {
+        $data = $this->data($request);
+        $data['settings'] = json_encode($data['settings'], JSON_THROW_ON_ERROR);
+        $data['revision'] = $request->integer('revision') + 1;
+        if (! CableLabelTemplate::query()->whereKey($template->id)->where('revision', $request->integer('revision'))->update($data)) {
+            $this->stale();
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Profilo salvato.']);
+
+        return to_route('administration.labels.index', ['profile' => $template->id]);
+    }
+
+    public function destroy(Request $request, CableLabelTemplate $template): RedirectResponse
+    {
+        $request->validate(['revision' => ['required', 'integer', 'min:1']]);
+        if (! CableLabelTemplate::query()->whereKey($template->id)->where('revision', $request->integer('revision'))->delete()) {
+            $this->stale();
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Profilo eliminato.']);
+
+        return to_route('administration.labels.index');
+    }
+
+    private function data(CableLabelTemplateRequest $request): array
+    {
+        $data = $request->safe()->only(['name', 'width', 'cable_type', 'settings']);
+        foreach (['diameter', 'wrap', 'max_length', 'face_length'] as $field) {
             $data['settings'][$field] = (float) $data['settings'][$field];
         }
         $data['settings']['back_rotation'] = (int) $data['settings']['back_rotation'];
@@ -34,29 +68,12 @@ class CableLabelTemplateController extends Controller
             }
             unset($row);
         }
-        $key = $request->safe()->only(['width', 'cable_type']);
-        try {
-            if ($data['revision'] === 0) {
-                CableLabelTemplate::create([...$key, 'settings' => $data['settings'], 'revision' => 1]);
-            } else {
-                $updated = CableLabelTemplate::query()->where($key)->where('revision', $data['revision'])->update([
-                    'settings' => json_encode($data['settings'], JSON_THROW_ON_ERROR),
-                    'revision' => $data['revision'] + 1,
-                ]);
-                if (! $updated) {
-                    $this->stale();
-                }
-            }
-        } catch (UniqueConstraintViolationException) {
-            $this->stale();
-        }
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Template salvato.']);
 
-        return to_route('administration.labels.index');
+        return $data;
     }
 
     private function stale(): never
     {
-        throw ValidationException::withMessages(['revision' => 'Il template è cambiato. Ricarica la pagina prima di salvare.']);
+        throw ValidationException::withMessages(['revision' => 'Il profilo è cambiato. Ricarica la pagina prima di continuare.']);
     }
 }

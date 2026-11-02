@@ -132,6 +132,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         });
         Route::get('labels', [CableLabelTemplateController::class, 'index'])->name('labels.index');
         Route::post('labels', [CableLabelTemplateController::class, 'store'])->name('labels.store');
+        Route::put('labels/{template}', [CableLabelTemplateController::class, 'update'])->name('labels.update');
+        Route::delete('labels/{template}', [CableLabelTemplateController::class, 'destroy'])->name('labels.destroy');
         Route::inertia('prototypes/hardware-editor', 'administration/hardware-editor')->name('hardware-editor');
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');

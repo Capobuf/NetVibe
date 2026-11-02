@@ -1,5 +1,6 @@
+import { SaveButton } from '@/components/save-button';
 import { Form } from '@inertiajs/react';
-import { Check, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
@@ -16,7 +17,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Spinner } from '@/components/ui/spinner';
 import {
     deletionImpact,
     destroy,
@@ -113,14 +113,9 @@ export default function IpStatusForm({ status }: { status?: IpStatus }) {
                                             Annulla
                                         </Button>
                                     </DialogClose>
-                                    <Button type="submit" disabled={processing}>
-                                        {processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <Check data-icon="inline-start" />
-                                        )}
+                                    <SaveButton processing={processing}>
                                         {status ? 'Salva stato' : 'Crea stato'}
-                                    </Button>
+                                    </SaveButton>
                                 </DialogFooter>
                             </FieldGroup>
                         )}

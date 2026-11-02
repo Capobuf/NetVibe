@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import type { CatalogModel } from '@/lib/hardware-editor/catalog-storage';
 import { index as modelIndex } from '@/routes/device-models';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -11,7 +12,6 @@ import {
     Minus,
     PanelsTopLeft,
     Plus,
-    Save,
     Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -565,43 +565,30 @@ export default function HardwareEditor({
                         </Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <span
-                            className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex"
-                            role="status"
-                        >
-                            <span
-                                className={cn(
-                                    'size-1.5 rounded-full',
-                                    e.dirty
-                                        ? 'bg-chart-1'
-                                        : 'bg-muted-foreground',
-                                )}
-                            />
-                            {e.saving
-                                ? 'Salvataggio…'
-                                : e.dirty
-                                  ? 'Modifiche non salvate'
-                                  : catalogModel
-                                    ? 'Salvato'
-                                    : 'Salvata nel browser'}
-                        </span>
-                        <Button
+                        <SaveButton
+                            type="button"
+                            processing={e.saving}
+                            saved={
+                                !e.dirty &&
+                                !e.session &&
+                                !e.loading &&
+                                !e.loadFailed
+                            }
+                            disabled={saveDisabled}
                             onClick={() => {
                                 if (e.session) void finishNumbering();
                                 else void e.save();
                             }}
-                            disabled={saveDisabled}
-                        >
-                            <Save />
-                            <span className="hidden sm:inline">Salva</span>
-                        </Button>
-                        <Button
+                        />
+                        <SaveButton
+                            type="button"
                             variant="outline"
+                            processing={e.saving}
                             disabled={saveDisabled}
                             onClick={() => void saveAndExit()}
                         >
                             Salva ed esci
-                        </Button>
+                        </SaveButton>
                     </div>
                 </header>
                 <EditorToolbar
@@ -976,12 +963,14 @@ export default function HardwareEditor({
                             >
                                 Esci senza salvare
                             </Button>
-                            <Button
+                            <SaveButton
+                                type="button"
+                                processing={e.saving}
                                 disabled={saveDisabled}
                                 onClick={() => void saveAndExit(leave)}
                             >
-                                {e.saving ? 'Salvataggio…' : 'Salva ed esci'}
-                            </Button>
+                                Salva ed esci
+                            </SaveButton>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -1022,13 +1011,13 @@ export default function HardwareEditor({
                                 <Trash2 data-icon="inline-start" />
                                 Scarta
                             </Button>
-                            <Button
-                                disabled={e.saving}
+                            <SaveButton
+                                type="button"
+                                processing={e.saving}
                                 onClick={() => void finishNumbering()}
                             >
-                                <Save data-icon="inline-start" />
                                 {leave ? 'Salva ed esci' : 'Salva'}
-                            </Button>
+                            </SaveButton>
                         </div>
                     </DialogFooter>
                 </DialogContent>

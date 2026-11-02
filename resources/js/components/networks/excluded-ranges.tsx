@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { Form, usePage } from '@inertiajs/react';
 import { SlidersHorizontal, Plus, TriangleAlert } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -394,22 +395,22 @@ export default function ExcludedRanges({
                                     >
                                         Annulla
                                     </Button>
-                                    <Button
-                                        type="submit"
-                                        variant={
-                                            mode === 'remove'
-                                                ? 'destructive'
-                                                : 'default'
-                                        }
-                                        disabled={processing}
-                                    >
-                                        {processing ? <Spinner /> : null}
-                                        {mode === 'add'
-                                            ? 'Escludi intervallo'
-                                            : mode === 'edit'
-                                              ? 'Salva modifiche'
-                                              : 'Conferma rimozione'}
-                                    </Button>
+                                    {mode === 'remove' ? (
+                                        <Button
+                                            type="submit"
+                                            variant="destructive"
+                                            disabled={processing}
+                                        >
+                                            {processing ? <Spinner /> : null}
+                                            Conferma rimozione
+                                        </Button>
+                                    ) : (
+                                        <SaveButton processing={processing}>
+                                            {mode === 'add'
+                                                ? 'Escludi intervallo'
+                                                : 'Salva modifiche'}
+                                        </SaveButton>
+                                    )}
                                 </DialogFooter>
                             </>
                         )}

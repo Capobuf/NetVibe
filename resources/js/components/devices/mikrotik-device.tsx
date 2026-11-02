@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { formatDateTime } from '@/lib/utils';
 import { MikrotikSetup } from '@/components/devices/mikrotik-setup';
 import { MikrotikSyncPanel } from '@/components/devices/mikrotik-sync-panel';
@@ -803,10 +804,11 @@ function MikrotikPanel({ connection, ...route }: Props) {
                             >
                                 Annulla
                             </Button>
-                            <Button type="submit" disabled={busy}>
-                                {form.processing ? <Spinner /> : null}
-                                Salva
-                            </Button>
+                            <SaveButton
+                                processing={form.processing}
+                                saved={!!connection && !form.isDirty}
+                                disabled={busy}
+                            />
                         </div>
                     </DialogFooter>
                 </form>

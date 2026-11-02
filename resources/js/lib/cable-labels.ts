@@ -1,4 +1,5 @@
 export type LabelWidth = 12 | 18 | 24;
+export type LabelPrintMode = 'single' | 'both' | 'a' | 'b';
 export type CableType = 'copper' | 'fiber' | 'usb' | 'power';
 export type LabelEnd = Record<
     'piano' | 'rack' | 'dispositivo' | 'porta',
@@ -17,12 +18,17 @@ export type LabelSettings = {
     wrap: number;
     profile: 'round' | 'duplex';
     max_length: number;
+    length_mode: 'auto' | 'fixed';
+    face_length: number;
+    fit: 'extend' | 'shrink' | 'wrap';
     back_mode: 'repeat' | 'opposite' | 'custom';
     back_rotation: 0 | 180;
     front: LabelRow[];
     back: LabelRow[];
 };
 export type LabelTemplate = {
+    id: number | null;
+    name: string;
     width: LabelWidth;
     cable_type: CableType;
     revision: number;
@@ -83,7 +89,18 @@ export function labelPreset(
     width: LabelWidth,
     preset = 'endpoint',
 ): LabelRow[] {
-    const size = width === 12 ? 2.5 : width === 18 ? 3 : 3.5;
+    const size =
+        preset === 'links'
+            ? width === 12
+                ? 2.4
+                : width === 18
+                  ? 3.8
+                  : 5
+            : width === 12
+              ? 3
+              : width === 18
+                ? 4
+                : 5;
     const block = (text: string): LabelBlock => ({
         text,
         size,
@@ -93,6 +110,7 @@ export function labelPreset(
         blocks: texts.map(block),
         separator: ' | ',
     });
+    if (preset === 'concise') return [row('{{dispositivo}}@{{porta}}')];
     if (preset === 'name') return [row('{{nome_cavo}}')];
     if (preset === 'links')
         return [
@@ -114,7 +132,10 @@ export function defaultLabelSettings(
         diameter,
         wrap: Math.ceil(Math.PI * diameter + 2),
         profile: 'round',
-        max_length: 100,
+        max_length: 150,
+        length_mode: 'auto',
+        face_length: 45,
+        fit: 'extend',
         back_mode: 'repeat',
         back_rotation: 0,
         front: labelPreset(width),
@@ -233,7 +254,10 @@ export function layoutLabel(
         settings.wrap > 160 ||
         !Number.isFinite(settings.max_length) ||
         settings.max_length < 8 ||
-        settings.max_length > 150
+        settings.max_length > 150 ||
+        !Number.isFinite(settings.face_length) ||
+        settings.face_length < 8 ||
+        settings.face_length > settings.max_length
     ) {
         return {
             width,
@@ -243,7 +267,7 @@ export function layoutLabel(
             rotation: settings.back_rotation,
             faces: [[], []],
             errors: [
-                'Correggi le dimensioni: diametro 0,5–30 mm, avvolgimento 2–160 mm, lunghezza massima 8–150 mm.',
+                'Correggi le dimensioni: diametro 0,5–30 mm, avvolgimento 2–160 mm, lunghezza faccia 8–150 mm entro il limite massimo.',
             ],
         };
     }
@@ -285,11 +309,18 @@ export function layoutLabel(
             'Una faccia è vuota. Inserisci il nome del cavo o scegli un template con collegamenti.',
         );
 
-    function fitFace(rows: (typeof faces)[number], length: number) {
+    function fitFace(rows: (typeof faces)[number], length: number, scale = 1) {
         const texts: LabelText[] = [];
         let y = 0;
         let fits = true;
-        for (const row of rows) {
+        for (const original of rows) {
+            const row = {
+                ...original,
+                blocks: original.blocks.map((block) => ({
+                    ...block,
+                    size: Math.max(2, block.size * scale),
+                })),
+            };
             const size = Math.max(...row.blocks.map((block) => block.size));
             const separatorWidth =
                 measure(row.separator, size) + (row.blocks.length > 1 ? 1 : 0);
@@ -309,12 +340,10 @@ export function layoutLabel(
                     0.1,
                     (available * natural[index]) / total,
                 );
-                const lines = wrapText(
-                    block.text,
-                    block.size,
-                    columnWidth,
-                    measure,
-                );
+                const lines =
+                    settings.length_mode === 'fixed' && settings.fit === 'wrap'
+                        ? wrapText(block.text, block.size, columnWidth, measure)
+                        : block.text.split('\n');
                 if (
                     lines.some(
                         (line) =>
@@ -376,19 +405,57 @@ export function layoutLabel(
             texts: texts.map((text) => ({ ...text, y: text.y + offset })),
         };
     }
-    let faceLength = 8;
+    // Measure unwrapped rows first; tape width constrains height, not the reading line.
+    const naturalLength = Math.max(
+        8,
+        ...faces.flatMap((rows) =>
+            rows.map((row) => {
+                const size = Math.max(...row.blocks.map((block) => block.size));
+                return (
+                    2 +
+                    row.blocks.reduce(
+                        (total, block) =>
+                            total +
+                            Math.max(
+                                block.size,
+                                ...block.text
+                                    .split('\n')
+                                    .map((line) => measure(line, block.size)),
+                            ),
+                        0,
+                    ) +
+                    (measure(row.separator, size) + 1) * (row.blocks.length - 1)
+                );
+            }),
+        ),
+    );
+    const automatic = settings.length_mode === 'auto';
+    const extend = !automatic && settings.fit === 'extend';
+    const desired = automatic
+        ? naturalLength
+        : extend
+          ? Math.max(settings.face_length, naturalLength)
+          : settings.face_length;
+    const faceLength = Math.min(
+        settings.max_length,
+        Math.ceil(desired * 10) / 10,
+    );
     let placed = faces.map((rows) => fitFace(rows, faceLength));
-    // Half-millimetre steps find the shortest printable face without shrinking the chosen type.
-    while (
-        placed.some((face) => !face.fits) &&
-        faceLength < settings.max_length
-    ) {
-        faceLength = Math.min(settings.max_length, faceLength + 0.5);
-        placed = faces.map((rows) => fitFace(rows, faceLength));
+    if (!automatic && settings.fit === 'shrink') {
+        // Keep every block at or above the same readable minimum used by the editor.
+        for (
+            let percent = 99;
+            percent >= 0 && placed.some((face) => !face.fits);
+            percent--
+        ) {
+            placed = faces.map((rows) =>
+                fitFace(rows, faceLength, percent / 100),
+            );
+        }
     }
     if (placed.some((face) => !face.fits))
         errors.push(
-            'Il contenuto non entra: aumenta la lunghezza massima o la larghezza del nastro, oppure riduci righe e dimensione del testo.',
+            'Il contenuto non entra: aumenta la lunghezza della faccia o il limite massimo, scegli un nastro più alto oppure modifica l’adattamento del testo (minimo 2 mm).',
         );
     return {
         width,
@@ -400,3 +467,28 @@ export function layoutLabel(
         errors: [...new Set(errors)],
     };
 }
+
+export const printModes = {
+    single: 'Una etichetta per cavo',
+    both: 'Due etichette, una per estremità',
+    a: 'Solo estremità A',
+    b: 'Solo estremità B',
+};
+
+export function labelPrintSides(mode: LabelPrintMode): ('a' | 'b')[] {
+    return mode === 'both' ? ['a', 'b'] : [mode === 'b' ? 'b' : 'a'];
+}
+
+export const labelCompositions = {
+    name: { name: 'Solo nome', example: 'Uplink sala server' },
+    concise: { name: 'Sintetica', example: 'SW-CORE@24' },
+    endpoint: { name: 'Completa', example: '[PT] RACK-01\\SW-CORE@24' },
+    links: {
+        name: 'Nome + collegamenti',
+        example: 'Nome\nEstremità A\nEstremità B',
+    },
+    inline: {
+        name: 'A | Nome | B',
+        example: 'Estremità A | Nome | Estremità B',
+    },
+};

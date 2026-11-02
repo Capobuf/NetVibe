@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { RackFloorField } from './rack-floor-field';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
@@ -69,7 +70,9 @@ export function RackForm({ company, site }: { company: number; site: number }) {
                                         Annulla
                                     </Button>
                                 </DialogClose>
-                                <Button disabled={processing}>Crea rack</Button>
+                                <SaveButton processing={processing}>
+                                    Crea rack
+                                </SaveButton>
                             </DialogFooter>
                         </FieldGroup>
                     )}

@@ -1,17 +1,11 @@
+import { SaveButton } from '@/components/save-button';
 import {
     MikrotikSourcesDialog,
     MikrotikIndicator,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
 import { Form, usePage } from '@inertiajs/react';
-import {
-    ArrowRight,
-    Check,
-    Pencil,
-    Plus,
-    Trash2,
-    TriangleAlert,
-} from 'lucide-react';
+import { ArrowRight, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { type ComponentProps, useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { CopyValue } from '@/components/copy-value';
@@ -37,7 +31,6 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ipv4Number } from '@/lib/ipv4';
 import {
@@ -505,37 +498,26 @@ export default function IpAddressForm({
                                     >
                                         Annulla
                                     </Button>
-                                    {canEdit && (
-                                        <Button
-                                            type={
-                                                releasing ? 'button' : 'submit'
-                                            }
-                                            variant={
-                                                releasing
-                                                    ? 'destructive'
-                                                    : 'default'
-                                            }
-                                            disabled={processing}
-                                            onClick={
-                                                releasing
-                                                    ? () => setDeleting(true)
-                                                    : undefined
-                                            }
-                                        >
-                                            {processing ? (
-                                                <Spinner />
-                                            ) : releasing ? (
-                                                <Trash2 data-icon="inline-start" />
-                                            ) : (
-                                                <Check data-icon="inline-start" />
-                                            )}
-                                            {releasing
-                                                ? 'Libera IP…'
-                                                : errors.mac_confirmation
-                                                  ? 'Sostituisci MAC'
-                                                  : 'Salva'}
-                                        </Button>
-                                    )}
+                                    {canEdit &&
+                                        (releasing ? (
+                                            <Button
+                                                type="button"
+                                                variant="destructive"
+                                                disabled={processing}
+                                                onClick={() =>
+                                                    setDeleting(true)
+                                                }
+                                            >
+                                                <Trash2 />
+                                                Libera IP…
+                                            </Button>
+                                        ) : (
+                                            <SaveButton processing={processing}>
+                                                {errors.mac_confirmation
+                                                    ? 'Sostituisci MAC'
+                                                    : 'Salva'}
+                                            </SaveButton>
+                                        ))}
                                 </SheetFooter>
                             </FieldGroup>
                         )}

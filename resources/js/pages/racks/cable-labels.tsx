@@ -1,10 +1,13 @@
 import { Head, Link } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
-import { LabelPhysicalSettings } from '@/components/labels/label-settings';
+import {
+    LabelLengthSettings,
+    LabelPhysicalSettings,
+} from '@/components/labels/label-settings';
 import {
     createLabelMeasure,
-    LabelPreview,
+    LabelPreviews,
 } from '@/components/labels/label-preview';
 import { Choice } from '@/components/hardware-editor/editor-fields';
 import { IconButton } from '@/components/icon-button';
@@ -14,10 +17,21 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     defaultLabelSettings,
     layoutLabel,
+    labelPrintSides,
+    printModes,
     type CableType,
     type LabelData,
+    type LabelPrintMode,
     type LabelTemplate,
     type LabelWidth,
 } from '@/lib/cable-labels';
@@ -41,16 +55,12 @@ export default function CableLabels({
     templates,
 }: Props) {
     const [width, setWidth] = useState<LabelWidth>(12);
-    const [selection, setSelection] = useState('both');
-    const [side, setSide] = useState<'a' | 'b'>('a');
+    const [profileId, setProfileId] = useState('');
+    const [printMode, setPrintMode] = useState<LabelPrintMode>('both');
     const [measure] = useState(createLabelMeasure);
-    function settingsFor(width: LabelWidth) {
-        return (
-            templates.find((template) => template.width === width)?.settings ??
-            defaultLabelSettings(width, cable.type)
-        );
-    }
-    const [settings, setSettings] = useState(() => settingsFor(12));
+    const [settings, setSettings] = useState(() =>
+        defaultLabelSettings(12, cable.type),
+    );
     const [documentUrl, setDocumentUrl] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
@@ -61,10 +71,9 @@ export default function CableLabels({
         [documentUrl],
     );
     const data = { ...ends, name: cable.name };
-    const a = layoutLabel(settings, width, data, 'a', measure);
-    const b = layoutLabel(settings, width, data, 'b', measure);
-    const layouts =
-        selection === 'both' ? [a, b] : selection === 'a' ? [a] : [b];
+    const layouts = labelPrintSides(printMode).map((side) =>
+        layoutLabel(settings, width, data, side, measure),
+    );
     const problems = [...new Set(layouts.flatMap((layout) => layout.errors))];
     function invalidate() {
         setDocumentUrl(null);
@@ -97,7 +106,7 @@ export default function CableLabels({
                         className="flex flex-col gap-6"
                         onSubmit={async (event) => {
                             event.preventDefault();
-                            if (problems.length || busy) return;
+                            if (!profileId || problems.length || busy) return;
                             setBusy(true);
                             setError('');
                             try {
@@ -135,7 +144,13 @@ export default function CableLabels({
                                             value,
                                         ) as LabelWidth;
                                         setWidth(next);
-                                        setSettings(settingsFor(next));
+                                        setProfileId('');
+                                        setSettings(
+                                            defaultLabelSettings(
+                                                next,
+                                                cable.type,
+                                            ),
+                                        );
                                         invalidate();
                                     }}
                                 >
@@ -149,43 +164,99 @@ export default function CableLabels({
                                     ))}
                                 </ToggleGroup>
                             </Field>
-                            <p className="text-xs text-muted-foreground">
-                                {templates.some(
-                                    (template) => template.width === width,
-                                )
-                                    ? 'Template salvato'
-                                    : 'Preset iniziale'}{' '}
-                                · {cableTypes[cable.type]} · {width} mm
-                            </p>
-                            <Choice
-                                label="Etichette da stampare"
-                                value={selection}
-                                choices={{
-                                    both: 'Entrambe le estremità',
-                                    a: 'Solo estremità A',
-                                    b: 'Solo estremità B',
-                                }}
-                                onChange={(value) => {
-                                    setSelection(value);
-                                    if (value !== 'both')
-                                        setSide(value as 'a' | 'b');
-                                    invalidate();
-                                }}
-                            />
-                            <LabelPhysicalSettings
-                                settings={settings}
-                                onChange={(next) => {
-                                    setSettings(next);
-                                    invalidate();
-                                }}
-                            />
-                            <Button
-                                type="submit"
-                                disabled={busy || problems.length > 0}
-                            >
-                                <Printer />
-                                {busy ? 'Preparazione…' : 'Genera PDF'}
-                            </Button>
+                            <Field>
+                                <FieldLabel htmlFor="print-profile">
+                                    Profilo
+                                </FieldLabel>
+                                <Select
+                                    value={profileId}
+                                    onValueChange={(value) => {
+                                        const template = templates.find(
+                                            (template) =>
+                                                String(template.id) === value,
+                                        );
+                                        setProfileId(value);
+                                        setSettings(
+                                            template?.settings ??
+                                                defaultLabelSettings(
+                                                    width,
+                                                    cable.type,
+                                                ),
+                                        );
+                                        invalidate();
+                                    }}
+                                >
+                                    <SelectTrigger
+                                        id="print-profile"
+                                        className="w-full"
+                                    >
+                                        <SelectValue placeholder="Scegli un profilo…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            {templates
+                                                .filter(
+                                                    (template) =>
+                                                        template.width ===
+                                                        width,
+                                                )
+                                                .map((template) => (
+                                                    <SelectItem
+                                                        key={template.id}
+                                                        value={String(
+                                                            template.id,
+                                                        )}
+                                                    >
+                                                        {template.name}
+                                                    </SelectItem>
+                                                ))}
+                                            <SelectItem value="preset">
+                                                Preset iniziale · Completa (
+                                                {width} mm)
+                                            </SelectItem>
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                            </Field>
+                            {profileId && (
+                                <>
+                                    <Choice
+                                        label="Etichette fisiche da stampare"
+                                        value={printMode}
+                                        choices={printModes}
+                                        onChange={(value) => {
+                                            setPrintMode(
+                                                value as LabelPrintMode,
+                                            );
+                                            invalidate();
+                                        }}
+                                    />
+                                    <LabelLengthSettings
+                                        settings={settings}
+                                        faceLength={layouts[0].faceLength}
+                                        onChange={(next) => {
+                                            setSettings(next);
+                                            invalidate();
+                                        }}
+                                    />
+                                    <LabelPhysicalSettings
+                                        settings={settings}
+                                        onChange={(next) => {
+                                            setSettings(next);
+                                            invalidate();
+                                        }}
+                                    />
+                                    <Button
+                                        type="submit"
+                                        disabled={busy || problems.length > 0}
+                                    >
+                                        <Printer />
+                                        {busy
+                                            ? 'Preparazione…'
+                                            : `Genera PDF · ${layouts.length} ${layouts.length === 1 ? 'etichetta' : 'etichette'}`}
+                                    </Button>
+                                </>
+                            )}
                         </fieldset>
                         {error && (
                             <Alert variant="destructive">
@@ -221,48 +292,26 @@ export default function CableLabels({
                             </div>
                         )}
                     </form>
-                    <div className="flex min-w-0 flex-col gap-5">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h2 className="text-base font-medium">Anteprima</h2>
-                            <ToggleGroup
-                                type="single"
-                                variant="outline"
-                                value={side}
-                                aria-label="Anteprima estremità"
-                                onValueChange={(value) => {
-                                    if (value) setSide(value as 'a' | 'b');
-                                }}
-                            >
-                                <ToggleGroupItem value="a">
-                                    Etichetta A
-                                </ToggleGroupItem>
-                                <ToggleGroupItem value="b">
-                                    Etichetta B
-                                </ToggleGroupItem>
-                            </ToggleGroup>
-                        </div>
-                        <LabelPreview
-                            layout={side === 'a' ? a : b}
-                            settings={settings}
-                            color={cable.color}
-                        />
-                        {problems.length > 0 &&
-                            (side === 'a' ? b : a).errors.some(
-                                (error) =>
-                                    problems.includes(error) &&
-                                    !(side === 'a' ? a : b).errors.includes(
-                                        error,
-                                    ),
-                            ) && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>
-                                        Controlla anche gli avvisi dell’altra
-                                        estremità prima di generare entrambe le
-                                        etichette.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-                    </div>
+                    <section className="flex min-w-0 flex-col gap-5 lg:sticky lg:top-6">
+                        <h2 className="text-base font-medium">
+                            Anteprima di stampa
+                        </h2>
+                        {profileId ? (
+                            <LabelPreviews
+                                layouts={layouts}
+                                printMode={printMode}
+                                settings={settings}
+                                color={cable.color}
+                            />
+                        ) : (
+                            <Alert>
+                                <AlertDescription>
+                                    Seleziona un profilo per preparare le
+                                    etichette.
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                    </section>
                 </div>
             </div>
         </>

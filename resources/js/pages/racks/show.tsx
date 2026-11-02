@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -8,7 +9,6 @@ import {
     Maximize,
     Minus,
     Plus,
-    Save,
     Search,
     Server,
     Settings2,
@@ -802,14 +802,6 @@ function RackEditor({
                         </ToggleGroup>
                         {editing && (
                             <>
-                                {isDirty && (
-                                    <span
-                                        className="text-xs text-muted-foreground"
-                                        aria-live="polite"
-                                    >
-                                        Modifiche da salvare
-                                    </span>
-                                )}
                                 <Button
                                     variant="outline"
                                     disabled={processing}
@@ -818,13 +810,13 @@ function RackEditor({
                                     <Undo2 />
                                     Annulla
                                 </Button>
-                                <Button
-                                    onClick={() => save()}
+                                <SaveButton
+                                    type="button"
+                                    processing={form.processing}
+                                    saved={!isDirty}
                                     disabled={processing}
-                                >
-                                    <Save />
-                                    {processing ? 'Salvataggio…' : 'Salva'}
-                                </Button>
+                                    onClick={() => save()}
+                                />
                             </>
                         )}
                     </div>
@@ -1980,12 +1972,14 @@ function RackEditor({
                             Scarta modifiche
                         </Button>
                         {leave && !modalDirty && (
-                            <Button
+                            <SaveButton
+                                type="button"
+                                processing={form.processing}
                                 disabled={processing}
                                 onClick={() => save(leave)}
                             >
-                                {processing ? 'Salvataggio…' : 'Salva ed esci'}
-                            </Button>
+                                Salva ed esci
+                            </SaveButton>
                         )}
                     </DialogFooter>
                 </DialogContent>

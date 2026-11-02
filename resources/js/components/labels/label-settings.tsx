@@ -88,13 +88,93 @@ export function LabelPhysicalSettings({
                 max={160}
                 onChange={(wrap) => onChange({ ...settings, wrap })}
             />
-            <Millimetres
-                label="Lunghezza massima di ogni faccia (mm)"
-                value={settings.max_length}
-                min={8}
-                max={150}
-                onChange={(max_length) => onChange({ ...settings, max_length })}
+        </FieldGroup>
+    );
+}
+
+export function LabelLengthSettings({
+    settings,
+    faceLength,
+    onChange,
+}: {
+    settings: LabelSettings;
+    faceLength: number;
+    onChange: (settings: LabelSettings) => void;
+}) {
+    return (
+        <FieldGroup className="gap-5">
+            <Choice
+                label="Lunghezza delle facce"
+                value={settings.length_mode}
+                choices={{
+                    auto: 'Automatica sul contenuto',
+                    fixed: 'Personalizzata',
+                }}
+                onChange={(length_mode) =>
+                    onChange({
+                        ...settings,
+                        length_mode:
+                            length_mode as LabelSettings['length_mode'],
+                        face_length: Math.min(
+                            settings.max_length,
+                            Math.max(8, faceLength),
+                        ),
+                    })
+                }
             />
+            <Millimetres
+                label="Lunghezza di ogni faccia (mm)"
+                value={
+                    settings.length_mode === 'auto'
+                        ? faceLength
+                        : settings.face_length
+                }
+                min={8}
+                max={settings.max_length}
+                onChange={(face_length) =>
+                    onChange({ ...settings, face_length, length_mode: 'fixed' })
+                }
+            />
+            {settings.length_mode === 'fixed' && (
+                <Choice
+                    label="Se il testo non entra"
+                    value={settings.fit}
+                    choices={{
+                        extend: 'Allunga la faccia',
+                        shrink: 'Riduci il carattere (min. 2 mm)',
+                        wrap: 'Vai a capo',
+                    }}
+                    onChange={(fit) =>
+                        onChange({
+                            ...settings,
+                            fit: fit as LabelSettings['fit'],
+                        })
+                    }
+                />
+            )}
+            <details>
+                <summary className="cursor-pointer rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                    Limite di lunghezza
+                </summary>
+                <div className="pt-4">
+                    <Millimetres
+                        label="Lunghezza massima della faccia (mm)"
+                        value={settings.max_length}
+                        min={8}
+                        max={150}
+                        onChange={(max_length) =>
+                            onChange({
+                                ...settings,
+                                max_length,
+                                face_length: Math.min(
+                                    settings.face_length,
+                                    max_length,
+                                ),
+                            })
+                        }
+                    />
+                </div>
+            </details>
         </FieldGroup>
     );
 }

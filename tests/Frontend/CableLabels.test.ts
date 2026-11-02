@@ -4,6 +4,7 @@ import {
     defaultEndpointFormat,
     defaultLabelSettings,
     labelPreset,
+    labelPrintSides,
     layoutLabel,
     minimumWrap,
     resolveLabelText,
@@ -97,7 +98,7 @@ test('long text grows the face without truncation; wrap and both face compositio
     const short = layoutLabel(settings, 12, sampleLabelData, 'a', measure);
     const data = {
         ...sampleLabelData,
-        a: { ...sampleLabelData.a, dispositivo: 'SW-CORE-'.repeat(15) },
+        a: { ...sampleLabelData.a, dispositivo: 'SW-CORE-'.repeat(5) },
     };
     const long = layoutLabel(settings, 12, data, 'a', measure);
     assert.ok(long.faceLength > short.faceLength);
@@ -111,7 +112,7 @@ test('long text grows the face without truncation; wrap and both face compositio
     assert.equal(long.length, long.faceLength * 2 + settings.wrap);
     assert.ok(
         layoutLabel(
-            { ...settings, max_length: 20 },
+            { ...settings, max_length: 20, face_length: 20 },
             12,
             data,
             'a',
@@ -141,4 +142,59 @@ test('long text grows the face without truncation; wrap and both face compositio
             .join('')
             .includes('PH0'),
     );
+});
+
+test('automatic faces keep the complete 12 mm identification on one line and fixed lengths use only the chosen fitting policy', () => {
+    const settings = defaultLabelSettings(12, 'copper');
+    const automatic = layoutLabel(settings, 12, sampleLabelData, 'a', measure);
+    assert.deepEqual(automatic.errors, []);
+    assert.equal(automatic.faces[0].length, 1);
+    assert.equal(automatic.faces[0][0].text, '[PT] RACK-01\\SW-CORE@24');
+    assert.ok(automatic.faceLength > 17.5);
+    const fixed = {
+        ...settings,
+        length_mode: 'fixed' as const,
+        face_length: 30,
+    };
+    const extended = layoutLabel(fixed, 12, sampleLabelData, 'a', measure);
+    assert.equal(extended.faceLength, automatic.faceLength);
+    const shrunk = layoutLabel(
+        { ...fixed, fit: 'shrink' },
+        12,
+        sampleLabelData,
+        'a',
+        measure,
+    );
+    assert.deepEqual(shrunk.errors, []);
+    assert.equal(shrunk.faceLength, 30);
+    assert.equal(shrunk.faces[0].length, 1);
+    assert.ok(
+        shrunk.faces[0][0].size >= 2 &&
+            shrunk.faces[0][0].size < automatic.faces[0][0].size,
+    );
+    const wrapped = layoutLabel(
+        { ...fixed, face_length: 35, fit: 'wrap' },
+        12,
+        sampleLabelData,
+        'a',
+        measure,
+    );
+    assert.deepEqual(wrapped.errors, []);
+    assert.ok(wrapped.faces[0].length > 1);
+    assert.ok(
+        layoutLabel(
+            { ...fixed, face_length: 8, fit: 'shrink' },
+            12,
+            sampleLabelData,
+            'a',
+            measure,
+        ).errors.length > 0,
+    );
+    assert.ok(
+        defaultLabelSettings(24, 'copper').front[0].blocks[0].size >
+            defaultLabelSettings(18, 'copper').front[0].blocks[0].size,
+    );
+    assert.deepEqual(labelPrintSides('single'), ['a']);
+    assert.deepEqual(labelPrintSides('both'), ['a', 'b']);
+    assert.deepEqual(labelPrintSides('b'), ['b']);
 });

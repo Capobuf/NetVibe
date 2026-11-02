@@ -1,3 +1,4 @@
+import { SaveButton } from '@/components/save-button';
 import { MacConfirmation } from '@/components/devices/mac-confirmation';
 import { Form } from '@inertiajs/react';
 import { useId, useState, type ComponentProps, type ReactNode } from 'react';
@@ -395,13 +396,12 @@ export function InterfaceForm({
                                     Annulla
                                 </Button>
                             </DialogClose>
-                            <Button
-                                type="submit"
+                            <SaveButton
                                 form={`${id}-form`}
-                                disabled={submitting}
+                                processing={submitting}
                             >
                                 {confirmingMac ? 'Sostituisci MAC' : 'Salva'}
-                            </Button>
+                            </SaveButton>
                         </DialogFooter>
                     </>
                 )}

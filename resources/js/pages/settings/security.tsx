@@ -1,10 +1,10 @@
+import { SaveButton } from '@/components/save-button';
 import { Form, Head } from '@inertiajs/react';
 import { useRef } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
-import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/security';
 import type { Props as ManagePasskeysProps } from '@/components/manage-passkeys';
@@ -57,7 +57,7 @@ export default function Security(props: Props) {
                     }}
                     className="space-y-6"
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, processing, isDirty, wasSuccessful }) => (
                         <>
                             <div className="grid gap-2">
                                 <Label htmlFor="current_password">
@@ -112,12 +112,11 @@ export default function Security(props: Props) {
                             </div>
 
                             <div className="flex items-center gap-4">
-                                <Button
-                                    disabled={processing}
+                                <SaveButton
+                                    processing={processing}
+                                    saved={wasSuccessful && !isDirty}
                                     data-test="update-password-button"
-                                >
-                                    Salva
-                                </Button>
+                                />
                             </div>
                         </>
                     )}

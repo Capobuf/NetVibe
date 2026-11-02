@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Exceptions\SnipeItException;
+use App\Models\SnipeItConnection;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -77,7 +78,37 @@ class SnipeItClient
         throw new SnipeItException('limit');
     }
 
-    public function inventory(string $url, #[\SensitiveParameter] string $token, int $company): array
+    public function fields(string $url, #[\SensitiveParameter] string $token): array
+    {
+        $fields = [
+            ['value' => 'name', 'label' => 'Nome asset'],
+            ['value' => 'asset_tag', 'label' => 'Asset tag'],
+            ['value' => 'serial', 'label' => 'Seriale'],
+            ['value' => 'notes', 'label' => 'Note asset'],
+        ];
+        $deadline = microtime(true) + 20;
+        for ($offset = 0; $offset < 10_000;) {
+            $data = $this->read($url, $token, 'fields', ['limit' => 500, 'offset' => $offset], $deadline);
+            foreach ($data['rows'] as $row) {
+                $column = $row['db_column_name'] ?? null;
+                $name = self::text($row['name'] ?? null);
+                if (! is_string($column) || ! str_starts_with($column, '_snipeit_') || mb_strlen($column) > 255 || $name === null) {
+                    throw new SnipeItException('format');
+                }
+                $fields[] = ['value' => 'custom:'.$column, 'label' => $name];
+            }
+            $offset += count($data['rows']);
+            if ($offset === $data['total']) {
+                return $fields;
+            }
+            if ($data['rows'] === [] || $offset > $data['total']) {
+                throw new SnipeItException('format');
+            }
+        }
+        throw new SnipeItException('limit');
+    }
+
+    public function inventory(string $url, #[\SensitiveParameter] string $token, int $company, array $mapping = SnipeItConnection::DEFAULT_MAPPING): array
     {
         $deadline = microtime(true) + 55;
         $seen = $assets = $models = [];
@@ -100,10 +131,17 @@ class SnipeItClient
                 }
                 $modelId = $row['model']['id'] ?? null;
                 $assets[$row['id']] = [
-                    'name' => self::text($row['name'] ?? null),
+                    'name' => self::mappedValue($row, $mapping['name']),
                     'asset_tag' => self::text($row['asset_tag'] ?? null),
                     'serial' => self::text($row['serial'] ?? null),
                     'model_id' => is_int($modelId) && $modelId > 0 ? $modelId : null,
+                    'mapping' => $mapping,
+                    'notes' => self::mappedValue($row, $mapping['description']),
+                    'network' => [
+                        'ip' => self::mappedValue($row, $mapping['ip']),
+                        'mac' => ($mac = self::mappedValue($row, $mapping['mac'])) !== null
+                            ? strtoupper(str_replace('-', ':', $mac)) : null,
+                    ],
                 ];
                 if ($assets[$row['id']]['model_id'] && ! isset($models[$modelId])) {
                     $models[$modelId] = [
@@ -131,6 +169,22 @@ class SnipeItClient
         } while (count($seen) < $total);
 
         return ['assets' => $assets, 'models' => $models];
+    }
+
+    private static function mappedValue(array $row, ?string $field): ?string
+    {
+        if ($field === null) {
+            return null;
+        }
+        if (str_starts_with($field, 'custom:')) {
+            return self::text(collect($row['custom_fields'] ?? [])->firstWhere('field', substr($field, 7))['value'] ?? null);
+        }
+        if (str_starts_with($field, 'label:')) {
+            return self::text($row['custom_fields'][substr($field, 6)]['value'] ?? null);
+        }
+        $value = self::text($row[$field] ?? null);
+
+        return $field === 'notes' && $value !== null ? trim(strip_tags($value)) : $value;
     }
 
     private static function text(mixed $value): ?string

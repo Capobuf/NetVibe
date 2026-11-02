@@ -1,4 +1,5 @@
 import { SaveButton } from '@/components/save-button';
+import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import {
     MikrotikSourcesDialog,
     MikrotikIndicator,
@@ -204,6 +205,10 @@ export default function IpAddressForm({
                             </div>
                         ))}
                     </dl>
+                    <SnipeItIp
+                        source={ipAddress.snipe_it}
+                        mikrotikSources={sources}
+                    />
                     <Separator />
                     <section className="flex flex-col gap-3">
                         <h3 className="text-sm font-medium">

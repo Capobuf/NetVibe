@@ -7,17 +7,20 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
+use App\Models\MikrotikSource;
 use App\Models\ModelType;
 use App\Models\SnipeItAsset;
 use App\Models\SnipeItCompanyLink;
 use App\Models\SnipeItModel;
 use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync as Sync;
+use App\Models\Subnet;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class SnipeItSync
@@ -43,12 +46,14 @@ class SnipeItSync
         }
         try {
             $connection = $sync->connection;
-            $inventory = $this->client->inventory($connection->server_url, $connection->api_key, $sync->external_company_id);
+            $inventory = $this->client->inventory($connection->server_url, $connection->api_key, $sync->external_company_id, $connection->mapping());
             DB::transaction(function () use ($sync, $inventory, $connection) {
                 SnipeItSetting::whereKey('global')->lockForUpdate()->firstOrFail();
                 $sync->refresh();
                 $this->ensureActive($sync);
-                if ($connection->updated_at != $connection->fresh()->updated_at) {
+                $currentConnection = $connection->fresh();
+                if ($connection->updated_at != $currentConnection->updated_at
+                    || Arr::sortRecursive($connection->mapping()) !== Arr::sortRecursive($currentConnection->mapping())) {
                     $this->invalid('La connessione è cambiata durante la lettura. Sincronizza nuovamente.');
                 }
                 $models = [];
@@ -62,20 +67,26 @@ class SnipeItSync
                 DeviceModel::whereIn('id', collect($models)->pluck('device_model_id')->filter())->orderBy('id')->lockForUpdate()->get();
                 Company::whereKey($sync->company_id)->lockForUpdate()->firstOrFail();
                 $sync->assets()->update(['present' => false]);
+                $assets = [];
                 foreach ($inventory['assets'] as $externalId => $snapshot) {
                     $asset = $sync->assets()->firstOrNew(['external_id' => $externalId]);
+                    $previous = $asset->snapshot ?? [];
                     if (! $asset->exists) {
                         $asset->state = 'pending';
-                        $asset->needs_confirmation = ! $sync->activated_at;
+                        $asset->needs_confirmation = true;
                     }
                     $asset->fill([
                         'snapshot' => $snapshot, 'present' => true,
                         'snipe_it_model_id' => ($models[$snapshot['model_id']] ?? null)?->id,
                     ])->save();
                     $asset->setRelation('sync', $sync);
-                    $this->applyAsset($asset);
+                    $assets[] = [$asset, $previous];
                 }
-                $sync->update(['synced_at' => now(), 'error' => null]);
+                // Read all network claims before assigning any IP, regardless of API order.
+                foreach ($assets as [$asset, $previous]) {
+                    $this->applyAsset($asset, previous: $previous);
+                }
+                $sync->update(['activated_at' => $sync->activated_at ?? now(), 'synced_at' => now(), 'error' => null]);
                 Sync::where('connection_id', $sync->connection_id)->increment('revision');
             }, 3);
         } catch (SnipeItException $e) {
@@ -100,6 +111,10 @@ class SnipeItSync
             foreach ($decisions as $decision) {
                 $asset = $assets[$decision['id']];
                 $asset->setRelation('sync', $sync);
+                if (in_array($decision['action'], ['create', 'link'], true)
+                    && Arr::sortRecursive($asset->snapshot['mapping'] ?? []) !== Arr::sortRecursive($sync->connection->mapping())) {
+                    $this->invalid('I campi da sincronizzare sono cambiati. Sincronizza nuovamente prima di confermare gli asset.');
+                }
                 if ($asset->device_id) {
                     $this->invalid('Il dispositivo è già collegato. Usa l’azione Scollega dal dettaglio.');
                 }
@@ -109,7 +124,7 @@ class SnipeItSync
                     continue;
                 }
                 if ($decision['action'] === 'restore' && $asset->state === 'excluded') {
-                    $asset->update(['state' => 'pending', 'needs_confirmation' => true]);
+                    $asset->update(['state' => 'detached', 'needs_confirmation' => true]);
 
                     continue;
                 }
@@ -148,7 +163,7 @@ class SnipeItSync
             if (! $asset->device_id) {
                 $this->invalid('Il dispositivo è già scollegato.');
             }
-            $asset->update(['device_id' => null, 'state' => $exclude ? 'excluded' : 'pending', 'needs_confirmation' => true, 'problem' => null]);
+            $asset->update(['device_id' => null, 'state' => $exclude ? 'excluded' : 'detached', 'needs_confirmation' => true, 'problem' => null]);
             $asset->sync()->increment('revision');
         }, 3);
     }
@@ -299,11 +314,23 @@ class SnipeItSync
         });
     }
 
-    private function applyAsset(SnipeItAsset $asset, bool $explicit = false, ?Device $target = null, ?int $siteId = null, ?int $modelId = null, bool $changeModel = false): void
+    private function applyAsset(SnipeItAsset $asset, bool $explicit = false, ?Device $target = null, ?int $siteId = null, ?int $modelId = null, bool $changeModel = false, array $previous = []): void
     {
         if ($asset->state === 'excluded') {
             return;
         }
+        $device = $target ?? ($asset->device_id ? $this->companyDevices($asset->sync)->lockForUpdate()->findOrFail($asset->device_id) : null);
+        if (! $device && ! $explicit) {
+            $problem = $this->applyNetwork($asset, previous: $previous);
+            $asset->update([
+                'state' => in_array($asset->state, ['linked', 'detached'], true) ? 'detached' : 'pending',
+                'needs_confirmation' => true,
+                'problem' => $problem,
+            ]);
+
+            return;
+        }
+        $previousNotes = $previous['notes'] ?? null;
         $data = $asset->snapshot;
         $name = $data['name'] ?? $data['asset_tag'];
         $externalModel = $asset->externalModel()->first();
@@ -321,33 +348,9 @@ class SnipeItSync
 
             return;
         }
-        $device = $target ?? ($asset->device_id ? $this->companyDevices($asset->sync)->lockForUpdate()->findOrFail($asset->device_id) : null);
-        if (! $device && ! $explicit) {
-            if ($asset->state === 'linked') {
-                // Ordinary deletion is intentional: never recreate the deleted device implicitly.
-                $asset->needs_confirmation = true;
-            }
-            if ($asset->needs_confirmation || ! $asset->sync->activated_at) {
-                $asset->update(['state' => 'pending', 'needs_confirmation' => true, 'problem' => null]);
-
-                return;
-            }
-            if ($this->deviceCandidates($asset)->exists()) {
-                $asset->update(['state' => 'pending', 'needs_confirmation' => true, 'problem' => 'Possibile dispositivo esistente: conferma l’associazione.']);
-
-                return;
-            }
-            $sites = $asset->sync->company->sites()->pluck('id');
-            if ($sites->count() !== 1) {
-                $asset->update(['state' => 'site', 'problem' => null]);
-
-                return;
-            }
-            $siteId = $sites->first();
-        }
         try {
             // Roll back catalog creation too when this device cannot be imported.
-            DB::transaction(function () use ($asset, $externalModel, $modelId, $device, $siteId, $data, $name, $explicit, $changeModel) {
+            DB::transaction(function () use ($asset, $externalModel, $modelId, $device, $siteId, $data, $name, $explicit, $changeModel, $previousNotes) {
                 $model = $this->resolveModel($externalModel, $modelId);
                 if ($device) {
                     if ($blocked = $device->modelChangeProblem($model->id)) {
@@ -359,10 +362,21 @@ class SnipeItSync
                 } else {
                     $device = $asset->sync->company->sites()->findOrFail($siteId)->devices()->make();
                 }
+                $notesProblem = null;
+                if (($data['notes'] ?? null) !== null) {
+                    if (mb_strlen($data['notes']) > 10000) {
+                        $notesProblem = 'Le note Snipe-IT superano 10.000 caratteri.';
+                    } elseif (! $device->exists || $device->notes === $previousNotes || ($previousNotes === null && blank($device->notes))) {
+                        $device->notes = $data['notes'];
+                    } elseif ($device->notes !== $data['notes']) {
+                        $notesProblem = 'Le note del dispositivo sono state conservate perché diverse da Snipe-IT.';
+                    }
+                }
                 $device->fill(['name' => $name, 'serial_number' => $data['serial'], 'asset_tag' => $data['asset_tag'],
                     'device_model_id' => $model->id, 'manufacturer_id' => $model->manufacturer_id])->save();
                 $device->addModelInterfaces($model);
-                $asset->update(['device_id' => $device->id, 'state' => 'linked', 'needs_confirmation' => false, 'problem' => null]);
+                $asset->update(['device_id' => $device->id, 'state' => 'linked', 'needs_confirmation' => false,
+                    'problem' => implode(' ', array_filter([$notesProblem, $this->applyNetwork($asset, $device)])) ?: null]);
             });
         } catch (ValidationException $exception) {
             if ($asset->device_id && $device) {
@@ -370,6 +384,105 @@ class SnipeItSync
             }
             $asset->update(['problem' => $exception->errors()['sync'][0], 'needs_confirmation' => true]);
         }
+    }
+
+    private function applyNetwork(SnipeItAsset $asset, ?Device $device = null, array $previous = []): ?string
+    {
+        $network = $asset->snapshot['network'] ?? [];
+        $ip = $network['ip'] ?? null;
+        $mac = $network['mac'] ?? null;
+        if ($ip === null) {
+            return null;
+        }
+        if (Validator::make(['ip' => $ip, 'mac' => $mac], [
+            'ip' => ['required', 'ipv4'], 'mac' => ['nullable', 'mac_address'],
+        ])->fails()) {
+            return 'IP o MAC non valido. Verifica i campi selezionati e i valori in Snipe-IT.';
+        }
+        $address = ip2long($ip);
+        $subnets = Subnet::whereIn('site_id', $asset->sync->company->sites()->select('id'))
+            ->when($device, fn ($query) => $query->where('site_id', $device->site_id))->visible()
+            ->where('network_address', '<=', $address)->where('broadcast_address', '>=', $address)->get();
+        if ($subnets->count() !== 1) {
+            return "IP {$ip}: nessuna subnet univoca disponibile nelle sedi interessate.";
+        }
+        $subnet = $subnets->first();
+        [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
+        if ($address < $first || $address > $last) {
+            return "IP {$ip}: indirizzo di rete o broadcast non assegnabile.";
+        }
+        $duplicate = $asset->sync->assets()->whereKeyNot($asset->id)->where('present', true)->where('state', '!=', 'excluded')
+            ->where(fn ($query) => $query->whereNull('device_id')->orWhereHas('device', fn ($query) => $query->where('site_id', $subnet->site_id)))
+            ->where(function ($query) use ($ip, $mac) {
+                $query->where('snapshot->network->ip', $ip);
+                if ($mac !== null) {
+                    $query->orWhere('snapshot->network->mac', $mac);
+                }
+            })->exists();
+        if ($duplicate) {
+            return "IP {$ip}: IP o MAC dichiarato anche da un altro asset Snipe-IT. Verifica gli asset e le sedi.";
+        }
+        $record = $subnet->ipAddresses()->where('address', $address)->lockForUpdate()->first();
+        if ($record && SnipeItAsset::where('ip_address_id', $record->id)->whereKeyNot($asset->id)->exists()) {
+            return "IP {$ip}: già collegato a un altro asset Snipe-IT.";
+        }
+        $sources = MikrotikSource::blocking($subnet->site_id)->where('address', $address)->get();
+        $sourceConflict = $sources->contains(fn ($source) => ($source->kind === 'address' && $source->device_id !== $device?->id)
+            || ($mac !== null && ! empty($source->data['mac']) && strtoupper(str_replace('-', ':', $source->data['mac'])) !== $mac));
+        if (! $device) {
+            // Document the client independently; source discrepancies never assign a technical device.
+            $record ??= $subnet->ipAddresses()->make(['address' => $address]);
+            $problems = $sourceConflict ? ["IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT."] : [];
+            $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
+            $values = ['hostname' => $name, 'mac_address' => $mac];
+            $old = ['hostname' => $previous['name'] ?? $previous['asset_tag'] ?? null, 'mac_address' => $previous['network']['mac'] ?? null];
+            foreach ($values as $field => $value) {
+                if ($value === null) {
+                    continue;
+                }
+                if (mb_strlen($value) > ($field === 'hostname' ? 255 : 17)) {
+                    $problems[] = "IP {$ip}: nome o MAC troppo lungo in Snipe-IT.";
+                } elseif ($record->device_id) {
+                    $problems[] = "IP {$ip}: già associato a un dispositivo tecnico. Dati documentati conservati.";
+                } elseif (! $record->exists || ($asset->ip_address_id !== $record->id && blank($record->$field)) || $old[$field] === $record->$field) {
+                    $record->$field = $value;
+                } elseif ($value !== $record->$field) {
+                    $label = $field === 'hostname' ? 'Hostname' : 'MAC';
+                    $problems[] = "IP {$ip}: {$label} documentato diverso da Snipe-IT; valore conservato.";
+                }
+            }
+            $record->save();
+            $asset->update(['ip_address_id' => $record->id]);
+
+            return implode(' ', array_unique($problems)) ?: null;
+        }
+        if ($record?->device_id && $record->device_id !== $device->id) {
+            return "IP {$ip}: già associato a un altro dispositivo in NetVibe.";
+        }
+        if ($mac !== null && $record?->mac_address && strtoupper(str_replace('-', ':', $record->mac_address)) !== $mac) {
+            return "IP {$ip}: il MAC documentato in NetVibe è diverso da Snipe-IT.";
+        }
+        if ($sourceConflict) {
+            return "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT.";
+        }
+        try {
+            // A shared interface MAC may require confirmation; roll back all its changes in that case.
+            DB::transaction(function () use ($asset, $device, $subnet, $record, $address, $mac) {
+                $record ??= $subnet->ipAddresses()->make(['address' => $address]);
+                $assignment = DeviceAssignment::validate($device->site_id, $device->id, $record->device_interface_id, $record);
+                $assignment['mac_address'] = $mac ?? $record->mac_address;
+                if ($record->device_interface_id) {
+                    $interface = $device->interfaces()->lockForUpdate()->findOrFail($record->device_interface_id);
+                    $assignment['mac_address'] = InterfaceMac::synchronize($interface, $assignment['mac_address'], $record, null);
+                }
+                $record->fill($assignment)->save();
+                $asset->update(['ip_address_id' => $record->id]);
+            });
+        } catch (ValidationException $exception) {
+            return "IP {$ip}: associazione sospesa. ".collect($exception->errors())->flatten()->first();
+        }
+
+        return $subnet->isExcluded($address) ? "IP {$ip} documentato in un intervallo escluso dai suggerimenti." : null;
     }
 
     private function invalid(string $message): never

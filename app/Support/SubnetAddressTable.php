@@ -25,6 +25,8 @@ class SubnetAddressTable
                         ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereIn('address', $sourceMatches)
+                        ->orWhereHas('snipeItAsset', fn ($query) => $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.name')) LIKE ? ESCAPE '!'", [$pattern])
+                            ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.network.mac')) LIKE ? ESCAPE '!'", [$pattern]))
                         ->orWhereHas('status', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]))
                         ->orWhereHas('tags', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
                 });
@@ -141,7 +143,7 @@ class SubnetAddressTable
             }
         }
 
-        $records = $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
+        $records = $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['snipeItAsset.sync.connection', 'status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
             ->whereIn('address', $addresses)->get()->keyBy('address');
         $excludedRanges = $subnet->excludedRanges;
         $rows = array_map(function ($address) use ($records, $excludedRanges) {
@@ -155,6 +157,7 @@ class SubnetAddressTable
                 'ip' => long2ip($address),
                 'device_id' => $record?->device_id, 'device_interface_id' => $record?->device_interface_id,
                 'device' => $record?->device, 'device_interface' => $record?->deviceInterface,
+                'snipe_it' => $record?->snipeItAsset?->ipamData(),
                 'hostname' => $record?->hostname,
                 'mac_address' => $record?->mac_address,
                 'description' => $record?->description,

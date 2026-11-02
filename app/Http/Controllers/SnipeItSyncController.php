@@ -22,7 +22,7 @@ class SnipeItSyncController extends Controller
     public function refresh(Company $company): RedirectResponse
     {
         $this->synchronizer->refresh($company);
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Acquisizione completata.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Sincronizzazione completata.']);
 
         return back();
     }
@@ -30,9 +30,9 @@ class SnipeItSyncController extends Controller
     public function index(Request $request, Company $company): Response
     {
         $filters = $request->validate([
-            'view' => ['sometimes', Rule::in(['devices', 'sites', 'excluded'])],
+            'view' => ['sometimes', Rule::in(SnipeItAsset::VIEWS)],
             'q' => ['nullable', 'string', 'max:255'],
-            'sort' => ['nullable', Rule::in(['local', 'name', 'model', 'serial', 'state'])],
+            'sort' => ['nullable', Rule::in(['local', 'name', 'model', 'serial', 'ip', 'state'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', Rule::in([25, 50, 100])],
@@ -41,10 +41,8 @@ class SnipeItSyncController extends Controller
         $view = $filters['view'] ?? 'devices';
         $sync = SnipeItSync::current($company);
         $query = SnipeItAsset::where('sync_id', $sync?->id ?? 0)
-            ->when($view === 'sites', fn ($q) => $q->where('state', 'site')->where('present', true))
-            ->when($view === 'excluded', fn ($q) => $q->where('state', 'excluded'))
-            ->when($view === 'devices', fn ($q) => $q->where('state', '!=', 'excluded')->where(fn ($q) => $q->where('present', true)->orWhereNotNull('device_id')))
-            ->with('device.site', 'device.model.manufacturer', 'device.model.modelType', 'externalModel.model.manufacturer', 'externalModel.model.modelType')
+            ->forView($view)
+            ->with('ipAddress.subnet', 'device.site', 'device.model.manufacturer', 'device.model.modelType', 'externalModel.model.manufacturer', 'externalModel.model.modelType')
             ->leftJoin('devices as local', 'local.id', '=', 'snipe_it_assets.device_id')
             ->leftJoin('snipe_it_models as source_model', 'source_model.id', '=', 'snipe_it_assets.snipe_it_model_id')
             ->select('snipe_it_assets.*');
@@ -52,7 +50,7 @@ class SnipeItSyncController extends Controller
         if ($search = $filters['q'] ?? null) {
             $query->where(function ($q) use ($search, $table) {
                 $q->whereLike('local.name', '%'.$search.'%');
-                foreach (['name', 'asset_tag', 'serial'] as $field) {
+                foreach (['name', 'asset_tag', 'serial', 'network->ip', 'network->mac'] as $field) {
                     $q->orWhereLike($table.'.snapshot->'.$field, '%'.$search.'%');
                 }
                 $q->orWhereLike('source_model.snapshot->name', '%'.$search.'%')
@@ -73,6 +71,8 @@ class SnipeItSyncController extends Controller
         if (($filters['sort'] ?? null) && ($filters['direction'] ?? null)) {
             if ($filters['sort'] === 'name') {
                 $query->orderByRaw("COALESCE(JSON_VALUE(snipe_it_assets.snapshot, '$.name'), JSON_VALUE(snipe_it_assets.snapshot, '$.serial')) ".$filters['direction']);
+            } elseif ($filters['sort'] === 'ip') {
+                $query->orderByRaw("INET_ATON(JSON_VALUE(snipe_it_assets.snapshot, '$.network.ip')) ".$filters['direction']);
             } else {
                 $query->orderBy($columns[$filters['sort']], $filters['direction']);
             }
@@ -85,18 +85,27 @@ class SnipeItSyncController extends Controller
             $modelCandidates = $external && ! $external->device_model_id
                 ? $this->synchronizer->modelCandidates($external)->with('manufacturer', 'modelType')->get() : collect();
             $model = $external?->model ?? ($modelCandidates->count() === 1 ? $modelCandidates->first() : null);
-            $problem = $row->problem ?? ($row->state !== 'excluded' ? $this->synchronizer->modelProblem($external) : null);
+            $problem = $row->problem ?? ($row->device_id ? $this->synchronizer->modelProblem($external) : null);
+            if (! $problem && ! $row->device_id && ! $row->ip_address_id && $row->state !== 'excluded') {
+                $problem = match (true) {
+                    $row->state === 'detached' => 'Conferma una nuova associazione dopo lo scollegamento o la rimozione.',
+                    $row->state === 'site' => 'Scegli la sede del dispositivo.',
+                    $candidates->isNotEmpty() => 'Possibile dispositivo esistente: verifica la corrispondenza.',
+                    default => null,
+                };
+            }
 
             return [
                 'id' => $row->id, 'snapshot' => $row->snapshot, 'problem' => $problem,
-                'state' => $row->device_id ? 'linked' : ($row->state === 'excluded' ? 'excluded' : ($problem ? 'review' : ($candidates->isNotEmpty() ? 'candidate' : 'new'))),
+                'state' => $row->device_id ? 'linked' : ($row->state === 'excluded' ? 'excluded' : ($problem ? 'review' : ($row->ip_address_id ? 'ipam' : ($candidates->isNotEmpty() ? 'candidate' : 'new')))),
                 'local' => $row->device ? $this->deviceOption($row->device) : null,
                 'candidates' => $candidates->map(fn ($device) => $this->deviceOption($device))->all(),
                 'model' => $external?->snapshot, 'present' => $row->present,
                 'model_local' => $model ? $this->modelOption($model) : null,
                 'model_linked' => (bool) $external?->device_model_id,
                 'model_ambiguous' => $modelCandidates->count() > 1,
-                'model_problem' => $external?->problem,
+                'model_problem' => $row->device_id ? $external?->problem : null,
+                'ipam_url' => $row->ipAddress ? route('companies.sites.subnets.show', [$sync->company_id, $row->ipAddress->subnet->site_id, $row->ipAddress->subnet_id, 'ip_address' => $row->ip_address_id]) : null,
                 'site_id' => $row->device?->site_id,
             ];
         });
@@ -129,7 +138,7 @@ class SnipeItSyncController extends Controller
     {
         $data = $request->validate([
             'sync_id' => ['required', 'integer'], 'revision' => ['required', 'integer'],
-            'view' => ['required', 'in:devices,sites,excluded'], 'activate' => ['required', 'boolean'],
+            'view' => ['required', Rule::in(SnipeItAsset::VIEWS)], 'activate' => ['required', 'boolean'],
             'decisions' => ['present', 'array', 'max:100'], 'decisions.*.id' => ['required', 'integer', 'distinct'],
             'decisions.*.action' => ['required', 'in:create,link,exclude,restore'],
             'decisions.*.model_id' => ['nullable', 'integer', Rule::exists('device_models', 'id')],

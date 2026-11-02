@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Link2, RefreshCw, Trash2 } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import PasswordInput from '@/components/password-input';
+import { SnipeItFields } from '@/components/devices/snipe-it-fields';
 import {
     SnipeItOverview,
     type SyncSummary,
@@ -103,16 +104,29 @@ function defaults(settings: Settings) {
 }
 
 export default function SnipeIt(props: Props) {
+    const [tab, setTab] = useState(props.company ? 'sync' : 'connection');
     // Reset transient form/list state after a save or a change of company; secrets never enter history state.
     return (
         <SnipeItForm
             key={`${props.company?.id ?? 'global'}:${props.settings.revision}:${props.settings.global_revision}`}
             {...props}
+            tab={tab}
+            onTabChange={setTab}
         />
     );
 }
 
-function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
+function SnipeItForm({
+    company,
+    settings,
+    affectedCompanies,
+    sync,
+    tab,
+    onTabChange,
+}: Props & {
+    tab: string;
+    onTabChange: (tab: string) => void;
+}) {
     const form = useForm(defaults(settings));
     const test = useHttp<ReturnType<typeof defaults>, TestResult>(
         defaults(settings),
@@ -254,456 +268,574 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                         value="snipe-it"
                         className="flex flex-col gap-6"
                     >
-                        {company ? (
-                            <SnipeItOverview
-                                company={company.id}
-                                sync={sync}
-                                confirmed={
-                                    settings.association?.confirmed ?? false
-                                }
-                            />
-                        ) : null}
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <h2 className="text-base font-medium">
-                                    Connessione{' '}
-                                    {company
-                                        ? settings.use_global
-                                            ? 'globale'
-                                            : 'dedicata'
-                                        : 'globale'}
-                                </h2>
-                                {!settings.connection ? (
-                                    <Badge variant="outline">
-                                        Non configurata
-                                    </Badge>
-                                ) : null}
-                            </div>
-                            {lastCheck?.checked_at ? (
-                                <p className="text-sm text-muted-foreground">
-                                    Ultima verifica:{' '}
-                                    {formatDateTime(lastCheck.checked_at)} ·{' '}
-                                    {('status' in lastCheck
-                                        ? lastCheck.status
-                                        : lastCheck.check_status) === 'ok'
-                                        ? 'Riuscita'
-                                        : 'Non riuscita'}
-                                </p>
-                            ) : (
-                                <p className="text-sm text-muted-foreground">
-                                    Mai verificata
-                                </p>
-                            )}
-                        </div>
-                        {connectionError ? (
-                            <Alert variant="destructive">
-                                <AlertDescription>
-                                    {connectionError}
-                                </AlertDescription>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => router.reload()}
-                                >
-                                    Ricarica pagina
-                                </Button>
-                            </Alert>
-                        ) : null}
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                save();
-                            }}
+                        <Tabs
+                            value={
+                                company || settings.connection
+                                    ? tab
+                                    : 'connection'
+                            }
+                            onValueChange={onTabChange}
+                            className="gap-6"
                         >
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Connessione</CardTitle>
-                                </CardHeader>
-                                <CardContent className="flex flex-col gap-6">
-                                    <FieldSet disabled={busy}>
-                                        <FieldGroup>
-                                            {company ? (
-                                                <Field>
-                                                    <FieldLabel id="source-label">
-                                                        Origine
-                                                    </FieldLabel>
-                                                    <ToggleGroup
-                                                        type="single"
-                                                        variant="outline"
-                                                        value={
-                                                            usesGlobal
-                                                                ? 'global'
-                                                                : 'dedicated'
-                                                        }
-                                                        aria-labelledby="source-label"
-                                                        className="w-fit flex-wrap"
-                                                        disabled={busy}
-                                                        onValueChange={(
-                                                            value,
-                                                        ) => {
-                                                            if (value) {
-                                                                clearFeedback();
-                                                                form.setData(
-                                                                    'use_global',
-                                                                    value ===
-                                                                        'global',
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        <ToggleGroupItem value="global">
-                                                            Usa connessione
-                                                            globale
-                                                        </ToggleGroupItem>
-                                                        <ToggleGroupItem value="dedicated">
-                                                            Connessione dedicata
-                                                        </ToggleGroupItem>
-                                                    </ToggleGroup>
-                                                </Field>
-                                            ) : null}
-                                            {usesGlobal ? (
-                                                <Field>
-                                                    <FieldLabel>
-                                                        URL server
-                                                    </FieldLabel>
-                                                    <p className="text-sm break-all">
-                                                        {settings
-                                                            .global_connection
-                                                            ?.server_url ??
-                                                            'Connessione globale non configurata'}
-                                                    </p>
-                                                    <Button
-                                                        asChild
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="w-fit"
-                                                    >
-                                                        <Link
-                                                            href={globalRoutes.edit()}
-                                                        >
-                                                            Gestisci connessione
-                                                            globale
-                                                        </Link>
-                                                    </Button>
-                                                </Field>
-                                            ) : (
-                                                <>
-                                                    <Field
-                                                        data-invalid={
-                                                            !!urlError
-                                                        }
-                                                    >
-                                                        <FieldLabel htmlFor="server_url">
-                                                            URL server
-                                                        </FieldLabel>
-                                                        <Input
-                                                            id="server_url"
-                                                            type="url"
-                                                            name="server_url"
-                                                            placeholder="https://inventario.example.it"
-                                                            value={
-                                                                form.data
-                                                                    .server_url
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                clearFeedback();
-                                                                form.setData(
-                                                                    'server_url',
-                                                                    event.target
-                                                                        .value,
-                                                                );
-                                                            }}
-                                                            required
-                                                            maxLength={2048}
-                                                            autoComplete="off"
-                                                            aria-invalid={
-                                                                !!urlError
-                                                            }
-                                                            aria-describedby="server-url-error"
-                                                        />
-                                                        <FieldError id="server-url-error">
-                                                            {urlError}
-                                                        </FieldError>
-                                                    </Field>
-                                                    <Field
-                                                        data-invalid={
-                                                            !!keyError
-                                                        }
-                                                    >
-                                                        <FieldLabel htmlFor="api_key">
-                                                            {selectedConnection?.has_key
-                                                                ? 'Nuova API key'
-                                                                : 'API key'}
-                                                        </FieldLabel>
-                                                        <PasswordInput
-                                                            id="api_key"
-                                                            name="api_key"
-                                                            hasSavedValue={
-                                                                selectedConnection?.has_key
-                                                            }
-                                                            value={
-                                                                form.data
-                                                                    .api_key
-                                                            }
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                clearFeedback();
-                                                                form.setData(
-                                                                    'api_key',
-                                                                    event.target
-                                                                        .value,
-                                                                );
-                                                            }}
-                                                            autoComplete="new-password"
-                                                            maxLength={8192}
-                                                            disabled={busy}
-                                                            aria-invalid={
-                                                                !!keyError
-                                                            }
-                                                            aria-describedby="key-hint key-error"
-                                                        />
-                                                        {selectedConnection?.has_key ? (
-                                                            <FieldDescription id="key-hint">
-                                                                Chiave salvata.
-                                                                Lascia vuoto per
-                                                                conservarla
-                                                                sullo stesso
-                                                                server.
-                                                            </FieldDescription>
-                                                        ) : null}
-                                                        <FieldError id="key-error">
-                                                            {keyError}
-                                                        </FieldError>
-                                                    </Field>
-                                                </>
-                                            )}
-                                        </FieldGroup>
-                                    </FieldSet>
-                                    {result ? (
-                                        <Alert
-                                            variant={
-                                                result.status === 'ok'
-                                                    ? 'default'
-                                                    : 'destructive'
-                                            }
-                                            aria-live="polite"
-                                        >
-                                            <AlertTitle>
-                                                {result.draft
-                                                    ? 'Verifica della bozza · non salvata'
-                                                    : 'Verifica della connessione salvata'}
-                                            </AlertTitle>
-                                            <AlertDescription>
-                                                {result.message} ·{' '}
-                                                {formatDateTime(
-                                                    result.checked_at,
-                                                )}
-                                            </AlertDescription>
-                                        </Alert>
-                                    ) : null}
-                                </CardContent>
-                                <CardFooter className="flex flex-wrap gap-3">
-                                    <SaveButton
-                                        processing={form.processing}
-                                        saved={
-                                            !!settings.connection && !changed
+                            <TabsList
+                                aria-label="Impostazioni Snipe-IT"
+                                className="max-w-full justify-start overflow-x-auto"
+                            >
+                                {company ? (
+                                    <TabsTrigger value="sync">
+                                        Sincronizzazione
+                                    </TabsTrigger>
+                                ) : null}
+                                <TabsTrigger
+                                    value="fields"
+                                    disabled={
+                                        !settings.connection || busy || changed
+                                    }
+                                >
+                                    Mappatura Campi
+                                </TabsTrigger>
+                                <TabsTrigger value="connection">
+                                    Connessione
+                                </TabsTrigger>
+                            </TabsList>
+                            {company ? (
+                                <TabsContent
+                                    value="sync"
+                                    forceMount
+                                    className="data-[state=inactive]:hidden"
+                                >
+                                    <SnipeItOverview
+                                        company={company.id}
+                                        sync={sync}
+                                        confirmed={
+                                            settings.association?.confirmed ??
+                                            false
                                         }
-                                        disabled={busy || !changed}
+                                        onConfigure={() =>
+                                            onTabChange('connection')
+                                        }
                                     />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                            busy ||
-                                            (usesGlobal && !selectedConnection)
-                                        }
-                                        onClick={() => void verify()}
-                                    >
-                                        {test.processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <RefreshCw />
-                                        )}
-                                        Verifica connessione
-                                    </Button>
-                                    {settings.own_connection ? (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            disabled={busy}
-                                            onClick={() => setConfirm('remove')}
-                                        >
-                                            <Trash2 />
+                                </TabsContent>
+                            ) : null}
+                            <TabsContent
+                                value="connection"
+                                forceMount
+                                className="flex flex-col gap-6 data-[state=inactive]:hidden"
+                            >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <h2 className="text-base font-medium">
+                                            Connessione{' '}
                                             {company
-                                                ? 'Rimuovi connessione dedicata'
-                                                : 'Rimuovi connessione'}
-                                        </Button>
-                                    ) : null}
-                                </CardFooter>
-                            </Card>
-                        </form>
-                        {company ? (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Azienda associata</CardTitle>
-                                </CardHeader>
-                                <CardContent className="flex flex-col gap-5">
-                                    {settings.association ? (
-                                        <div className="flex flex-wrap items-center gap-3">
-                                            <span className="text-sm font-medium">
-                                                {
-                                                    settings.association
-                                                        .external_company_name
-                                                }
-                                            </span>
-                                            <Badge
-                                                variant={
-                                                    settings.association
-                                                        .confirmed
-                                                        ? 'secondary'
-                                                        : 'outline'
-                                                }
-                                            >
-                                                {settings.association.confirmed
-                                                    ? 'Associata'
-                                                    : 'Da riconfermare'}
+                                                ? settings.use_global
+                                                    ? 'globale'
+                                                    : 'dedicata'
+                                                : 'globale'}
+                                        </h2>
+                                        {!settings.connection ? (
+                                            <Badge variant="outline">
+                                                Non configurata
                                             </Badge>
-                                        </div>
+                                        ) : null}
+                                    </div>
+                                    {lastCheck?.checked_at ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            Ultima verifica:{' '}
+                                            {formatDateTime(
+                                                lastCheck.checked_at,
+                                            )}{' '}
+                                            ·{' '}
+                                            {('status' in lastCheck
+                                                ? lastCheck.status
+                                                : lastCheck.check_status) ===
+                                            'ok'
+                                                ? 'Riuscita'
+                                                : 'Non riuscita'}
+                                        </p>
                                     ) : (
                                         <p className="text-sm text-muted-foreground">
-                                            Nessuna azienda associata
+                                            Mai verificata
                                         </p>
                                     )}
-                                    {changed ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            Salva la connessione prima di
-                                            scegliere l’azienda.
-                                        </p>
-                                    ) : options ? (
-                                        <Field
-                                            data-invalid={
-                                                !!association.errors
-                                                    .external_company_id
-                                            }
+                                </div>
+                                {connectionError ? (
+                                    <Alert variant="destructive">
+                                        <AlertDescription>
+                                            {connectionError}
+                                        </AlertDescription>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.reload()}
                                         >
-                                            <FieldLabel htmlFor="external-company">
-                                                Azienda Snipe-IT
-                                            </FieldLabel>
-                                            <Combobox
-                                                items={options.companies}
-                                                value={selected}
-                                                onValueChange={setSelected}
-                                                itemToStringLabel={(
-                                                    item: Company,
-                                                ) => item.name}
-                                                isItemEqualToValue={(
-                                                    a: Company,
-                                                    b: Company,
-                                                ) => a.id === b.id}
-                                                disabled={busy}
+                                            Ricarica pagina
+                                        </Button>
+                                    </Alert>
+                                ) : null}
+                                <form
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        save();
+                                    }}
+                                >
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>Connessione</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-col gap-6">
+                                            <FieldSet disabled={busy}>
+                                                <FieldGroup>
+                                                    {company ? (
+                                                        <Field>
+                                                            <FieldLabel id="source-label">
+                                                                Origine
+                                                            </FieldLabel>
+                                                            <ToggleGroup
+                                                                type="single"
+                                                                variant="outline"
+                                                                value={
+                                                                    usesGlobal
+                                                                        ? 'global'
+                                                                        : 'dedicated'
+                                                                }
+                                                                aria-labelledby="source-label"
+                                                                className="w-fit flex-wrap"
+                                                                disabled={busy}
+                                                                onValueChange={(
+                                                                    value,
+                                                                ) => {
+                                                                    if (value) {
+                                                                        clearFeedback();
+                                                                        form.setData(
+                                                                            'use_global',
+                                                                            value ===
+                                                                                'global',
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <ToggleGroupItem value="global">
+                                                                    Usa
+                                                                    connessione
+                                                                    globale
+                                                                </ToggleGroupItem>
+                                                                <ToggleGroupItem value="dedicated">
+                                                                    Connessione
+                                                                    dedicata
+                                                                </ToggleGroupItem>
+                                                            </ToggleGroup>
+                                                        </Field>
+                                                    ) : null}
+                                                    {usesGlobal ? (
+                                                        <Field>
+                                                            <FieldLabel>
+                                                                URL server
+                                                            </FieldLabel>
+                                                            <p className="text-sm break-all">
+                                                                {settings
+                                                                    .global_connection
+                                                                    ?.server_url ??
+                                                                    'Connessione globale non configurata'}
+                                                            </p>
+                                                            <Button
+                                                                asChild
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="w-fit"
+                                                            >
+                                                                <Link
+                                                                    href={globalRoutes.edit()}
+                                                                >
+                                                                    Gestisci
+                                                                    connessione
+                                                                    globale
+                                                                </Link>
+                                                            </Button>
+                                                        </Field>
+                                                    ) : (
+                                                        <>
+                                                            <Field
+                                                                data-invalid={
+                                                                    !!urlError
+                                                                }
+                                                            >
+                                                                <FieldLabel htmlFor="server_url">
+                                                                    URL server
+                                                                </FieldLabel>
+                                                                <Input
+                                                                    id="server_url"
+                                                                    type="url"
+                                                                    name="server_url"
+                                                                    placeholder="https://inventario.example.it"
+                                                                    value={
+                                                                        form
+                                                                            .data
+                                                                            .server_url
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) => {
+                                                                        clearFeedback();
+                                                                        form.setData(
+                                                                            'server_url',
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        );
+                                                                    }}
+                                                                    required
+                                                                    maxLength={
+                                                                        2048
+                                                                    }
+                                                                    autoComplete="off"
+                                                                    aria-invalid={
+                                                                        !!urlError
+                                                                    }
+                                                                    aria-describedby="server-url-error"
+                                                                />
+                                                                <FieldError id="server-url-error">
+                                                                    {urlError}
+                                                                </FieldError>
+                                                            </Field>
+                                                            <Field
+                                                                data-invalid={
+                                                                    !!keyError
+                                                                }
+                                                            >
+                                                                <FieldLabel htmlFor="api_key">
+                                                                    {selectedConnection?.has_key
+                                                                        ? 'Nuova API key'
+                                                                        : 'API key'}
+                                                                </FieldLabel>
+                                                                <PasswordInput
+                                                                    id="api_key"
+                                                                    name="api_key"
+                                                                    hasSavedValue={
+                                                                        selectedConnection?.has_key
+                                                                    }
+                                                                    value={
+                                                                        form
+                                                                            .data
+                                                                            .api_key
+                                                                    }
+                                                                    onChange={(
+                                                                        event,
+                                                                    ) => {
+                                                                        clearFeedback();
+                                                                        form.setData(
+                                                                            'api_key',
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        );
+                                                                    }}
+                                                                    autoComplete="new-password"
+                                                                    maxLength={
+                                                                        8192
+                                                                    }
+                                                                    disabled={
+                                                                        busy
+                                                                    }
+                                                                    aria-invalid={
+                                                                        !!keyError
+                                                                    }
+                                                                    aria-describedby="key-hint key-error"
+                                                                />
+                                                                {selectedConnection?.has_key ? (
+                                                                    <FieldDescription id="key-hint">
+                                                                        Chiave
+                                                                        salvata.
+                                                                        Lascia
+                                                                        vuoto
+                                                                        per
+                                                                        conservarla
+                                                                        sullo
+                                                                        stesso
+                                                                        server.
+                                                                    </FieldDescription>
+                                                                ) : null}
+                                                                <FieldError id="key-error">
+                                                                    {keyError}
+                                                                </FieldError>
+                                                            </Field>
+                                                        </>
+                                                    )}
+                                                </FieldGroup>
+                                            </FieldSet>
+                                            {result ? (
+                                                <Alert
+                                                    variant={
+                                                        result.status === 'ok'
+                                                            ? 'default'
+                                                            : 'destructive'
+                                                    }
+                                                    aria-live="polite"
+                                                >
+                                                    <AlertTitle>
+                                                        {result.draft
+                                                            ? 'Verifica della bozza · non salvata'
+                                                            : 'Verifica della connessione salvata'}
+                                                    </AlertTitle>
+                                                    <AlertDescription>
+                                                        {result.message} ·{' '}
+                                                        {formatDateTime(
+                                                            result.checked_at,
+                                                        )}
+                                                    </AlertDescription>
+                                                </Alert>
+                                            ) : null}
+                                        </CardContent>
+                                        <CardFooter className="flex flex-wrap gap-3">
+                                            <SaveButton
+                                                processing={form.processing}
+                                                saved={
+                                                    !!settings.connection &&
+                                                    !changed
+                                                }
+                                                disabled={busy || !changed}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={
+                                                    busy ||
+                                                    (usesGlobal &&
+                                                        !selectedConnection)
+                                                }
+                                                onClick={() => void verify()}
                                             >
-                                                <ComboboxInput
-                                                    id="external-company"
-                                                    placeholder="Cerca azienda…"
-                                                    aria-invalid={
+                                                {test.processing ? (
+                                                    <Spinner />
+                                                ) : (
+                                                    <RefreshCw />
+                                                )}
+                                                Verifica connessione
+                                            </Button>
+                                            {settings.own_connection ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        setConfirm('remove')
+                                                    }
+                                                >
+                                                    <Trash2 />
+                                                    {company
+                                                        ? 'Rimuovi connessione dedicata'
+                                                        : 'Rimuovi connessione'}
+                                                </Button>
+                                            ) : null}
+                                        </CardFooter>
+                                    </Card>
+                                </form>
+                                {company ? (
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>
+                                                Azienda associata
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-col gap-5">
+                                            {settings.association ? (
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <span className="text-sm font-medium">
+                                                        {
+                                                            settings.association
+                                                                .external_company_name
+                                                        }
+                                                    </span>
+                                                    <Badge
+                                                        variant={
+                                                            settings.association
+                                                                .confirmed
+                                                                ? 'secondary'
+                                                                : 'outline'
+                                                        }
+                                                    >
+                                                        {settings.association
+                                                            .confirmed
+                                                            ? 'Associata'
+                                                            : 'Da riconfermare'}
+                                                    </Badge>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Nessuna azienda associata
+                                                </p>
+                                            )}
+                                            {changed ? (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Salva la connessione prima
+                                                    di scegliere l’azienda.
+                                                </p>
+                                            ) : options ? (
+                                                <Field
+                                                    data-invalid={
                                                         !!association.errors
                                                             .external_company_id
                                                     }
-                                                    aria-describedby="company-error company-suggestion"
-                                                />
-                                                <ComboboxContent>
-                                                    <ComboboxEmpty>
-                                                        Nessuna azienda trovata
-                                                    </ComboboxEmpty>
-                                                    <ComboboxList>
-                                                        {(item: Company) => (
-                                                            <ComboboxItem
-                                                                key={item.id}
-                                                                value={item}
-                                                            >
-                                                                {item.name}
-                                                            </ComboboxItem>
-                                                        )}
-                                                    </ComboboxList>
-                                                </ComboboxContent>
-                                            </Combobox>
-                                            {options.suggested_id &&
-                                            !settings.association?.confirmed &&
-                                            selected?.id ===
-                                                options.suggested_id ? (
-                                                <FieldDescription id="company-suggestion">
-                                                    Nome corrispondente:
-                                                    conferma l’associazione.
-                                                </FieldDescription>
+                                                >
+                                                    <FieldLabel htmlFor="external-company">
+                                                        Azienda Snipe-IT
+                                                    </FieldLabel>
+                                                    <Combobox
+                                                        items={
+                                                            options.companies
+                                                        }
+                                                        value={selected}
+                                                        onValueChange={
+                                                            setSelected
+                                                        }
+                                                        itemToStringLabel={(
+                                                            item: Company,
+                                                        ) => item.name}
+                                                        isItemEqualToValue={(
+                                                            a: Company,
+                                                            b: Company,
+                                                        ) => a.id === b.id}
+                                                        disabled={busy}
+                                                    >
+                                                        <ComboboxInput
+                                                            id="external-company"
+                                                            placeholder="Cerca azienda…"
+                                                            aria-invalid={
+                                                                !!association
+                                                                    .errors
+                                                                    .external_company_id
+                                                            }
+                                                            aria-describedby="company-error company-suggestion"
+                                                        />
+                                                        <ComboboxContent>
+                                                            <ComboboxEmpty>
+                                                                Nessuna azienda
+                                                                trovata
+                                                            </ComboboxEmpty>
+                                                            <ComboboxList>
+                                                                {(
+                                                                    item: Company,
+                                                                ) => (
+                                                                    <ComboboxItem
+                                                                        key={
+                                                                            item.id
+                                                                        }
+                                                                        value={
+                                                                            item
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            item.name
+                                                                        }
+                                                                    </ComboboxItem>
+                                                                )}
+                                                            </ComboboxList>
+                                                        </ComboboxContent>
+                                                    </Combobox>
+                                                    {options.suggested_id &&
+                                                    !settings.association
+                                                        ?.confirmed &&
+                                                    selected?.id ===
+                                                        options.suggested_id ? (
+                                                        <FieldDescription id="company-suggestion">
+                                                            Nome corrispondente:
+                                                            conferma
+                                                            l’associazione.
+                                                        </FieldDescription>
+                                                    ) : null}
+                                                    <FieldError id="company-error">
+                                                        {
+                                                            association.errors
+                                                                .external_company_id
+                                                        }
+                                                    </FieldError>
+                                                </Field>
                                             ) : null}
-                                            <FieldError id="company-error">
-                                                {
-                                                    association.errors
-                                                        .external_company_id
+                                        </CardContent>
+                                        <CardFooter className="flex flex-wrap gap-3">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={
+                                                    busy ||
+                                                    changed ||
+                                                    !settings.connection
                                                 }
-                                            </FieldError>
-                                        </Field>
-                                    ) : null}
-                                </CardContent>
-                                <CardFooter className="flex flex-wrap gap-3">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                            busy ||
-                                            changed ||
-                                            !settings.connection
+                                                onClick={() =>
+                                                    void loadCompanies()
+                                                }
+                                            >
+                                                {list.processing ? (
+                                                    <Spinner />
+                                                ) : (
+                                                    <RefreshCw />
+                                                )}
+                                                {options
+                                                    ? 'Ricarica aziende'
+                                                    : 'Carica aziende'}
+                                            </Button>
+                                            {options ? (
+                                                <Button
+                                                    type="button"
+                                                    disabled={
+                                                        busy ||
+                                                        changed ||
+                                                        !selected
+                                                    }
+                                                    onClick={() => {
+                                                        association.transform(
+                                                            (data) => ({
+                                                                ...data,
+                                                                connection_id:
+                                                                    options.connection_id,
+                                                                external_company_id:
+                                                                    selected!
+                                                                        .id,
+                                                            }),
+                                                        );
+                                                        association.submit(
+                                                            companyRoutes.associate(
+                                                                company.id,
+                                                            ),
+                                                            {
+                                                                preserveScroll: true,
+                                                            },
+                                                        );
+                                                    }}
+                                                >
+                                                    {association.processing ? (
+                                                        <Spinner />
+                                                    ) : (
+                                                        <Link2 />
+                                                    )}
+                                                    Conferma associazione
+                                                </Button>
+                                            ) : null}
+                                        </CardFooter>
+                                    </Card>
+                                ) : null}
+                            </TabsContent>
+                            <TabsContent
+                                value="fields"
+                                forceMount
+                                className="data-[state=inactive]:hidden"
+                            >
+                                {settings.connection ? (
+                                    <SnipeItFields
+                                        company={company?.id}
+                                        revision={settings.revision}
+                                        globalRevision={
+                                            settings.global_revision
                                         }
-                                        onClick={() => void loadCompanies()}
-                                    >
-                                        {list.processing ? (
-                                            <Spinner />
-                                        ) : (
-                                            <RefreshCw />
-                                        )}
-                                        {options
-                                            ? 'Ricarica aziende'
-                                            : 'Carica aziende'}
-                                    </Button>
-                                    {options ? (
-                                        <Button
-                                            type="button"
-                                            disabled={
-                                                busy || changed || !selected
-                                            }
-                                            onClick={() => {
-                                                association.transform(
-                                                    (data) => ({
-                                                        ...data,
-                                                        connection_id:
-                                                            options.connection_id,
-                                                        external_company_id:
-                                                            selected!.id,
-                                                    }),
-                                                );
-                                                association.submit(
-                                                    companyRoutes.associate(
-                                                        company.id,
-                                                    ),
-                                                    { preserveScroll: true },
-                                                );
-                                            }}
-                                        >
-                                            {association.processing ? (
-                                                <Spinner />
-                                            ) : (
-                                                <Link2 />
-                                            )}
-                                            Conferma associazione
-                                        </Button>
-                                    ) : null}
-                                </CardFooter>
-                            </Card>
-                        ) : null}
+                                        inherited={
+                                            !!company && settings.use_global
+                                        }
+                                        disabled={busy || changed}
+                                        active={tab === 'fields'}
+                                    />
+                                ) : null}
+                            </TabsContent>
+                        </Tabs>
                     </TabsContent>
                 </Tabs>
             </div>

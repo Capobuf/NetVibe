@@ -31,8 +31,22 @@ import {
     DialogDescription,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationPrevious,
+    PaginationNext,
+    PaginationEllipsis,
+} from '@/components/ui/pagination';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Field, FieldLabel } from '@/components/ui/field';
 import {
@@ -65,8 +79,15 @@ import {
 } from '@/routes/companies/settings/integrations/snipe-it';
 import type { Company, Site } from '@/types/company';
 
-type View = 'devices' | 'sites' | 'excluded';
-type Column = 'local' | 'name' | 'model' | 'serial' | 'state';
+type View =
+    | 'devices'
+    | 'review'
+    | 'linked'
+    | 'ipam'
+    | 'no-ip'
+    | 'sites'
+    | 'excluded';
+type Column = 'local' | 'name' | 'model' | 'serial' | 'ip' | 'state';
 type Row = {
     id: number;
     snapshot: {
@@ -75,13 +96,19 @@ type Row = {
         category?: string | null;
         serial?: string | null;
         asset_tag?: string | null;
+        network?: { ip: string | null; mac: string | null };
     };
-    state: 'linked' | 'excluded' | 'review' | 'candidate' | 'new';
+    state: 'linked' | 'excluded' | 'review' | 'candidate' | 'new' | 'ipam';
+    ipam_url: string | null;
     problem: string | null;
     present: boolean;
     local: SnipeOption | null;
     candidates: SnipeOption[];
-    model: { name: string | null; manufacturer: string | null; category: string | null } | null;
+    model: {
+        name: string | null;
+        manufacturer: string | null;
+        category: string | null;
+    } | null;
     site_id: number | null;
     model_local: SnipeOption | null;
     model_linked: boolean;
@@ -107,7 +134,13 @@ type Props = {
     } | null;
     active: boolean;
     view: View;
-    filters: { q?: string; sort?: Column; direction?: 'asc' | 'desc'; per_page?: number; group?: 'category' | 'none' };
+    filters: {
+        q?: string;
+        sort?: Column;
+        direction?: 'asc' | 'desc';
+        per_page?: number;
+        group?: 'category' | 'none';
+    };
     rows: {
         data: Row[];
         current_page: number;
@@ -121,7 +154,11 @@ type Props = {
     sites: Site[];
 };
 const titles: Record<View, string> = {
-    devices: 'Collega dispositivi',
+    devices: 'Asset Snipe-IT',
+    ipam: 'Client nell’IPAM',
+    review: 'Da verificare',
+    linked: 'Apparati tecnici collegati',
+    'no-ip': 'Senza IP Ethernet',
     sites: 'Da assegnare',
     excluded: 'Esclusi',
 };
@@ -130,7 +167,8 @@ const states = {
     excluded: 'Escluso',
     review: 'Da verificare',
     candidate: 'Corrispondenza proposta',
-    new: 'Da creare',
+    new: 'Solo Snipe-IT',
+    ipam: 'Nell’IPAM',
 };
 
 function SitePicker({
@@ -188,7 +226,9 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
     const [targets, setTargets] = useState<Record<number, SnipeOption | null>>(
         {},
     );
-    const [models, setModels] = useState<Record<number, SnipeOption | null>>({});
+    const [models, setModels] = useState<Record<number, SnipeOption | null>>(
+        {},
+    );
     const [bulkSite, setBulkSite] = useState<number | null>(null);
     const [review, setReview] = useState(false);
     const form = useForm({
@@ -208,7 +248,16 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
               { id: 'name', label: 'Dispositivo', visible: true },
               { id: 'model', label: 'Produttore / Modello', visible: true },
               { id: 'serial', label: 'Seriale', visible: true },
-              ...(multipleSites ? [{ id: 'local' as const, label: 'Sede NetVibe', visible: true }] : []),
+              { id: 'ip', label: 'IP Ethernet', visible: true },
+              ...(multipleSites
+                  ? [
+                        {
+                            id: 'local' as const,
+                            label: 'Sede NetVibe',
+                            visible: true,
+                        },
+                    ]
+                  : []),
               { id: 'state', label: 'Esito', visible: true },
           ]
         : [
@@ -216,6 +265,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
               { id: 'name', label: 'Snipe-IT', visible: true },
               { id: 'model', label: 'Produttore / Modello', visible: true },
               { id: 'serial', label: 'Seriale', visible: true },
+              { id: 'ip', label: 'IP Ethernet', visible: true },
               { id: 'state', label: 'Esito', visible: true },
           ];
     const { columns, setColumns, separators, setSeparators } =
@@ -232,7 +282,10 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
         ...Object.values(form.errors),
         ...Object.values(acquire.errors),
         sync?.error,
-    ].find((message): message is string => typeof message === 'string' && message.length > 0);
+    ].find(
+        (message): message is string =>
+            typeof message === 'string' && message.length > 0,
+    );
 
     function visit(changes: Record<string, string | number | null>) {
         router.get(
@@ -270,10 +323,11 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
     function applyBulk(change: Partial<Decision>) {
         setChoices((previous) => ({
             ...previous,
-            ...Object.fromEntries(rows.data.filter((row) => selected.includes(row.id)).map((row) => [
-                row.id,
-                { ...decision(row), ...change },
-            ])),
+            ...Object.fromEntries(
+                rows.data
+                    .filter((row) => selected.includes(row.id))
+                    .map((row) => [row.id, { ...decision(row), ...change }]),
+            ),
         }));
     }
     function confirmSelection() {
@@ -293,35 +347,60 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
         });
     }
     function cell(row: Row, column: Column) {
-        const name =
-            row.snapshot.name || '—';
+        const name = row.snapshot.name || '—';
         const choice = decision(row);
         if (column === 'name')
             return (
                 <div className="flex flex-col gap-1">
                     <span className="font-medium">{name}</span>
-                    {!grouped ? <span className="text-xs text-muted-foreground">{row.model?.category || 'Senza tipo'}</span> : null}
+                    {!grouped ? (
+                        <span className="text-xs text-muted-foreground">
+                            {row.model?.category || 'Senza tipo'}
+                        </span>
+                    ) : null}
                 </div>
             );
         if (column === 'model') {
-            const target = choice.action === 'link'
-                ? (targets[row.id] ?? row.candidates.find((item) => item.id === choice.target_id))
-                : null;
+            const target =
+                choice.action === 'link'
+                    ? (targets[row.id] ??
+                      row.candidates.find(
+                          (item) => item.id === choice.target_id,
+                      ))
+                    : null;
             const model = models[row.id] ?? row.model_local;
-            const different = !!target && (!target.model || target.model.id !== model?.id);
-            const editable = !row.local && view !== 'excluded' && choice.action !== 'exclude';
+            const different =
+                !!target && (!target.model || target.model.id !== model?.id);
+            const editable =
+                !row.local &&
+                view !== 'excluded' &&
+                choice.action !== 'exclude';
             return (
                 <div className="flex min-w-48 flex-col gap-2">
-                    <span className="font-medium">{row.model?.name || '—'}</span>
-                    <span className="text-xs text-muted-foreground">{row.model?.manufacturer || '—'}</span>
+                    <span className="font-medium">
+                        {row.model?.name || '—'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                        {row.model?.manufacturer || '—'}
+                    </span>
                     {row.model_problem ? (
                         <div className="flex flex-col gap-1 text-xs">
-                            <p className="text-destructive">{row.model_problem}</p>
-                            <span>Snipe-IT · {row.model?.category || 'Senza categoria'}</span>
-                            <span>NetVibe · {row.model_local?.name} · {row.model_local?.detail || 'Senza tipologia'}</span>
+                            <p className="text-destructive">
+                                {row.model_problem}
+                            </p>
+                            <span>
+                                Snipe-IT ·{' '}
+                                {row.model?.category || 'Senza categoria'}
+                            </span>
+                            <span>
+                                NetVibe · {row.model_local?.name} ·{' '}
+                                {row.model_local?.detail || 'Senza tipologia'}
+                            </span>
                         </div>
                     ) : null}
-                    {editable && !row.model_linked && (row.model_ambiguous || different || !!models[row.id]) ? (
+                    {editable &&
+                    !row.model_linked &&
+                    (row.model_ambiguous || different || !!models[row.id]) ? (
                         <Field>
                             <FieldLabel>Modello NetVibe</FieldLabel>
                             <SnipeItPicker
@@ -331,8 +410,14 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                 value={model}
                                 disabled={busy || !active}
                                 onChange={(value) => {
-                                    setModels((previous) => ({ ...previous, [row.id]: value }));
-                                    choose(row, { model_id: value?.id ?? null, change_model: false });
+                                    setModels((previous) => ({
+                                        ...previous,
+                                        [row.id]: value,
+                                    }));
+                                    choose(row, {
+                                        model_id: value?.id ?? null,
+                                        change_model: false,
+                                    });
                                 }}
                             />
                         </Field>
@@ -343,19 +428,46 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                 id={`change-model-${row.id}`}
                                 checked={choice.change_model}
                                 disabled={busy || !active}
-                                onCheckedChange={(checked) => choose(row, { change_model: checked === true })}
+                                onCheckedChange={(checked) =>
+                                    choose(row, {
+                                        change_model: checked === true,
+                                    })
+                                }
                             />
                             <FieldLabel htmlFor={`change-model-${row.id}`}>
-                                Cambia modello da {target?.model?.name ?? 'nessun modello'} a {model?.name ?? row.model?.name}
+                                Cambia modello da{' '}
+                                {target?.model?.name ?? 'nessun modello'} a{' '}
+                                {model?.name ?? row.model?.name}
                             </FieldLabel>
                         </Field>
                     ) : null}
                 </div>
             );
         }
+        if (column === 'ip')
+            return (
+                <div className="flex flex-col gap-1">
+                    <span className="tabular-nums">
+                        {row.ipam_url ? (
+                            <TextLink href={row.ipam_url}>
+                                {row.snapshot.network?.ip}
+                            </TextLink>
+                        ) : (
+                            row.snapshot.network?.ip || 'Non indicato'
+                        )}
+                    </span>
+                    {row.snapshot.network?.mac ? (
+                        <span className="text-xs text-muted-foreground">
+                            {row.snapshot.network.mac}
+                        </span>
+                    ) : null}
+                </div>
+            );
         if (column === 'serial')
             return (
-                <span className="tabular-nums">{row.snapshot.serial || '—'}</span>
+                <span className="tabular-nums">
+                    {row.snapshot.serial || '—'}
+                </span>
             );
         if (column === 'state')
             return (
@@ -365,7 +477,14 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                             row.state === 'linked' ? 'secondary' : 'outline'
                         }
                     >
-                        {!row.present ? 'Non più presente' : selected.includes(row.id) && choice.action === 'exclude' ? 'Da escludere' : states[row.state]}
+                        {!row.present
+                            ? 'Non più presente'
+                            : selected.includes(row.id) &&
+                                choice.action === 'exclude'
+                              ? 'Da escludere'
+                              : row.problem || row.model_problem
+                                ? 'Da verificare'
+                                : states[row.state]}
                     </Badge>
                     {row.problem ? (
                         <p className="text-xs text-muted-foreground">
@@ -418,9 +537,11 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     <SelectContent>
                         <SelectGroup>
                             <SelectItem value="link">
-                                Associa esistente
+                                Collega apparato esistente
                             </SelectItem>
-                            <SelectItem value="create">Crea nuovo</SelectItem>
+                            <SelectItem value="create">
+                                Crea apparato tecnico
+                            </SelectItem>
                             <SelectItem value="exclude">Escludi</SelectItem>
                         </SelectGroup>
                     </SelectContent>
@@ -443,7 +564,10 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                 ...previous,
                                 [row.id]: value,
                             }));
-                            choose(row, { target_id: value?.id ?? null, change_model: false });
+                            choose(row, {
+                                target_id: value?.id ?? null,
+                                change_model: false,
+                            });
                         }}
                     />
                 ) : null}
@@ -467,7 +591,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     <Button asChild variant="ghost" size="sm">
                         <Link href={edit(company.id)}>
                             <ArrowLeft data-icon="inline-start" />
-                            Snipe-IT
+                            Sincronizzazione Snipe-IT
                         </Link>
                     </Button>
                 </div>
@@ -501,9 +625,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                             ) : (
                                 <RefreshCw data-icon="inline-start" />
                             )}
-                            {sync?.synced_at
-                                ? 'Sincronizza ora'
-                                : 'Acquisisci anteprima'}
+                            Sincronizza ora
                         </Button>
                     </div>
                 </header>
@@ -521,6 +643,29 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     </Alert>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-3">
+                    <Select
+                        value={view}
+                        onValueChange={(view) => visit({ view, page: 1 })}
+                        disabled={busy}
+                    >
+                        <SelectTrigger
+                            aria-label="Mostra dispositivi"
+                            className="w-56"
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                {Object.entries(titles).map(
+                                    ([value, label]) => (
+                                        <SelectItem key={value} value={value}>
+                                            {label}
+                                        </SelectItem>
+                                    ),
+                                )}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
                     <form
                         className="w-full max-w-sm"
                         onSubmit={(event) => {
@@ -552,13 +697,20 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         onValueChange={(group) => visit({ group, page: 1 })}
                         disabled={busy}
                     >
-                        <SelectTrigger aria-label="Raggruppa dispositivi" className="w-52">
+                        <SelectTrigger
+                            aria-label="Raggruppa dispositivi"
+                            className="w-52"
+                        >
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="category">Per tipo Snipe-IT</SelectItem>
-                                <SelectItem value="none">Senza raggruppamento</SelectItem>
+                                <SelectItem value="category">
+                                    Per tipo Snipe-IT
+                                </SelectItem>
+                                <SelectItem value="none">
+                                    Senza raggruppamento
+                                </SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -568,35 +720,62 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     {selected.length > 0 ? (
-                        <span className="text-sm text-muted-foreground" role="status">
+                        <span
+                            className="text-sm text-muted-foreground"
+                            role="status"
+                        >
                             {selected.length} selezionati nella pagina corrente
                         </span>
                     ) : null}
                     {selected.length > 1 && view !== 'excluded' ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" disabled={busy || !active}>
-                                    Azioni massive <ChevronDown data-icon="inline-end" />
+                                <Button
+                                    variant="outline"
+                                    disabled={busy || !active}
+                                >
+                                    Azioni massive{' '}
+                                    <ChevronDown data-icon="inline-end" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuGroup>
-                                    <DropdownMenuItem onSelect={() => applyBulk({ action: 'create', change_model: false })}>
-                                        Crea nuovi
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            applyBulk({
+                                                action: 'create',
+                                                change_model: false,
+                                            })
+                                        }
+                                    >
+                                        Crea apparati tecnici
                                     </DropdownMenuItem>
                                     {!siteView ? (
-                                        <DropdownMenuItem onSelect={() => applyBulk({ action: 'link', change_model: false })}>
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                applyBulk({
+                                                    action: 'link',
+                                                    change_model: false,
+                                                })
+                                            }
+                                        >
                                             Associa esistenti
                                         </DropdownMenuItem>
                                     ) : null}
-                                    <DropdownMenuItem onSelect={() => applyBulk({ action: 'exclude' })}>
+                                    <DropdownMenuItem
+                                        onSelect={() =>
+                                            applyBulk({ action: 'exclude' })
+                                        }
+                                    >
                                         Escludi dall’importazione
                                     </DropdownMenuItem>
                                 </DropdownMenuGroup>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     ) : null}
-                    {selected.length > 1 && multipleSites && view !== 'excluded' ? (
+                    {selected.length > 1 &&
+                    multipleSites &&
+                    view !== 'excluded' ? (
                         <div className="w-64">
                             <SitePicker
                                 sites={sites}
@@ -612,11 +791,13 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     ) : null}
                     <Button
                         className="ml-auto"
-                        disabled={!active || busy || (!selected.length && (view !== 'devices' || !!sync?.activated_at))}
+                        disabled={!active || busy || !selected.length}
                         onClick={() => setReview(true)}
                     >
                         <Check data-icon="inline-start" />
-                        {view === 'excluded' ? 'Riammetti selezionati' : 'Conferma scelte'}
+                        {view === 'excluded'
+                            ? 'Riammetti selezionati'
+                            : 'Applica selezione'}
                     </Button>
                 </div>
                 <div className="overflow-hidden rounded-xl border">
@@ -686,79 +867,149 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         <TableBody>
                             {rows.data.map((row, index) => {
                                 const category = row.model?.category ?? null;
-                                const startsGroup = grouped && (index === 0 || category !== (rows.data[index - 1].model?.category ?? null));
+                                const startsGroup =
+                                    grouped &&
+                                    (index === 0 ||
+                                        category !==
+                                            (rows.data[index - 1].model
+                                                ?.category ?? null));
                                 const groupIds = startsGroup
-                                    ? actionable.filter((item) => (item.model?.category ?? null) === category).map((item) => item.id)
+                                    ? actionable
+                                          .filter(
+                                              (item) =>
+                                                  (item.model?.category ??
+                                                      null) === category,
+                                          )
+                                          .map((item) => item.id)
                                     : [];
-                                const selectedInGroup = groupIds.filter((id) => selected.includes(id)).length;
+                                const selectedInGroup = groupIds.filter((id) =>
+                                    selected.includes(id),
+                                ).length;
                                 return (
-                                <Fragment key={row.id}>
-                                    {startsGroup ? (
-                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                            <TableHead colSpan={visible.length + 2} scope="rowgroup" className="h-auto py-3 font-medium text-foreground max-lg:w-full">
-                                                <div className="flex items-center gap-3">
-                                                    <Checkbox
-                                                        id={`snipe-group-${row.id}`}
-                                                        aria-label={`Seleziona ${row.model?.category || 'Senza tipo'} nella pagina corrente`}
-                                                        disabled={!groupIds.length || busy || !active}
-                                                        checked={groupIds.length > 0 && selectedInGroup === groupIds.length
-                                                            ? true
-                                                            : selectedInGroup > 0 ? 'indeterminate' : false}
-                                                        onCheckedChange={(checked) => setSelected((previous) => checked === true
-                                                            ? [...new Set([...previous, ...groupIds])]
-                                                            : previous.filter((id) => !groupIds.includes(id)))}
-                                                    />
-                                                    <label htmlFor={`snipe-group-${row.id}`}>
-                                                        {row.model?.category || 'Senza tipo'}
-                                                    </label>
-                                                </div>
-                                            </TableHead>
-                                        </TableRow>
-                                    ) : null}
-                                <TableRow
-                                    data-state={
-                                        selected.includes(row.id)
-                                            ? 'selected'
-                                            : undefined
-                                    }
-                                >
-                                    <TableCell className="max-lg:basis-full">
-                                        <Checkbox
-                                            aria-label={`Seleziona ${row.snapshot.name || row.snapshot.serial || row.id}`}
-                                            disabled={
-                                                row.state === 'linked' ||
-                                                (!row.present &&
-                                                    view !== 'excluded') ||
-                                                busy ||
-                                                !active
+                                    <Fragment key={row.id}>
+                                        {startsGroup ? (
+                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                <TableHead
+                                                    colSpan={visible.length + 2}
+                                                    scope="rowgroup"
+                                                    className="h-auto py-3 font-medium text-foreground max-lg:w-full"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <Checkbox
+                                                            id={`snipe-group-${row.id}`}
+                                                            aria-label={`Seleziona ${row.model?.category || 'Senza tipo'} nella pagina corrente`}
+                                                            disabled={
+                                                                !groupIds.length ||
+                                                                busy ||
+                                                                !active
+                                                            }
+                                                            checked={
+                                                                groupIds.length >
+                                                                    0 &&
+                                                                selectedInGroup ===
+                                                                    groupIds.length
+                                                                    ? true
+                                                                    : selectedInGroup >
+                                                                        0
+                                                                      ? 'indeterminate'
+                                                                      : false
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
+                                                                setSelected(
+                                                                    (
+                                                                        previous,
+                                                                    ) =>
+                                                                        checked ===
+                                                                        true
+                                                                            ? [
+                                                                                  ...new Set(
+                                                                                      [
+                                                                                          ...previous,
+                                                                                          ...groupIds,
+                                                                                      ],
+                                                                                  ),
+                                                                              ]
+                                                                            : previous.filter(
+                                                                                  (
+                                                                                      id,
+                                                                                  ) =>
+                                                                                      !groupIds.includes(
+                                                                                          id,
+                                                                                      ),
+                                                                              ),
+                                                                )
+                                                            }
+                                                        />
+                                                        <label
+                                                            htmlFor={`snipe-group-${row.id}`}
+                                                        >
+                                                            {row.model
+                                                                ?.category ||
+                                                                'Senza tipo'}
+                                                        </label>
+                                                    </div>
+                                                </TableHead>
+                                            </TableRow>
+                                        ) : null}
+                                        <TableRow
+                                            data-state={
+                                                selected.includes(row.id)
+                                                    ? 'selected'
+                                                    : undefined
                                             }
-                                            checked={selected.includes(row.id)}
-                                            onCheckedChange={(checked) =>
-                                                setSelected((previous) =>
-                                                    checked
-                                                        ? [...previous, row.id]
-                                                        : previous.filter(
-                                                              (id) =>
-                                                                  id !== row.id,
-                                                          ),
-                                                )
-                                            }
-                                        />
-                                    </TableCell>
-                                    {visible.map((column) => (
-                                        <TableCell
-                                            key={column.id}
-                                            className="max-w-lg py-4 align-top break-words whitespace-normal"
                                         >
-                                            <span className="mb-2 block text-xs text-muted-foreground lg:hidden">
-                                                {column.label}
-                                            </span>
-                                            {cell(row, column.id)}
-                                        </TableCell>
-                                    ))}
-                                    <TableCell className="max-lg:hidden" />
-                                </TableRow>
-                                </Fragment>
+                                            <TableCell className="max-lg:basis-full">
+                                                <Checkbox
+                                                    aria-label={`Seleziona ${row.snapshot.name || row.snapshot.serial || row.id}`}
+                                                    disabled={
+                                                        row.state ===
+                                                            'linked' ||
+                                                        (!row.present &&
+                                                            view !==
+                                                                'excluded') ||
+                                                        busy ||
+                                                        !active
+                                                    }
+                                                    checked={selected.includes(
+                                                        row.id,
+                                                    )}
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) =>
+                                                        setSelected(
+                                                            (previous) =>
+                                                                checked
+                                                                    ? [
+                                                                          ...previous,
+                                                                          row.id,
+                                                                      ]
+                                                                    : previous.filter(
+                                                                          (
+                                                                              id,
+                                                                          ) =>
+                                                                              id !==
+                                                                              row.id,
+                                                                      ),
+                                                        )
+                                                    }
+                                                />
+                                            </TableCell>
+                                            {visible.map((column) => (
+                                                <TableCell
+                                                    key={column.id}
+                                                    className="max-w-lg py-4 align-top break-words whitespace-normal"
+                                                >
+                                                    <span className="mb-2 block text-xs text-muted-foreground lg:hidden">
+                                                        {column.label}
+                                                    </span>
+                                                    {cell(row, column.id)}
+                                                </TableCell>
+                                            ))}
+                                            <TableCell className="max-lg:hidden" />
+                                        </TableRow>
+                                    </Fragment>
                                 );
                             })}
                             {!rows.data.length ? (
@@ -769,7 +1020,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                                 <EmptyTitle>
                                                     {sync?.synced_at
                                                         ? 'Nessun elemento in questa vista'
-                                                        : 'Acquisisci gli asset per iniziare'}
+                                                        : 'Sincronizza per caricare i dispositivi'}
                                                 </EmptyTitle>
                                             </EmptyHeader>
                                         </Empty>
@@ -780,7 +1031,7 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     </Table>
                 </div>
                 <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
-                    <span className="text-center text-sm tabular-nums text-muted-foreground lg:text-left">
+                    <span className="text-center text-sm text-muted-foreground tabular-nums lg:text-left">
                         {rows.from ?? 0}–{rows.to ?? 0} di {rows.total}
                     </span>
                     <Pagination>
@@ -788,7 +1039,9 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                             <PaginationItem>
                                 <PaginationPrevious
                                     disabled={rows.current_page <= 1 || busy}
-                                    onClick={() => visit({ page: rows.current_page - 1 })}
+                                    onClick={() =>
+                                        visit({ page: rows.current_page - 1 })
+                                    }
                                 />
                             </PaginationItem>
                             {rows.links.slice(1, -1).map((link, index) => (
@@ -798,34 +1051,62 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                                             isActive={link.active}
                                             aria-label={`Pagina ${link.label}`}
                                             disabled={busy}
-                                            onClick={() => visit({ page: Number(link.label) })}
+                                            onClick={() =>
+                                                visit({
+                                                    page: Number(link.label),
+                                                })
+                                            }
                                         >
                                             {link.label}
                                         </PaginationLink>
-                                    ) : <PaginationEllipsis />}
+                                    ) : (
+                                        <PaginationEllipsis />
+                                    )}
                                 </PaginationItem>
                             ))}
                             <PaginationItem>
                                 <PaginationNext
-                                    disabled={rows.current_page >= rows.last_page || busy}
-                                    onClick={() => visit({ page: rows.current_page + 1 })}
+                                    disabled={
+                                        rows.current_page >= rows.last_page ||
+                                        busy
+                                    }
+                                    onClick={() =>
+                                        visit({ page: rows.current_page + 1 })
+                                    }
                                 />
                             </PaginationItem>
                         </PaginationContent>
                     </Pagination>
                     <div className="flex items-center justify-center gap-2 lg:justify-end">
-                        <label htmlFor="snipe-page-size" className="text-sm text-muted-foreground">Voci per pagina</label>
+                        <label
+                            htmlFor="snipe-page-size"
+                            className="text-sm text-muted-foreground"
+                        >
+                            Voci per pagina
+                        </label>
                         <Select
                             value={String(rows.per_page)}
-                            onValueChange={(value) => visit({ per_page: Number(value), page: 1 })}
+                            onValueChange={(value) =>
+                                visit({ per_page: Number(value), page: 1 })
+                            }
                             disabled={busy}
                         >
-                            <SelectTrigger id="snipe-page-size" className="w-20">
+                            <SelectTrigger
+                                id="snipe-page-size"
+                                className="w-20"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    {[25, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}
+                                    {[25, 50, 100].map((size) => (
+                                        <SelectItem
+                                            key={size}
+                                            value={String(size)}
+                                        >
+                                            {size}
+                                        </SelectItem>
+                                    ))}
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
@@ -845,25 +1126,10 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         </DialogTitle>
                         <DialogDescription>
                             {view === 'excluded'
-                                  ? 'Gli asset selezionati torneranno in attesa di una scelta esplicita.'
-                                  : 'Le associazioni aggiornano nome, seriale e modello. Sede e documentazione tecnica dei dispositivi esistenti restano conservate.'}
+                                ? 'Gli asset selezionati riprenderanno l’aggiornamento automatico dell’IPAM.'
+                                : 'Le creazioni aggiungono gli asset selezionati a Dispositivi come apparati tecnici. Le associazioni aggiornano nome, seriale e modello degli apparati esistenti.'}
                         </DialogDescription>
                     </DialogHeader>
-                    {view === 'devices' && !sync?.activated_at ? (
-                        <Field orientation="horizontal">
-                            <Checkbox
-                                id="activate-snipe"
-                                checked={form.data.activate}
-                                onCheckedChange={(checked) =>
-                                    form.setData('activate', checked === true)
-                                }
-                                disabled={busy}
-                            />
-                            <FieldLabel htmlFor="activate-snipe">
-                                Attiva la sincronizzazione automatica ogni ora
-                            </FieldLabel>
-                        </Field>
-                    ) : null}
                     <DialogFooter>
                         <Button
                             variant="outline"

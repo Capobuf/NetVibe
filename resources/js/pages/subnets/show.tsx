@@ -1,4 +1,5 @@
 import { NetworkExclusionAction } from '@/components/networks/network-exclusion';
+import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import { show as vlanShow } from '@/routes/companies/sites/vlans';
 import {
     Empty,
@@ -582,6 +583,12 @@ export default function SubnetShow({
                                                                     ipAddress.ip
                                                                 }
                                                                 className="py-1 tabular-nums"
+                                                            />
+                                                            <SnipeItIp
+                                                                source={
+                                                                    ipAddress.snipe_it
+                                                                }
+                                                                compact
                                                             />
                                                             {ipAddress.excluded ? (
                                                                 <Tooltip>

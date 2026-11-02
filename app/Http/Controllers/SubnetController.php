@@ -71,7 +71,7 @@ class SubnetController extends Controller
 
         $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
         $selected = isset($options['ip_address'])
-            ? $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
+            ? $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['snipeItAsset.sync.connection', 'status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
             : null;
 
         return Inertia::render('subnets/show', [
@@ -97,6 +97,7 @@ class SubnetController extends Controller
             'initialIpAddress' => $selected ? [
                 ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label', 'mikrotik_edit_mode', 'mikrotik_matched_at'),
                 'ip' => long2ip($selected->address),
+                'snipe_it' => $selected->snipeItAsset?->ipamData(),
                 'device_id' => $selected->device_id, 'device_interface_id' => $selected->device_interface_id,
                 'device' => $selected->device, 'device_interface' => $selected->deviceInterface,
                 'status' => $selected->status?->only('id', 'name'),

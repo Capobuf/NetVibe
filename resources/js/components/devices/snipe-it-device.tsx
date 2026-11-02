@@ -40,6 +40,11 @@ export type SnipeDevice = {
         name: string | null;
         asset_tag: string | null;
         serial: string | null;
+        notes?: string | null;
+        network?: {
+            ip: string | null;
+            mac: string | null;
+        };
     };
     model: {
         name: string | null;
@@ -101,6 +106,9 @@ export function SnipeItDevice({
                 device.model?.model_type?.name ??
                 null,
         },
+        ...(source.snapshot.notes != null
+            ? [{ label: 'Note', current: device.notes, external: source.snapshot.notes }]
+            : []),
     ].filter((field) => field.current !== field.external);
     return (
         <Card>
@@ -121,6 +129,22 @@ export function SnipeItDevice({
                                 {formatDateTime(source.synced_at)}
                             </time>
                         </dd>
+                    </dl>
+                ) : null}
+                {source.snapshot.network?.ip || source.snapshot.network?.mac ? (
+                    <dl className="flex flex-col gap-3 text-sm">
+                        <div>
+                            <dt className="text-muted-foreground">IP</dt>
+                            <dd className="break-words font-mono">
+                                {source.snapshot.network.ip ?? 'Non indicato'}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-muted-foreground">MAC</dt>
+                            <dd className="break-words font-mono">
+                                {source.snapshot.network.mac ?? 'Non indicato'}
+                            </dd>
+                        </div>
                     </dl>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-3">

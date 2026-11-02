@@ -18,6 +18,7 @@ use App\Http\Controllers\ModelPanelController;
 use App\Http\Controllers\ModelTypeController;
 use App\Http\Controllers\NetworkExclusionController;
 use App\Http\Controllers\RackController;
+use App\Http\Controllers\RackDocumentController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SmtpSettingController;
 use App\Http\Controllers\SnipeItController;
@@ -50,6 +51,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
         Route::get('companies/{company}/sites/{site}/topology', [TopologyController::class, 'index'])->name('companies.sites.topology.index');
+        Route::get('companies/{company}/sites/{site}/racks/documentation/{rack?}', [RackDocumentController::class, 'show'])->name('companies.sites.racks.documentation');
         Route::get('companies/{company}/sites/{site}/racks/{rack}/cables/{cableId}/labels', [CableLabelController::class, 'show'])->whereNumber('cableId')->name('companies.sites.racks.cables.labels');
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');

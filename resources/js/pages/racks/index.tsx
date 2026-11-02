@@ -1,10 +1,11 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Printer } from 'lucide-react';
 import { DeviceTable } from '@/components/devices/device-table';
 import { RackForm, RackDelete } from '@/components/racks/rack-form';
 import { IconButton } from '@/components/icon-button';
+import { Button } from '@/components/ui/button';
 import TextLink from '@/components/text-link';
-import { index, show } from '@/routes/companies/sites/racks';
+import { documentation, index, show } from '@/routes/companies/sites/racks';
 import type { Company, Site } from '@/types/company';
 import type { Rack } from '@/types/rack';
 
@@ -40,7 +41,15 @@ export default function Racks({ company, site, racks }: Props) {
                             Rack
                         </h1>
                     </div>
-                    <RackForm {...route} />
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" asChild>
+                            <Link href={documentation(route)}>
+                                <Printer data-icon="inline-start" />
+                                Stampa documentazione
+                            </Link>
+                        </Button>
+                        <RackForm {...route} />
+                    </div>
                 </header>
                 <DeviceTable
                     name="racks"

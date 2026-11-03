@@ -50,13 +50,40 @@ class ModelTypeController extends Controller
         $request->validate(['confirmed' => ['accepted']]);
         DB::transaction(function () use ($modelType) {
             $modelType = ModelType::query()->lockForUpdate()->findOrFail($modelType->id);
-            if ($modelType->models()->exists()) {
-                throw ValidationException::withMessages(['confirmed' => 'Il tipo è associato a modelli. Cambia prima il tipo nei modelli che lo utilizzano.']);
-            }
-            $modelType->delete();
+            $this->deleteModelType($modelType);
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Tipo eliminato.']);
 
         return to_route('device-models.index', ['tab' => 'types']);
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'confirmed' => ['accepted'],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'distinct', 'exists:model_types,id'],
+        ], [], ['ids' => 'tipi selezionati', 'ids.*' => 'tipo selezionato']);
+
+        DB::transaction(function () use ($data) {
+            $types = ModelType::query()->whereKey($data['ids'])->orderBy('id')->lockForUpdate()->get();
+            if ($types->count() !== count($data['ids'])) {
+                throw ValidationException::withMessages(['ids' => 'La selezione è cambiata. Ricarica l’elenco e riprova.']);
+            }
+            foreach ($types as $type) {
+                $this->deleteModelType($type);
+            }
+        }, 3);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Tipi selezionati eliminati.']);
+
+        return to_route('device-models.index', ['tab' => 'types']);
+    }
+
+    private function deleteModelType(ModelType $modelType): void
+    {
+        if ($modelType->models()->exists()) {
+            throw ValidationException::withMessages(['confirmed' => '«'.$modelType->name.'»: il tipo è associato a modelli. Cambia prima il tipo nei modelli che lo utilizzano. Nessun dato è stato eliminato.']);
+        }
+        $modelType->delete();
     }
 }

@@ -5,6 +5,7 @@ import { TableSortHead } from '@/components/table-sort-head';
 import { TableSearch } from '@/components/table-search';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTablePagination } from '@/hooks/use-table-pagination';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
@@ -40,6 +41,7 @@ export function DeviceTable<
     rowOpensDialog = true,
     filters,
     headerActions,
+    bulkActions,
     empty = 'Nessun risultato',
     variant = 'default',
     total = rows.length,
@@ -59,6 +61,7 @@ export function DeviceTable<
     rowOpensDialog?: boolean;
     filters?: ReactNode;
     headerActions?: ReactNode;
+    bulkActions?: (rows: Row[], clearSelection: () => void) => ReactNode;
     empty?: string;
     variant?: 'default' | 'list';
     total?: number;
@@ -68,6 +71,7 @@ export function DeviceTable<
 }) {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<Column>>(defaultSort);
+    const [selectedIds, setSelectedIds] = useState<Row['id'][]>([]);
     const { columns, setColumns, separators, setSeparators } =
         useTablePreferences(name, defaults);
     const availableColumns = columns.filter(
@@ -95,13 +99,23 @@ export function DeviceTable<
         setPageSize,
     } = useTablePagination(sorted, JSON.stringify([search, sort, filterKey]));
     const isList = variant === 'list';
+    const selected = filtered.filter((row) => selectedIds.includes(row.id));
+    const allSelected =
+        filtered.length > 0 && selected.length === filtered.length;
+    function clearSelection() {
+        setSelectedIds([]);
+    }
+    function changeSearch(value: string) {
+        setSearch(value);
+        clearSelection();
+    }
     return (
         <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
                 {isList ? (
                     <TableSearch
                         value={search}
-                        onChange={setSearch}
+                        onChange={changeSearch}
                         total={total}
                         label={searchLabel}
                     />
@@ -114,11 +128,26 @@ export function DeviceTable<
                             aria-label="Cerca nell’elenco"
                             placeholder="Cerca nell’elenco…"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => changeSearch(e.target.value)}
                         />
                     </InputGroup>
                 )}
                 {filters}
+                {bulkActions && selected.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span role="status" className="text-sm tabular-nums">
+                            {selected.length} selezionati
+                        </span>
+                        {bulkActions(selected, clearSelection)}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearSelection}
+                        >
+                            Annulla selezione
+                        </Button>
+                    </div>
+                ) : null}
                 {!isList ? (
                     <span className="ml-auto text-sm text-muted-foreground tabular-nums">
                         {sorted.length} risultati
@@ -138,6 +167,30 @@ export function DeviceTable<
                 >
                     <TableHeader>
                         <TableRow>
+                            {bulkActions ? (
+                                <TableHead className="w-12">
+                                    <Checkbox
+                                        aria-label="Seleziona tutti i risultati"
+                                        checked={
+                                            allSelected
+                                                ? true
+                                                : selected.length > 0
+                                                  ? 'indeterminate'
+                                                  : false
+                                        }
+                                        disabled={!filtered.length}
+                                        onCheckedChange={(checked) =>
+                                            setSelectedIds(
+                                                checked === true
+                                                    ? filtered.map(
+                                                          (row) => row.id,
+                                                      )
+                                                    : [],
+                                            )
+                                        }
+                                    />
+                                </TableHead>
+                            ) : null}
                             {visible.map((column) => (
                                 <TableSortHead
                                     key={column.id}
@@ -179,6 +232,12 @@ export function DeviceTable<
                             return (
                                 <TableRow
                                     key={row.id}
+                                    data-state={
+                                        bulkActions &&
+                                        selectedIds.includes(row.id)
+                                            ? 'selected'
+                                            : undefined
+                                    }
                                     id={
                                         onRowClick
                                             ? `row-${name}-${row.id}`
@@ -232,6 +291,30 @@ export function DeviceTable<
                                             : undefined
                                     }
                                 >
+                                    {bulkActions ? (
+                                        <TableCell>
+                                            <Checkbox
+                                                aria-label={`Seleziona ${value(row, defaults[0].id)}`}
+                                                checked={selectedIds.includes(
+                                                    row.id,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    setSelectedIds((current) =>
+                                                        checked === true
+                                                            ? [
+                                                                  ...current,
+                                                                  row.id,
+                                                              ]
+                                                            : current.filter(
+                                                                  (id) =>
+                                                                      id !==
+                                                                      row.id,
+                                                              ),
+                                                    )
+                                                }
+                                            />
+                                        </TableCell>
+                                    ) : null}
                                     {visible.map((c) => (
                                         <TableCell
                                             key={c.id}
@@ -261,7 +344,13 @@ export function DeviceTable<
                         })}
                         {!sorted.length && (
                             <TableRow>
-                                <TableCell colSpan={visible.length + 1}>
+                                <TableCell
+                                    colSpan={
+                                        visible.length +
+                                        1 +
+                                        (bulkActions ? 1 : 0)
+                                    }
+                                >
                                     <Empty>
                                         <EmptyHeader>
                                             <EmptyTitle>
@@ -273,7 +362,7 @@ export function DeviceTable<
                                         {isList && search ? (
                                             <Button
                                                 variant="outline"
-                                                onClick={() => setSearch('')}
+                                                onClick={() => changeSearch('')}
                                             >
                                                 Azzera ricerca
                                             </Button>

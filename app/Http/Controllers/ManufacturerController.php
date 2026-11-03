@@ -68,13 +68,40 @@ class ManufacturerController extends Controller
         $request->validate(['confirmed' => ['accepted']]);
         DB::transaction(function () use ($manufacturer) {
             $manufacturer = Manufacturer::query()->lockForUpdate()->findOrFail($manufacturer->id);
-            if ($manufacturer->devices()->exists() || $manufacturer->models()->exists()) {
-                throw ValidationException::withMessages(['confirmed' => 'Rimuovi prima i modelli e cambia produttore ai dispositivi associati. Nessun dato è stato eliminato.']);
-            }
-            $manufacturer->delete();
+            $this->deleteManufacturer($manufacturer);
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Produttore eliminato.']);
 
         return to_route('manufacturers.index');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'confirmed' => ['accepted'],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'distinct', 'exists:manufacturers,id'],
+        ], [], ['ids' => 'produttori selezionati', 'ids.*' => 'produttore selezionato']);
+
+        DB::transaction(function () use ($data) {
+            $manufacturers = Manufacturer::query()->whereKey($data['ids'])->orderBy('id')->lockForUpdate()->get();
+            if ($manufacturers->count() !== count($data['ids'])) {
+                throw ValidationException::withMessages(['ids' => 'La selezione è cambiata. Ricarica l’elenco e riprova.']);
+            }
+            foreach ($manufacturers as $manufacturer) {
+                $this->deleteManufacturer($manufacturer);
+            }
+        }, 3);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Produttori selezionati eliminati.']);
+
+        return to_route('manufacturers.index');
+    }
+
+    private function deleteManufacturer(Manufacturer $manufacturer): void
+    {
+        if ($manufacturer->devices()->exists() || $manufacturer->models()->exists()) {
+            throw ValidationException::withMessages(['confirmed' => '«'.$manufacturer->name.'»: rimuovi prima i modelli e cambia produttore ai dispositivi associati. Nessun dato è stato eliminato.']);
+        }
+        $manufacturer->delete();
     }
 }

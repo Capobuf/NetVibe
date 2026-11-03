@@ -2,7 +2,7 @@ import { SaveButton } from '@/components/save-button';
 import { formatDateTime } from '@/lib/utils';
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useState } from 'react';
-import { Link2, RefreshCw, Trash2 } from 'lucide-react';
+import { Link2, RefreshCw, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { IntegrationTabs } from '@/components/integration-tabs';
 import { index as administration } from '@/routes/administration';
 import { index as integrationIndex } from '@/routes/administration/integrations';
@@ -275,10 +275,11 @@ function SnipeItForm({
                         >
                             <TabsList
                                 aria-label="Impostazioni Snipe-IT"
-                                className="max-w-full justify-start overflow-x-auto"
+                                className="max-w-full flex-wrap justify-start gap-1 group-data-[orientation=horizontal]/tabs:h-auto"
                             >
                                 {company ? (
                                     <TabsTrigger value="sync">
+                                        <RefreshCw aria-hidden="true" />
                                         Sincronizzazione
                                     </TabsTrigger>
                                 ) : null}
@@ -288,9 +289,11 @@ function SnipeItForm({
                                         !settings.connection || busy || changed
                                     }
                                 >
+                                    <SlidersHorizontal aria-hidden="true" />
                                     Mappatura Campi
                                 </TabsTrigger>
                                 <TabsTrigger value="connection">
+                                    <Link2 aria-hidden="true" />
                                     Connessione
                                 </TabsTrigger>
                             </TabsList>

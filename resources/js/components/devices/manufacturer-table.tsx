@@ -1,10 +1,11 @@
 import { Link } from '@inertiajs/react';
 import { ArrowRight } from 'lucide-react';
 import { CatalogForm } from '@/components/devices/catalog-form';
+import { CatalogBulkDelete } from '@/components/devices/catalog-bulk-delete';
 import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
-import { update, destroy } from '@/routes/manufacturers';
+import { update, destroy, bulkDestroy } from '@/routes/manufacturers';
 import { index } from '@/routes/device-models';
 import type { Manufacturer } from '@/types/device';
 
@@ -39,6 +40,13 @@ export function ManufacturerTable({
                 )
             }
             empty="Nessun produttore"
+            bulkActions={(items, clearSelection) => (
+                <CatalogBulkDelete
+                    items={items}
+                    action={bulkDestroy.form()}
+                    onSuccess={clearSelection}
+                />
+            )}
             actions={(m) => (
                 <>
                     <CatalogForm

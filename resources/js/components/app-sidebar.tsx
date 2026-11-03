@@ -70,7 +70,7 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             size="lg"
-                            className="h-28 justify-center"
+                            className="h-16 justify-center hover:bg-transparent active:bg-transparent"
                             asChild
                         >
                             <Link
@@ -78,7 +78,7 @@ export function AppSidebar() {
                                     inAdministration ? administration() : home()
                                 }
                             >
-                                <AppLogo className="size-24" />
+                                <AppLogo className="size-12" />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

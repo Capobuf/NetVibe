@@ -3,6 +3,7 @@ import { ArrowLeft, LayoutTemplate, Factory, Shapes } from 'lucide-react';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from '@/components/devices/catalog-form';
+import { CatalogBulkDelete } from '@/components/devices/catalog-bulk-delete';
 import { ManufacturerTable } from '@/components/devices/manufacturer-table';
 import { DeviceTable } from '@/components/devices/device-table';
 import { PanelViewer } from '@/components/devices/panel-viewer';
@@ -22,6 +23,7 @@ import {
     store as storeType,
     update as updateType,
     destroy as destroyType,
+    bulkDestroy as bulkDestroyTypes,
 } from '@/routes/model-types';
 import { store as storeManufacturer } from '@/routes/manufacturers';
 import {
@@ -358,6 +360,13 @@ export default function Models({
                             ]}
                             value={(type, column) => type[column] ?? 0}
                             empty="Nessun tipo"
+                            bulkActions={(items, clearSelection) => (
+                                <CatalogBulkDelete
+                                    items={items}
+                                    action={bulkDestroyTypes.form()}
+                                    onSuccess={clearSelection}
+                                />
+                            )}
                             actions={(type) => (
                                 <CatalogForm
                                     title="Modifica tipo"

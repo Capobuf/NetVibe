@@ -10,6 +10,8 @@ use App\Models\Manufacturer;
 use App\Models\MikrotikSource;
 use App\Support\MikrotikPortMap;
 use App\Support\MikrotikSync;
+use App\Support\UnifiInventory;
+use App\Support\UnifiPortMap;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +21,27 @@ use Throwable;
 
 class ModelPanelController extends Controller
 {
+    public function unifiPorts(Request $request, Manufacturer $manufacturer, DeviceModel $model): JsonResponse
+    {
+        abort_unless(mb_strtolower(trim($manufacturer->name)) === 'ubiquiti', 404);
+        $data = $request->validate([
+            'ports' => ['present', 'array', 'max:2048'],
+            'ports.*' => ['required', 'array:id,type,label,unifiPort'],
+            'ports.*.id' => ['required', 'string', 'max:64', 'distinct'],
+            'ports.*.type' => ['required', 'in:rj45,sfp,qsfp'],
+            'ports.*.label' => ['present', 'nullable', 'string', 'max:255'],
+            'ports.*.unifiPort' => ['sometimes', 'nullable', 'integer:strict', 'min:1'],
+        ]);
+        $ports = array_map(fn ($port) => [...$port, 'label' => $port['label'] ?? ''], $data['ports']);
+        $observed = UnifiPortMap::observed($model);
+
+        return response()->json([
+            'observed' => count($observed) > 0,
+            'interfaces' => array_map(fn ($port) => ['name' => (string) $port['idx'], 'type' => UnifiPortMap::type($port['connector'] ?? null)], $observed),
+            'matches' => (object) array_map('strval', UnifiPortMap::resolve($ports, $observed)),
+        ]);
+    }
+
     public function mikrotikPorts(Request $request, Manufacturer $manufacturer, DeviceModel $model): JsonResponse
     {
         abort_unless($manufacturer->isMikrotik(), 404);
@@ -95,6 +118,7 @@ class ModelPanelController extends Controller
                     $device->addModelInterfaces($model);
                     $device->setRelation('model', $model);
                     app(MikrotikSync::class)->applySavedInterfaceMap($device);
+                    app(UnifiInventory::class)->applySavedInterfaceMap($device);
                 }
 
                 return ['revision' => $model->panel_revision, 'previous' => $previous];

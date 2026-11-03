@@ -18,7 +18,6 @@ export function PanelScene({
     hideImage = false,
     imageDelta,
     imageOpacity,
-    numbering = false,
     preview,
     selectedPortId,
 }: {
@@ -30,7 +29,6 @@ export function PanelScene({
     hideImage?: boolean;
     imageDelta?: Point | null;
     imageOpacity?: number;
-    numbering?: boolean;
     preview?: Map<string, string>;
     selectedPortId?: string;
 }) {
@@ -85,7 +83,6 @@ export function PanelScene({
                                     key={port.id}
                                     port={port}
                                     selected={false}
-                                    numbering={numbering}
                                     preview={preview?.get(port.id)}
                                     zoom={zoom}
                                 />

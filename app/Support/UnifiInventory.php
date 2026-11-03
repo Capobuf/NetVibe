@@ -120,7 +120,7 @@ class UnifiInventory
 
     private function ports(UnifiDevice $source): void
     {
-        $device = $source->device;
+        $device = $source->device()->lockForUpdate()->first();
         if (! $device || $device->site_id !== $source->unifiSite->site_id) {
             return;
         }
@@ -138,13 +138,79 @@ class UnifiInventory
             if ($previous === null && $canCreate) {
                 $id = $device->interfaces()->create(['kind' => 'physical', 'name' => 'Porta '.$port['idx']])->id;
             }
-            $ports[] = [...$port, 'device_interface_id' => $id];
+            $ports[] = [...$port, 'device_interface_id' => $id,
+                ...($previous !== null && array_key_exists('interface_from_model', $previous) ? ['interface_from_model' => $previous['interface_from_model']] : [])];
         }
         // Missing API ports retain their mappings, but never appear as fresh observations.
         foreach ($links as $idx => $previous) {
             if (! in_array($idx, array_column($ports, 'idx'), true)) {
                 $ports[] = [...$previous, 'missing' => true];
             }
+        }
+        $source->update(['ports' => $ports]);
+        $source->setRelation('device', $device);
+        $this->associateInterfaces($source);
+    }
+
+    // The caller holds the device lock in the model-save transaction.
+    public function applySavedInterfaceMap(Device $device): void
+    {
+        $source = $device->unifiDevice()->lockForUpdate()->first();
+        if (! $source || $source->status !== 'linked' || $source->stale() || $source->unifiSite->site_id !== $device->site_id) {
+            return;
+        }
+        $source->setRelation('device', $device);
+        $this->associateInterfaces($source);
+    }
+
+    private function associateInterfaces(UnifiDevice $source): void
+    {
+        $device = $source->device;
+        $connectors = collect($device->model?->connectors() ?? [])->keyBy('id');
+        if ($connectors->isEmpty()) {
+            return;
+        }
+        $ports = $source->ports ?? [];
+        $current = array_values(array_filter($ports, fn ($port) => ! ($port['missing'] ?? false)));
+        $matches = UnifiPortMap::resolve($connectors->values()->all(), $current);
+        $interfaces = $device->interfaces()->setEagerLoads([])->where('kind', 'physical')
+            ->withCount(['ipAddresses', 'mikrotikSource'])->lockForUpdate()->get()->keyBy('id');
+        foreach ($ports as &$port) {
+            $interface = $interfaces->get($port['device_interface_id']);
+            $connector = $interface ? $connectors->get($interface->connector_id) : null;
+            if (! ($port['interface_from_model'] ?? false) || ! $connector || ($port['missing'] ?? false)) {
+                continue;
+            }
+            $explicit = array_key_exists('unifiPort', $connector);
+            $wanted = $explicit ? $connector['unifiPort'] : ($matches[$connector['id']] ?? null);
+            $target = array_search($port['idx'], $matches, true);
+            if ((($explicit || $wanted !== null) && $wanted !== $port['idx']) || ($target !== false && $target !== $connector['id'])) {
+                $port['device_interface_id'] = null;
+                $port['interface_from_model'] = false;
+            }
+        }
+        unset($port);
+        foreach ($matches as $connectorId => $idx) {
+            $position = array_search($idx, array_column($ports, 'idx'), true);
+            $target = $interfaces->firstWhere('connector_id', $connectorId);
+            $old = $interfaces->get($ports[$position]['device_interface_id']);
+            if (! $target || $old?->id === $target->id
+                || in_array($target->id, array_column($ports, 'device_interface_id'), true)) {
+                continue;
+            }
+            if ($old) {
+                // Preserve imported interface IDs, aliases and IPs; only replace an empty model placeholder.
+                if ($old->connector_id !== null || array_key_exists('interface_from_model', $ports[$position])
+                    || $target->name !== null || $target->mac_address !== null || $target->ip_addresses_count || $target->mikrotik_source_count) {
+                    continue;
+                }
+                $target->delete();
+                $interfaces->forget($target->id);
+                $old->update(['connector_id' => $connectorId]);
+                $target = $old;
+            }
+            $ports[$position]['device_interface_id'] = $target->id;
+            $ports[$position]['interface_from_model'] = true;
         }
         $source->update(['ports' => $ports]);
     }
@@ -158,6 +224,12 @@ class UnifiInventory
         }
         if ($interfaceId !== null) {
             $interface = $source->device->interfaces()->where('kind', 'physical')->lockForUpdate()->findOrFail($interfaceId);
+            if ($interface->connector_id !== null) {
+                $connector = collect($source->device->model?->connectors() ?? [])->firstWhere('id', $interface->connector_id);
+                if (! $connector || UnifiPortMap::type($ports[$position]['connector'] ?? null) !== $connector['type']) {
+                    $this->invalid('La porta UniFi non è compatibile con il connettore NetVibe.');
+                }
+            }
             foreach ($ports as $port) {
                 if ($port['idx'] !== $idx && $port['device_interface_id'] === $interface->id) {
                     $this->invalid('L’interfaccia è già associata a un’altra porta UniFi.');
@@ -170,6 +242,7 @@ class UnifiInventory
             $interface = $source->device->interfaces()->create(['kind' => 'physical', 'name' => 'Porta '.$idx]);
         }
         $ports[$position]['device_interface_id'] = $interface->id;
+        $ports[$position]['interface_from_model'] = false;
         $source->update(['ports' => $ports]);
     }
 

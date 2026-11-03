@@ -5,6 +5,7 @@ import {
     UnifiDeviceSummary,
     UnifiPorts,
     UnifiPortDetails,
+    UnifiPortInfo,
 } from '@/components/devices/unifi-device';
 import type { UnifiDeviceDetail } from '@/components/unifi/types';
 import { DeviceForm } from '@/components/devices/device-form';
@@ -207,6 +208,11 @@ export default function DeviceShow({
     }
     const selected = port
         ? device.interfaces.find((i) => i.connector_id === port.id)
+        : null;
+    const unifiPort = selected
+        ? device.unifi?.ports.find(
+              (observed) => observed.device_interface_id === selected.id,
+          )
         : null;
     const context =
         (companyNavigation?.sites.length ?? 0) > 1
@@ -637,6 +643,12 @@ export default function DeviceShow({
                     className="flex max-h-[min(32rem,var(--radix-popover-content-available-height))] w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl p-0"
                     aria-labelledby={portTitleId}
                     aria-describedby={undefined}
+                    onOpenAutoFocus={(event) => {
+                        if (!unifiPort) return;
+                        event.preventDefault();
+                        if (event.target instanceof HTMLElement)
+                            event.target.focus({ preventScroll: true });
+                    }}
                     onInteractOutside={(event) => {
                         const target = event.target;
                         // Canvas ports share a DOM target; their click handler updates or closes the popup.
@@ -666,6 +678,9 @@ export default function DeviceShow({
                                     ? connectorTypes[port.type].name
                                     : 'Porta')}
                         </PopoverTitle>
+                        {device.unifi && unifiPort ? (
+                            <UnifiPortInfo source={device.unifi} />
+                        ) : null}
                         <Button
                             type="button"
                             size="icon"
@@ -679,20 +694,11 @@ export default function DeviceShow({
                     </PopoverHeader>
                     <Separator />
                     <div className="min-h-0 overflow-y-auto overscroll-contain p-4">
-                        {device.unifi &&
-                        selected &&
-                        device.unifi.ports.find(
-                            (observed) =>
-                                observed.device_interface_id === selected.id,
-                        ) ? (
+                        {device.unifi && unifiPort ? (
                             <div className="mb-4">
                                 <UnifiPortDetails
                                     source={device.unifi}
-                                    port={device.unifi.ports.find(
-                                        (observed) =>
-                                            observed.device_interface_id ===
-                                            selected.id,
-                                    )!}
+                                    port={unifiPort}
                                     interfaces={device.interfaces}
                                 />
                                 <Separator className="mt-4" />

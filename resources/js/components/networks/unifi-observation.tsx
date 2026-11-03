@@ -1,5 +1,5 @@
 import { useForm, usePage } from '@inertiajs/react';
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { update } from '@/actions/App/Http/Controllers/UnifiIpamController';
 import { UnifiMark } from '@/components/unifi-mark';
@@ -78,6 +78,7 @@ export function UnifiObservationIndicator({
                 <Button
                     variant="ghost"
                     size={children ? 'sm' : 'icon'}
+                    className={children ? 'h-auto min-h-8 py-1' : undefined}
                     onClick={(event) => event.stopPropagation()}
                     aria-label={
                         children ? undefined : 'Apri le osservazioni UniFi'
@@ -322,6 +323,7 @@ export function UnifiObservedValue({
         ),
     ];
     if (!values.length) return null;
+    const warning = `${field === 'mac' ? 'MAC' : 'Hostname'} discordanti per lo stesso IP`;
     return (
         <UnifiObservationIndicator
             observations={relevant}
@@ -329,9 +331,23 @@ export function UnifiObservedValue({
             site={site}
             documented={value}
         >
-            <span className="max-w-72 truncate" title={values.join(', ')}>
-                {values.join(', ')}
+            <span className="flex flex-col items-start gap-1">
+                {values.map((observed) => (
+                    <span
+                        key={observed}
+                        className="max-w-72 truncate"
+                        title={observed}
+                    >
+                        {observed}
+                    </span>
+                ))}
             </span>
+            {values.length > 1 ? (
+                <span title={warning}>
+                    <TriangleAlert data-icon="inline-end" aria-hidden="true" />
+                    <span className="sr-only">{warning}</span>
+                </span>
+            ) : null}
             {value ? (
                 <span className="text-xs text-muted-foreground">
                     Differente

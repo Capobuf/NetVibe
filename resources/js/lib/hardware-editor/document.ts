@@ -156,6 +156,7 @@ export type Port = Point &
         scale: number;
         label: string;
         mikrotikName?: string | null;
+        unifiPort?: number | null;
         labelPosition: keyof typeof labelPositions;
         poe: boolean;
         group: string | null;
@@ -426,6 +427,7 @@ export function duplicatePorts(ports: Port[]): Port[] {
             group: p.group ? groups.get(p.group)! : null,
         };
         delete duplicate.mikrotikName;
+        delete duplicate.unifiPort;
         return duplicate;
     });
 }

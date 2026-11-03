@@ -287,14 +287,17 @@ test('automatic paste preserves grouped symbols and avoids occupied bounds on re
     assert.deepEqual(source, original);
 });
 
-test('pasted ports do not inherit a MikroTik association from their source', () => {
+test('pasted ports do not inherit integration associations from their source', () => {
     const source = {
         ...makePort('rj45', { x: 50, y: 40 }),
         mikrotikName: 'ether1',
+        unifiPort: 1,
     };
     const [pasted] = pastePorts(blankDocument(), 'front', [source]);
     assert.equal(Object.hasOwn(pasted, 'mikrotikName'), false);
     assert.equal(source.mikrotikName, 'ether1');
+    assert.equal(Object.hasOwn(pasted, 'unifiPort'), false);
+    assert.equal(source.unifiPort, 1);
 });
 
 test('paste centers on the requested point and preserves only labels still available after a cut', () => {

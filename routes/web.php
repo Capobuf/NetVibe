@@ -47,6 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('manufacturers.models', DeviceModelController::class)->only(['store', 'update', 'edit', 'destroy']);
         Route::post('manufacturers/{manufacturer}/models/{model}/panel', [ModelPanelController::class, 'update'])->name('manufacturers.models.panel.update');
         Route::post('manufacturers/{manufacturer}/models/{model}/mikrotik-ports', [ModelPanelController::class, 'mikrotikPorts'])->name('manufacturers.models.mikrotik-ports');
+        Route::post('manufacturers/{manufacturer}/models/{model}/unifi-ports', [ModelPanelController::class, 'unifiPorts'])->name('manufacturers.models.unifi-ports');
     });
     Route::redirect('search', '/companies');
     Route::resource('companies', CompanyController::class)->only(['index']);

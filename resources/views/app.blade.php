@@ -30,9 +30,10 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico?v=spettro" sizes="any">
-        <link rel="icon" href="/favicon.svg?v=spettro" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=spettro">
+        <link rel="icon" href="/favicon.ico?v=branding-20261103" sizes="any">
+        <link rel="icon" href="/branding/logo-black.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+        <link rel="icon" href="/branding/logo-white.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=branding-20261103">
 
         @fonts
 

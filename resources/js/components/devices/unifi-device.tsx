@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useForm } from '@inertiajs/react';
-import { CircleAlert, EthernetPort, Zap } from 'lucide-react';
+import { CircleAlert, EthernetPort, Info, Zap } from 'lucide-react';
 import {
     adopt,
     port as associatePort,
 } from '@/actions/App/Http/Controllers/UnifiInventoryController';
 import { UnifiMark } from '@/components/unifi-mark';
+import { IconButton } from '@/components/icon-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,13 @@ import {
 } from '@/components/unifi/types';
 import { formatDateTime } from '@/lib/utils';
 import { interfaceName, type DeviceInterface } from '@/types/device';
+
+const poeStates: Record<string, string> = {
+    UP: 'Attivo',
+    DOWN: 'Inattivo',
+    LIMITED: 'Limitato',
+    UNKNOWN: 'Non disponibile',
+};
 
 export function UnifiDeviceSummary({ source }: { source: UnifiDeviceDetail }) {
     const form = useForm({
@@ -260,7 +268,7 @@ export function UnifiPorts({
                                             {port.idx}
                                         </span>
                                         {port.poe?.enabled ? (
-                                            <Zap aria-label="PoE attivo" />
+                                            <Zap aria-label="PoE abilitato" />
                                         ) : null}
                                     </span>
                                     <span className="text-xs">
@@ -273,11 +281,20 @@ export function UnifiPorts({
                                     </span>
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 max-w-[calc(100vw-2rem)]">
-                                <PopoverHeader>
+                            <PopoverContent
+                                className="w-80 max-w-[calc(100vw-2rem)]"
+                                aria-label={`Porta ${port.idx}`}
+                                onOpenAutoFocus={(event) => {
+                                    event.preventDefault();
+                                    if (event.target instanceof HTMLElement)
+                                        event.target.focus({ preventScroll: true });
+                                }}
+                            >
+                                <PopoverHeader className="flex-row items-center gap-2">
                                     <PopoverTitle>
                                         Porta {port.idx}
                                     </PopoverTitle>
+                                    <UnifiPortInfo source={source} />
                                 </PopoverHeader>
                                 <div className="pt-3">
                                     <UnifiPortDetails
@@ -295,6 +312,20 @@ export function UnifiPorts({
                     ))}
             </div>
         </section>
+    );
+}
+
+export function UnifiPortInfo({ source }: { source: UnifiDeviceDetail }) {
+    return (
+        <IconButton
+            label={source.synced_at
+                ? `Ultima lettura: ${formatDateTime(source.synced_at)}`
+                : 'Mai sincronizzato'}
+            variant="ghost"
+            className="size-8 shrink-0 text-muted-foreground"
+        >
+            <Info />
+        </IconButton>
     );
 }
 
@@ -350,28 +381,28 @@ export function UnifiPortDetails({
                 {port.poe ? (
                     <>
                         <dt className="text-muted-foreground">PoE</dt>
-                        <dd>
-                            {[
-                                port.poe.standard,
-                                port.poe.type,
-                                port.poe.state,
-                                port.poe.enabled === true
-                                    ? 'Attivo'
+                        <dd className="flex flex-col items-start gap-1.5">
+                            <Badge variant="secondary">
+                                <Zap />
+                                {port.poe.enabled === true
+                                    ? 'Abilitato'
                                     : port.poe.enabled === false
-                                      ? 'Disattivo'
-                                      : null,
-                            ]
-                                .filter(Boolean)
-                                .join(' · ') || '—'}
+                                      ? 'Disabilitato'
+                                      : 'Non disponibile'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                                {[
+                                    port.poe.standard,
+                                    port.poe.type != null ? `Tipo ${port.poe.type}` : null,
+                                ].filter(Boolean).join(' · ')}
+                            </span>
+                        </dd>
+                        <dt className="text-muted-foreground">Stato PoE</dt>
+                        <dd>
+                            {poeStates[port.poe.state ?? 'UNKNOWN'] ?? port.poe.state}
                         </dd>
                     </>
                 ) : null}
-                <dt className="text-muted-foreground">Fonte</dt>
-                <dd>{source.source_name}</dd>
-                <dt className="text-muted-foreground">Ultima lettura</dt>
-                <dd>
-                    {source.synced_at ? formatDateTime(source.synced_at) : '—'}
-                </dd>
             </dl>
             {local && onInterface ? (
                 <Button

@@ -153,6 +153,7 @@ export function validateDraft(value: Draft): void {
                 !Object.hasOwn(labelPositions, p.labelPosition) ||
                 typeof p.label !== 'string' ||
                 (p.mikrotikName != null && (typeof p.mikrotikName !== 'string' || !/^[a-zA-Z0-9_.-]{1,255}$/.test(p.mikrotikName))) ||
+                (p.unifiPort != null && (!Number.isSafeInteger(p.unifiPort) || p.unifiPort < 1)) ||
                 typeof p.poe !== 'boolean' ||
                 ![p.x, p.y, p.scale, p.rotation].every(finite) ||
                 p.scale < 0.2 ||

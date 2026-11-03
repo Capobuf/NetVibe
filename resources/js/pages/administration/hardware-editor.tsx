@@ -26,10 +26,11 @@ import { EditorLayers } from '@/components/hardware-editor/editor-layers';
 import { EditorInspector } from '@/components/hardware-editor/editor-inspector';
 import { EditorToolbar } from '@/components/hardware-editor/editor-toolbar';
 import { NumberingPanel } from '@/components/hardware-editor/numbering-panel';
-import { MikrotikPortsPanel } from '@/components/hardware-editor/mikrotik-ports-panel';
+import { IntegrationPortsPanel } from '@/components/hardware-editor/integration-ports-panel';
 import { useEditor } from '@/components/hardware-editor/use-editor';
 import { IconButton } from '@/components/icon-button';
 import { MikrotikMark } from '@/components/mikrotik-mark';
+import { UnifiMark } from '@/components/unifi-mark';
 import { ErrorNotification } from '@/components/error-notification';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,8 @@ export default function HardwareEditor({
     const e = useEditor(auth.user.id, catalogModel);
     const mikrotik =
         catalogModel?.manufacturer.name.trim().toLowerCase() === 'mikrotik';
+    const unifi =
+        catalogModel?.manufacturer.name.trim().toLowerCase() === 'ubiquiti';
     const currentDocument = useRef(e.doc);
     currentDocument.current = e.doc;
     const exitRoute = catalogModel
@@ -851,10 +854,12 @@ export default function HardwareEditor({
                             aria-label="Proprietà del pannello"
                             className={cn(
                                 'absolute inset-y-0 right-0 max-w-[95%] border-l bg-background shadow-lg lg:relative lg:max-w-none lg:shrink-0 lg:shadow-none',
-                                mikrotik && inspectorTab === 'ports' ? 'w-96' : 'w-72',
+                                (mikrotik || unifi) && inspectorTab === 'ports'
+                                    ? 'w-96'
+                                    : 'w-72',
                             )}
                         >
-                            {mikrotik ? (
+                            {mikrotik || unifi ? (
                                 <Tabs
                                     value={inspectorTab}
                                     onValueChange={setInspectorTab}
@@ -874,7 +879,11 @@ export default function HardwareEditor({
                                             value="ports"
                                             disabled={inspectorTabsDisabled}
                                         >
-                                            <MikrotikMark />
+                                            {unifi ? (
+                                                <UnifiMark />
+                                            ) : (
+                                                <MikrotikMark />
+                                            )}
                                             Porte
                                         </TabsTrigger>
                                     </TabsList>
@@ -889,7 +898,13 @@ export default function HardwareEditor({
                                         className="min-h-0"
                                     >
                                         {catalogModel && (
-                                            <MikrotikPortsPanel editor={e} model={catalogModel} />
+                                            <IntegrationPortsPanel
+                                                editor={e}
+                                                model={catalogModel}
+                                                vendor={
+                                                    unifi ? 'unifi' : 'mikrotik'
+                                                }
+                                            />
                                         )}
                                     </TabsContent>
                                 </Tabs>

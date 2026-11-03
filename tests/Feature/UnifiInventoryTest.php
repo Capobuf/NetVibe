@@ -6,6 +6,8 @@ use App\Models\Company;
 use App\Models\Manufacturer;
 use App\Models\UnifiConnection;
 use App\Models\UnifiSite;
+use App\Models\User;
+use App\Support\Ipv4Cidr;
 use App\Support\UnifiInventory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -101,6 +103,134 @@ class UnifiInventoryTest extends TestCase
         $this->assertSame('ignored', $old->fresh()->status);
         $this->assertDatabaseCount('devices', 1);
         $this->assertDatabaseCount('device_interfaces', 2);
+    }
+
+    public function test_model_mapping_reuses_imported_interfaces_and_preserves_documented_data(): void
+    {
+        Http::preventStrayRequests();
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $site = $this->source();
+        $site->update(['sync_status' => 'ok']);
+        $inventory = new UnifiInventory;
+        $inventory->capture($site, [$this->device()]);
+        DB::transaction(fn () => $inventory->activate($site));
+        $source = $site->unifiDevices()->sole();
+        $device = $source->device;
+        $model = $device->model;
+        $interface = $device->interfaces()->findOrFail($source->ports[0]['device_interface_id']);
+        $interface->update(['name' => 'Management', 'mac_address' => '02:00:00:00:00:01']);
+        $subnet = $site->site->subnets()->create(Ipv4Cidr::parse('192.168.60.0/24'));
+        $ip = $subnet->ipAddresses()->create(['address' => ip2long('192.168.60.20'),
+            'device_id' => $device->id, 'device_interface_id' => $interface->id]);
+        $panel = $this->panel();
+        $model->update(['panel' => $panel]);
+        $device->addModelInterfaces($model);
+        $preview = route('manufacturers.models.unifi-ports', [$model->manufacturer_id, $model]);
+        $ports = array_map(fn ($port) => array_intersect_key($port, array_flip(['id', 'type', 'label'])), $panel['faces']['front']['ports']);
+        $url = route('manufacturers.models.panel.update', [$model->manufacturer_id, $model]);
+        $seenAt = $source->synced_at;
+
+        $this->postJson($preview, ['ports' => $ports])->assertOk()->assertJsonPath('observed', true)
+            ->assertJsonPath('matches.'.str_repeat('a', 32), '1')->assertJsonPath('matches.'.str_repeat('b', 32), '2');
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])->assertOk();
+
+        $this->assertSame(str_repeat('a', 32), $interface->fresh()->connector_id);
+        $this->assertSame('Management', $interface->fresh()->name);
+        $this->assertSame('02:00:00:00:00:01', $interface->fresh()->mac_address);
+        $this->assertSame($interface->id, $ip->fresh()->device_interface_id);
+        $this->assertSame(2, $device->interfaces()->count());
+        $this->assertTrue($source->fresh()->ports[0]['interface_from_model']);
+        $this->assertTrue($seenAt->equalTo($source->fresh()->synced_at));
+        DB::transaction(fn () => $inventory->capture($site, [$this->device()]));
+        $this->assertSame($interface->id, $source->fresh()->ports[0]['device_interface_id']);
+        $this->assertSame(2, $device->interfaces()->count());
+
+        $panel['faces']['front']['ports'][0]['unifiPort'] = null;
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 1])->assertOk();
+        DB::transaction(fn () => $inventory->capture($site, [$this->device()]));
+        $this->assertNull($source->fresh()->ports[0]['device_interface_id']);
+        $this->assertSame($interface->id, $ip->fresh()->device_interface_id);
+        Http::assertNothingSent();
+    }
+
+    public function test_model_corrections_preserve_manual_missing_and_offline_port_links(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $site = $this->source();
+        $site->update(['sync_status' => 'ok']);
+        $inventory = new UnifiInventory;
+        $data = $this->device();
+        $data['ports'][1]['connector'] = 'RJ45';
+        $inventory->capture($site, [$data]);
+        DB::transaction(fn () => $inventory->activate($site));
+        $source = $site->unifiDevices()->sole();
+        $device = $source->device;
+        $model = $device->model;
+        $panel = $this->panel();
+        $panel['faces']['front']['ports'][1]['type'] = 'rj45';
+        $url = route('manufacturers.models.panel.update', [$model->manufacturer_id, $model]);
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])->assertOk();
+        $ids = array_column($source->fresh()->ports, 'device_interface_id');
+        $panel['faces']['front']['ports'][0]['unifiPort'] = 2;
+        $panel['faces']['front']['ports'][1]['unifiPort'] = 1;
+
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 1])->assertOk();
+        $this->assertSame([$ids[1], $ids[0]], array_column($source->fresh()->ports, 'device_interface_id'));
+        $site->update(['sync_status' => 'offline']);
+        $panel['faces']['front']['ports'][0]['unifiPort'] = null;
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 2])->assertOk();
+        $this->assertSame($ids[0], $source->fresh()->ports[1]['device_interface_id']);
+
+        $site->update(['sync_status' => 'ok']);
+        $onlyFirst = $data;
+        $onlyFirst['ports'] = [$data['ports'][0]];
+        DB::transaction(fn () => $inventory->capture($site, [$onlyFirst]));
+        $this->assertTrue($source->fresh()->ports[1]['missing']);
+        $this->assertSame($ids[0], $source->fresh()->ports[1]['device_interface_id']);
+
+        $manual = $device->interfaces()->create(['kind' => 'physical', 'name' => 'Manual port']);
+        DB::transaction(fn () => $inventory->mapPort($source->fresh(), 1, $manual->id));
+        DB::transaction(fn () => $inventory->capture($site, [$data]));
+        $this->assertSame($manual->id, $source->fresh()->ports[0]['device_interface_id']);
+        $this->assertFalse($source->fresh()->ports[0]['interface_from_model']);
+        $this->assertNull($source->fresh()->ports[1]['device_interface_id']);
+    }
+
+    public function test_unifi_model_mapping_rejects_duplicate_incompatible_and_unauthorized_choices(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $site = $this->source();
+        $site->update(['sync_status' => 'ok']);
+        $inventory = new UnifiInventory;
+        $inventory->capture($site, [$this->device()]);
+        DB::transaction(fn () => $inventory->activate($site));
+        $model = $site->unifiDevices()->sole()->device->model;
+        $panel = $this->panel();
+        $url = route('manufacturers.models.panel.update', [$model->manufacturer_id, $model]);
+        $panel['faces']['front']['ports'][0]['unifiPort'] = 2;
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])
+            ->assertUnprocessable()->assertJsonValidationErrors('document');
+        $panel['faces']['front']['ports'][0]['unifiPort'] = 1;
+        $panel['faces']['front']['ports'][1]['type'] = 'rj45';
+        $panel['faces']['front']['ports'][1]['unifiPort'] = 1;
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])
+            ->assertUnprocessable()->assertJsonValidationErrors('document');
+        $this->assertNull($model->fresh()->panel);
+        $this->actingAs(User::factory()->create(['is_superadmin' => false]))
+            ->postJson(route('manufacturers.models.unifi-ports', [$model->manufacturer_id, $model]), ['ports' => []])->assertForbidden();
+    }
+
+    private function panel(): array
+    {
+        $face = ['ports' => [], 'image' => null, 'order' => [], 'shellState' => ['hidden' => false, 'locked' => false]];
+        $port = ['id' => str_repeat('a', 32), 'type' => 'rj45', 'label' => '1', 'x' => 50, 'y' => 50,
+            'rotation' => 0, 'scale' => 1, 'labelPosition' => 'center', 'poe' => false, 'group' => null,
+            'opacity' => 1, 'opacityCustomized' => false, 'borderColor' => '#000000', 'hidden' => false, 'locked' => false];
+
+        return ['version' => 3, 'name' => 'Synthetic panel',
+            'shell' => ['x' => 0, 'y' => 0, 'width' => 200, 'height' => 100, 'radius' => 0, 'border' => 1],
+            'faces' => ['front' => [...$face, 'ports' => [$port, [...$port, 'id' => str_repeat('b', 32), 'label' => '2', 'type' => 'sfp', 'x' => 100]]], 'rear' => $face],
+            'numbering' => ['next' => 3, 'prefix' => '']];
     }
 
     private function source(): UnifiSite

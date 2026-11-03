@@ -11,13 +11,11 @@ import {
 export function PortSymbol({
     port,
     selected,
-    numbering,
     preview,
     zoom,
 }: {
     port: Port;
     selected: boolean;
-    numbering: boolean;
     preview?: string;
     zoom: number;
 }) {
@@ -36,9 +34,7 @@ export function PortSymbol({
                 height={b.height + 8}
                 cornerRadius={4}
                 fill="transparent"
-                stroke={
-                    selected ? '#3b82f6' : numbering ? '#38bdf8' : undefined
-                }
+                stroke={selected ? '#3b82f6' : undefined}
                 strokeWidth={1.5 / zoom}
             />
             <Group

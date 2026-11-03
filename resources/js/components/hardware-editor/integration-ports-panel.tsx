@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { mikrotikPorts } from '@/actions/App/Http/Controllers/ModelPanelController';
+import {
+    mikrotikPorts,
+    unifiPorts,
+} from '@/actions/App/Http/Controllers/ModelPanelController';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,23 +26,29 @@ type Mapping = {
     matches: Record<string, string>;
 };
 
-export function MikrotikPortsPanel({
+export function IntegrationPortsPanel({
     editor: e,
     model,
+    vendor,
 }: {
     editor: Editor;
     model: CatalogModel;
+    vendor: 'mikrotik' | 'unifi';
 }) {
+    const unifi = vendor === 'unifi';
+    const vendorName = unifi ? 'UniFi' : 'MikroTik';
+    const field = unifi ? 'unifiPort' : 'mikrotikName';
+    const endpoint = unifi ? unifiPorts : mikrotikPorts;
     const allPorts = [
         ...e.doc.faces.front.ports,
         ...e.doc.faces.rear.ports,
     ].filter((port) => ['rj45', 'sfp', 'qsfp'].includes(port.type));
     const payload = JSON.stringify({
-        ports: allPorts.map(({ id, type, label, mikrotikName }) => ({
-            id,
-            type,
-            label,
-            mikrotikName,
+        ports: allPorts.map((port) => ({
+            id: port.id,
+            type: port.type,
+            label: port.label,
+            [field]: port[field],
         })),
     });
     const [result, setResult] = useState<{
@@ -66,7 +75,7 @@ export function MikrotikPortsPanel({
                     .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
                     ?.slice('XSRF-TOKEN='.length);
                 const response = await fetch(
-                    mikrotikPorts.url({
+                    endpoint.url({
                         manufacturer: model.manufacturer_id,
                         model: model.id,
                     }),
@@ -83,7 +92,7 @@ export function MikrotikPortsPanel({
                 );
                 if (!response.ok)
                     throw new Error(
-                        'Impossibile caricare le interfacce MikroTik. Riprova.',
+                        `Impossibile caricare le porte ${vendorName}. Riprova.`,
                     );
                 const mapping: Mapping = await response.json();
                 if (!controller.signal.aborted)
@@ -101,7 +110,7 @@ export function MikrotikPortsPanel({
             window.clearTimeout(timer);
             controller.abort();
         };
-    }, [payload, model.id, model.manufacturer_id, retry]);
+    }, [payload, model.id, model.manufacturer_id, retry, endpoint, vendorName]);
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
@@ -121,28 +130,33 @@ export function MikrotikPortsPanel({
             )}
             {data && !data.observed && (
                 <Badge variant="outline" className="self-start">
-                    Nomi standard
+                    {unifi ? 'Nessuna porta UniFi rilevata' : 'Nomi standard'}
                 </Badge>
             )}
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3 text-xs font-medium text-muted-foreground">
                 <span>Porta NetVibe</span>
-                <span>Interfaccia MikroTik</span>
+                <span>Porta {vendorName}</span>
             </div>
             {ports.map((port) => {
                 const current =
-                    port.mikrotikName === null
+                    port[field] === null
                         ? 'none'
-                        : (port.mikrotikName ??
-                          data?.matches[port.id] ??
-                          'unassigned');
+                        : String(
+                              port[field] ??
+                                  data?.matches[port.id] ??
+                                  'unassigned',
+                          );
                 const options = (data?.interfaces ?? []).filter(
                     (item) => item.type === null || item.type === port.type,
                 );
                 if (
-                    port.mikrotikName &&
-                    !options.some((item) => item.name === port.mikrotikName)
+                    port[field] != null &&
+                    !options.some((item) => item.name === String(port[field]))
                 )
-                    options.push({ name: port.mikrotikName, type: port.type });
+                    options.push({
+                        name: String(port[field]),
+                        type: port.type,
+                    });
                 return (
                     <div
                         key={port.id}
@@ -173,9 +187,9 @@ export function MikrotikPortsPanel({
                         <Field>
                             <FieldLabel
                                 className="sr-only"
-                                htmlFor={`mikrotik-port-${port.id}`}
+                                htmlFor={`${vendor}-port-${port.id}`}
                             >
-                                Interfaccia MikroTik per{' '}
+                                Porta {vendorName} per{' '}
                                 {port.label || connectorTypes[port.type].name}
                             </FieldLabel>
                             <Select
@@ -193,12 +207,14 @@ export function MikrotikPortsPanel({
                                             item.id === port.id
                                                 ? {
                                                       ...item,
-                                                      mikrotikName:
+                                                      [field]:
                                                           value === 'auto'
                                                               ? undefined
                                                               : value === 'none'
                                                                 ? null
-                                                                : value,
+                                                                : unifi
+                                                                  ? Number(value)
+                                                                  : value,
                                                   }
                                                 : item,
                                         ),
@@ -206,7 +222,7 @@ export function MikrotikPortsPanel({
                                 }}
                             >
                                 <SelectTrigger
-                                    id={`mikrotik-port-${port.id}`}
+                                    id={`${vendor}-port-${port.id}`}
                                     className="w-full min-w-0"
                                 >
                                     <SelectValue />
@@ -231,11 +247,14 @@ export function MikrotikPortsPanel({
                                                 disabled={allPorts.some(
                                                     (other) =>
                                                         other.id !== port.id &&
-                                                        other.mikrotikName ===
+                                                        other[field] != null &&
+                                                        String(other[field]) ===
                                                             item.name,
                                                 )}
                                             >
-                                                {item.name}
+                                                {unifi
+                                                    ? `Porta ${item.name}`
+                                                    : item.name}
                                             </SelectItem>
                                         ))}
                                     </SelectGroup>

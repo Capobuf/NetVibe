@@ -634,7 +634,9 @@ export function EditorCanvas({
             e.setSelection({ kind: 'ports', ids: g.clickSelection });
         if (!moved && !blocked && g.mode !== 'pan') e.setPastePoint(g.start);
         if (
-            (g.mode === 'block-spacing' || g.mode === 'group-scale') &&
+            (g.mode === 'block-spacing' ||
+                g.mode === 'group-scale' ||
+                g.mode === 'crop') &&
             stage.current
         )
             stage.current.container().style.cursor = '';
@@ -912,7 +914,6 @@ export function EditorCanvas({
                                 ? (e.opacityPreview ?? image?.opacity)
                                 : image?.opacity
                         }
-                        numbering={!!e.session}
                         preview={preview}
                     />
                     {blockPreview && blockOptions && blockBox && (
@@ -992,7 +993,6 @@ export function EditorCanvas({
                                     key={port.id}
                                     port={port}
                                     selected={false}
-                                    numbering={false}
                                     zoom={view.zoom}
                                 />
                             ))}
@@ -1168,16 +1168,16 @@ export function EditorCanvas({
                                     ))}
                                     {(
                                         [
-                                            ['nw', 0, 0],
-                                            ['n', 0.5, 0],
-                                            ['ne', 1, 0],
-                                            ['e', 1, 0.5],
-                                            ['se', 1, 1],
-                                            ['s', 0.5, 1],
-                                            ['sw', 0, 1],
-                                            ['w', 0, 0.5],
+                                            ['nw', 0, 0, 'nwse-resize'],
+                                            ['n', 0.5, 0, 'ns-resize'],
+                                            ['ne', 1, 0, 'nesw-resize'],
+                                            ['e', 1, 0.5, 'ew-resize'],
+                                            ['se', 1, 1, 'nwse-resize'],
+                                            ['s', 0.5, 1, 'ns-resize'],
+                                            ['sw', 0, 1, 'nesw-resize'],
+                                            ['w', 0, 0.5, 'ew-resize'],
                                         ] as const
-                                    ).map(([name, x, y]) => (
+                                    ).map(([name, x, y, cursor]) => (
                                         <Rect
                                             key={name}
                                             name={`crop-${name}`}
@@ -1198,6 +1198,19 @@ export function EditorCanvas({
                                             strokeWidth={1 / view.zoom}
                                             hitStrokeWidth={14 / view.zoom}
                                             cornerRadius={2 / view.zoom}
+                                            onMouseEnter={() => {
+                                                if (!space && stage.current)
+                                                    stage.current.container().style.cursor =
+                                                        cursor;
+                                            }}
+                                            onMouseLeave={() => {
+                                                if (
+                                                    stage.current &&
+                                                    gesture.current?.mode !== 'crop'
+                                                )
+                                                    stage.current.container().style.cursor =
+                                                        '';
+                                            }}
                                         />
                                     ))}
                                 </Group>

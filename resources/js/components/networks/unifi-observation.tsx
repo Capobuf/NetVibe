@@ -1,3 +1,9 @@
+import { SourceAvatar } from '@/components/networks/source-avatar';
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+} from '@/components/ui/tooltip';
 import { useForm, usePage } from '@inertiajs/react';
 import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -64,33 +70,56 @@ export function UnifiObservationIndicator({
     site,
     documented,
     children,
+    avatar = false,
+    showIndicator = true,
 }: {
     observations: UnifiObservation[];
     company: number;
     site: number;
     documented?: string | null;
     children?: ReactNode;
+    avatar?: boolean;
+    showIndicator?: boolean;
 }) {
     if (!observations.length) return null;
     return (
         <Sheet>
             <SheetTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size={children ? 'sm' : 'icon'}
-                    className={children ? 'h-auto min-h-8 py-1' : undefined}
-                    onClick={(event) => event.stopPropagation()}
-                    aria-label={
-                        children ? undefined : 'Apri le osservazioni UniFi'
-                    }
-                >
-                    {observations.some((observation) => observation.problem) ? (
-                        <CircleAlert />
-                    ) : (
+                {avatar ? (
+                    <SourceAvatar
+                        label={
+                            observations.some(
+                                (observation) => observation.problem,
+                            )
+                                ? 'UniFi: differenze da verificare'
+                                : 'Apri le osservazioni UniFi'
+                        }
+                        warning={observations.some(
+                            (observation) => observation.problem,
+                        )}
+                    >
                         <UnifiMark />
-                    )}
-                    {children}
-                </Button>
+                    </SourceAvatar>
+                ) : (
+                    <Button
+                        variant="ghost"
+                        size={children ? 'sm' : 'icon'}
+                        className={children ? 'h-auto min-h-8 py-1' : undefined}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={
+                            children ? undefined : 'Apri le osservazioni UniFi'
+                        }
+                    >
+                        {!showIndicator ? null : observations.some(
+                              (observation) => observation.problem,
+                          ) ? (
+                            <CircleAlert />
+                        ) : (
+                            <UnifiMark />
+                        )}
+                        {children}
+                    </Button>
+                )}
             </SheetTrigger>
             <SheetContent
                 className="w-full overflow-y-auto sm:max-w-xl"
@@ -300,12 +329,14 @@ export function UnifiObservedValue({
     site,
     value,
     field,
+    showIndicator = true,
 }: {
     observations: UnifiObservation[];
     company: number;
     site: number;
     value: string | null;
     field: 'mac' | 'hostname_observed';
+    showIndicator?: boolean;
 }) {
     const relevant = observations.filter(
         (observation) => observation.data[field],
@@ -330,23 +361,33 @@ export function UnifiObservedValue({
             company={company}
             site={site}
             documented={value}
+            showIndicator={showIndicator}
         >
             <span className="flex flex-col items-start gap-1">
                 {values.map((observed) => (
-                    <span
-                        key={observed}
-                        className="max-w-72 truncate"
-                        title={observed}
-                    >
-                        {observed}
-                    </span>
+                    <Tooltip key={observed}>
+                        <TooltipTrigger asChild>
+                            <span className="max-w-72 truncate">
+                                {observed}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{observed}</TooltipContent>
+                    </Tooltip>
                 ))}
             </span>
             {values.length > 1 ? (
-                <span title={warning}>
-                    <TriangleAlert data-icon="inline-end" aria-hidden="true" />
-                    <span className="sr-only">{warning}</span>
-                </span>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span>
+                            <TriangleAlert
+                                data-icon="inline-end"
+                                aria-hidden="true"
+                            />
+                            <span className="sr-only">{warning}</span>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{warning}</TooltipContent>
+                </Tooltip>
             ) : null}
             {value ? (
                 <span className="text-xs text-muted-foreground">

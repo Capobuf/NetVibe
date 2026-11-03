@@ -3,14 +3,25 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes'])]
+#[Hidden(['image_path'])]
 class Device extends Model
 {
+    public function imageUrl(int $companyId): ?string
+    {
+        if ($this->snipeItAsset) {
+            return $this->snipeItAsset->snapshot['image'] ?? null;
+        }
+
+        return $this->image_path ? route('companies.sites.devices.image', [$companyId, $this->site_id, $this]) : null;
+    }
+
     public function mikrotikSources(): HasMany
     {
         return $this->hasMany(MikrotikSource::class);

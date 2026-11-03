@@ -147,7 +147,7 @@ export function CatalogForm({
                                 onCreated(flash.createdModel as CreatedModel);
                         }}
                         onSuccess={() => setOpen(false)}
-                        options={{ preserveScroll: true }}
+                        options={{ preserveScroll: true, preserveState: true }}
                     >
                         {({ processing, errors }) => (
                             <FieldGroup>

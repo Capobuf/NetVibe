@@ -10,7 +10,6 @@ import {
     Layers,
     MoreHorizontal,
     MousePointer2,
-    PanelRight,
     Plus,
     Redo2,
     RotateCw,
@@ -27,6 +26,7 @@ import {
     DropdownMenuContent,
     DropdownMenuGroup,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
@@ -44,10 +44,32 @@ import {
 } from '@/components/ui/tooltip';
 import {
     insertableConnectors,
+    isPowerConnector,
     type ConnectorType,
 } from '@/lib/hardware-editor/document';
 import { alignmentActions } from './editor-inspector';
 import type { Editor } from './use-editor';
+
+const connectorSections = [
+    {
+        label: 'Rete',
+        connectors: insertableConnectors.filter(([type]) =>
+            ['rj45', 'sfp', 'qsfp'].includes(type),
+        ),
+    },
+    {
+        label: 'Dati',
+        connectors: insertableConnectors.filter(([type]) =>
+            type.startsWith('usb'),
+        ),
+    },
+    {
+        label: 'Alimentazione',
+        connectors: insertableConnectors.filter(([type]) =>
+            isPowerConnector(type),
+        ),
+    },
+];
 
 export function EditorToolbar({
     editor: e,
@@ -57,8 +79,6 @@ export function EditorToolbar({
     setTool,
     snap,
     setSnap,
-    inspector,
-    setInspector,
     layers,
     setLayers,
     add,
@@ -75,8 +95,6 @@ export function EditorToolbar({
     setSnap: (snap: boolean) => void;
     layers: boolean;
     setLayers: (open: boolean) => void;
-    inspector: boolean;
-    setInspector: (open: boolean) => void;
     add: (type: ConnectorType) => void;
     image: () => void;
     onBlock: () => void;
@@ -93,17 +111,23 @@ export function EditorToolbar({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
+                    {connectorSections.map(({ label, connectors }, index) => (
+                        <DropdownMenuGroup key={label} aria-label={label}>
+                            {index > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuLabel>{label}</DropdownMenuLabel>
+                            {connectors.map(([type, item]) => (
+                                <DropdownMenuItem
+                                    key={type}
+                                    onSelect={() => add(type)}
+                                >
+                                    <ConnectorIcon type={type} />
+                                    {item.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuGroup>
+                    ))}
+                    <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                        {insertableConnectors.map(([type, item]) => (
-                            <DropdownMenuItem
-                                key={type}
-                                onSelect={() => add(type as ConnectorType)}
-                            >
-                                <ConnectorIcon type={type} />
-                                {item.name}
-                            </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={onBlock}>
                             <Grid2X2 />
                             Blocco porte
@@ -196,12 +220,28 @@ export function EditorToolbar({
                             onPressedChange={setLayers}
                             aria-label="Livelli"
                             aria-expanded={layers}
-                            className="size-10 rounded-l-none border-l-0 shadow-none focus-visible:z-10"
+                            className="size-10 rounded-none border-l-0 shadow-none focus-visible:z-10"
                         >
                             <Layers />
                         </Toggle>
                     </TooltipTrigger>
                     <TooltipContent>Livelli</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Toggle
+                            variant="outline"
+                            pressed={snap}
+                            onPressedChange={setSnap}
+                            aria-label="Guide magnetiche"
+                            className="size-10 rounded-l-none border-l-0 shadow-none focus-visible:z-10"
+                        >
+                            <Magnet />
+                        </Toggle>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        Guide magnetiche {snap ? 'attive' : 'disattivate'}
+                    </TooltipContent>
                 </Tooltip>
             </div>
 
@@ -327,37 +367,6 @@ export function EditorToolbar({
                     </DropdownMenuGroup>
                 </DropdownMenuContent>
             </DropdownMenu>
-            <div className="ml-auto flex items-center gap-2">
-                <ToggleGroup
-                    type="multiple"
-                    variant="outline"
-                    value={snap ? ['snap'] : []}
-                    onValueChange={(value) => setSnap(value.includes('snap'))}
-                >
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <ToggleGroupItem
-                                value="snap"
-                                aria-label="Guide magnetiche"
-                                className="size-10"
-                            >
-                                <Magnet />
-                            </ToggleGroupItem>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Guide magnetiche {snap ? 'attive' : 'disattivate'}
-                        </TooltipContent>
-                    </Tooltip>
-                </ToggleGroup>
-                <IconButton
-                    aria-pressed={inspector}
-                    label="Proprietà"
-                    variant={inspector ? 'secondary' : 'ghost'}
-                    onClick={() => setInspector(!inspector)}
-                >
-                    <PanelRight />
-                </IconButton>
-            </div>
         </div>
     );
 }

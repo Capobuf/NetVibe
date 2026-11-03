@@ -16,6 +16,7 @@ export function PanelScene({
     dark,
     zoom,
     hideImage = false,
+    selectLockedImage = false,
     imageDelta,
     imageOpacity,
     preview,
@@ -27,6 +28,7 @@ export function PanelScene({
     dark: boolean;
     zoom: number;
     hideImage?: boolean;
+    selectLockedImage?: boolean;
     imageDelta?: Point | null;
     imageOpacity?: number;
     preview?: Map<string, string>;
@@ -68,7 +70,7 @@ export function PanelScene({
                                 x={imageBounds(image).x + (imageDelta?.x ?? 0)}
                                 y={imageBounds(image).y + (imageDelta?.y ?? 0)}
                                 crop={image.crop}
-                                listening={!image.locked}
+                                listening={selectLockedImage || !image.locked}
                                 opacity={imageOpacity ?? image.opacity}
                             />
                         </Group>

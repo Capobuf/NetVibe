@@ -20,7 +20,9 @@ use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -48,6 +50,29 @@ class SnipeItSyncTest extends TestCase
         SnipeItCompanyLink::create(['company_id' => $this->company->id, 'connection_id' => $this->connection->id,
             'external_company_id' => 7, 'external_company_name' => 'Alfa', 'confirmed_at' => now()]);
         Http::preventStrayRequests();
+    }
+
+    public function test_asset_images_are_synced_and_cannot_be_overridden_locally(): void
+    {
+        Storage::fake('local');
+        $url = $this->connection->server_url.'/uploads/models/switch.png';
+        $this->server([$this->asset(1, ['image' => $url])]);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $asset = SnipeItAsset::sole();
+        $this->confirm('devices', [['id' => $asset->id, 'action' => 'create', 'site_id' => $this->site->id]])->assertSessionHasNoErrors();
+        $device = $asset->fresh()->device;
+        $index = route('companies.sites.devices.index', [$this->company, $this->site]);
+        $this->get($index)->assertInertia(fn (Assert $page) => $page->where('devices.0.image_url', $url));
+        $this->post(route('companies.sites.devices.update', [$this->company, $this->site, $device]), [
+            '_method' => 'PUT', 'name' => $device->name, 'device_model_id' => $device->device_model_id,
+            'image' => UploadedFile::fake()->image('override.png'),
+        ])->assertSessionHasErrors('image');
+        $this->assertNull($device->fresh()->image_path);
+        $this->assertSame([], Storage::disk('local')->allFiles('devices'));
+
+        $this->server([$this->asset(1, ['image' => 'javascript:alert(1)'])]);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->get($index)->assertInertia(fn (Assert $page) => $page->where('devices.0.image_url', null));
     }
 
     public function test_acquisition_is_company_scoped_and_only_explicitly_selected_devices_are_imported(): void

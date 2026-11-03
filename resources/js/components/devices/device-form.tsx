@@ -2,7 +2,8 @@ import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { CopyValue } from '@/components/copy-value';
 import { Form, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { DeviceImage } from '@/components/devices/device-image';
 import { ExternalLink, Settings2, Trash2, TriangleAlert } from 'lucide-react';
 import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { Button } from '@/components/ui/button';
@@ -76,6 +77,19 @@ export function DeviceForm({
     const [modelDraft, setModelDraft] = useState<{ name: string } | null>(null);
     const [model, setModel] = useState(String(device?.device_model_id ?? ''));
     const linked = !!snipeIt;
+    const imageInput = useRef<HTMLInputElement>(null);
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [removeImage, setRemoveImage] = useState(false);
+    useEffect(() => {
+        if (!imageFile) {
+            setImagePreview(null);
+            return;
+        }
+        const url = URL.createObjectURL(imageFile);
+        setImagePreview(url);
+        return () => URL.revokeObjectURL(url);
+    }, [imageFile]);
     const integrationProblem =
         (snipeIt && snipeItProblem(snipeIt)) ||
         (mikrotik?.sync_status && mikrotik.sync_status !== 'ok') ||
@@ -95,6 +109,8 @@ export function DeviceForm({
                 setOpen(value);
                 if (value) {
                     setDeleting(false);
+                    setImageFile(null);
+                    setRemoveImage(false);
                     setModel(String(device?.device_model_id ?? ''));
                 }
             }}
@@ -191,6 +207,11 @@ export function DeviceForm({
                                     <div className="min-h-0 flex-1 overflow-y-auto p-6">
                                         {linked && device ? (
                                             <div className="flex flex-col gap-6">
+                                                <DeviceImage
+                                                    src={device.image_url}
+                                                    name={device.name}
+                                                    className="h-24 w-40"
+                                                />
                                                 <Button
                                                     asChild
                                                     variant="outline"
@@ -232,7 +253,9 @@ export function DeviceForm({
                                                             <dd className="font-medium break-words">
                                                                 {value ? (
                                                                     <CopyValue
-                                                                        value={value}
+                                                                        value={
+                                                                            value
+                                                                        }
                                                                         className="-mx-2 -my-1.5 font-medium"
                                                                     />
                                                                 ) : (
@@ -245,6 +268,110 @@ export function DeviceForm({
                                             </div>
                                         ) : (
                                             <FieldGroup>
+                                                <Field
+                                                    data-invalid={
+                                                        !!errors.image
+                                                    }
+                                                >
+                                                    <FieldLabel htmlFor="device-image">
+                                                        Immagine
+                                                    </FieldLabel>
+                                                    <div className="flex flex-wrap items-center gap-4">
+                                                        <DeviceImage
+                                                            src={
+                                                                removeImage
+                                                                    ? null
+                                                                    : (imagePreview ??
+                                                                      device?.image_url)
+                                                            }
+                                                            name={
+                                                                device?.name ??
+                                                                'nuovo dispositivo'
+                                                            }
+                                                            className="h-20 w-32"
+                                                        />
+                                                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                                                            <Input
+                                                                ref={imageInput}
+                                                                id="device-image"
+                                                                type="file"
+                                                                name="image"
+                                                                accept="image/png,image/jpeg,image/webp"
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                                aria-invalid={
+                                                                    !!errors.image
+                                                                }
+                                                                aria-describedby="device-image-error device-image-formats"
+                                                                onChange={(
+                                                                    event,
+                                                                ) => {
+                                                                    setImageFile(
+                                                                        event
+                                                                            .target
+                                                                            .files?.[0] ??
+                                                                            null,
+                                                                    );
+                                                                    setRemoveImage(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                            />
+                                                            <p
+                                                                id="device-image-formats"
+                                                                className="text-xs text-muted-foreground"
+                                                            >
+                                                                PNG, JPG o WebP
+                                                                · massimo 5 MB,
+                                                                4096 × 4096 px
+                                                            </p>
+                                                            {!removeImage &&
+                                                            (imageFile ||
+                                                                device?.image_url) ? (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="self-start"
+                                                                    disabled={
+                                                                        processing
+                                                                    }
+                                                                    onClick={() => {
+                                                                        setRemoveImage(
+                                                                            true,
+                                                                        );
+                                                                        setImageFile(
+                                                                            null,
+                                                                        );
+                                                                        if (
+                                                                            imageInput.current
+                                                                        )
+                                                                            imageInput.current.value =
+                                                                                '';
+                                                                    }}
+                                                                >
+                                                                    <Trash2 />
+                                                                    Rimuovi
+                                                                    immagine
+                                                                </Button>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                    <input
+                                                        type="hidden"
+                                                        name="remove_image"
+                                                        value={
+                                                            removeImage
+                                                                ? '1'
+                                                                : '0'
+                                                        }
+                                                    />
+                                                    <InputError
+                                                        id="device-image-error"
+                                                        message={errors.image}
+                                                    />
+                                                </Field>
                                                 <Field
                                                     data-invalid={!!errors.name}
                                                 >

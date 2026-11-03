@@ -28,7 +28,6 @@ import {
 import { Choice } from './editor-fields';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import {
     Collapsible,
     CollapsibleContent,
@@ -274,7 +273,7 @@ export function EditorLayers({
         );
     }
     return (
-        <TooltipProvider delayDuration={700} skipDelayDuration={0}>
+        <>
             <div className="flex h-full flex-col">
                 <div className="flex items-center justify-between gap-2 border-b px-3 py-3">
                     <h2 className="flex items-center gap-2 text-sm font-medium">
@@ -421,6 +420,6 @@ export function EditorLayers({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </TooltipProvider>
+        </>
     );
 }

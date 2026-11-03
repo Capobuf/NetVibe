@@ -134,6 +134,7 @@ class SnipeItClient
                     'name' => self::mappedValue($row, $mapping['name']),
                     'asset_tag' => self::text($row['asset_tag'] ?? null),
                     'serial' => self::text($row['serial'] ?? null),
+                    'image' => self::imageUrl($row['image'] ?? null),
                     'model_id' => is_int($modelId) && $modelId > 0 ? $modelId : null,
                     'mapping' => $mapping,
                     'notes' => self::mappedValue($row, $mapping['description']),
@@ -169,6 +170,19 @@ class SnipeItClient
         } while (count($seen) < $total);
 
         return ['assets' => $assets, 'models' => $models];
+    }
+
+    private static function imageUrl(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+        $url = trim(htmlspecialchars_decode($value, ENT_QUOTES));
+        $parts = parse_url($url);
+
+        return strlen($url) <= 2048 && filter_var($url, FILTER_VALIDATE_URL)
+            && in_array($parts['scheme'] ?? null, ['http', 'https'], true)
+            && ! isset($parts['user']) && ! isset($parts['pass']) ? $url : null;
     }
 
     private static function mappedValue(array $row, ?string $field): ?string

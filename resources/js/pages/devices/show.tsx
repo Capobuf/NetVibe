@@ -38,6 +38,7 @@ import {
     PopoverTitle,
 } from '@/components/ui/popover';
 import { index, show } from '@/routes/companies/sites/devices';
+import { edit as editModel } from '@/routes/manufacturers/models';
 import { ReleaseIp } from '@/components/devices/release-ip';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { connectorTypes, type Port } from '@/lib/hardware-editor/document';
@@ -102,7 +103,7 @@ export default function DeviceShow({
     tags,
     initialInterfaceId,
 }: Props) {
-    const { companyNavigation } = usePage().props;
+    const { auth, companyNavigation } = usePage().props;
     const [tab, setTab] = useState(initialTab);
     const [releasingIp, setReleasingIp] = useState<{
         id: number;
@@ -328,6 +329,15 @@ export default function DeviceShow({
                 ) : null}
                 {panel && (
                     <PanelViewer
+                        editHref={
+                            auth.user.is_superadmin && device.model
+                                ? editModel.url({
+                                      manufacturer:
+                                          device.model.manufacturer_id,
+                                      model: device.model.id,
+                                  })
+                                : undefined
+                        }
                         initialPortId={initialPort?.id}
                         panel={panel}
                         assetUrls={assetUrls}

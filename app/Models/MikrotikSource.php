@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Support\MikrotikPortMap;
 use App\Support\MikrotikSnapshot;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,7 +25,18 @@ class MikrotikSource extends Model
 
     public static function blocking(int $siteId): Builder
     {
-        return static::query()->where('site_id', $siteId)->where('state', '!=', 'missing')->whereNotNull('address');
+        return static::query()->where('site_id', $siteId)->where('state', '!=', 'missing')->whereNotNull('address')
+            ->withoutUnresolvedArp();
+    }
+
+    #[Scope]
+    protected function withoutUnresolvedArp(Builder $query): Builder
+    {
+        // An unresolved ARP request without a MAC is not evidence of an occupied IP.
+        return $query->where(fn ($query) => $query->where('kind', '!=', 'observation')
+            ->orWhereNull('data->menu')->orWhere('data->menu', '!=', '/ip/arp')
+            ->orWhereNull('data->status')->orWhereNotIn('data->status', ['failed', 'incomplete'])
+            ->orWhere(fn ($mac) => $mac->whereNotNull('data->mac')->where('data->mac', '!=', '')));
     }
 
     public function display(): array
@@ -38,6 +50,8 @@ class MikrotikSource extends Model
             'can_associate' => $this->state === 'current' && ($this->problem === 'VLAN riportata da un’altra sorgente: conferma che il contesto L2 sia lo stesso.'
                 || ($this->problem === 'VLAN documentata diversa dalla fonte. Verifica l’associazione della subnet.' && $this->data['tag'] !== null)),
             'source' => $this->device->name,
+            'device_id' => $this->device_id,
+            'site_id' => $this->site_id,
             'ip' => $this->address === null ? null : long2ip($this->address),
             'stale' => $this->state === 'unknown' || ! $connection?->activated_at
                 || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok',

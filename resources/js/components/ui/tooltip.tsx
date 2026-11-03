@@ -3,29 +3,85 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+export const TOOLTIP_DELAY = 700
+
+const TooltipKeyboardNavigation = React.createContext<React.RefObject<boolean> | null>(null)
+
 function TooltipProvider({
-  delayDuration = 0,
+  children,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+}: Omit<
+  React.ComponentProps<typeof TooltipPrimitive.Provider>,
+  "delayDuration" | "skipDelayDuration"
+>) {
+  const keyboardNavigation = React.useRef(false)
+
+  React.useEffect(() => {
+    function reset() {
+      keyboardNavigation.current = false
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      reset()
+      // Dialog autofocus and restored focus must not behave like keyboard navigation.
+      keyboardNavigation.current =
+        !event.altKey && !event.ctrlKey && !event.metaKey &&
+        ["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+    }
+    document.addEventListener("keydown", onKeyDown, true)
+    document.addEventListener("keyup", reset, true)
+    document.addEventListener("pointerdown", reset, true)
+    window.addEventListener("blur", reset)
+    return () => {
+      reset()
+      document.removeEventListener("keydown", onKeyDown, true)
+      document.removeEventListener("keyup", reset, true)
+      document.removeEventListener("pointerdown", reset, true)
+      window.removeEventListener("blur", reset)
+    }
+  }, [])
+
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <TooltipKeyboardNavigation.Provider value={keyboardNavigation}>
+      <TooltipPrimitive.Provider
+        data-slot="tooltip-provider"
+        {...props}
+        delayDuration={TOOLTIP_DELAY}
+        skipDelayDuration={0}
+      >
+        {children}
+      </TooltipPrimitive.Provider>
+    </TooltipKeyboardNavigation.Provider>
   )
 }
 
 function Tooltip({
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+}: Omit<React.ComponentProps<typeof TooltipPrimitive.Root>, "delayDuration" | "defaultOpen">) {
+  return (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      {...props}
+      delayDuration={TOOLTIP_DELAY}
+      defaultOpen={false}
+    />
+  )
 }
 
 function TooltipTrigger({
+  onFocus,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  const keyboardNavigation = React.useContext(TooltipKeyboardNavigation)
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      {...props}
+      onFocus={(event) => {
+        onFocus?.(event)
+        if (!keyboardNavigation?.current) event.preventDefault()
+      }}
+    />
+  )
 }
 
 function TooltipContent({

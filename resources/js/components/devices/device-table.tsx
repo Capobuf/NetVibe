@@ -39,6 +39,7 @@ export function DeviceTable<
     isRowClickable,
     rowOpensDialog = true,
     filters,
+    headerActions,
     empty = 'Nessun risultato',
     variant = 'default',
     total = rows.length,
@@ -57,6 +58,7 @@ export function DeviceTable<
     isRowClickable?: (row: Row) => boolean;
     rowOpensDialog?: boolean;
     filters?: ReactNode;
+    headerActions?: ReactNode;
     empty?: string;
     variant?: 'default' | 'list';
     total?: number;
@@ -145,23 +147,26 @@ export function DeviceTable<
                                 />
                             ))}
                             <TableHead className="w-16 text-right">
-                                <TableColumns
-                                    columns={availableColumns}
-                                    onChange={(next) => {
-                                        let index = 0;
-                                        setColumns(
-                                            columns.map((column) =>
-                                                hiddenColumns.includes(
-                                                    column.id,
-                                                )
-                                                    ? column
-                                                    : next[index++],
-                                            ),
-                                        );
-                                    }}
-                                    separators={separators}
-                                    onSeparatorsChange={setSeparators}
-                                />
+                                <div className="flex items-center justify-end gap-1">
+                                    {headerActions}
+                                    <TableColumns
+                                        columns={availableColumns}
+                                        onChange={(next) => {
+                                            let index = 0;
+                                            setColumns(
+                                                columns.map((column) =>
+                                                    hiddenColumns.includes(
+                                                        column.id,
+                                                    )
+                                                        ? column
+                                                        : next[index++],
+                                                ),
+                                            );
+                                        }}
+                                        separators={separators}
+                                        onSeparatorsChange={setSeparators}
+                                    />
+                                </div>
                             </TableHead>
                         </TableRow>
                     </TableHeader>

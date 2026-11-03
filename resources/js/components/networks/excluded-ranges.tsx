@@ -1,7 +1,7 @@
 import { SaveButton } from '@/components/save-button';
 import { Form, usePage } from '@inertiajs/react';
 import { SlidersHorizontal, Plus, TriangleAlert } from 'lucide-react';
-import { useId, useState } from 'react';
+import { type ComponentProps, useId, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,9 @@ export default function ExcludedRanges({
     subnetCidr,
     context,
     excludedRanges,
+    open,
+    onOpenChange,
+    onCloseAutoFocus,
 }: {
     companyId: number;
     siteId: number;
@@ -57,6 +60,9 @@ export default function ExcludedRanges({
     subnetCidr: string;
     context: string;
     excludedRanges: ExcludedRange[];
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
 }) {
     const { auth } = usePage().props;
     const [mode, setMode] = useState<'list' | 'add' | 'edit' | 'remove'>(
@@ -91,20 +97,27 @@ export default function ExcludedRanges({
 
     return (
         <Dialog
+            open={open}
             onOpenChange={(open) => {
+                onOpenChange?.(open);
                 if (open) setMode('list');
             }}
         >
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <SlidersHorizontal data-icon="inline-start" />
-                    Esclusioni
-                    <Badge variant="secondary" className="tabular-nums">
-                        {excludedRanges.length}
-                    </Badge>
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+            {open === undefined ? (
+                <DialogTrigger asChild>
+                    <Button variant="outline">
+                        <SlidersHorizontal data-icon="inline-start" />
+                        Esclusioni
+                        <Badge variant="secondary" className="tabular-nums">
+                            {excludedRanges.length}
+                        </Badge>
+                    </Button>
+                </DialogTrigger>
+            ) : null}
+            <DialogContent
+                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {mode === 'list'
@@ -192,9 +205,7 @@ export default function ExcludedRanges({
                                         <TableRow>
                                             <TableCell
                                                 colSpan={
-                                                    auth.canEditIpam
-                                                        ? 3
-                                                        : 2
+                                                    auth.canEditIpam ? 3 : 2
                                                 }
                                                 className="h-24 text-center text-muted-foreground"
                                             >

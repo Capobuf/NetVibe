@@ -17,6 +17,51 @@ class DevicesTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_device_images_can_be_created_replaced_removed_and_are_site_scoped(): void
+    {
+        Storage::fake('local');
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $otherSite = $company->sites()->create(['name' => 'Milano']);
+        $manufacturer = Manufacturer::create(['name' => 'Vendor']);
+        $model = $manufacturer->models()->create(['name' => 'Switch']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $this->actingAs($user);
+        $data = ['name' => 'Switch', 'device_model_id' => $model->id];
+        $this->post(route('companies.sites.devices.store', [$company, $site]), [
+            ...$data, 'image' => UploadedFile::fake()->image('front.png'),
+        ])->assertSessionHasNoErrors();
+        $device = $site->devices()->sole();
+        $original = $device->image_path;
+        Storage::disk('local')->assertExists($original);
+        $imageUrl = route('companies.sites.devices.image', [$company, $site, $device]);
+        $this->get($imageUrl)->assertOk()->assertHeader('Content-Type', 'image/png');
+        $this->get(route('companies.sites.devices.image', [$company, $otherSite, $device]))->assertNotFound();
+        $this->get(route('companies.sites.devices.index', [$company, $site]))->assertInertia(fn (Assert $page) => $page
+            ->where('devices.0.image_url', $imageUrl)->missing('devices.0.image_path'));
+
+        $update = route('companies.sites.devices.update', [$company, $site, $device]);
+        $this->post($update, [...$data, '_method' => 'PUT', 'image' => UploadedFile::fake()->create('invalid.txt', 1, 'text/plain')])
+            ->assertSessionHasErrors('image');
+        $this->assertSame($original, $device->fresh()->image_path);
+        $this->post($update, [...$data, '_method' => 'PUT', 'image' => UploadedFile::fake()->image('back.jpg')])
+            ->assertSessionHasNoErrors();
+        $replacement = $device->fresh()->image_path;
+        Storage::disk('local')->assertMissing($original);
+        Storage::disk('local')->assertExists($replacement);
+        $this->put($update, $data)->assertSessionHasNoErrors();
+        $this->assertSame($replacement, $device->fresh()->image_path);
+
+        $this->actingAs(User::factory()->create());
+        $this->get($imageUrl)->assertForbidden();
+        $this->actingAs($user);
+        $this->put($update, [...$data, 'remove_image' => true])->assertSessionHasNoErrors();
+        $this->assertNull($device->fresh()->image_path);
+        Storage::disk('local')->assertMissing($replacement);
+        $this->get($imageUrl)->assertNotFound();
+    }
+
     public function test_company_users_can_document_devices_but_cannot_cross_sites_or_edit_the_global_catalog(): void
     {
         $company = Company::create(['name' => 'Alfa']);

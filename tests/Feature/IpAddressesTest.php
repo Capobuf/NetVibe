@@ -159,6 +159,41 @@ class IpAddressesTest extends TestCase
         $this->assertDatabaseCount('ip_addresses', 3);
     }
 
+    public function test_created_ip_can_be_revealed_across_pages_and_sort_orders(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        foreach (range(1, 30) as $last) {
+            $subnet->ipAddresses()->create(['address' => ip2long("10.0.0.$last"), 'hostname' => 'node']);
+        }
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+        $this->from($show)->post(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), [
+            'ip' => '10.0.0.200', 'hostname' => 'z-server',
+        ])->assertRedirect($show)->assertSessionHasNoErrors();
+
+        foreach ([
+            ['sort=ip&direction=asc', 8, 24],
+            ['sort=ip&direction=desc', 3, 4],
+            ['sort=hostname&direction=asc', 11, 3],
+            ['sort=hostname&direction=desc', 1, 0],
+            ['sort=hostname&direction=asc&hide_free=1&search=node', 2, 5],
+        ] as [$query, $number, $index]) {
+            $this->get($show.'?focus_ip=10.0.0.200&'.$query)->assertInertia(fn (Assert $page) => $page
+                ->where('ipAddresses.current_page', $number)
+                ->where("ipAddresses.data.$index.ip", '10.0.0.200')
+                ->where('query.search', '')
+                ->where('initialIpAddress', null));
+        }
+
+        $this->get($show.'?focus_ip=10.0.0.200&search=z-server&sort=hostname')->assertInertia(fn (Assert $page) => $page
+            ->where('query.search', 'z-server')->where('ipAddresses.total', 1)
+            ->where('ipAddresses.data.0.ip', '10.0.0.200'));
+        $this->get($show.'?focus_ip=10.0.1.200&search=node')->assertInertia(fn (Assert $page) => $page
+            ->where('query.search', 'node')->where('ipAddresses.total', 30));
+    }
+
     public function test_documented_ip_is_unique_and_keeps_its_data_when_moved_until_explicitly_freed(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

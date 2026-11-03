@@ -22,6 +22,7 @@ import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
+    TOOLTIP_DELAY,
 } from '@/components/ui/tooltip';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
@@ -100,6 +101,7 @@ export function EditorCanvas({
     fitKey,
     onContext,
     onEditLabel,
+    onImageSelect,
     onZoom,
     api,
 }: {
@@ -113,6 +115,7 @@ export function EditorCanvas({
     fitKey: number;
     onContext: (point: Point, selection: Selection) => void;
     onEditLabel: () => void;
+    onImageSelect: () => void;
     onZoom: (zoom: number) => void;
     api: Ref<CanvasApi>;
 }) {
@@ -188,7 +191,10 @@ export function EditorCanvas({
     useEffect(() => {
         setLabelTooltip(null);
         if (!tooltipKey) return;
-        const timer = window.setTimeout(() => setLabelTooltip(tooltipKey), 700);
+        const timer = window.setTimeout(
+            () => setLabelTooltip(tooltipKey),
+            TOOLTIP_DELAY,
+        );
         return () => window.clearTimeout(timer);
     }, [tooltipKey, view]);
 
@@ -634,6 +640,13 @@ export function EditorCanvas({
             e.setSelection({ kind: 'ports', ids: g.clickSelection });
         if (!moved && !blocked && g.mode !== 'pan') e.setPastePoint(g.start);
         if (
+            !moved &&
+            !blocked &&
+            g.mode !== 'pan' &&
+            e.selection.kind === 'image'
+        )
+            onImageSelect();
+        if (
             (g.mode === 'block-spacing' ||
                 g.mode === 'group-scale' ||
                 g.mode === 'crop') &&
@@ -888,6 +901,7 @@ export function EditorCanvas({
                             />
                         )}
                     <PanelScene
+                        selectLockedImage
                         shell={shell}
                         face={{
                             ...e.doc.faces[e.face],
@@ -1206,7 +1220,8 @@ export function EditorCanvas({
                                             onMouseLeave={() => {
                                                 if (
                                                     stage.current &&
-                                                    gesture.current?.mode !== 'crop'
+                                                    gesture.current?.mode !==
+                                                        'crop'
                                                 )
                                                     stage.current.container().style.cursor =
                                                         '';

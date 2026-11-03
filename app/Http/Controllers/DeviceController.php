@@ -21,9 +21,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class DeviceController extends Controller
 {
@@ -41,8 +44,9 @@ class DeviceController extends Controller
             'snipePending' => $request->user()->is_superadmin
                 ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'ipAddresses:id,device_id,address', 'unifiDevice.unifiSite.unifiConnection'])->orderBy('name')->get()
-                ->map(fn ($device) => [...$device->makeHidden('unifiDevice')->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
+            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'snipeItAsset:id,device_id,snapshot', 'ipAddresses:id,device_id,address', 'unifiDevice.unifiSite.unifiConnection'])->withExists('mikrotikConnection')->orderBy('name')->get()
+                ->map(fn ($device) => [...$device->makeHidden(['unifiDevice', 'snipeItAsset'])->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
+                    'image_url' => $device->imageUrl($company->id),
                     'unifi' => $device->unifiDevice && $device->unifiDevice->unifiSite->site_id === $site->id ? [
                         'state' => $device->unifiDevice->observed['state'] ?? null,
                         'stale' => $device->unifiDevice->stale(), 'synced_at' => $device->unifiDevice->synced_at,
@@ -61,6 +65,8 @@ class DeviceController extends Controller
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
         $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
+        $device->setRelation('snipeItAsset', $asset)->makeHidden('snipeItAsset');
+        $device->setAttribute('image_url', $device->imageUrl($company->id));
         $unifiSource = $device->unifiDevice()->with('unifiSite.unifiConnection')->first();
         if ($unifiSource) {
             $unifiSource->setRelation('device', $device);
@@ -113,6 +119,13 @@ class DeviceController extends Controller
         ]);
     }
 
+    public function image(Company $company, Site $site, Device $device): StreamedResponse
+    {
+        abort_unless($device->image_path && Storage::disk('local')->exists($device->image_path), 404);
+
+        return Storage::disk('local')->response($device->image_path, null, ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-cache']);
+    }
+
     public function integrations(Request $request, Company $company, Site $site, Device $device): RedirectResponse
     {
         $options = $request->validate(['tab' => ['sometimes', 'in:mikrotik,snipe-it']]);
@@ -132,30 +145,53 @@ class DeviceController extends Controller
 
     private function save(DeviceRequest $request, Company $company, Site $site, ?Device $device = null): RedirectResponse
     {
-        $data = $request->validated();
-        $record = DB::transaction(function () use ($data, $company, $site, $device) {
-            $model = DeviceModel::query()->sharedLock()->whereKey($data['device_model_id'])->firstOrFail();
-            Manufacturer::query()->sharedLock()->findOrFail($model->manufacturer_id);
-            $data['manufacturer_id'] = $model->manufacturer_id;
-            Company::query()->lockForUpdate()->findOrFail($company->id);
-            $site = Site::query()->findOrFail($site->id);
-            $record = $device ? $site->devices()->lockForUpdate()->findOrFail($device->id) : $site->devices()->make();
-            if ($record->exists && $record->snipeItAsset()->exists()) {
-                $changed = (clone $record)->fill($data)->getDirty();
-                foreach (['name', 'serial_number', 'asset_tag', 'device_model_id', 'manufacturer_id'] as $field) {
-                    if (array_key_exists($field, $changed)) {
-                        throw ValidationException::withMessages([$field => 'Questo campo è gestito da Snipe-IT. Modificalo alla fonte oppure scollega il dispositivo.']);
+        $data = $request->safe()->except(['image', 'remove_image']);
+        $uploaded = $request->file('image');
+        $stored = $uploaded?->store('devices', 'local');
+        if ($uploaded && ! $stored) {
+            throw new \RuntimeException('Impossibile salvare l’immagine.');
+        }
+        $previous = null;
+        try {
+            $record = DB::transaction(function () use ($data, $company, $site, $device, $request, $stored, &$previous) {
+                $model = DeviceModel::query()->sharedLock()->whereKey($data['device_model_id'])->firstOrFail();
+                Manufacturer::query()->sharedLock()->findOrFail($model->manufacturer_id);
+                $data['manufacturer_id'] = $model->manufacturer_id;
+                Company::query()->lockForUpdate()->findOrFail($company->id);
+                $site = Site::query()->findOrFail($site->id);
+                $record = $device ? $site->devices()->lockForUpdate()->findOrFail($device->id) : $site->devices()->make();
+                if ($record->exists && $record->snipeItAsset()->exists()) {
+                    if ($stored || $request->boolean('remove_image')) {
+                        throw ValidationException::withMessages(['image' => 'L’immagine è gestita da Snipe-IT. Modificala alla fonte oppure scollega il dispositivo.']);
+                    }
+                    $changed = (clone $record)->fill($data)->getDirty();
+                    foreach (['name', 'serial_number', 'asset_tag', 'device_model_id', 'manufacturer_id'] as $field) {
+                        if (array_key_exists($field, $changed)) {
+                            throw ValidationException::withMessages([$field => 'Questo campo è gestito da Snipe-IT. Modificalo alla fonte oppure scollega il dispositivo.']);
+                        }
                     }
                 }
-            }
-            if ($record->exists && ($problem = $record->modelChangeProblem($model->id))) {
-                throw ValidationException::withMessages(['device_model_id' => $problem]);
-            }
-            $record->fill($data)->save();
-            $record->addModelInterfaces($model);
+                if ($record->exists && ($problem = $record->modelChangeProblem($model->id))) {
+                    throw ValidationException::withMessages(['device_model_id' => $problem]);
+                }
+                $previous = $record->image_path;
+                if ($stored || $request->boolean('remove_image')) {
+                    $record->image_path = $stored ?: null;
+                }
+                $record->fill($data)->save();
+                $record->addModelInterfaces($model);
 
-            return $record;
-        }, 3);
+                return $record;
+            }, 3);
+        } catch (Throwable $error) {
+            if ($stored) {
+                Storage::disk('local')->delete($stored);
+            }
+            throw $error;
+        }
+        if ($previous && $previous !== $record->image_path) {
+            Storage::disk('local')->delete($previous);
+        }
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo salvato.']);
 
         return to_route('companies.sites.devices.show', [$company, $site, $record]);

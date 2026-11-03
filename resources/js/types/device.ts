@@ -46,6 +46,7 @@ export type DeviceInterface = {
 };
 export type Device = {
     id: number;
+    image_url?: string | null;
     name: string;
     serial_number: string | null;
     asset_tag?: string | null;
@@ -56,6 +57,7 @@ export type Device = {
     model: DeviceModel | null;
     interfaces: DeviceInterface[];
     ips?: string[];
+    mikrotik_connection_exists?: boolean;
     unifi?: {
         state?: string | null;
         stale: boolean;

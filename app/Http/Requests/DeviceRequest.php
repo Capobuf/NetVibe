@@ -15,6 +15,8 @@ class DeviceRequest extends FormRequest
             'serial_number' => ['nullable', 'string', 'max:255'],
             'asset_tag' => ['sometimes', 'nullable', 'string', 'max:255'],
             'notes' => ['sometimes', 'nullable', 'string', 'max:10000'],
+            'image' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:5120', 'dimensions:max_width=4096,max_height=4096'],
+            'remove_image' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -25,6 +27,6 @@ class DeviceRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['name' => 'nome', 'device_model_id' => 'modello', 'serial_number' => 'seriale'];
+        return ['name' => 'nome', 'device_model_id' => 'modello', 'serial_number' => 'seriale', 'image' => 'immagine'];
     }
 }

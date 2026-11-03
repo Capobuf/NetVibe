@@ -1,3 +1,12 @@
+import { SourceAvatar } from '@/components/networks/source-avatar';
+import { usePage } from '@inertiajs/react';
+import TextLink from '@/components/text-link';
+import { show as deviceShow } from '@/routes/companies/sites/devices';
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+} from '@/components/ui/tooltip';
 import { formatDateTime } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
 import { ChevronDown, TriangleAlert } from 'lucide-react';
@@ -42,6 +51,8 @@ export type MikrotikSource = {
     kind: string;
     state: 'current' | 'missing' | 'unknown';
     source: string;
+    device_id: number;
+    site_id: number;
     stale: boolean;
     seen_at: string;
     ip: string | null;
@@ -90,7 +101,7 @@ export function sourceLabel(source: MikrotikSource) {
             ? 'Prenotazione DHCP fissa'
             : 'Lease senza IPv4 fisso';
     if (source.kind === 'observation') {
-        if (source.data.menu === '/ip/arp') return 'Osservazione ARP';
+        if (source.data.menu === '/ip/arp') return 'Tabella ARP';
         if (source.data.menu === '/interface/bridge/host')
             return 'Osservazione MAC';
         if (source.data.menu === '/ip/neighbor') return 'Neighbor';
@@ -121,6 +132,8 @@ export function sourceLabel(source: MikrotikSource) {
 }
 
 export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
+    const { companyNavigation } = usePage().props;
+    const companyId = companyNavigation?.currentCompanyId;
     return (
         <div className="flex flex-col gap-3">
             {sources.map((source) => (
@@ -203,9 +216,22 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                 </dt>
                                 <dd className="flex items-start gap-2">
                                     <MikrotikMark />
-                                    <span className="min-w-0 break-words">
-                                        {source.source}
-                                    </span>
+                                    {companyId ? (
+                                        <TextLink
+                                            href={deviceShow({
+                                                company: companyId,
+                                                site: source.site_id,
+                                                device: source.device_id,
+                                            })}
+                                            className="min-w-0 break-words"
+                                        >
+                                            {source.source}
+                                        </TextLink>
+                                    ) : (
+                                        <span className="min-w-0 break-words">
+                                            {source.source}
+                                        </span>
+                                    )}
                                 </dd>
                             </div>
                             <div>
@@ -286,11 +312,6 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                             <p className="text-muted-foreground">
                                 {source.import_note}
                             </p>
-                        ) : source.kind === 'observation' &&
-                          sourceIsDynamic(source) ? (
-                            <p className="text-muted-foreground">
-                                Osservazione dinamica: non crea un record IPAM.
-                            </p>
                         ) : null}
                         {source.problem ? (
                             <Alert>
@@ -336,11 +357,13 @@ export function MikrotikIndicator({
     mac,
     field = 'ip',
     children,
+    avatar = false,
 }: {
     sources: MikrotikSource[];
     mac?: string | null;
     field?: 'ip' | 'mac' | 'hostname';
     children?: ReactNode;
+    avatar?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const relevant =
@@ -366,33 +389,46 @@ export function MikrotikIndicator({
     return (
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size={children ? 'sm' : 'icon'}
-                    className={
-                        children
-                            ? 'h-8 max-w-full min-w-0 gap-2 px-2 py-1 font-normal hover:bg-transparent'
-                            : undefined
-                    }
-                    aria-label={
-                        children
-                            ? undefined
-                            : mismatch
-                              ? 'Differenza MikroTik: apri le fonti'
-                              : 'Apri le fonti MikroTik'
-                    }
-                    onClick={(event) => {
-                        event.stopPropagation();
-                    }}
-                >
-                    {children ??
-                        (mismatch ? (
-                            <TriangleAlert className="text-destructive" />
-                        ) : (
-                            <MikrotikMark />
-                        ))}
-                </Button>
+                {avatar ? (
+                    <SourceAvatar
+                        label={
+                            mismatch
+                                ? 'MikroTik: differenze da verificare'
+                                : 'Apri le fonti MikroTik'
+                        }
+                        warning={Boolean(mismatch)}
+                    >
+                        <MikrotikMark />
+                    </SourceAvatar>
+                ) : (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size={children ? 'sm' : 'icon'}
+                        className={
+                            children
+                                ? 'h-8 max-w-full min-w-0 gap-2 px-2 py-1 font-normal hover:bg-transparent'
+                                : undefined
+                        }
+                        aria-label={
+                            children
+                                ? undefined
+                                : mismatch
+                                  ? 'Differenza MikroTik: apri le fonti'
+                                  : 'Apri le fonti MikroTik'
+                        }
+                        onClick={(event) => {
+                            event.stopPropagation();
+                        }}
+                    >
+                        {children ??
+                            (mismatch ? (
+                                <TriangleAlert className="text-destructive" />
+                            ) : (
+                                <MikrotikMark />
+                            ))}
+                    </Button>
+                )}
             </SheetTrigger>
             <SheetContent
                 className="w-full gap-5 overflow-y-auto sm:max-w-xl"
@@ -406,7 +442,7 @@ export function MikrotikIndicator({
                             ? 'MAC rilevato da MikroTik'
                             : field === 'hostname'
                               ? 'Hostname riportato da MikroTik'
-                              : 'Dati riportati da MikroTik'}
+                              : 'Rilevamenti'}
                     </SheetTitle>
                 </SheetHeader>
                 <div className="flex flex-col gap-4 px-5 pb-6">
@@ -469,7 +505,7 @@ export function MikrotikValue({
             {value ? (
                 <CopyValue
                     value={value}
-                    className="ml-10 h-8 max-w-96 py-1 whitespace-nowrap [&>span]:truncate"
+                    className={`${showIndicator ? 'ml-10 ' : ''}h-8 max-w-96 py-1 whitespace-nowrap [&>span]:truncate`}
                 />
             ) : null}
             {values.length ? (
@@ -478,15 +514,19 @@ export function MikrotikValue({
                     field={field}
                     mac={field === 'mac' ? value : undefined}
                 >
-                    <span className="flex w-8 shrink-0 items-center justify-center">
-                        {showIndicator ? <MikrotikMark /> : null}
-                    </span>
-                    <span
-                        className="max-w-96 truncate"
-                        title={values.join(', ')}
-                    >
-                        {values.join(', ')}
-                    </span>
+                    {showIndicator ? (
+                        <span className="flex w-8 shrink-0 items-center justify-center">
+                            <MikrotikMark />
+                        </span>
+                    ) : null}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="max-w-96 truncate">
+                                {values.join(', ')}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{values.join(', ')}</TooltipContent>
+                    </Tooltip>
                     <span className="sr-only">Fonti MikroTik</span>
                     {valueSources.every((source) => source.stale) ? (
                         <span className="font-sans text-xs text-muted-foreground">

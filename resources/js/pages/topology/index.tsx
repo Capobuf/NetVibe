@@ -19,6 +19,11 @@ import {
     X,
 } from 'lucide-react';
 import { IconButton } from '@/components/icon-button';
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+} from '@/components/ui/tooltip';
 import { ListPageHeader } from '@/components/list-page-header';
 import {
     TopologyCanvas,
@@ -422,27 +427,45 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     }}
                                     aria-label="Vista topologia"
                                 >
-                                    <ToggleGroupItem
-                                        value="horizontal"
-                                        aria-label="Disposizione orizzontale"
-                                        title="Disposizione orizzontale"
-                                    >
-                                        <GitFork className="-rotate-90" />
-                                    </ToggleGroupItem>
-                                    <ToggleGroupItem
-                                        value="vertical"
-                                        aria-label="Disposizione verticale"
-                                        title="Disposizione verticale"
-                                    >
-                                        <GitFork />
-                                    </ToggleGroupItem>
-                                    <ToggleGroupItem
-                                        value="racks"
-                                        aria-label="Vista rack"
-                                        title="Vista rack"
-                                    >
-                                        <Server />
-                                    </ToggleGroupItem>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <ToggleGroupItem
+                                                value="horizontal"
+                                                aria-label="Disposizione orizzontale"
+                                            >
+                                                <GitFork className="-rotate-90" />
+                                            </ToggleGroupItem>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            Disposizione orizzontale
+                                        </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <ToggleGroupItem
+                                                value="vertical"
+                                                aria-label="Disposizione verticale"
+                                            >
+                                                <GitFork />
+                                            </ToggleGroupItem>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            Disposizione verticale
+                                        </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <ToggleGroupItem
+                                                value="racks"
+                                                aria-label="Vista rack"
+                                            >
+                                                <Server />
+                                            </ToggleGroupItem>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            Vista rack
+                                        </TooltipContent>
+                                    </Tooltip>
                                 </ToggleGroup>
                                 <Separator
                                     orientation="vertical"

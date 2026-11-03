@@ -18,6 +18,7 @@ export type TableColumn<Id extends string> = {
     id: Id;
     label: string;
     visible: boolean;
+    sortable?: boolean;
 };
 
 export function TableColumns<Id extends string>({

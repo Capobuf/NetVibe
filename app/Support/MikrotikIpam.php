@@ -14,6 +14,7 @@ class MikrotikIpam
     public static function forSubnet(Subnet $subnet): Collection
     {
         return (new NetworkExclusions($subnet->site_id))->display(MikrotikSource::where('site_id', $subnet->site_id)
+            ->withoutUnresolvedArp()
             ->where(fn ($query) => $query->where('subnet_id', $subnet->id)
                 ->orWhereBetween('address', [$subnet->network_address, $subnet->broadcast_address]))
             ->with('device.mikrotikConnection')->orderByDesc('seen_at')->get());

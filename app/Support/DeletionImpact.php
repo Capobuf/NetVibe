@@ -14,6 +14,7 @@ use App\Models\Site;
 use App\Models\Subnet;
 use App\Models\Vlan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class DeletionImpact
@@ -118,7 +119,11 @@ class DeletionImpact
         Site::query()->whereKey($cables->pluck('site_id')->unique())->increment('cabling_revision');
         Cable::query()->whereKey($cables->modelKeys())->delete();
         DB::table('ip_addresses')->whereIn('device_id', $ids)->delete();
+        $images = DB::table('devices')->whereIn('id', $ids)->whereNotNull('image_path')->pluck('image_path')->all();
         DB::table('devices')->whereIn('id', $ids)->delete();
+        if ($images) {
+            DB::afterCommit(fn () => Storage::disk('local')->delete($images));
+        }
     }
 
     private static function cables(array $deviceIds): array

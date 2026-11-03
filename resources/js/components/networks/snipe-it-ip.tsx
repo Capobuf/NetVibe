@@ -1,3 +1,4 @@
+import { SourceAvatar } from '@/components/networks/source-avatar';
 import { ArrowUpRight, TriangleAlert } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
@@ -27,10 +28,12 @@ import type { IpAddress } from '@/types/network';
 export function SnipeItIp({
     source,
     compact = false,
+    avatar = false,
     mikrotikSources = [],
 }: {
     source: IpAddress['snipe_it'];
     compact?: boolean;
+    avatar?: boolean;
     mikrotikSources?: MikrotikSource[];
 }) {
     if (!source) return null;
@@ -39,6 +42,16 @@ export function SnipeItIp({
         : !source.active
           ? 'Sincronizzazione Snipe-IT non aggiornata.'
           : source.problem;
+    if (avatar)
+        return (
+            <SourceAvatar
+                href={source.url}
+                label={`Apri ${source.name ?? 'asset'} in Snipe-IT (nuova scheda)${problem ? ` · ${problem}` : ''}`}
+                warning={Boolean(problem)}
+            >
+                <SnipeItMark />
+            </SourceAvatar>
+        );
     const link = (
         <Button asChild variant="outline" size="sm">
             <a

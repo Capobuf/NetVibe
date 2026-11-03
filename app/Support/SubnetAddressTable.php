@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class SubnetAddressTable
 {
-    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page, int $perPage = 25, bool $hideFree = false): LengthAwarePaginator
+    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page, int $perPage = 25, bool $hideFree = false, ?int $focusAddress = null): LengthAwarePaginator
     {
         [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
         $matcher = new Ipv4Search($search);
@@ -117,6 +117,36 @@ class SubnetAddressTable
         }
         $virtualCount = array_sum(array_column($segments, 2));
         $total = $virtualCount + $populatedCount;
+        if ($focusAddress !== null) {
+            $position = null;
+            $before = 0;
+            foreach ($segments as [$start, $end, $count, $included]) {
+                if ($focusAddress >= $start && $focusAddress <= $end
+                    && ($included || $matcher->count($focusAddress, $focusAddress) > 0)) {
+                    $position = $before + ($included ? 0 : $matcher->count($start, $focusAddress) - 1);
+                    if (! $textSort && $direction === 'desc') {
+                        $position = $virtualCount - 1 - $position;
+                    }
+                    if ($textSort && $direction === 'desc') {
+                        $position += $populatedCount;
+                    }
+                    break;
+                }
+                $before += $count;
+            }
+            if ($position === null && $populated !== null) {
+                $order = $direction === 'desc' ? 'DESC' : 'ASC';
+                $ranked = DB::query()->fromSub(clone $populated, 'entries')
+                    ->select('address')->selectRaw("ROW_NUMBER() OVER (ORDER BY {$sortColumn} {$order}, address) AS row_position");
+                $rank = DB::query()->fromSub($ranked, 'ranked')->where('address', $focusAddress)->value('row_position');
+                if ($rank !== null) {
+                    $position = (int) $rank - 1 + ($direction === 'asc' ? $virtualCount : 0);
+                }
+            }
+            if ($position !== null) {
+                $page = intdiv($position, $perPage) + 1;
+            }
+        }
         $page = min($page, max(1, (int) ceil($total / $perPage)));
         $offset = ($page - 1) * $perPage;
         $addresses = [];

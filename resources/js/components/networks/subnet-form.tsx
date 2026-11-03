@@ -3,7 +3,7 @@ import { NewItemButton } from '@/components/new-item-button';
 import { MikrotikEditMode } from '@/components/networks/mikrotik-edit-mode';
 import { Form } from '@inertiajs/react';
 import { Pencil, Trash2 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { type ComponentProps, useId, useState } from 'react';
 import { GuidedDeletion } from '@/components/networks/guided-deletion';
 import { IconButton } from '@/components/icon-button';
 import InputError from '@/components/input-error';
@@ -42,14 +42,22 @@ export default function SubnetForm({
     context,
     vlans,
     subnet,
+    open: controlledOpen,
+    onOpenChange,
+    onCloseAutoFocus,
 }: {
     companyId: number;
     siteId: number;
     context: string;
     vlans: Vlan[];
     subnet?: Subnet;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
 }) {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = onOpenChange ?? setInternalOpen;
     const [deleting, setDeleting] = useState(false);
     const [vlanChoice, setVlanChoice] = useState(
         String(subnet?.vlan_id ?? 'none'),
@@ -66,16 +74,21 @@ export default function SubnetForm({
                 if (value) setVlanChoice(String(subnet?.vlan_id ?? 'none'));
             }}
         >
-            <DialogTrigger asChild>
-                {subnet ? (
-                    <IconButton label={`Modifica subnet ${subnet.cidr}`}>
-                        <Pencil />
-                    </IconButton>
-                ) : (
-                    <NewItemButton aria-label="Nuovo: crea subnet" />
-                )}
-            </DialogTrigger>
-            <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+            {controlledOpen === undefined ? (
+                <DialogTrigger asChild>
+                    {subnet ? (
+                        <IconButton label={`Modifica subnet ${subnet.cidr}`}>
+                            <Pencil />
+                        </IconButton>
+                    ) : (
+                        <NewItemButton aria-label="Nuovo: crea subnet" />
+                    )}
+                </DialogTrigger>
+            ) : null}
+            <DialogContent
+                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {deleting

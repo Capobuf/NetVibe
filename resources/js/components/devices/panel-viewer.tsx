@@ -1,11 +1,17 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type Konva from 'konva';
 import { Stage, Layer } from 'react-konva';
-import { Minus, Plus, Maximize } from 'lucide-react';
+import { Minus, Plus, Maximize, Eye, Pencil } from 'lucide-react';
+import { Link } from '@inertiajs/react';
 import { PanelScene } from '@/components/hardware-editor/panel-scene';
 import { IconButton } from '@/components/icon-button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+    Tooltip,
+    TooltipTrigger,
+    TooltipContent,
+} from '@/components/ui/tooltip';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
     boundsOf,
@@ -31,6 +37,7 @@ export function PanelViewer({
     initialPortId,
     highlightPortId,
     zoomToPort = false,
+    editHref,
 }: {
     panel: PanelDocument;
     assetUrls: Record<string, string>;
@@ -39,6 +46,7 @@ export function PanelViewer({
     initialPortId?: string;
     highlightPortId?: string;
     zoomToPort?: boolean;
+    editHref?: string;
 }) {
     const [face, setFace] = useState<Face>(
         panel.faces.rear.ports.some(
@@ -158,7 +166,7 @@ export function PanelViewer({
             )}
         >
             {!compact && (
-                <div className="flex items-center justify-between gap-2 border-b bg-background p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background p-3">
                     <ToggleGroup
                         type="single"
                         variant="outline"
@@ -176,7 +184,26 @@ export function PanelViewer({
                         </ToggleGroupItem>
                         <ToggleGroupItem value="rear">Retro</ToggleGroupItem>
                     </ToggleGroup>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {editHref && (
+                            <ToggleGroup
+                                type="single"
+                                variant="outline"
+                                value="view"
+                                aria-label="Modalità pannello"
+                            >
+                                <ToggleGroupItem value="view">
+                                    <Eye />
+                                    Visualizza
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="edit" asChild>
+                                    <Link href={editHref}>
+                                        <Pencil />
+                                        Modifica
+                                    </Link>
+                                </ToggleGroupItem>
+                            </ToggleGroup>
+                        )}
                         <IconButton
                             label="Riduci zoom"
                             onClick={() =>
@@ -264,18 +291,23 @@ export function PanelViewer({
                     {side.ports
                         .filter((p) => !p.hidden)
                         .map((p) => (
-                            <button
-                                key={p.id}
-                                id={`port-${p.id}`}
-                                data-device-port=""
-                                type="button"
-                                aria-haspopup="dialog"
-                                className="rounded-md px-3 py-2 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
-                                onClick={() => showPort(p)}
-                                title={connectorTypes[p.type].name}
-                            >
-                                {p.label || connectorTypes[p.type].name}
-                            </button>
+                            <Tooltip key={p.id}>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        id={`port-${p.id}`}
+                                        data-device-port=""
+                                        type="button"
+                                        aria-haspopup="dialog"
+                                        className="rounded-md px-3 py-2 text-xs hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                                        onClick={() => showPort(p)}
+                                    >
+                                        {p.label || connectorTypes[p.type].name}
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    {connectorTypes[p.type].name}
+                                </TooltipContent>
+                            </Tooltip>
                         ))}
                 </div>
             )}

@@ -76,6 +76,35 @@ class MikrotikSyncTest extends TestCase
         Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
     }
 
+    public function test_unresolved_arp_without_a_mac_is_hidden_from_ipam_and_does_not_block_suggestions(): void
+    {
+        $tables = $this->tables();
+        $tables['ip/arp'] = [
+            ['.id' => '*1', 'address' => '192.0.2.2', 'interface' => 'vlan10', 'status' => 'failed', 'complete' => 'false'],
+            ['.id' => '*2', 'address' => '192.0.2.4', 'interface' => 'vlan10', 'status' => 'incomplete', 'mac-address' => ''],
+            ['.id' => '*3', 'address' => '192.0.2.5', 'interface' => 'vlan10', 'status' => 'failed', 'mac-address' => '02:00:00:00:00:05'],
+            ['.id' => '*4', 'address' => '192.0.2.6', 'interface' => 'vlan10'],
+        ];
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $subnet = $this->device->site->subnets()->sole();
+
+        $this->assertSame('192.0.2.2', $subnet->firstProposableIp());
+        $this->assertSame(['documented' => 1, 'excluded' => 0, 'external' => 3, 'proposable' => 2], $subnet->addressCounts());
+        $this->assertSame(4, MikrotikSource::where('kind', 'observation')->count());
+        $this->get(route('companies.sites.subnets.show', [$this->device->site->company_id, $this->device->site_id, $subnet]))
+            ->assertInertia(fn (Assert $page) => $page->component('subnets/show')
+                ->where('firstProposableIp', '192.0.2.2')->has('vlans', 2)
+                ->where('mikrotikSources', fn ($sources) => collect($sources)->where('kind', 'observation')
+                    ->pluck('ip')->sort()->values()->all() === ['192.0.2.5', '192.0.2.6']));
+
+        $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.2')]);
+        $this->assertSame('192.0.2.4', $subnet->firstProposableIp());
+        $subnet->excludedRanges()->create(['start_address' => ip2long('192.0.2.4'), 'end_address' => ip2long('192.0.2.4')]);
+        $this->assertNull($subnet->firstProposableIp());
+        $this->assertSame(['documented' => 2, 'excluded' => 1, 'external' => 3, 'proposable' => 0], $subnet->addressCounts());
+    }
+
     public function test_incomplete_reads_preserve_observations_until_a_complete_read_reports_absence(): void
     {
         $tables = $this->tables();

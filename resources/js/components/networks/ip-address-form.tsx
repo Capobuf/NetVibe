@@ -10,7 +10,15 @@ import {
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
 import { Form, usePage } from '@inertiajs/react';
-import { ArrowRight, Pencil, Plus, Trash2, TriangleAlert } from 'lucide-react';
+import {
+    ArrowRight,
+    Network,
+    Pencil,
+    Plus,
+    Server,
+    Trash2,
+    TriangleAlert,
+} from 'lucide-react';
 import { type ComponentProps, useId, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { CopyValue } from '@/components/copy-value';
@@ -79,6 +87,7 @@ export default function IpAddressForm({
     open: controlledOpen,
     onOpenChange,
     onCloseAutoFocus,
+    onCreated,
     assignment,
     devices: providedDevices,
     embedded = false,
@@ -94,6 +103,7 @@ export default function IpAddressForm({
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     onCloseAutoFocus?: ComponentProps<typeof SheetContent>['onCloseAutoFocus'];
+    onCreated?: (ip: string) => void;
     assignment?: { deviceId: number; interfaceId?: number; label: string };
     devices?: Device[];
     embedded?: boolean;
@@ -164,7 +174,13 @@ export default function IpAddressForm({
             {ipAddress && !editing ? (
                 <>
                     <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-medium">Indirizzo</h3>
+                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                            <Network
+                                className="size-4 text-muted-foreground"
+                                aria-hidden="true"
+                            />
+                            Indirizzo
+                        </h3>
                         {canEdit && (
                             <IconButton
                                 label={`Modifica IP ${ipAddress.ip}`}
@@ -229,7 +245,11 @@ export default function IpAddressForm({
                     />
                     <Separator />
                     <section className="flex flex-col gap-3">
-                        <h3 className="text-sm font-medium">
+                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                            <Server
+                                className="size-4 text-muted-foreground"
+                                aria-hidden="true"
+                            />
                             Dispositivo / Interfaccia
                         </h3>
                         <div className="text-sm">
@@ -308,7 +328,10 @@ export default function IpAddressForm({
                                   ipAddress: ipAddress.id,
                               })
                             : store.form(route))}
-                        onSuccess={() => setOpen(false)}
+                        onSuccess={() => {
+                            if (!ipAddress) onCreated?.(ip);
+                            setOpen(false);
+                        }}
                         onBefore={() => {
                             if (releasing) {
                                 setDeleting(true);
@@ -322,7 +345,11 @@ export default function IpAddressForm({
                         {({ processing, errors }) => (
                             <FieldGroup>
                                 <div className="flex items-center justify-between gap-3">
-                                    <h3 className="text-sm font-medium">
+                                    <h3 className="flex items-center gap-2 text-sm font-medium">
+                                        <Network
+                                            className="size-4 text-muted-foreground"
+                                            aria-hidden="true"
+                                        />
                                         Indirizzo
                                     </h3>
                                     <div className="flex flex-wrap gap-2">
@@ -445,7 +472,11 @@ export default function IpAddressForm({
                                     />
                                 </Field>
                                 <Separator />
-                                <h3 className="text-sm font-medium">
+                                <h3 className="flex items-center gap-2 text-sm font-medium">
+                                    <Server
+                                        className="size-4 text-muted-foreground"
+                                        aria-hidden="true"
+                                    />
                                     Dispositivo / Interfaccia
                                 </h3>
                                 <IpAssignmentFields
@@ -520,18 +551,20 @@ export default function IpAddressForm({
                                             <Trash2 />
                                         </IconButton>
                                     )}
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={processing}
-                                        onClick={() =>
-                                            ipAddress
-                                                ? setEditing(false)
-                                                : setOpen(false)
-                                        }
-                                    >
-                                        Annulla
-                                    </Button>
+                                    {embedded && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={processing}
+                                            onClick={() =>
+                                                ipAddress
+                                                    ? setEditing(false)
+                                                    : setOpen(false)
+                                            }
+                                        >
+                                            Annulla
+                                        </Button>
+                                    )}
                                     {canEdit &&
                                         (releasing ? (
                                             <Button

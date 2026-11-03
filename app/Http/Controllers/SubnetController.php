@@ -65,6 +65,7 @@ class SubnetController extends Controller
             'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
             'hide_free' => ['sometimes', 'boolean'],
             'ip_address' => ['sometimes', 'integer', 'min:1'],
+            'focus_ip' => ['sometimes', 'ipv4'],
         ]);
         $hideFree = (bool) ($options['hide_free'] ?? false);
         $search = $options['search'] ?? '';
@@ -72,6 +73,15 @@ class SubnetController extends Controller
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
 
         $subnet->load(['excludedRanges' => fn ($query) => $query->orderBy('start_address')]);
+        $focusAddress = isset($options['focus_ip'])
+            ? $subnet->ipAddresses()->where('address', ip2long($options['focus_ip']))->value('address') : null;
+        $page = (int) ($options['page'] ?? 1);
+        $perPage = (int) ($options['per_page'] ?? 25);
+        $ipAddresses = SubnetAddressTable::paginate($subnet, $search, $sort, $direction, $page, $perPage, $hideFree, $focusAddress);
+        if ($focusAddress !== null && $search !== '' && ! $ipAddresses->getCollection()->contains('ip', $options['focus_ip'])) {
+            $search = '';
+            $ipAddresses = SubnetAddressTable::paginate($subnet, $search, $sort, $direction, $page, $perPage, $hideFree, $focusAddress);
+        }
         $selected = isset($options['ip_address'])
             ? $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['snipeItAsset.sync.connection', 'status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])->whereKey($options['ip_address'])->first()
             : null;
@@ -81,6 +91,7 @@ class SubnetController extends Controller
             'site' => $site->only('id', 'name'),
             'subnet' => $subnet->only('id', 'cidr', 'name', 'description', 'vlan_id', 'excluded_at'),
             'vlan' => $subnet->vlan?->only('id', 'tag', 'name', 'excluded_at'),
+            'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name', 'excluded_at']),
             'summaryEntries' => $subnet->summaryEntries()->orderBy('id')->get(['id', 'name', 'values']),
             'excludedRanges' => $subnet->excludedRanges
                 ->map(fn (ExcludedRange $range) => [
@@ -96,7 +107,7 @@ class SubnetController extends Controller
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
-            'ipAddresses' => SubnetAddressTable::paginate($subnet, $search, $sort, $direction, (int) ($options['page'] ?? 1), (int) ($options['per_page'] ?? 25), $hideFree),
+            'ipAddresses' => $ipAddresses,
             'initialIpAddress' => $selected ? [
                 ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label', 'mikrotik_edit_mode', 'mikrotik_matched_at'),
                 'ip' => long2ip($selected->address),

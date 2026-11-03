@@ -1,16 +1,27 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Filter } from 'lucide-react';
 import { UnifiMark } from '@/components/unifi-mark';
+import { MikrotikMark } from '@/components/mikrotik-mark';
 import { unifiState } from '@/components/unifi/types';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
+import { DeviceImage } from '@/components/devices/device-image';
 import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
+import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    PopoverHeader,
+    PopoverTitle,
+} from '@/components/ui/popover';
 import { records as snipeRecords } from '@/routes/companies/settings/integrations/snipe-it';
 import {
     Select,
@@ -21,6 +32,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index, show } from '@/routes/companies/sites/devices';
+import { show as manufacturerShow } from '@/routes/manufacturers';
+import { edit as editModel } from '@/routes/manufacturers/models';
 import type { Company, Site } from '@/types/company';
 import { type Device, type Manufacturer } from '@/types/device';
 
@@ -42,9 +55,11 @@ function DeviceList({
     manufacturers,
     snipePending,
 }: Props) {
-    const { companyNavigation } = usePage().props;
+    const { auth, companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
     const [type, setType] = useState('all');
+    const activeFilters =
+        Number(manufacturer !== 'all') + Number(type !== 'all');
     const manufacturerIds = new Set(
         devices.map((device) => device.manufacturer_id),
     );
@@ -79,6 +94,7 @@ function DeviceList({
     const value = (
         d: Device,
         c:
+            | 'image'
             | 'name'
             | 'manufacturer'
             | 'model'
@@ -87,23 +103,28 @@ function DeviceList({
             | 'source'
             | 'state',
     ) =>
-        c === 'state'
-            ? d.unifi
-                ? unifiState(d.unifi.state, d.unifi.stale)
-                : null
-            : c === 'source'
+        c === 'image'
+            ? null
+            : c === 'state'
               ? d.unifi
-                  ? 'UniFi'
+                  ? unifiState(d.unifi.state, d.unifi.stale)
                   : null
-              : c === 'manufacturer'
-                ? d.manufacturer.name
-                : c === 'model'
-                  ? (d.model?.name ?? '—')
-                  : c === 'type'
-                    ? (d.model?.model_type?.name ?? '—')
-                    : c === 'ips'
-                      ? (d.ips?.join(', ') ?? '')
-                      : d.name;
+              : c === 'source'
+                ? [
+                      d.mikrotik_connection_exists ? 'MikroTik' : null,
+                      d.unifi ? 'UniFi' : null,
+                  ]
+                      .filter(Boolean)
+                      .join(', ') || null
+                : c === 'manufacturer'
+                  ? d.manufacturer.name
+                  : c === 'model'
+                    ? (d.model?.name ?? '—')
+                    : c === 'type'
+                      ? (d.model?.model_type?.name ?? '—')
+                      : c === 'ips'
+                        ? (d.ips?.join(', ') ?? '')
+                        : d.name;
     return (
         <>
             <Head title={`Dispositivi · ${context}`} />
@@ -141,6 +162,12 @@ function DeviceList({
                     filterKey={`${manufacturer}:${type}`}
                     rows={rows}
                     columns={[
+                        {
+                            id: 'image',
+                            label: 'Immagine',
+                            visible: true,
+                            sortable: false,
+                        },
                         { id: 'name', label: 'Nome', visible: true },
                         {
                             id: 'manufacturer',
@@ -160,12 +187,27 @@ function DeviceList({
                     hiddenColumns={
                         devices.some((device) => device.unifi)
                             ? []
-                            : ['source', 'state']
+                            : devices.some(
+                                    (device) =>
+                                        device.mikrotik_connection_exists,
+                                )
+                              ? ['state']
+                              : ['source', 'state']
                     }
                     value={value}
                     render={(d, c) =>
-                        c === 'name' ? (
+                        c === 'image' ? (
+                            <DeviceImage src={d.image_url} name={d.name} />
+                        ) : c === 'name' ? (
                             <div className="flex items-center gap-2">
+                                {d.mikrotik_connection_exists ? (
+                                    <span
+                                        role="img"
+                                        aria-label="Integrazione MikroTik"
+                                    >
+                                        <MikrotikMark className="size-4 shrink-0" />
+                                    </span>
+                                ) : null}
                                 {d.unifi ? (
                                     <span role="img" aria-label="Fonte UniFi">
                                         <UnifiMark className="size-4 shrink-0" />
@@ -173,16 +215,73 @@ function DeviceList({
                                 ) : null}
                                 <TextLink
                                     href={show({ ...route, device: d.id })}
+                                    className="whitespace-nowrap"
                                 >
                                     {d.name}
                                 </TextLink>
                             </div>
+                        ) : c === 'manufacturer' && auth.user.is_superadmin ? (
+                            <TextLink
+                                href={manufacturerShow(d.manufacturer_id)}
+                                className="whitespace-nowrap"
+                            >
+                                {d.manufacturer.name}
+                            </TextLink>
+                        ) : c === 'model' &&
+                          d.model &&
+                          auth.user.is_superadmin ? (
+                            <TextLink
+                                href={editModel({
+                                    manufacturer: d.manufacturer_id,
+                                    model: d.model.id,
+                                })}
+                                className="whitespace-nowrap"
+                            >
+                                {d.model.name}
+                            </TextLink>
                         ) : c === 'ips' ? (
                             d.ips?.length ? (
-                                <div className="flex flex-col gap-1 tabular-nums">
-                                    {d.ips.map((ip) => (
-                                        <span key={ip}>{ip}</span>
-                                    ))}
+                                <div className="flex items-center gap-2 whitespace-nowrap tabular-nums">
+                                    <CopyValue
+                                        value={d.ips[0]}
+                                        className="-ml-2 whitespace-nowrap tabular-nums"
+                                    />
+                                    {d.ips.length > 1 ? (
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    aria-label={`Mostra tutti i ${d.ips.length} IP documentati di ${d.name}`}
+                                                >
+                                                    +{d.ips.length - 1}
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                                align="end"
+                                                className="flex flex-col gap-3"
+                                                aria-label={`IP documentati di ${d.name}`}
+                                            >
+                                                <PopoverHeader>
+                                                    <PopoverTitle>
+                                                        IP documentati (
+                                                        {d.ips.length})
+                                                    </PopoverTitle>
+                                                </PopoverHeader>
+                                                <ul className="max-h-64 overflow-y-auto">
+                                                    {d.ips.map((ip) => (
+                                                        <li key={ip}>
+                                                            <CopyValue
+                                                                value={ip}
+                                                                className="w-full tabular-nums"
+                                                            />
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </PopoverContent>
+                                        </Popover>
+                                    ) : null}
                                 </div>
                             ) : (
                                 <span className="text-muted-foreground">—</span>
@@ -192,7 +291,9 @@ function DeviceList({
                                 {d.model.model_type.name}
                             </Badge>
                         ) : (
-                            value(d, c) || '—'
+                            <span className="whitespace-nowrap">
+                                {value(d, c) || '—'}
+                            </span>
                         )
                     }
                     actions={(d) => (
@@ -207,83 +308,147 @@ function DeviceList({
                             ? 'Nessun dispositivo trovato'
                             : 'Nessun dispositivo'
                     }
-                    filters={
-                        <>
-                            {manufacturerIds.size > 1 ||
-                            manufacturer !== 'all' ? (
-                                <Select
-                                    value={manufacturer}
-                                    onValueChange={setManufacturer}
+                    headerActions={
+                        manufacturerIds.size > 1 ||
+                        typeIds.size > 1 ||
+                        activeFilters > 0 ? (
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <IconButton
+                                        label={
+                                            activeFilters
+                                                ? `Filtri (${activeFilters} attivi)`
+                                                : 'Filtri'
+                                        }
+                                        variant={
+                                            activeFilters
+                                                ? 'secondary'
+                                                : 'outline'
+                                        }
+                                    >
+                                        <Filter />
+                                    </IconButton>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    align="end"
+                                    aria-labelledby="device-filters-title"
+                                    className="flex flex-col gap-4"
                                 >
-                                    <SelectTrigger
-                                        className="w-48 max-w-full"
-                                        aria-label="Filtra produttore"
-                                    >
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="all">
-                                                Tutti i produttori
-                                            </SelectItem>
-                                            {manufacturers
-                                                .filter(
-                                                    (m) =>
-                                                        manufacturerIds.has(
-                                                            m.id,
-                                                        ) ||
-                                                        String(m.id) ===
-                                                            manufacturer,
-                                                )
-                                                .map((m) => (
-                                                    <SelectItem
-                                                        key={m.id}
-                                                        value={String(m.id)}
-                                                    >
-                                                        {m.name}
-                                                    </SelectItem>
-                                                ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                            ) : null}
-                            {typeIds.size > 1 || type !== 'all' ? (
-                                <Select value={type} onValueChange={setType}>
-                                    <SelectTrigger
-                                        className="w-44 max-w-full"
-                                        aria-label="Filtra tipo"
-                                    >
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="all">
-                                                Tutti i tipi
-                                            </SelectItem>
-                                            {types.map((type) => (
-                                                <SelectItem
-                                                    key={type.id}
-                                                    value={String(type.id)}
+                                    <PopoverHeader>
+                                        <PopoverTitle id="device-filters-title">
+                                            Filtri
+                                        </PopoverTitle>
+                                    </PopoverHeader>
+                                    <FieldGroup>
+                                        {manufacturerIds.size > 1 ||
+                                        manufacturer !== 'all' ? (
+                                            <Field>
+                                                <FieldLabel htmlFor="device-manufacturer-filter">
+                                                    Produttore
+                                                </FieldLabel>
+                                                <Select
+                                                    value={manufacturer}
+                                                    onValueChange={
+                                                        setManufacturer
+                                                    }
                                                 >
-                                                    {type.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                            ) : null}
-                            {manufacturer !== 'all' || type !== 'all' ? (
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => {
-                                        setManufacturer('all');
-                                        setType('all');
-                                    }}
-                                >
-                                    Azzera filtri
-                                </Button>
-                            ) : null}
-                        </>
+                                                    <SelectTrigger
+                                                        id="device-manufacturer-filter"
+                                                        className="w-full"
+                                                    >
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            <SelectItem value="all">
+                                                                Tutti i
+                                                                produttori
+                                                            </SelectItem>
+                                                            {manufacturers
+                                                                .filter(
+                                                                    (m) =>
+                                                                        manufacturerIds.has(
+                                                                            m.id,
+                                                                        ) ||
+                                                                        String(
+                                                                            m.id,
+                                                                        ) ===
+                                                                            manufacturer,
+                                                                )
+                                                                .map((m) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            m.id
+                                                                        }
+                                                                        value={String(
+                                                                            m.id,
+                                                                        )}
+                                                                    >
+                                                                        {m.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
+                                            </Field>
+                                        ) : null}
+                                        {typeIds.size > 1 || type !== 'all' ? (
+                                            <Field>
+                                                <FieldLabel htmlFor="device-type-filter">
+                                                    Tipo
+                                                </FieldLabel>
+                                                <Select
+                                                    value={type}
+                                                    onValueChange={setType}
+                                                >
+                                                    <SelectTrigger
+                                                        id="device-type-filter"
+                                                        className="w-full"
+                                                    >
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            <SelectItem value="all">
+                                                                Tutti i tipi
+                                                            </SelectItem>
+                                                            {types.map(
+                                                                (type) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            type.id
+                                                                        }
+                                                                        value={String(
+                                                                            type.id,
+                                                                        )}
+                                                                    >
+                                                                        {
+                                                                            type.name
+                                                                        }
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
+                                            </Field>
+                                        ) : null}
+                                        {manufacturer !== 'all' ||
+                                        type !== 'all' ? (
+                                            <Button
+                                                variant="ghost"
+                                                onClick={() => {
+                                                    setManufacturer('all');
+                                                    setType('all');
+                                                }}
+                                            >
+                                                Azzera filtri
+                                            </Button>
+                                        ) : null}
+                                    </FieldGroup>
+                                </PopoverContent>
+                            </Popover>
+                        ) : null
                     }
                 />
             </div>

@@ -76,10 +76,12 @@ export const alignmentActions = [
 ];
 export function EditorInspector({
     editor: e,
+    showPanelName,
     onImage,
     onClose,
 }: {
     editor: Editor;
+    showPanelName: boolean;
     onImage: () => void;
     onClose: () => void;
 }) {
@@ -542,22 +544,27 @@ export function EditorInspector({
                 ) : (
                     <>
                         <FieldGroup>
-                            <Field className="gap-1.5">
-                                <FieldLabel htmlFor="panel-name">
-                                    Nome pannello
-                                </FieldLabel>
-                                <Input
-                                    id="panel-name"
-                                    key={e.doc.name}
-                                    defaultValue={e.doc.name}
-                                    maxLength={100}
-                                    onBlur={(event) => {
-                                        const name = event.target.value.trim();
-                                        if (name) e.commit({ ...e.doc, name });
-                                        else event.target.value = e.doc.name;
-                                    }}
-                                />
-                            </Field>
+                            {showPanelName && (
+                                <Field className="gap-1.5">
+                                    <FieldLabel htmlFor="panel-name">
+                                        Nome pannello
+                                    </FieldLabel>
+                                    <Input
+                                        id="panel-name"
+                                        key={e.doc.name}
+                                        defaultValue={e.doc.name}
+                                        maxLength={100}
+                                        onBlur={(event) => {
+                                            const name =
+                                                event.target.value.trim();
+                                            if (name)
+                                                e.commit({ ...e.doc, name });
+                                            else
+                                                event.target.value = e.doc.name;
+                                        }}
+                                    />
+                                </Field>
+                            )}
                             <div className="grid grid-cols-2 gap-3">
                                 <NumberField
                                     label="Larghezza"
@@ -603,7 +610,7 @@ export function EditorInspector({
                                     }
                                 />
                                 <NumberField
-                                    label="Bordo"
+                                    label="Bordo scocca"
                                     value={e.doc.shell.border}
                                     min={0}
                                     max={12}
@@ -618,40 +625,45 @@ export function EditorInspector({
                                 />
                             </div>
                         </FieldGroup>
-                        <Button
-                            variant="outline"
-                            onClick={() =>
-                                e.patchShellState({
-                                    locked: !e.shellState.locked,
-                                })
-                            }
-                        >
-                            {e.shellState.locked ? <Unlock /> : <Lock />}
-                            {e.shellState.locked
-                                ? 'Sblocca scocca'
-                                : 'Blocca scocca'}
-                        </Button>
                         <Separator />
                         <h3 className="text-sm font-medium">
                             {e.face === 'front' ? 'Frontale' : 'Retro'}
                         </h3>
-                        <Button variant="outline" onClick={onImage}>
-                            <ImagePlus />
-                            {image
-                                ? 'Sostituisci immagine'
-                                : 'Importa immagine'}
-                        </Button>
-                        {image && (
+                        <div className="flex flex-col gap-2">
                             <Button
                                 variant="outline"
                                 onClick={() =>
-                                    e.setSelection({ kind: 'image', ids: [] })
+                                    e.patchShellState({
+                                        locked: !e.shellState.locked,
+                                    })
                                 }
                             >
-                                <Scan />
-                                Seleziona immagine
+                                {e.shellState.locked ? <Unlock /> : <Lock />}
+                                {e.shellState.locked
+                                    ? 'Sblocca scocca'
+                                    : 'Blocca scocca'}
                             </Button>
-                        )}
+                            <Button variant="outline" onClick={onImage}>
+                                <ImagePlus />
+                                {image
+                                    ? 'Sostituisci immagine'
+                                    : 'Importa immagine'}
+                            </Button>
+                            {image && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        e.setSelection({
+                                            kind: 'image',
+                                            ids: [],
+                                        })
+                                    }
+                                >
+                                    <Scan />
+                                    Seleziona immagine
+                                </Button>
+                            )}
+                        </div>
                     </>
                 )}
             </div>

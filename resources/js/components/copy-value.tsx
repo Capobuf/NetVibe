@@ -29,7 +29,7 @@ export function CopyValue({
 
     return (
         <Tooltip>
-            <TooltipTrigger asChild onFocus={(event) => event.preventDefault()}>
+            <TooltipTrigger asChild>
                 <Button
                     type="button"
                     variant="ghost"

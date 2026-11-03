@@ -8,11 +8,13 @@ export function TableSortHead<Id extends string>({
     sort,
     onSort,
 }: {
-    column: { id: Id; label: string };
+    column: { id: Id; label: string; sortable?: boolean };
     sort: TableSort<Id>;
     onSort: (sort: TableSort<Id>) => void;
 }) {
     const direction = sort?.column === column.id ? sort.direction : null;
+    if (column.sortable === false)
+        return <TableHead scope="col">{column.label}</TableHead>;
     return (
         <TableHead
             scope="col"

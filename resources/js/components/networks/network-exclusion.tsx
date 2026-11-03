@@ -72,6 +72,9 @@ export function NetworkExclusionAction({
     device,
     excluded = false,
     compact = false,
+    open: controlledOpen,
+    onOpenChange,
+    onRestoreFocus,
 }: {
     company: number;
     site: number;
@@ -81,8 +84,13 @@ export function NetworkExclusionAction({
     device?: number;
     excluded?: boolean;
     compact?: boolean;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    onRestoreFocus?: () => void;
 }) {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = onOpenChange ?? setInternalOpen;
     const trigger = useRef<HTMLButtonElement>(null);
     const route = { company, site };
     const preview =
@@ -108,7 +116,7 @@ export function NetworkExclusionAction({
 
     return (
         <>
-            {compact && !excluded ? (
+            {controlledOpen !== undefined ? null : compact && !excluded ? (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -158,7 +166,9 @@ export function NetworkExclusionAction({
                         previewUrl={preview.url}
                         action={action}
                         onClose={() => setOpen(false)}
-                        onRestoreFocus={() => trigger.current?.focus()}
+                        onRestoreFocus={
+                            onRestoreFocus ?? (() => trigger.current?.focus())
+                        }
                     />
                 ) : null}
             </Dialog>

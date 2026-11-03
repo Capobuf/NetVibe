@@ -1,16 +1,18 @@
 import { SaveButton } from '@/components/save-button';
+import { CatalogForm } from '@/components/devices/catalog-form';
 import type { CatalogModel } from '@/lib/hardware-editor/catalog-storage';
 import { index as modelIndex } from '@/routes/device-models';
+import { update as updateModel } from '@/routes/manufacturers/models';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
     Crop,
     X,
     Check,
-    ImagePlus,
     Maximize,
     Minus,
     PanelsTopLeft,
+    PanelRight,
     Plus,
     Trash2,
 } from 'lucide-react';
@@ -45,14 +47,11 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
     labelConflict,
     makePort,
     numberingLabels,
-    outsideShell,
-    imageBounds,
     previewBlock,
     type BlockOptions,
     updatePorts,
@@ -70,6 +69,12 @@ export default function HardwareEditor({
 }) {
     const { auth } = usePage().props;
     const e = useEditor(auth.user.id, catalogModel);
+    const renameUrl = catalogModel
+        ? updateModel.form({
+              manufacturer: catalogModel.manufacturer_id,
+              model: catalogModel.id,
+          }).action
+        : null;
     const mikrotik =
         catalogModel?.manufacturer.name.trim().toLowerCase() === 'mikrotik';
     const unifi =
@@ -132,18 +137,6 @@ export default function HardwareEditor({
           )
         : e.doc;
     const conflict = preview ? labelConflict(numberedDoc) : null;
-    const picture = e.doc.faces[e.face].image;
-    const imageOutside =
-        picture &&
-        (imageBounds(picture).x < e.doc.shell.x ||
-            imageBounds(picture).y < e.doc.shell.y ||
-            imageBounds(picture).x + imageBounds(picture).width >
-                e.doc.shell.x + e.doc.shell.width ||
-            imageBounds(picture).y + imageBounds(picture).height >
-                e.doc.shell.y + e.doc.shell.height);
-    const outside = e.ports.filter(
-        (p) => !p.hidden && outsideShell(p, e.doc.shell),
-    );
     const blocked = !!e.session || !!numberMode || !!e.crop || !!block;
     const saveDisabled =
         e.loading ||
@@ -292,14 +285,22 @@ export default function HardwareEditor({
     }
     useEffect(() => {
         const stop = router.on('before', (event) => {
+            const visit = event.detail.visit;
+            // Renaming preserves the editor's unsaved panel and stays on this page.
+            const renamingModel =
+                renameUrl &&
+                visit.method === 'post' &&
+                visit.preserveState === true &&
+                visit.url.href ===
+                    new URL(renameUrl, window.location.origin).href;
             if (
+                renamingModel ||
                 allowLeave.current ||
                 (!e.dirty && !e.session && !e.crop && !block) ||
                 e.initialLoading
             )
                 return;
             event.preventDefault();
-            const visit = event.detail.visit;
             setLeave(() => () => {
                 allowLeave.current = true;
                 setLeave(null);
@@ -349,7 +350,7 @@ export default function HardwareEditor({
             window.removeEventListener('beforeunload', unload);
             window.removeEventListener('popstate', pop, true);
         };
-    }, [e.dirty, e.session, e.crop, e.initialLoading, block]);
+    }, [e.dirty, e.session, e.crop, e.initialLoading, block, renameUrl]);
     useEffect(() => {
         const key = (event: KeyboardEvent) => {
             if (
@@ -518,6 +519,7 @@ export default function HardwareEditor({
             <EditorInspector
                 key={`${e.selection.kind}-${e.selected.map((p) => p.id).join(',')}`}
                 editor={e}
+                showPanelName={!catalogModel}
                 onImage={image}
                 onClose={() => setInspector(false)}
             />
@@ -532,12 +534,12 @@ export default function HardwareEditor({
         !!numberMode;
 
     return (
-        <TooltipProvider delayDuration={700} skipDelayDuration={0}>
-            <Head title="Editor" />
+        <>
+            <Head title={`Editor · ${catalogModel?.name ?? e.doc.name}`} />
             <ErrorNotification error={e.error} />
             <div className="flex h-[calc(100dvh-5rem)] min-h-150 min-w-0 flex-col overflow-hidden">
                 <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                         <IconButton
                             label={
                                 catalogModel ? 'Catalogo' : 'Amministrazione'
@@ -549,50 +551,50 @@ export default function HardwareEditor({
                                 <ArrowLeft />
                             </Link>
                         </IconButton>
-                        <PanelsTopLeft className="hidden size-5 text-muted-foreground sm:block" />
-                        <div className="min-w-0">
-                            <h1 className="truncate text-base font-medium">
-                                Editor
-                            </h1>
-                            <p className="truncate text-xs text-muted-foreground">
+                        <div className="min-w-0 space-y-1">
+                            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                <PanelsTopLeft className="size-3.5" />
                                 {catalogModel
-                                    ? `${catalogModel.manufacturer.name} · ${catalogModel.name}`
-                                    : e.doc.name}
+                                    ? 'Editor modello'
+                                    : 'Editor prototipo'}
                             </p>
+                            <div className="flex min-w-0 items-center gap-2">
+                                <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+                                    {catalogModel?.name ?? e.doc.name}
+                                </h1>
+                                {catalogModel && renameUrl && (
+                                    <CatalogForm
+                                        title="Rinomina modello"
+                                        item={catalogModel}
+                                        action={{
+                                            action: renameUrl,
+                                            method: 'post',
+                                        }}
+                                    />
+                                )}
+                            </div>
+                            {catalogModel && (
+                                <p className="truncate text-sm text-muted-foreground">
+                                    {catalogModel.manufacturer.name}
+                                </p>
+                            )}
                         </div>
-                        <Badge
-                            variant="outline"
-                            className="hidden sm:inline-flex"
-                        >
-                            {catalogModel ? 'Modello' : 'Prototipo'}
-                        </Badge>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <SaveButton
-                            type="button"
-                            processing={e.saving}
-                            saved={
-                                !e.dirty &&
-                                !e.session &&
-                                !e.loading &&
-                                !e.loadFailed
-                            }
-                            disabled={saveDisabled}
-                            onClick={() => {
-                                if (e.session) void finishNumbering();
-                                else void e.save();
-                            }}
-                        />
-                        <SaveButton
-                            type="button"
-                            variant="outline"
-                            processing={e.saving}
-                            disabled={saveDisabled}
-                            onClick={() => void saveAndExit()}
-                        >
-                            Salva ed esci
-                        </SaveButton>
-                    </div>
+                    <SaveButton
+                        type="button"
+                        processing={e.saving}
+                        saved={
+                            !e.dirty &&
+                            !e.session &&
+                            !e.loading &&
+                            !e.loadFailed
+                        }
+                        disabled={saveDisabled}
+                        onClick={() => {
+                            if (e.session) void finishNumbering();
+                            else void e.save();
+                        }}
+                    />
                 </header>
                 <EditorToolbar
                     editor={e}
@@ -602,8 +604,6 @@ export default function HardwareEditor({
                     setTool={setTool}
                     snap={snap}
                     setSnap={setSnap}
-                    inspector={inspector}
-                    setInspector={toggleInspector}
                     layers={layers}
                     setLayers={toggleLayers}
                     add={add}
@@ -652,50 +652,25 @@ export default function HardwareEditor({
                                 </ToggleGroupItem>
                             </ToggleGroup>
                             <div className="flex items-center gap-1">
-                                <IconButton
-                                    label="Scocca"
-                                    variant={
-                                        e.selection.kind === 'shell'
-                                            ? 'secondary'
-                                            : 'ghost'
-                                    }
-                                    disabled={blocked}
-                                    onClick={() => {
-                                        e.setSelection({
-                                            kind: 'shell',
-                                            ids: [],
-                                        });
-                                        properties();
-                                    }}
-                                >
-                                    <PanelsTopLeft />
-                                </IconButton>
-                                {e.doc.faces[e.face].image && (
-                                    <IconButton
-                                        label="Seleziona immagine"
-                                        variant={
-                                            e.selection.kind === 'image'
-                                                ? 'secondary'
-                                                : 'ghost'
-                                        }
-                                        disabled={blocked}
-                                        onClick={() => {
-                                            e.setSelection({
-                                                kind: 'image',
-                                                ids: [],
-                                            });
-                                            properties();
-                                        }}
-                                    >
-                                        <ImagePlus />
-                                    </IconButton>
-                                )}
                                 <Badge
                                     variant="secondary"
                                     className="hidden sm:inline-flex"
                                 >
                                     {e.ports.length} porte
                                 </Badge>
+                                <IconButton
+                                    aria-expanded={inspector}
+                                    aria-controls="editor-inspector"
+                                    label={
+                                        inspector
+                                            ? 'Chiudi pannello laterale'
+                                            : 'Apri pannello laterale'
+                                    }
+                                    variant="ghost"
+                                    onClick={() => toggleInspector(!inspector)}
+                                >
+                                    <PanelRight />
+                                </IconButton>
                             </div>
                         </div>
                         {e.crop && (
@@ -751,6 +726,7 @@ export default function HardwareEditor({
                                         api={canvas}
                                         onZoom={setZoom}
                                         onEditLabel={label}
+                                        onImageSelect={properties}
                                         onContext={(point) =>
                                             setContextPoint(point)
                                         }
@@ -770,55 +746,7 @@ export default function HardwareEditor({
                                 />
                             </ContextMenu>
                         )}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-background px-3 py-2">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span role="status">
-                                    {block
-                                        ? `${block.count} porte in anteprima`
-                                        : e.session
-                                          ? `Prossima: ${e.doc.numbering.prefix}${e.doc.numbering.next}`
-                                          : e.selected.length
-                                            ? `${e.selected.length} selezionate`
-                                            : e.selection.kind === 'image'
-                                              ? 'Immagine selezionata'
-                                              : e.selection.kind === 'shell'
-                                                ? 'Scocca selezionata'
-                                                : 'Nessuna selezione'}
-                                </span>
-                                {imageOutside && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={blocked}
-                                        onClick={() => {
-                                            e.setSelection({
-                                                kind: 'image',
-                                                ids: [],
-                                            });
-                                            properties();
-                                            fit();
-                                        }}
-                                    >
-                                        Immagine fuori scocca
-                                    </Button>
-                                )}
-                                {outside.length > 0 && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={blocked}
-                                        onClick={() => {
-                                            e.setSelection({
-                                                kind: 'ports',
-                                                ids: outside.map((p) => p.id),
-                                            });
-                                            fit();
-                                        }}
-                                    >
-                                        {outside.length} fuori scocca
-                                    </Button>
-                                )}
-                            </div>
+                        <div className="flex items-center justify-end border-t bg-background px-3 py-2">
                             <div className="flex items-center gap-1">
                                 <IconButton
                                     label="Riduci zoom"
@@ -851,6 +779,7 @@ export default function HardwareEditor({
                     </div>
                     {inspector && (
                         <aside
+                            id="editor-inspector"
                             aria-label="Proprietà del pannello"
                             className={cn(
                                 'absolute inset-y-0 right-0 max-w-[95%] border-l bg-background shadow-lg lg:relative lg:max-w-none lg:shrink-0 lg:shadow-none',
@@ -965,18 +894,11 @@ export default function HardwareEditor({
                         </DialogHeader>
                         <DialogFooter>
                             <Button
-                                variant="outline"
-                                disabled={e.saving}
-                                onClick={() => setLeave(null)}
-                            >
-                                Continua a modificare
-                            </Button>
-                            <Button
                                 variant="destructive"
                                 disabled={e.saving}
                                 onClick={leave}
                             >
-                                Esci senza salvare
+                                Scarta
                             </Button>
                             <SaveButton
                                 type="button"
@@ -984,7 +906,7 @@ export default function HardwareEditor({
                                 disabled={saveDisabled}
                                 onClick={() => void saveAndExit(leave)}
                             >
-                                Salva ed esci
+                                Salva ed Esci
                             </SaveButton>
                         </DialogFooter>
                     </DialogContent>
@@ -1010,13 +932,15 @@ export default function HardwareEditor({
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="flex-row flex-wrap justify-between sm:justify-between">
-                        <Button
-                            variant="outline"
-                            disabled={e.saving}
-                            onClick={cancelEndNumbering}
-                        >
-                            Annulla
-                        </Button>
+                        {!leave && (
+                            <Button
+                                variant="outline"
+                                disabled={e.saving}
+                                onClick={cancelEndNumbering}
+                            >
+                                Annulla
+                            </Button>
+                        )}
                         <div className="ml-auto flex gap-2">
                             <Button
                                 variant="destructive"
@@ -1031,7 +955,7 @@ export default function HardwareEditor({
                                 processing={e.saving}
                                 onClick={() => void finishNumbering()}
                             >
-                                {leave ? 'Salva ed esci' : 'Salva'}
+                                {leave ? 'Salva ed Esci' : 'Salva'}
                             </SaveButton>
                         </div>
                     </DialogFooter>
@@ -1089,6 +1013,6 @@ export default function HardwareEditor({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </TooltipProvider>
+        </>
     );
 }

@@ -10,6 +10,7 @@ class DatabaseIsolationTest extends TestCase
 {
     public function test_test_account_is_confined_to_the_testing_database(): void
     {
+        $this->assertStringContainsString('MariaDB', DB::selectOne('SELECT VERSION() AS version')->version);
         $this->assertSame('testing', DB::selectOne('SELECT DATABASE() AS name')->name);
 
         $this->expectException(QueryException::class);

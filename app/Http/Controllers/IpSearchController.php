@@ -59,7 +59,7 @@ class IpSearchController extends Controller
             });
         $external = (clone $observations)->whereNotExists(fn ($query) => $query->selectRaw('1')->from('ip_addresses')
             ->whereColumn('ip_addresses.subnet_id', 'subnets.id')->whereColumn('ip_addresses.address', 'unifi_observations.address'))
-            ->selectRaw('NULL AS id, unifi_observations.address, NULL AS hostname, NULL AS mac_address, sites.id AS site_id, sites.name AS site, subnets.id AS subnet_id, subnets.cidr AS subnet, subnets.network_address, NULL AS assignment_label')->distinct();
+            ->selectRaw('CAST(NULL AS UNSIGNED) AS id, unifi_observations.address, NULL AS hostname, NULL AS mac_address, sites.id AS site_id, sites.name AS site, subnets.id AS subnet_id, subnets.cidr AS subnet, subnets.network_address, NULL AS assignment_label')->distinct();
         $results = DB::query()->fromSub($documented->toBase()->unionAll($external->toBase()), 'results')
             ->when($search === '', fn ($query) => $query->whereRaw('1 = 0'))
             ->when($group === 'site', fn ($query) => $query->orderBy('site', $sort === 'site' ? $direction : 'asc')->orderBy('site_id'))

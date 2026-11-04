@@ -17,10 +17,10 @@ abstract class TestCase extends BaseTestCase
         // Stop before RefreshDatabase can migrate a cached or misdirected connection.
         if ($app->configurationIsCached()
             || ! $app->environment('testing')
-            || $connection->getDriverName() !== 'mysql'
+            || $connection->getDriverName() !== 'mariadb'
             || $connection->getDatabaseName() !== 'testing'
             || $connection->getConfig('username') !== 'sail_test') {
-            throw new LogicException('Tests require uncached configuration and the isolated MySQL testing database with sail_test.');
+            throw new LogicException('Tests require uncached configuration and the isolated MariaDB testing database with sail_test.');
         }
 
         return $app;

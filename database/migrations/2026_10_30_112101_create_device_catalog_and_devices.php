@@ -55,7 +55,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE ip_addresses DROP CHECK ip_interface_requires_device');
+        DB::statement('ALTER TABLE ip_addresses DROP CONSTRAINT ip_interface_requires_device');
         Schema::table('ip_addresses', function (Blueprint $table) {
             $table->dropForeign('ip_device_interface_fk');
             $table->dropColumn('device_interface_id');

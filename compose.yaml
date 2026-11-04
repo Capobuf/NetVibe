@@ -1,11 +1,12 @@
 services:
     laravel.test:
         build:
-            context: './vendor/laravel/sail/runtimes/8.4'
+            context: './vendor/laravel/sail/runtimes/8.5'
             dockerfile: Dockerfile
             args:
                 WWWGROUP: '${WWWGROUP}'
-        image: 'sail-8.4/app'
+                MYSQL_CLIENT: mariadb-client
+        image: 'sail-8.5/app'
         extra_hosts:
             - 'host.docker.internal:host-gateway'
         ports:
@@ -21,35 +22,32 @@ services:
         networks:
             - sail
         depends_on:
-            mysql:
+            mariadb:
                 condition: service_healthy
-    mysql:
-        image: 'mysql:8.4'
+    mariadb:
+        image: 'mariadb:11.4'
         environment:
             MYSQL_ROOT_PASSWORD: '${DB_PASSWORD}'
             MYSQL_ROOT_HOST: '%'
             MYSQL_DATABASE: '${DB_DATABASE}'
             MYSQL_USER: '${DB_USERNAME}'
             MYSQL_PASSWORD: '${DB_PASSWORD}'
-            MYSQL_ALLOW_EMPTY_PASSWORD: 1
-            MYSQL_EXTRA_OPTIONS: '${MYSQL_EXTRA_OPTIONS:-}'
         volumes:
-            - 'sail-mysql:/var/lib/mysql'
-            - './vendor/laravel/sail/database/mysql/create-testing-database.sh:/docker-entrypoint-initdb.d/10-create-testing-database.sh'
-            - './docker/mysql/create-test-user.sql:/docker-entrypoint-initdb.d/20-create-test-user.sql:ro'
+            - 'sail-mariadb:/var/lib/mysql'
+            - './docker/mariadb/create-test-user.sql:/docker-entrypoint-initdb.d/20-create-test-user.sql:ro'
         networks:
             - sail
         healthcheck:
             test:
                 - CMD
-                - mysqladmin
-                - ping
-                - '-p${DB_PASSWORD}'
+                - healthcheck.sh
+                - --connect
+                - --innodb_initialized
             retries: 3
             timeout: 5s
 networks:
     sail:
         driver: bridge
 volumes:
-    sail-mysql:
+    sail-mariadb:
         driver: local

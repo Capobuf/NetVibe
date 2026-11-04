@@ -115,17 +115,18 @@ class UnifiIpamTest extends TestCase
         $local = $site->devices()->create(['name' => 'AP', ...$catalog]);
         $parent = $site->devices()->create(['name' => 'Switch', ...$catalog]);
         $foreign = $other->devices()->create(['name' => 'Altro switch', ...$catalog]);
-        $source->unifiDevices()->create(['external_id' => 'switch', 'device_id' => $parent->id, 'status' => 'linked', 'present' => true,
+        $switchId = (string) Str::uuid();
+        $source->unifiDevices()->create(['external_id' => $switchId, 'device_id' => $parent->id, 'status' => 'linked', 'present' => true,
             'observed' => ['name' => 'Switch'], 'synced_at' => now()]);
-        $ap = $source->unifiDevices()->create(['external_id' => 'ap', 'device_id' => $local->id, 'status' => 'linked', 'present' => true,
-            'observed' => ['name' => 'AP', 'uplink_device_id' => 'switch'], 'synced_at' => now()]);
+        $ap = $source->unifiDevices()->create(['external_id' => (string) Str::uuid(), 'device_id' => $local->id, 'status' => 'linked', 'present' => true,
+            'observed' => ['name' => 'AP', 'uplink_device_id' => $switchId], 'synced_at' => now()]);
         $edges = (new Topology)->forSite($site)['edges'];
         $this->assertCount(1, $edges);
         $this->assertSame('logical', $edges[0]['kind']);
         $this->assertNull($edges[0]['a']);
         $this->assertNull($edges[0]['suggestion']);
         $this->assertDatabaseCount('cables', 0);
-        UnifiDevice::where('external_id', 'switch')->update(['device_id' => $foreign->id]);
+        UnifiDevice::where('external_id', $switchId)->update(['device_id' => $foreign->id]);
         $this->assertSame([], (new Topology)->forSite($site)['edges']);
 
         $observation = UnifiObservation::create(['unifi_site_id' => $source->id, 'site_id' => $site->id,

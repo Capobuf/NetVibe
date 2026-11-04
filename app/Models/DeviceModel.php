@@ -22,6 +22,11 @@ class DeviceModel extends Model
         return ['panel' => 'array', 'assets' => 'array', 'panel_revision' => 'integer', 'rack_height_u' => 'integer', 'without_rack_ears' => 'boolean'];
     }
 
+    public function isInfrastructure(): bool
+    {
+        return $this->modelType?->is_infrastructure ?? false;
+    }
+
     /** @return BelongsTo<Manufacturer, $this> */
     public function manufacturer(): BelongsTo
     {

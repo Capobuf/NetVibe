@@ -279,4 +279,38 @@ class TopologyTest extends TestCase
         $this->get(route('companies.sites.topology.index', [$this->site->company, $foreign]))->assertNotFound();
         $this->get(route('companies.sites.topology.index', [$foreign->company, $foreign]))->assertForbidden();
     }
+
+    public function test_indirect_summaries_preserve_counts_latest_sighting_and_generation_rules(): void
+    {
+        $generation = $this->local->mikrotikConnection->source_generation;
+        $previous = (string) Str::uuid();
+        foreach ([
+            [$this->local, $generation, '/ip/arp', '2026-01-01 10:00:00'],
+            [$this->local, $generation, '/ip/arp', '2026-01-01 11:00:00'],
+            [$this->local, $previous, '/ip/arp', '2026-01-01 12:00:00'],
+            [$this->local, $generation, '/ip/dhcp-server/lease', '2026-01-01 09:00:00'],
+            [$this->remote, $this->remote->mikrotikConnection->source_generation, '/interface/bridge/host', '2026-01-01 08:00:00'],
+        ] as $index => [$device, $sourceGeneration, $menu, $seen]) {
+            $source = $device->mikrotikSources()->make([
+                'generation' => $sourceGeneration, 'kind' => 'observation', 'source_key' => 'indirect:'.$index,
+                'state' => 'current', 'seen_at' => $seen, 'anchor' => [], 'data' => ['menu' => $menu],
+            ]);
+            $source->site_id = $this->site->id;
+            $source->save();
+        }
+        $url = route('companies.sites.topology.index', [$this->site->company, $this->site]);
+
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->has('topology.edges', 0)->has('topology.nodes.0.indirect', 2)
+            ->where('topology.nodes.0.indirect.0.menu', '/ip/arp')
+            ->where('topology.nodes.0.indirect.0.count', 2)
+            ->where('topology.nodes.0.indirect.0.seen_at', '2026-01-01T11:00:00+00:00')
+            ->where('topology.nodes.0.indirect.1.count', 1)
+            ->has('topology.nodes.1.indirect', 1)->where('topology.nodes.1.indirect.0.count', 1));
+
+        $this->local->mikrotikConnection()->update(['activated_at' => null]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('topology.nodes.0.indirect.0.count', 3)
+            ->where('topology.nodes.0.indirect.0.seen_at', '2026-01-01T12:00:00+00:00'));
+    }
 }

@@ -46,6 +46,7 @@ import {
     interfaceName,
     interfaceMac,
     type Device,
+    type DeviceView,
     type DeviceInterface,
     type Manufacturer,
     type MikrotikInterface,
@@ -66,6 +67,7 @@ type LinkedIp = AvailableIp & {
 };
 type InterfaceRow = DeviceInterface | Port;
 type Props = {
+    view: DeviceView;
     company: Company;
     site: Site;
     device: Device & { unifi?: UnifiDeviceDetail | null };
@@ -85,6 +87,7 @@ type Props = {
     tags: Tag[];
 };
 export default function DeviceShow({
+    view,
     company,
     site,
     device,
@@ -237,7 +240,7 @@ export default function DeviceShow({
             <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
                 <div>
                     <Button variant="ghost" size="sm" asChild>
-                        <Link href={index(route)}>
+                        <Link href={index(route, { query: { view } })}>
                             <ArrowLeft data-icon="inline-start" />
                             Dispositivi
                         </Link>
@@ -283,6 +286,7 @@ export default function DeviceShow({
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <DeviceForm
+                                view={view}
                                 company={company.id}
                                 site={site.id}
                                 manufacturers={manufacturers}
@@ -813,19 +817,25 @@ export default function DeviceShow({
         </>
     );
 }
-DeviceShow.layout = ({ company, site, device }: Props) => ({
+DeviceShow.layout = ({ company, site, device, view }: Props) => ({
     breadcrumbs: [
         {
             title: 'Dispositivi',
-            href: index({ company: company.id, site: site.id }),
+            href: index(
+                { company: company.id, site: site.id },
+                { query: { view } },
+            ),
         },
         {
             title: device.name,
-            href: show({
-                company: company.id,
-                site: site.id,
-                device: device.id,
-            }),
+            href: show(
+                {
+                    company: company.id,
+                    site: site.id,
+                    device: device.id,
+                },
+                { query: { view } },
+            ),
         },
     ],
 });

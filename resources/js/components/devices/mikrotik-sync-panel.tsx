@@ -8,6 +8,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ArrowLeft, Cable, RefreshCw } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
+import { MikrotikSourcesLoader } from '@/components/devices/mikrotik-sources-loader';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
 import { DeviceTable } from '@/components/devices/device-table';
 import {
@@ -59,9 +60,10 @@ export function MikrotikSyncPanel({
     verifying: boolean;
     route: { company: number; site: number; device: number };
 }) {
-    const { mikrotikSources: sources = [] } = usePage<{
-        mikrotikSources: Source[];
+    const { mikrotikSources } = usePage<{
+        mikrotikSources?: Source[];
     }>().props;
+    const sources = mikrotikSources ?? [];
     const [allOpen, setAllOpen] = useState(false);
     const detailTitle = useRef<HTMLHeadingElement>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -78,7 +80,7 @@ export function MikrotikSyncPanel({
     );
     const active = Boolean(connection?.activated_at);
     const verified = connection?.check_status === 'ok';
-    const busy = disabled || form.processing;
+    const busy = disabled || form.processing || mikrotikSources === undefined;
     const select = (source: Source) => {
         setSelectedId(source.id);
         setConfirmed(false);
@@ -95,6 +97,7 @@ export function MikrotikSyncPanel({
     };
     return (
         <>
+            <MikrotikSourcesLoader />
             {connection ? (
                 <Card aria-busy={verifying || form.processing}>
                     <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">

@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 
 class SnipeItSyncTest extends TestCase
@@ -50,6 +51,33 @@ class SnipeItSyncTest extends TestCase
         SnipeItCompanyLink::create(['company_id' => $this->company->id, 'connection_id' => $this->connection->id,
             'external_company_id' => 7, 'external_company_name' => 'Alfa', 'confirmed_at' => now()]);
         Http::preventStrayRequests();
+    }
+
+    #[TestWith([true])]
+    #[TestWith([false])]
+    public function test_local_classification_can_be_edited_by_company_users_and_survives_sync(bool $override): void
+    {
+        $this->activate();
+        $device = Device::sole();
+        $type = ModelType::create(['name' => 'Imported type', 'is_infrastructure' => ! $override]);
+        $device->model->update(['model_type_id' => $type->id]);
+        $member = User::factory()->create();
+        $this->company->users()->attach($member);
+        $url = route('companies.sites.devices.classification', [$this->company, $this->site, $device]);
+        $this->actingAs($member)->patch($url, ['infrastructure_override' => $override, 'name' => 'Local rename'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('Device 1', $device->fresh()->name);
+        $this->assertSame($override, $device->fresh()->isInfrastructure());
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $this->server([$this->asset(1, ['name' => 'Upstream rename', 'serial' => 'Updated serial'])]);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertSame('Upstream rename', $device->fresh()->name);
+        $this->assertSame('Updated serial', $device->fresh()->serial_number);
+        $this->assertSame($override, $device->fresh()->infrastructure_override);
+        $this->assertSame($override, $device->fresh()->isInfrastructure());
+        $this->actingAs($member)->patch($url, ['infrastructure_override' => null])->assertSessionHasNoErrors();
+        $this->assertSame(! $override, $device->fresh()->isInfrastructure());
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
     }
 
     public function test_asset_images_are_synced_and_cannot_be_overridden_locally(): void

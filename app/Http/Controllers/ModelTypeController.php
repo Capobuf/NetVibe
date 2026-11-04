@@ -26,7 +26,7 @@ class ModelTypeController extends Controller
 
     private function save(Request $request, ?ModelType $modelType = null): JsonResponse|RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:255', Rule::unique('model_types')->ignore($modelType)]], [], ['name' => 'nome']);
+        $data = $request->validate(['is_infrastructure' => ['sometimes', 'boolean'], 'name' => ['required', 'string', 'max:255', Rule::unique('model_types')->ignore($modelType)]], [], ['name' => 'nome', 'is_infrastructure' => 'classificazione predefinita']);
         $creating = $modelType === null;
         try {
             if ($modelType) {

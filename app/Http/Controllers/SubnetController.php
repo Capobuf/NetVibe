@@ -20,6 +20,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -105,7 +106,15 @@ class SubnetController extends Controller
             'query' => [...compact('search', 'sort', 'direction'), 'hide_free' => (int) $hideFree],
             'addressCounts' => $subnet->addressCounts(),
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id']),
+            'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id'])
+                ->each(function ($device) {
+                    if ($device->model?->panel) {
+                        // IP assignment only uses connector IDs and labels, not the panel drawing.
+                        $device->model->panel = ['faces' => collect($device->model->panel['faces'])
+                            ->map(fn ($face) => ['ports' => array_map(fn ($port) => Arr::only($port, ['id', 'label']), $face['ports'])])
+                            ->all()];
+                    }
+                }),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
             'ipAddresses' => $ipAddresses,
             'initialIpAddress' => $selected ? [

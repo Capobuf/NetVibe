@@ -26,7 +26,7 @@ class RackController extends Controller
     {
         return Inertia::render('racks/index', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
-            'racks' => $site->racks()->withCount(['items', 'items as devices_count' => fn ($q) => $q->whereNotNull('device_id')])->orderBy('name')->get(),
+            'racks' => $site->racks()->with('items')->withCount(['items', 'items as devices_count' => fn ($q) => $q->whereNotNull('device_id')])->orderBy('name')->get(),
         ]);
     }
 

@@ -184,6 +184,11 @@ class TopologyTest extends TestCase
         ]);
         $vlan->site_id = $this->site->id;
         $vlan->save();
+        $bridgeVlan = $vlan->replicate();
+        $bridgeVlan->fill([
+            'source_key' => 'interface/bridge/vlan:*1',
+            'data' => ['menu' => '/interface/bridge/vlan', 'name' => 'ether1', 'tag' => 100],
+        ])->save();
         $source = $this->neighbor($this->local, $this->remote, ['interface' => 'Management']);
         $url = route('companies.sites.topology.index', [$this->site->company, $this->site]);
 
@@ -199,7 +204,7 @@ class TopologyTest extends TestCase
             'lldp' => [...$source->data['lldp'], 'lldp-port-id' => 'Management'],
         ]]);
         $this->get($url)->assertInertia(fn (Assert $page) => $page->has('topology.edges', 0));
-        $this->assertDatabaseCount('mikrotik_sources', 2);
+        $this->assertDatabaseCount('mikrotik_sources', 3);
     }
 
     public function test_optional_lldp_failure_keeps_details_but_cannot_offer_a_fresh_suggestion(): void

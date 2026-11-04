@@ -20,7 +20,8 @@ class Topology
         $inGeneration = fn ($source) => ! $devices[$source->device_id]->mikrotikConnection?->activated_at
             || $source->generation === $devices[$source->device_id]->mikrotikConnection->source_generation;
         $sources = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
-            ->where(fn ($query) => $query->whereIn('kind', ['interface', 'vlan'])
+            ->where(fn ($query) => $query->where('kind', 'interface')
+                ->orWhere(fn ($query) => $query->where('kind', 'vlan')->where('data->menu', '/interface/vlan'))
                 ->orWhere(fn ($query) => $query->where('kind', 'observation')->where('data->menu', '/ip/neighbor')))
             ->orderByDesc('seen_at')->orderByDesc('id')->get()->filter($inGeneration);
         $interfaces = $sources->where('kind', 'interface')->groupBy('device_id');

@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { useId, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -119,64 +119,68 @@ function TopologyView({ company, site, topology, racks }: Props) {
     const diagram = useRef<HTMLElement>(null);
     const popupTitleId = useId();
     const byId = new Map(topology.nodes.map((node) => [node.id, node]));
-    const matchingRack = new Set(
-        topology.nodes
-            .filter(
-                (node) =>
-                    rack === 'all' ||
-                    (rack === 'none'
-                        ? node.device_id && !node.rack
-                        : node.rack?.id === Number(rack)),
-            )
-            .map((node) => node.id),
-    );
-    const matchingEdges = topology.edges.filter(
-        (edge) =>
-            (kind === 'all' || edge.kind === kind) &&
-            (matchingRack.has(edge.source) || matchingRack.has(edge.target)),
-    );
-    const visibleIds = new Set([
-        ...matchingRack,
-        ...matchingEdges.flatMap((edge) => [edge.source, edge.target]),
-    ]);
-    const term = search.trim().toLocaleLowerCase();
-    const searchIds = new Set(
-        topology.nodes
-            .filter(
-                (node) =>
-                    visibleIds.has(node.id) &&
-                    [
-                        node.label,
-                        node.model,
-                        node.identity,
-                        node.mac,
-                        node.rack?.name,
-                    ]
-                        .join(' ')
-                        .toLocaleLowerCase()
-                        .includes(term),
-            )
-            .map((node) => node.id),
-    );
-    const edges = term
-        ? matchingEdges.filter(
-              (edge) =>
-                  searchIds.has(edge.source) || searchIds.has(edge.target),
-          )
-        : matchingEdges;
-    const shown = term
-        ? new Set([
-              ...searchIds,
-              ...edges.flatMap((edge) => [edge.source, edge.target]),
-          ])
-        : visibleIds;
-    const nodes = topology.nodes.filter((node) => shown.has(node.id));
-    const visibleRacks = racks.filter(
-        (item) =>
-            (rack === 'all' && !term) ||
-            String(item.id) === rack ||
-            nodes.some((node) => node.rack?.id === item.id),
-    );
+    // Stable filter results preserve the canvas layout caches during zoom and selection.
+    const { nodes, edges, visibleRacks } = useMemo(() => {
+        const matchingRack = new Set(
+            topology.nodes
+                .filter(
+                    (node) =>
+                        rack === 'all' ||
+                        (rack === 'none'
+                            ? node.device_id && !node.rack
+                            : node.rack?.id === Number(rack)),
+                )
+                .map((node) => node.id),
+        );
+        const matchingEdges = topology.edges.filter(
+            (edge) =>
+                (kind === 'all' || edge.kind === kind) &&
+                (matchingRack.has(edge.source) || matchingRack.has(edge.target)),
+        );
+        const visibleIds = new Set([
+            ...matchingRack,
+            ...matchingEdges.flatMap((edge) => [edge.source, edge.target]),
+        ]);
+        const term = search.trim().toLocaleLowerCase();
+        const searchIds = new Set(
+            topology.nodes
+                .filter(
+                    (node) =>
+                        visibleIds.has(node.id) &&
+                        [
+                            node.label,
+                            node.model,
+                            node.identity,
+                            node.mac,
+                            node.rack?.name,
+                        ]
+                            .join(' ')
+                            .toLocaleLowerCase()
+                            .includes(term),
+                )
+                .map((node) => node.id),
+        );
+        const edges = term
+            ? matchingEdges.filter(
+                  (edge) =>
+                      searchIds.has(edge.source) || searchIds.has(edge.target),
+              )
+            : matchingEdges;
+        const shown = term
+            ? new Set([
+                  ...searchIds,
+                  ...edges.flatMap((edge) => [edge.source, edge.target]),
+              ])
+            : visibleIds;
+        const nodes = topology.nodes.filter((node) => shown.has(node.id));
+        const visibleRacks = racks.filter(
+            (item) =>
+                (rack === 'all' && !term) ||
+                String(item.id) === rack ||
+                nodes.some((node) => node.rack?.id === item.id),
+        );
+        return { nodes, edges, visibleRacks };
+    }, [topology.nodes, topology.edges, racks, rack, kind, search]);
     const selectedNode =
         selection?.kind === 'node'
             ? nodes.find((node) => node.id === selection.id)

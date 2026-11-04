@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
+use App\Models\SnipeItConnection;
+use App\Models\SnipeItSync;
+use App\Models\UnifiConnection;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +19,74 @@ use Tests\TestCase;
 class DevicesTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_index_keeps_list_and_creation_data_without_detail_fields_or_other_sites_devices(): void
+    {
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $type = ModelType::create(['name' => 'Switch', 'is_infrastructure' => true]);
+        $model = $vendor->models()->create(['name' => 'Core', 'model_type_id' => $type->id, 'panel' => $this->panel()]);
+        $device = $site->devices()->create([
+            'name' => 'A switch', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id,
+            'serial_number' => 'SN-001', 'asset_tag' => 'ASSET-001', 'notes' => 'Detail only',
+        ]);
+        $device->forceFill(['image_path' => 'devices/local.png'])->save();
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        foreach (['10.0.0.1', '10.0.0.2'] as $ip) {
+            $subnet->ipAddresses()->create(['address' => ip2long($ip), 'device_id' => $device->id]);
+        }
+        $otherSite = $company->sites()->create(['name' => 'Milano']);
+        $otherSite->devices()->create(['name' => 'Other site', 'manufacturer_id' => $vendor->id]);
+        $connection = UnifiConnection::create([
+            'name' => 'Controller', 'mode' => 'direct', 'server_url' => 'https://unifi.example.test',
+            'api_key' => 'test-key', 'revision' => '00000000-0000-0000-0000-000000000001', 'enabled' => true,
+        ]);
+        $source = $connection->unifiSites()->create([
+            'console_id' => 'direct', 'console_name' => 'Controller',
+            'external_site_id' => '00000000-0000-0000-0000-000000000002', 'name' => 'Source', 'version' => '10.1.84',
+            'available' => true, 'discovered_at' => now(), 'site_id' => $site->id, 'sync_status' => 'ok',
+        ]);
+        $source->unifiDevices()->create([
+            'external_id' => '00000000-0000-0000-0000-000000000003', 'device_id' => $device->id,
+            'observed' => ['state' => 'ONLINE'], 'present' => true, 'synced_at' => '2026-11-04 12:00:00',
+        ]);
+        $imported = $site->devices()->create([
+            'name' => 'B imported', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id,
+            'infrastructure_override' => false,
+        ]);
+        $snipe = SnipeItConnection::create(['server_url' => 'https://snipe.example.test', 'api_key' => 'test-key']);
+        $sync = SnipeItSync::create(['company_id' => $company->id, 'connection_id' => $snipe->id, 'external_company_id' => 1]);
+        $sync->assets()->create(['external_id' => 1, 'device_id' => $imported->id,
+            'snapshot' => ['image' => 'https://snipe.example.test/image.png']]);
+
+        $url = route('companies.sites.devices.index', [$company, $site]);
+        $this->actingAs($user)->get($url.'?view=all')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('devices/index')->where('view', 'all')->has('devices', 2)
+            ->where('devices.0.id', $device->id)->where('devices.0.name', 'A switch')
+            ->where('devices.0.manufacturer_id', $vendor->id)->where('devices.0.manufacturer.name', 'Vendor')
+            ->where('devices.0.model.id', $model->id)->where('devices.0.model.name', 'Core')
+            ->where('devices.0.model.model_type_id', $type->id)->where('devices.0.model.model_type.name', 'Switch')
+            ->where('devices.0.is_infrastructure', true)->where('devices.0.mikrotik_connection_exists', false)
+            ->where('devices.0.ips', ['10.0.0.1', '10.0.0.2'])
+            ->where('devices.0.image_url', route('companies.sites.devices.image', [$company, $site, $device]))
+            ->where('devices.0.unifi.state', 'ONLINE')->where('devices.0.unifi.stale', false)
+            ->where('devices.0.unifi.synced_at', '2026-11-04T12:00:00.000000Z')
+            ->missing('devices.0.ip_addresses')->missing('devices.0.notes')->missing('devices.0.serial_number')
+            ->missing('devices.0.asset_tag')->missing('devices.0.created_at')->missing('devices.0.updated_at')
+            ->missing('devices.0.image_path')->missing('devices.0.unifi_device')->missing('devices.0.model.panel')
+            ->where('devices.1.id', $imported->id)->where('devices.1.is_infrastructure', false)
+            ->where('devices.1.ips', [])->where('devices.1.unifi', null)
+            ->where('devices.1.image_url', 'https://snipe.example.test/image.png')->missing('devices.1.snipe_it_asset')
+            ->where('manufacturers.0.models.0.id', $model->id)->where('manufacturers.0.models.0.is_infrastructure', true)
+            ->where('types.0.id', $type->id));
+
+        $connection->update(['enabled' => false]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'infrastructure')->has('devices', 2)->where('devices.0.unifi.stale', true));
+    }
 
     public function test_infrastructure_classification_inherits_live_defaults_and_preserves_explicit_choices(): void
     {

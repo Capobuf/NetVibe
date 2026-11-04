@@ -40,6 +40,11 @@ class RacksTest extends TestCase
             $this->item('d', 'drawer', 6, ['height' => 2]),
         ];
         $this->put($url, [...$settings, 'revision' => 0, 'items' => $items])->assertSessionHasNoErrors();
+        $this->get(route('companies.sites.racks.index', [$company, $site]))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('racks/index')->has('racks', 1)->has('racks.0.items', 4)
+            ->where('racks.0.devices_count', 2)->where('racks.0.items.0.position', 10)
+            ->where('racks.0.items.2.shelf_key', str_repeat('b', 32))
+            ->where('racks.0.items.2.height', 4)->where('racks.0.items.2.width', 40)->where('racks.0.items.2.x', 30));
         $this->get(route('companies.sites.racks.show', [$company, $site, $rack]))->assertInertia(fn (Assert $page) => $page
             ->component('racks/show')->has('rack.items', 4)->where('rack.items.2.shelf_key', str_repeat('b', 32))
             ->where('rack.items.2.height', 4)->where('rack.items.2.width', 40));

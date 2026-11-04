@@ -2,6 +2,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Pencil, Printer } from 'lucide-react';
 import { DeviceTable } from '@/components/devices/device-table';
 import { RackForm, RackDelete } from '@/components/racks/rack-form';
+import { RackThumbnail } from '@/components/racks/rack-thumbnail';
 import { IconButton } from '@/components/icon-button';
 import { Button } from '@/components/ui/button';
 import TextLink from '@/components/text-link';
@@ -72,8 +73,12 @@ export default function Racks({ company, site, racks }: Props) {
                     value={value}
                     render={(rack, column) =>
                         column === 'name' ? (
-                            <TextLink href={show({ ...route, rack: rack.id })}>
-                                {rack.name}
+                            <TextLink
+                                href={show({ ...route, rack: rack.id })}
+                                className="inline-flex items-center gap-3"
+                            >
+                                <RackThumbnail rack={rack} />
+                                <span>{rack.name}</span>
                             </TextLink>
                         ) : (
                             value(rack, column)

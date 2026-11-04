@@ -49,8 +49,16 @@ class DeviceController extends Controller
             'snipePending' => $request->user()->is_superadmin
                 ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name,is_infrastructure', 'snipeItAsset:id,device_id,snapshot', 'ipAddresses:id,device_id,address', 'unifiDevice.unifiSite.unifiConnection'])->withExists('mikrotikConnection')->orderBy('name')->get()
-                ->map(fn ($device) => [...$device->makeHidden(['unifiDevice', 'snipeItAsset'])->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
+            'devices' => $site->devices()
+                ->select(['id', 'site_id', 'name', 'manufacturer_id', 'device_model_id', 'infrastructure_override', 'image_path'])
+                ->with([
+                    'manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name,is_infrastructure',
+                    'snipeItAsset:id,device_id,snapshot', 'ipAddresses:id,device_id,address',
+                    'unifiDevice:id,device_id,unifi_site_id,observed,present,synced_at',
+                    'unifiDevice.unifiSite:id,site_id,unifi_connection_id,available,sync_status',
+                    'unifiDevice.unifiSite.unifiConnection:id,enabled',
+                ])->withExists('mikrotikConnection')->orderBy('name')->get()
+                ->map(fn ($device) => [...$device->makeHidden(['unifiDevice', 'snipeItAsset', 'ipAddresses'])->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
                     'image_url' => $device->imageUrl($company->id),
                     'is_infrastructure' => $device->isInfrastructure(),
                     'unifi' => $device->unifiDevice && $device->unifiDevice->unifiSite->site_id === $site->id ? [

@@ -518,10 +518,12 @@ class DevicesTest extends TestCase
         $this->get(route('manufacturers.models.edit', [$target, $model]))->assertOk();
     }
 
-    public function test_interface_ip_choices_include_unassigned_device_ips_and_stay_within_the_site(): void
+    public function test_interface_ip_choices_load_on_demand_stay_within_the_site_and_refresh_after_assignment(): void
     {
-        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $this->actingAs($user);
         $site = $company->sites()->create(['name' => 'Torino']);
         $otherSite = $company->sites()->create(['name' => 'Milano']);
         $manufacturer = Manufacturer::create(['name' => 'Vendor']);
@@ -529,17 +531,41 @@ class DevicesTest extends TestCase
         $interface = $device->interfaces()->create(['name' => 'Management', 'kind' => 'logical']);
         $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
         $subnet->excludedRanges()->create(['start_address' => ip2long('10.0.0.100'), 'end_address' => ip2long('10.0.0.110')]);
-        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'description' => 'Available']);
+        $available = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'description' => 'Available']);
         $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'device_id' => $device->id]);
         $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.3'), 'device_id' => $device->id, 'device_interface_id' => $interface->id]);
         $otherSubnet = $otherSite->subnets()->create(Ipv4Cidr::parse('10.1.0.0/24'));
         $otherSubnet->ipAddresses()->create(['address' => ip2long('10.1.0.1'), 'description' => 'Other site']);
+        $secondSubnet = $site->subnets()->create(Ipv4Cidr::parse('10.2.0.0/24'));
+        $secondSubnet->ipAddresses()->create(['address' => ip2long('10.2.0.1'), 'description' => 'Second subnet']);
+        $otherCompany = Company::create(['name' => 'Beta']);
+        $foreignSite = $otherCompany->sites()->create(['name' => 'Roma']);
+        $foreignDevice = $foreignSite->devices()->create(['name' => 'Foreign', 'manufacturer_id' => $manufacturer->id]);
+        $foreignSite->subnets()->create(Ipv4Cidr::parse('10.3.0.0/24'))->ipAddresses()
+            ->create(['address' => ip2long('10.3.0.1'), 'description' => 'Other company']);
 
-        $this->get(route('companies.sites.devices.show', [$company, $site, $device]))
+        $url = route('companies.sites.devices.show', [$company, $site, $device, 'interface' => $interface->id]);
+        $this->get($url)
             ->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->has('availableIps', 2)->where('availableIps.0.ip', '10.0.0.1')->where('availableIps.1.ip', '10.0.0.2')
-            ->has('subnets', 1)->where('subnets.0.id', $subnet->id)
-            ->where('subnets.0.excludedRanges.0.start_ip', '10.0.0.100'));
+            ->missing('availableIps')->where('initialInterfaceId', $interface->id)
+            ->has('subnets', 2)->where('subnets.0.id', $subnet->id)
+            ->where('subnets.0.excludedRanges.0.start_ip', '10.0.0.100')
+            ->reloadOnly('availableIps', fn (Assert $reload) => $reload
+                ->has('availableIps', 3)->where('availableIps.0.ip', '10.0.0.1')
+                ->where('availableIps.1.ip', '10.0.0.2')->where('availableIps.2.ip', '10.2.0.1')));
+
+        $this->from($url)->post(route('companies.sites.devices.ip-addresses.store', [$company, $site, $device]), [
+            'ip_address_id' => $available->id, 'device_interface_id' => $interface->id,
+        ])->assertRedirect($url)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ip_addresses', [
+            'id' => $available->id, 'device_id' => $device->id, 'device_interface_id' => $interface->id,
+        ]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->missing('availableIps')->reloadOnly('availableIps', fn (Assert $reload) => $reload
+            ->has('availableIps', 2)->where('availableIps.0.ip', '10.0.0.2')->where('availableIps.1.ip', '10.2.0.1')));
+        $this->get(route('companies.sites.devices.show', [$otherCompany, $foreignSite, $foreignDevice]), [
+            'X-Inertia-Partial-Component' => 'devices/show', 'X-Inertia-Partial-Data' => 'availableIps',
+        ])->assertForbidden();
     }
 
     public function test_mac_changes_are_atomic_confirmed_and_shared_in_both_directions(): void

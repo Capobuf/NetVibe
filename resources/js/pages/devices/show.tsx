@@ -81,7 +81,7 @@ type Props = {
     assetUrls: Record<string, string>;
     initialInterfaceId: number | null;
     ips: LinkedIp[];
-    availableIps: AvailableIp[];
+    availableIps?: AvailableIp[];
     subnets: (Subnet & { excludedRanges: ExcludedRange[] })[];
     statuses: IpStatus[];
     tags: Tag[];

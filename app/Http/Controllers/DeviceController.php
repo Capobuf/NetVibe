@@ -121,10 +121,10 @@ class DeviceController extends Controller
             'manufacturers' => $this->catalog(),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'ips' => $device->ipAddresses->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)]),
-            'availableIps' => IpAddress::query()->whereIn('subnet_id', $site->subnets()->visible()->select('id'))
+            'availableIps' => Inertia::optional(fn () => IpAddress::query()->whereIn('subnet_id', $site->subnets()->visible()->select('id'))
                 ->where(fn ($query) => $query->whereNull('device_id')->orWhere(fn ($query) => $query->where('device_id', $device->id)->whereNull('device_interface_id')))
                 ->with('subnet:id,cidr')->orderBy('address')->get()
-                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)]),
+                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)])),
             'subnets' => $site->subnets()->visible()->with('excludedRanges')->orderBy('network_address')->get(['id', 'cidr', 'name'])
                 ->map(fn ($subnet) => [...$subnet->only('id', 'cidr', 'name'),
                     'excludedRanges' => $subnet->excludedRanges->map(fn ($range) => [

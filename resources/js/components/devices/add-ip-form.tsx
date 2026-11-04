@@ -1,11 +1,13 @@
 import { SaveButton } from '@/components/save-button';
 import { MacConfirmation } from '@/components/devices/mac-confirmation';
-import { Form } from '@inertiajs/react';
+import { Form, WhenVisible } from '@inertiajs/react';
 import { useId, useState } from 'react';
 import { Plus } from 'lucide-react';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import { ipv4Number, ipv4RangeSummary } from '@/lib/ipv4';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
 import {
     Dialog,
     DialogContent,
@@ -53,7 +55,7 @@ export function AddIpForm({
     site: number;
     device: Device;
     ports: Port[];
-    ips: AvailableIp[];
+    ips?: AvailableIp[];
     initialInterface?: number;
     subnets: (Subnet & { excludedRanges: ExcludedRange[] })[];
     statuses: IpStatus[];
@@ -62,6 +64,7 @@ export function AddIpForm({
     const interfaces = device.interfaces;
     const id = useId();
     const [open, setOpen] = useState(false);
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [creating, setCreating] = useState(false);
     const [subnetId, setSubnetId] = useState('');
     const subnet = subnets.find((item) => String(item.id) === subnetId);
@@ -71,14 +74,16 @@ export function AddIpForm({
         String(initialInterface ?? 'none'),
     );
     const query = search.trim();
-    const filtered = ips.filter((ip) =>
+    const filtered = (ips ?? []).filter((ip) =>
         [ip.ip, ip.hostname, ip.description, ip.subnet.cidr]
             .join(' ')
             .toLowerCase()
             .includes(query.toLowerCase()),
     );
     const canCreate =
-        ipv4Number(query) !== null && !ips.some((ip) => ip.ip === query);
+        ips !== undefined &&
+        ipv4Number(query) !== null &&
+        !ips.some((ip) => ip.ip === query);
     const matchingSubnets = canCreate
         ? subnets.filter(
               (item) => ipv4RangeSummary(item.cidr, query, query) !== null,
@@ -125,7 +130,41 @@ export function AddIpForm({
                             : 'Aggiungi IP'}
                     </DialogTitle>
                 </DialogHeader>
-                {!selection && !creating ? (
+                {ips === undefined ? (
+                    <WhenVisible
+                        key={loadAttempt}
+                        data="availableIps"
+                        params={{
+                            onHttpException: () => false,
+                            onNetworkError: () => false,
+                        }}
+                        fallback={
+                            <div
+                                role="status"
+                                className="flex items-center gap-2 text-sm"
+                            >
+                                <Spinner aria-hidden="true" />
+                                Caricamento IP…
+                            </div>
+                        }
+                    >
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                Impossibile caricare gli IP.
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                        setLoadAttempt((attempt) => attempt + 1)
+                                    }
+                                >
+                                    Riprova
+                                </Button>
+                            </AlertDescription>
+                        </Alert>
+                    </WhenVisible>
+                ) : !selection && !creating ? (
                     <div className="flex flex-col gap-3">
                         <Field>
                             <FieldLabel htmlFor={`${id}-ip-search`}>

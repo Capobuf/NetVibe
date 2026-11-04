@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\IpStatus;
+use App\Models\Manufacturer;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,6 +14,39 @@ use Tests\TestCase;
 class IpAddressesTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_subnet_assignment_keeps_both_faces_and_interfaces_without_panel_drawing_data(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $panel = ['faces' => [
+            'front' => ['ports' => [['id' => 'front-port', 'label' => 'LAN', 'x' => 20]], 'image' => ['assetId' => 'front-image']],
+            'rear' => ['ports' => [['id' => 'rear-port', 'label' => 'WAN', 'x' => 40]], 'blocks' => [['label' => 'Drawing']]],
+        ]];
+        $model = $vendor->models()->create(['name' => 'Router', 'panel' => $panel]);
+        $panel = $model->fresh()->panel;
+        $device = $site->devices()->create(['name' => 'A router', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id]);
+        $interface = $device->interfaces()->create(['connector_id' => 'rear-port', 'kind' => 'physical', 'mac_address' => 'AA:BB:CC:DD:EE:FF']);
+        $site->devices()->create(['name' => 'B without panel', 'manufacturer_id' => $vendor->id]);
+        $company->sites()->create(['name' => 'Other site'])->devices()->create(['name' => 'Foreign device', 'manufacturer_id' => $vendor->id]);
+
+        $this->get(route('companies.sites.subnets.show', [$company, $site, $subnet]))
+            ->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->has('devices', 2)
+            ->where('devices.0.id', $device->id)
+            ->where('devices.0.model.panel', ['faces' => [
+                'front' => ['ports' => [['id' => 'front-port', 'label' => 'LAN']]],
+                'rear' => ['ports' => [['id' => 'rear-port', 'label' => 'WAN']]],
+            ]])
+            ->where('devices.0.interfaces.0.id', $interface->id)
+            ->where('devices.0.interfaces.0.connector_id', 'rear-port')
+            ->where('devices.0.interfaces.0.mac_address', 'AA:BB:CC:DD:EE:FF')
+            ->where('devices.1.model', null));
+        $this->assertSame($panel, $model->fresh()->panel);
+    }
 
     public function test_ip_metadata_preserves_occupancy_and_keeps_tags_within_the_company(): void
     {

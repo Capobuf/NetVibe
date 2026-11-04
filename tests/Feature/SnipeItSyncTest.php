@@ -21,10 +21,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Inertia\Inertia;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
@@ -380,6 +382,74 @@ class SnipeItSyncTest extends TestCase
         $this->assertDatabaseCount('device_models', 2);
         $this->assertSame('Computer', DeviceModel::where('name', 'Desktop')->sole()->modelType->name);
         $this->assertSame('Monitor', DeviceModel::where('name', 'Display')->sole()->modelType->name);
+    }
+
+    public function test_page_candidates_keep_sql_matching_and_company_isolation_with_bounded_queries(): void
+    {
+        $this->activate();
+        $linked = SnipeItAsset::sole();
+        $linked->device->update(['name' => 'Candidate']);
+        $model = DeviceModel::sole();
+        $external = SnipeItModel::create([
+            'connection_id' => $this->connection->id, 'external_id' => 2,
+            'snapshot' => ['name' => 'model 1', 'manufacturer' => 'vendor', 'category' => null],
+        ]);
+        $otherSite = $this->company->sites()->create(['name' => 'Milano']);
+        $candidateIds = [];
+        foreach ([
+            ['name' => 'Candidate'],
+            ['name' => 'Serial match', 'serial_number' => 'SHARED-SERIAL'],
+            ['name' => 'Tag match', 'asset_tag' => 'SHARED-TAG'],
+        ] as $attributes) {
+            $candidateIds[] = $otherSite->devices()->create([
+                ...$attributes, 'manufacturer_id' => $model->manufacturer_id, 'device_model_id' => $model->id,
+            ])->id;
+        }
+        Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Foreign'])->devices()->create([
+            'name' => 'Candidate', 'manufacturer_id' => $model->manufacturer_id, 'serial_number' => 'SHARED-SERIAL', 'asset_tag' => 'SHARED-TAG',
+        ]);
+        foreach (range(2, 101) as $id) {
+            $linked->sync->assets()->create([
+                'external_id' => $id, 'snipe_it_model_id' => $external->id,
+                'snapshot' => [...$linked->snapshot, 'name' => 'candidate', 'serial' => 'shared-serial', 'asset_tag' => 'shared-tag'],
+                'state' => $id === 101 ? 'excluded' : 'pending', 'present' => true,
+            ]);
+        }
+
+        Http::swap((new Factory)->preventStrayRequests());
+        $headers = ['X-Inertia' => 'true', 'X-Inertia-Version' => Inertia::getVersion()];
+        $queryCounts = [];
+        foreach ([25, 100] as $size) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            try {
+                $response = $this->get($this->url('records').'?group=none&per_page='.$size, $headers);
+                $queryCounts[] = count(DB::getQueryLog());
+            } finally {
+                DB::disableQueryLog();
+            }
+            $response->assertOk()->assertJsonPath('props.rows.total', 100)
+                ->assertJsonCount($size, 'props.rows.data')
+                ->assertJsonPath('props.rows.data.0.state', 'linked')
+                ->assertJsonPath('props.rows.data.0.candidates', []);
+            foreach (array_slice($response->json('props.rows.data'), 1) as $row) {
+                $ids = array_column($row['candidates'], 'id');
+                sort($ids);
+                $this->assertSame($candidateIds, $ids);
+                $this->assertSame($model->id, $row['model_local']['id']);
+                $this->assertFalse($row['model_linked']);
+                $this->assertSame('review', $row['state']);
+                $this->assertSame('Possibile dispositivo esistente: verifica la corrispondenza.', $row['problem']);
+            }
+        }
+        $this->assertLessThanOrEqual($queryCounts[0] + 2, $queryCounts[1]);
+        $this->get($this->url('records').'?view=excluded', $headers)
+            ->assertOk()->assertJsonCount(1, 'props.rows.data')
+            ->assertJsonPath('props.rows.data.0.candidates', [])
+            ->assertJsonPath('props.rows.data.0.state', 'excluded')
+            ->assertJsonPath('props.rows.data.0.model_local.id', $model->id);
+        $this->assertDatabaseCount('devices', 5);
+        Http::assertNothingSent();
     }
 
     public function test_ethernet_creates_and_links_ips_only_in_the_device_site_without_importing_wifi(): void

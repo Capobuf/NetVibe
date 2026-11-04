@@ -1,10 +1,11 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowRight, Filter } from 'lucide-react';
 import { UnifiMark } from '@/components/unifi-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import { unifiState } from '@/components/unifi/types';
 import { ListPageHeader } from '@/components/list-page-header';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceImage } from '@/components/devices/device-image';
@@ -35,7 +36,11 @@ import { index, show } from '@/routes/companies/sites/devices';
 import { show as manufacturerShow } from '@/routes/manufacturers';
 import { edit as editModel } from '@/routes/manufacturers/models';
 import type { Company, Site } from '@/types/company';
-import { type Device, type Manufacturer } from '@/types/device';
+import {
+    type Device,
+    type DeviceView,
+    type Manufacturer,
+} from '@/types/device';
 
 type Props = {
     company: Company;
@@ -43,6 +48,7 @@ type Props = {
     devices: Device[];
     manufacturers: Manufacturer[];
     snipePending: number;
+    view: DeviceView;
 };
 export default function Devices(props: Props) {
     return <DeviceList key={props.site.id} {...props} />;
@@ -54,6 +60,7 @@ function DeviceList({
     devices,
     manufacturers,
     snipePending,
+    view,
 }: Props) {
     const { auth, companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
@@ -85,7 +92,11 @@ function DeviceList({
         (companyNavigation?.sites.length ?? 0) > 1
             ? `${company.name} · ${site.name}`
             : company.name;
-    const rows = devices.filter(
+    const viewDevices =
+        view === 'all'
+            ? devices
+            : devices.filter((device) => device.is_infrastructure);
+    const rows = viewDevices.filter(
         (d) =>
             (manufacturer === 'all' ||
                 d.manufacturer_id === Number(manufacturer)) &&
@@ -132,7 +143,11 @@ function DeviceList({
                 <ListPageHeader
                     title="Dispositivi"
                     actions={
-                        <DeviceForm {...route} manufacturers={manufacturers} />
+                        <DeviceForm
+                            {...route}
+                            manufacturers={manufacturers}
+                            view={view}
+                        />
                     }
                 />
                 {snipePending > 0 ? (
@@ -154,312 +169,386 @@ function DeviceList({
                         </AlertDescription>
                     </Alert>
                 ) : null}
-                <DeviceTable
-                    name="devices"
-                    variant="list"
-                    searchLabel="Cerca dispositivi"
-                    total={devices.length}
-                    filterKey={`${manufacturer}:${type}`}
-                    rows={rows}
-                    columns={[
-                        {
-                            id: 'image',
-                            label: 'Immagine',
-                            visible: true,
-                            sortable: false,
-                        },
-                        { id: 'name', label: 'Nome', visible: true },
-                        {
-                            id: 'manufacturer',
-                            label: 'Produttore',
-                            visible: true,
-                        },
-                        { id: 'model', label: 'Modello', visible: true },
-                        { id: 'type', label: 'Tipo', visible: true },
-                        { id: 'ips', label: 'IP documentati', visible: true },
-                        { id: 'source', label: 'Fonte', visible: false },
-                        {
-                            id: 'state',
-                            label: 'Stato osservato',
-                            visible: true,
-                        },
-                    ]}
-                    hiddenColumns={
-                        devices.some((device) => device.unifi)
-                            ? []
-                            : devices.some(
-                                    (device) =>
-                                        device.mikrotik_connection_exists,
-                                )
-                              ? ['state']
-                              : ['source', 'state']
-                    }
-                    value={value}
-                    render={(d, c) =>
-                        c === 'image' ? (
-                            <DeviceImage src={d.image_url} name={d.name} />
-                        ) : c === 'name' ? (
-                            <div className="flex items-center gap-2">
-                                {d.mikrotik_connection_exists ? (
-                                    <span
-                                        role="img"
-                                        aria-label="Integrazione MikroTik"
-                                    >
-                                        <MikrotikMark className="size-4 shrink-0" />
-                                    </span>
-                                ) : null}
-                                {d.unifi ? (
-                                    <span role="img" aria-label="Fonte UniFi">
-                                        <UnifiMark className="size-4 shrink-0" />
-                                    </span>
-                                ) : null}
-                                <TextLink
-                                    href={show({ ...route, device: d.id })}
-                                    className="whitespace-nowrap"
-                                >
-                                    {d.name}
-                                </TextLink>
-                            </div>
-                        ) : c === 'manufacturer' && auth.user.is_superadmin ? (
-                            <TextLink
-                                href={manufacturerShow(d.manufacturer_id)}
-                                className="whitespace-nowrap"
-                            >
-                                {d.manufacturer.name}
-                            </TextLink>
-                        ) : c === 'model' &&
-                          d.model &&
-                          auth.user.is_superadmin ? (
-                            <TextLink
-                                href={editModel({
-                                    manufacturer: d.manufacturer_id,
-                                    model: d.model.id,
-                                })}
-                                className="whitespace-nowrap"
-                            >
-                                {d.model.name}
-                            </TextLink>
-                        ) : c === 'ips' ? (
-                            d.ips?.length ? (
-                                <div className="flex items-center gap-2 whitespace-nowrap tabular-nums">
-                                    <CopyValue
-                                        value={d.ips[0]}
-                                        className="-ml-2 whitespace-nowrap tabular-nums"
-                                    />
-                                    {d.ips.length > 1 ? (
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    aria-label={`Mostra tutti i ${d.ips.length} IP documentati di ${d.name}`}
-                                                >
-                                                    +{d.ips.length - 1}
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent
-                                                align="end"
-                                                className="flex flex-col gap-3"
-                                                aria-label={`IP documentati di ${d.name}`}
-                                            >
-                                                <PopoverHeader>
-                                                    <PopoverTitle>
-                                                        IP documentati (
-                                                        {d.ips.length})
-                                                    </PopoverTitle>
-                                                </PopoverHeader>
-                                                <ul className="max-h-64 overflow-y-auto">
-                                                    {d.ips.map((ip) => (
-                                                        <li key={ip}>
-                                                            <CopyValue
-                                                                value={ip}
-                                                                className="w-full tabular-nums"
-                                                            />
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </PopoverContent>
-                                        </Popover>
-                                    ) : null}
-                                </div>
-                            ) : (
-                                <span className="text-muted-foreground">—</span>
-                            )
-                        ) : c === 'type' && d.model?.model_type ? (
-                            <Badge variant="secondary">
-                                {d.model.model_type.name}
-                            </Badge>
-                        ) : (
-                            <span className="whitespace-nowrap">
-                                {value(d, c) || '—'}
-                            </span>
+                <Tabs
+                    value={view}
+                    onValueChange={(value) =>
+                        router.get(
+                            index.url(route, { query: { view: value } }),
+                            {},
+                            { preserveState: true, preserveScroll: true },
                         )
                     }
-                    actions={(d) => (
-                        <IconButton label={`Apri ${d.name}`} asChild>
-                            <Link href={show({ ...route, device: d.id })}>
-                                <ArrowRight />
-                            </Link>
-                        </IconButton>
-                    )}
-                    empty={
-                        devices.length
-                            ? 'Nessun dispositivo trovato'
-                            : 'Nessun dispositivo'
-                    }
-                    headerActions={
-                        manufacturerIds.size > 1 ||
-                        typeIds.size > 1 ||
-                        activeFilters > 0 ? (
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <IconButton
-                                        label={
-                                            activeFilters
-                                                ? `Filtri (${activeFilters} attivi)`
-                                                : 'Filtri'
-                                        }
-                                        variant={
-                                            activeFilters
-                                                ? 'secondary'
-                                                : 'outline'
-                                        }
-                                    >
-                                        <Filter />
-                                    </IconButton>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    align="end"
-                                    aria-labelledby="device-filters-title"
-                                    className="flex flex-col gap-4"
-                                >
-                                    <PopoverHeader>
-                                        <PopoverTitle id="device-filters-title">
-                                            Filtri
-                                        </PopoverTitle>
-                                    </PopoverHeader>
-                                    <FieldGroup>
-                                        {manufacturerIds.size > 1 ||
-                                        manufacturer !== 'all' ? (
-                                            <Field>
-                                                <FieldLabel htmlFor="device-manufacturer-filter">
-                                                    Produttore
-                                                </FieldLabel>
-                                                <Select
-                                                    value={manufacturer}
-                                                    onValueChange={
-                                                        setManufacturer
-                                                    }
-                                                >
-                                                    <SelectTrigger
-                                                        id="device-manufacturer-filter"
-                                                        className="w-full"
-                                                    >
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            <SelectItem value="all">
-                                                                Tutti i
-                                                                produttori
-                                                            </SelectItem>
-                                                            {manufacturers
-                                                                .filter(
-                                                                    (m) =>
-                                                                        manufacturerIds.has(
-                                                                            m.id,
-                                                                        ) ||
-                                                                        String(
-                                                                            m.id,
-                                                                        ) ===
-                                                                            manufacturer,
-                                                                )
-                                                                .map((m) => (
-                                                                    <SelectItem
-                                                                        key={
-                                                                            m.id
-                                                                        }
-                                                                        value={String(
-                                                                            m.id,
-                                                                        )}
-                                                                    >
-                                                                        {m.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-                                        ) : null}
-                                        {typeIds.size > 1 || type !== 'all' ? (
-                                            <Field>
-                                                <FieldLabel htmlFor="device-type-filter">
-                                                    Tipo
-                                                </FieldLabel>
-                                                <Select
-                                                    value={type}
-                                                    onValueChange={setType}
-                                                >
-                                                    <SelectTrigger
-                                                        id="device-type-filter"
-                                                        className="w-full"
-                                                    >
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectGroup>
-                                                            <SelectItem value="all">
-                                                                Tutti i tipi
-                                                            </SelectItem>
-                                                            {types.map(
-                                                                (type) => (
-                                                                    <SelectItem
-                                                                        key={
-                                                                            type.id
-                                                                        }
-                                                                        value={String(
-                                                                            type.id,
-                                                                        )}
-                                                                    >
-                                                                        {
-                                                                            type.name
-                                                                        }
-                                                                    </SelectItem>
-                                                                ),
-                                                            )}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                            </Field>
-                                        ) : null}
-                                        {manufacturer !== 'all' ||
-                                        type !== 'all' ? (
-                                            <Button
-                                                variant="ghost"
-                                                onClick={() => {
-                                                    setManufacturer('all');
-                                                    setType('all');
-                                                }}
+                    className="gap-4"
+                >
+                    <TabsList aria-label="Vista dispositivi">
+                        <TabsTrigger value="infrastructure">
+                            Infrastruttura
+                        </TabsTrigger>
+                        <TabsTrigger value="all">Tutti</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value={view} forceMount>
+                        <DeviceTable
+                            name="devices"
+                            variant="list"
+                            searchLabel="Cerca dispositivi"
+                            total={viewDevices.length}
+                            filterKey={`${view}:${manufacturer}:${type}`}
+                            rows={rows}
+                            columns={[
+                                {
+                                    id: 'image',
+                                    label: 'Immagine',
+                                    visible: true,
+                                    sortable: false,
+                                },
+                                { id: 'name', label: 'Nome', visible: true },
+                                {
+                                    id: 'manufacturer',
+                                    label: 'Produttore',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'model',
+                                    label: 'Modello',
+                                    visible: true,
+                                },
+                                { id: 'type', label: 'Tipo', visible: true },
+                                {
+                                    id: 'ips',
+                                    label: 'IP documentati',
+                                    visible: true,
+                                },
+                                {
+                                    id: 'source',
+                                    label: 'Fonte',
+                                    visible: false,
+                                },
+                                {
+                                    id: 'state',
+                                    label: 'Stato osservato',
+                                    visible: true,
+                                },
+                            ]}
+                            hiddenColumns={
+                                devices.some((device) => device.unifi)
+                                    ? []
+                                    : devices.some(
+                                            (device) =>
+                                                device.mikrotik_connection_exists,
+                                        )
+                                      ? ['state']
+                                      : ['source', 'state']
+                            }
+                            value={value}
+                            render={(d, c) =>
+                                c === 'image' ? (
+                                    <DeviceImage
+                                        src={d.image_url}
+                                        name={d.name}
+                                    />
+                                ) : c === 'name' ? (
+                                    <div className="flex items-center gap-2">
+                                        {d.mikrotik_connection_exists ? (
+                                            <span
+                                                role="img"
+                                                aria-label="Integrazione MikroTik"
                                             >
-                                                Azzera filtri
-                                            </Button>
+                                                <MikrotikMark className="size-4 shrink-0" />
+                                            </span>
                                         ) : null}
-                                    </FieldGroup>
-                                </PopoverContent>
-                            </Popover>
-                        ) : null
-                    }
-                />
+                                        {d.unifi ? (
+                                            <span
+                                                role="img"
+                                                aria-label="Fonte UniFi"
+                                            >
+                                                <UnifiMark className="size-4 shrink-0" />
+                                            </span>
+                                        ) : null}
+                                        <TextLink
+                                            href={show(
+                                                { ...route, device: d.id },
+                                                { query: { view } },
+                                            )}
+                                            className="whitespace-nowrap"
+                                        >
+                                            {d.name}
+                                        </TextLink>
+                                    </div>
+                                ) : c === 'manufacturer' &&
+                                  auth.user.is_superadmin ? (
+                                    <TextLink
+                                        href={manufacturerShow(
+                                            d.manufacturer_id,
+                                        )}
+                                        className="whitespace-nowrap"
+                                    >
+                                        {d.manufacturer.name}
+                                    </TextLink>
+                                ) : c === 'model' &&
+                                  d.model &&
+                                  auth.user.is_superadmin ? (
+                                    <TextLink
+                                        href={editModel({
+                                            manufacturer: d.manufacturer_id,
+                                            model: d.model.id,
+                                        })}
+                                        className="whitespace-nowrap"
+                                    >
+                                        {d.model.name}
+                                    </TextLink>
+                                ) : c === 'ips' ? (
+                                    d.ips?.length ? (
+                                        <div className="flex items-center gap-2 whitespace-nowrap tabular-nums">
+                                            <CopyValue
+                                                value={d.ips[0]}
+                                                className="-ml-2 whitespace-nowrap tabular-nums"
+                                            />
+                                            {d.ips.length > 1 ? (
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            type="button"
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            aria-label={`Mostra tutti i ${d.ips.length} IP documentati di ${d.name}`}
+                                                        >
+                                                            +{d.ips.length - 1}
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent
+                                                        align="end"
+                                                        className="flex flex-col gap-3"
+                                                        aria-label={`IP documentati di ${d.name}`}
+                                                    >
+                                                        <PopoverHeader>
+                                                            <PopoverTitle>
+                                                                IP documentati (
+                                                                {d.ips.length})
+                                                            </PopoverTitle>
+                                                        </PopoverHeader>
+                                                        <ul className="max-h-64 overflow-y-auto">
+                                                            {d.ips.map((ip) => (
+                                                                <li key={ip}>
+                                                                    <CopyValue
+                                                                        value={
+                                                                            ip
+                                                                        }
+                                                                        className="w-full tabular-nums"
+                                                                    />
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            ) : null}
+                                        </div>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            —
+                                        </span>
+                                    )
+                                ) : c === 'type' && d.model?.model_type ? (
+                                    <Badge variant="secondary">
+                                        {d.model.model_type.name}
+                                    </Badge>
+                                ) : (
+                                    <span className="whitespace-nowrap">
+                                        {value(d, c) || '—'}
+                                    </span>
+                                )
+                            }
+                            actions={(d) => (
+                                <IconButton label={`Apri ${d.name}`} asChild>
+                                    <Link
+                                        href={show(
+                                            { ...route, device: d.id },
+                                            { query: { view } },
+                                        )}
+                                    >
+                                        <ArrowRight />
+                                    </Link>
+                                </IconButton>
+                            )}
+                            empty={
+                                devices.length
+                                    ? 'Nessun dispositivo trovato'
+                                    : view === 'infrastructure'
+                                      ? 'Nessun dispositivo in Infrastruttura'
+                                      : 'Nessun dispositivo'
+                            }
+                            headerActions={
+                                manufacturerIds.size > 1 ||
+                                typeIds.size > 1 ||
+                                activeFilters > 0 ? (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <IconButton
+                                                label={
+                                                    activeFilters
+                                                        ? `Filtri (${activeFilters} attivi)`
+                                                        : 'Filtri'
+                                                }
+                                                variant={
+                                                    activeFilters
+                                                        ? 'secondary'
+                                                        : 'outline'
+                                                }
+                                            >
+                                                <Filter />
+                                            </IconButton>
+                                        </PopoverTrigger>
+                                        <PopoverContent
+                                            align="end"
+                                            aria-labelledby="device-filters-title"
+                                            className="flex flex-col gap-4"
+                                        >
+                                            <PopoverHeader>
+                                                <PopoverTitle id="device-filters-title">
+                                                    Filtri
+                                                </PopoverTitle>
+                                            </PopoverHeader>
+                                            <FieldGroup>
+                                                {manufacturerIds.size > 1 ||
+                                                manufacturer !== 'all' ? (
+                                                    <Field>
+                                                        <FieldLabel htmlFor="device-manufacturer-filter">
+                                                            Produttore
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={manufacturer}
+                                                            onValueChange={
+                                                                setManufacturer
+                                                            }
+                                                        >
+                                                            <SelectTrigger
+                                                                id="device-manufacturer-filter"
+                                                                className="w-full"
+                                                            >
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    <SelectItem value="all">
+                                                                        Tutti i
+                                                                        produttori
+                                                                    </SelectItem>
+                                                                    {manufacturers
+                                                                        .filter(
+                                                                            (
+                                                                                m,
+                                                                            ) =>
+                                                                                manufacturerIds.has(
+                                                                                    m.id,
+                                                                                ) ||
+                                                                                String(
+                                                                                    m.id,
+                                                                                ) ===
+                                                                                    manufacturer,
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                m,
+                                                                            ) => (
+                                                                                <SelectItem
+                                                                                    key={
+                                                                                        m.id
+                                                                                    }
+                                                                                    value={String(
+                                                                                        m.id,
+                                                                                    )}
+                                                                                >
+                                                                                    {
+                                                                                        m.name
+                                                                                    }
+                                                                                </SelectItem>
+                                                                            ),
+                                                                        )}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+                                                ) : null}
+                                                {typeIds.size > 1 ||
+                                                type !== 'all' ? (
+                                                    <Field>
+                                                        <FieldLabel htmlFor="device-type-filter">
+                                                            Tipo
+                                                        </FieldLabel>
+                                                        <Select
+                                                            value={type}
+                                                            onValueChange={
+                                                                setType
+                                                            }
+                                                        >
+                                                            <SelectTrigger
+                                                                id="device-type-filter"
+                                                                className="w-full"
+                                                            >
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectGroup>
+                                                                    <SelectItem value="all">
+                                                                        Tutti i
+                                                                        tipi
+                                                                    </SelectItem>
+                                                                    {types.map(
+                                                                        (
+                                                                            type,
+                                                                        ) => (
+                                                                            <SelectItem
+                                                                                key={
+                                                                                    type.id
+                                                                                }
+                                                                                value={String(
+                                                                                    type.id,
+                                                                                )}
+                                                                            >
+                                                                                {
+                                                                                    type.name
+                                                                                }
+                                                                            </SelectItem>
+                                                                        ),
+                                                                    )}
+                                                                </SelectGroup>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </Field>
+                                                ) : null}
+                                                {manufacturer !== 'all' ||
+                                                type !== 'all' ? (
+                                                    <Button
+                                                        variant="ghost"
+                                                        onClick={() => {
+                                                            setManufacturer(
+                                                                'all',
+                                                            );
+                                                            setType('all');
+                                                        }}
+                                                    >
+                                                        Azzera filtri
+                                                    </Button>
+                                                ) : null}
+                                            </FieldGroup>
+                                        </PopoverContent>
+                                    </Popover>
+                                ) : null
+                            }
+                        />
+                    </TabsContent>
+                </Tabs>
             </div>
         </>
     );
 }
-Devices.layout = ({ company, site }: Props) => ({
+Devices.layout = ({ company, site, view }: Props) => ({
     breadcrumbs: [
         {
             title: 'Dispositivi',
-            href: index({ company: company.id, site: site.id }),
+            href: index(
+                { company: company.id, site: site.id },
+                { query: { view } },
+            ),
         },
     ],
 });

@@ -10,6 +10,7 @@ class DeviceRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'infrastructure_override' => ['sometimes', 'nullable', 'boolean'],
             'name' => ['required', 'string', 'max:255'],
             'device_model_id' => ['required', 'integer', 'exists:device_models,id'],
             'serial_number' => ['nullable', 'string', 'max:255'],
@@ -27,6 +28,6 @@ class DeviceRequest extends FormRequest
 
     public function attributes(): array
     {
-        return ['name' => 'nome', 'device_model_id' => 'modello', 'serial_number' => 'seriale', 'image' => 'immagine'];
+        return ['infrastructure_override' => 'classificazione', 'name' => 'nome', 'device_model_id' => 'modello', 'serial_number' => 'seriale', 'image' => 'immagine'];
     }
 }

@@ -17,6 +17,86 @@ class DevicesTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_infrastructure_classification_inherits_live_defaults_and_preserves_explicit_choices(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $type = ModelType::create(['name' => 'Switch', 'is_infrastructure' => true]);
+        $model = $vendor->models()->create(['name' => 'Core', 'model_type_id' => $type->id]);
+        $untyped = $vendor->models()->create(['name' => 'Generic']);
+        $devices = collect([null, true, false])->map(fn ($override, $index) => $site->devices()->create([
+            'name' => 'Device '.$index, 'manufacturer_id' => $vendor->id,
+            'device_model_id' => $model->id, 'infrastructure_override' => $override,
+        ]));
+        $index = route('companies.sites.devices.index', [$company, $site]);
+        $this->get($index)->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'infrastructure')->has('devices', 3)
+            ->where('devices.0.is_infrastructure', true)->where('devices.1.is_infrastructure', true)
+            ->where('devices.2.is_infrastructure', false));
+        $this->patch(route('model-types.update', $type), ['name' => $type->name, 'is_infrastructure' => false])
+            ->assertSessionHasNoErrors();
+        $this->get($index.'?view=all')->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'all')->has('devices', 3)
+            ->where('devices.0.is_infrastructure', false)->where('devices.1.is_infrastructure', true)
+            ->where('devices.2.is_infrastructure', false));
+        $this->assertSame([null, true, false], $site->devices()->orderBy('id')->pluck('infrastructure_override')->all());
+
+        $device = $devices[0];
+        $update = route('companies.sites.devices.update', [$company, $site, $device]);
+        $this->patch($update, ['name' => $device->name, 'device_model_id' => $untyped->id, 'infrastructure_override' => true])
+            ->assertSessionHasNoErrors();
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $this->patch($update, ['name' => $device->name, 'device_model_id' => $model->id])->assertSessionHasNoErrors();
+        $this->assertTrue($device->fresh()->infrastructure_override);
+        $this->patch(route('companies.sites.devices.classification', [$company, $site, $device]), ['infrastructure_override' => null])
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $type->refresh()->update(['is_infrastructure' => true]);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $model->update(['model_type_id' => null]);
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $device->update(['device_model_id' => null]);
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $device->update(['infrastructure_override' => true]);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+    }
+
+    public function test_classification_updates_validate_input_and_respect_company_site_and_catalog_permissions(): void
+    {
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $otherSite = $company->sites()->create(['name' => 'Milano']);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $model = $vendor->models()->create(['name' => 'Switch']);
+        $device = $site->devices()->create(['name' => 'Core', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id]);
+        $url = route('companies.sites.devices.classification', [$company, $site, $device]);
+        $this->patch($url, ['infrastructure_override' => true])->assertRedirect(route('login'));
+        $user = User::factory()->create();
+        $this->actingAs($user)->patch($url, ['infrastructure_override' => true])->assertForbidden();
+        $company->users()->attach($user);
+        $this->patch(route('companies.sites.devices.classification', [$company, $otherSite, $device]), ['infrastructure_override' => true])->assertNotFound();
+        $this->patch($url, [])->assertSessionHasErrors('infrastructure_override');
+        $this->patch($url, ['infrastructure_override' => 'invalid'])->assertSessionHasErrors('infrastructure_override');
+        $this->assertNull($device->fresh()->infrastructure_override);
+        $this->patch($url, ['infrastructure_override' => true, 'name' => 'Unwanted change'])->assertSessionHasNoErrors();
+        $this->assertSame('Core', $device->fresh()->name);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $this->post(route('companies.sites.devices.store', [$company, $site]), [
+            'name' => 'New device', 'device_model_id' => $model->id, 'infrastructure_override' => false,
+        ])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('devices', ['name' => 'New device', 'infrastructure_override' => false]);
+        $type = ModelType::create(['name' => 'Switch']);
+        $this->patch(route('model-types.update', $type), ['name' => 'Switch', 'is_infrastructure' => true])->assertForbidden();
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $this->postJson(route('model-types.store'), ['name' => 'Router'])->assertCreated();
+        $this->assertFalse(ModelType::where('name', 'Router')->sole()->is_infrastructure);
+        $this->patch(route('model-types.update', $type), ['name' => 'Switch', 'is_infrastructure' => 'invalid'])
+            ->assertSessionHasErrors('is_infrastructure');
+        $this->assertFalse($type->fresh()->is_infrastructure);
+    }
+
     public function test_device_images_can_be_created_replaced_removed_and_are_site_scoped(): void
     {
         Storage::fake('local');

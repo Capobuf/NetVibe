@@ -29,11 +29,18 @@ import { MikrotikMark } from '@/components/mikrotik-mark';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SheetContent } from '@/components/ui/sheet';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+    Field,
+    FieldDescription,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Input } from '@/components/ui/input';
 import InputError from '@/components/input-error';
 import { cn } from '@/lib/utils';
 import {
+    classification as saveClassification,
     deletionImpact,
     destroy,
     store,
@@ -42,7 +49,12 @@ import {
 import { store as storeModel } from '@/routes/manufacturers/models';
 import { CatalogCombobox } from '@/components/devices/catalog-combobox';
 import { CatalogForm } from '@/components/devices/catalog-form';
-import type { Manufacturer, Device, ModelType } from '@/types/device';
+import type {
+    Manufacturer,
+    Device,
+    DeviceView,
+    ModelType,
+} from '@/types/device';
 
 export function DeviceForm({
     company,
@@ -53,7 +65,9 @@ export function DeviceForm({
     isMikrotik = false,
     mikrotik = null,
     initialManagementTab,
+    view = 'infrastructure',
 }: {
+    view?: DeviceView;
     company: number;
     site: number;
     manufacturers: Manufacturer[];
@@ -76,6 +90,13 @@ export function DeviceForm({
     const [deleting, setDeleting] = useState(false);
     const [modelDraft, setModelDraft] = useState<{ name: string } | null>(null);
     const [model, setModel] = useState(String(device?.device_model_id ?? ''));
+    const [classification, setClassification] = useState(
+        device?.infrastructure_override == null
+            ? 'inherit'
+            : device.infrastructure_override
+              ? 'infrastructure'
+              : 'other',
+    );
     const linked = !!snipeIt;
     const imageInput = useRef<HTMLInputElement>(null);
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -102,6 +123,10 @@ export function DeviceForm({
             name: `${manufacturer.name} · ${model.name}`,
         })),
     );
+    const selectedModel = models.find((item) => String(item.id) === model);
+    const inheritedClassification = selectedModel?.is_infrastructure
+        ? 'infrastructure'
+        : 'other';
     return (
         <Dialog
             open={open}
@@ -112,6 +137,13 @@ export function DeviceForm({
                     setImageFile(null);
                     setRemoveImage(false);
                     setModel(String(device?.device_model_id ?? ''));
+                    setClassification(
+                        device?.infrastructure_override == null
+                            ? 'inherit'
+                            : device.infrastructure_override
+                              ? 'infrastructure'
+                              : 'other',
+                    );
                 }
             }}
         >
@@ -192,19 +224,34 @@ export function DeviceForm({
                         <Form
                             className="flex min-h-0 flex-1 flex-col"
                             {...(device
-                                ? update.form({
-                                      company,
-                                      site,
-                                      device: device.id,
-                                  })
-                                : store.form({ company, site }))}
-                            onBefore={() => !linked && !modelDraft}
+                                ? linked
+                                    ? saveClassification.form({
+                                          company,
+                                          site,
+                                          device: device.id,
+                                      })
+                                    : update.form(
+                                          { company, site, device: device.id },
+                                          { query: { view } },
+                                      )
+                                : store.form(
+                                      { company, site },
+                                      { query: { view } },
+                                  ))}
+                            transform={(data) => ({
+                                ...data,
+                                infrastructure_override:
+                                    classification === 'inherit'
+                                        ? null
+                                        : classification === 'infrastructure',
+                            })}
+                            onBefore={() => !modelDraft}
                             onSuccess={() => setOpen(false)}
                             options={{ preserveScroll: true }}
                         >
                             {({ errors, processing }) => (
                                 <>
-                                    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                                    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-6">
                                         {linked && device ? (
                                             <div className="flex flex-col gap-6">
                                                 <DeviceImage
@@ -495,6 +542,92 @@ export function DeviceForm({
                                                 </Field>
                                             </FieldGroup>
                                         )}
+                                        <FieldGroup>
+                                            <Field
+                                                data-invalid={
+                                                    !!errors.infrastructure_override
+                                                }
+                                            >
+                                                <FieldLabel id="device-classification">
+                                                    Classificazione
+                                                </FieldLabel>
+                                                <ToggleGroup
+                                                    type="single"
+                                                    variant="outline"
+                                                    value={
+                                                        classification ===
+                                                        'inherit'
+                                                            ? inheritedClassification
+                                                            : classification
+                                                    }
+                                                    onValueChange={(value) => {
+                                                        if (value)
+                                                            setClassification(
+                                                                value,
+                                                            );
+                                                    }}
+                                                    disabled={processing}
+                                                    aria-labelledby="device-classification"
+                                                    aria-invalid={
+                                                        !!errors.infrastructure_override
+                                                    }
+                                                    aria-describedby="device-classification-source device-classification-error"
+                                                    className="w-full"
+                                                >
+                                                    <ToggleGroupItem
+                                                        value="infrastructure"
+                                                        className="flex-1"
+                                                    >
+                                                        Infrastruttura
+                                                    </ToggleGroupItem>
+                                                    <ToggleGroupItem
+                                                        value="other"
+                                                        className="flex-1"
+                                                    >
+                                                        Altri dispositivi
+                                                    </ToggleGroupItem>
+                                                </ToggleGroup>
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <FieldDescription
+                                                        id="device-classification-source"
+                                                        aria-live="polite"
+                                                    >
+                                                        {classification ===
+                                                        'inherit'
+                                                            ? selectedModel?.model_type_id
+                                                                ? 'Predefinita del tipo'
+                                                                : 'Predefinita'
+                                                            : 'Personalizzata'}
+                                                    </FieldDescription>
+                                                    {classification !==
+                                                        'inherit' && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            disabled={
+                                                                processing
+                                                            }
+                                                            onClick={() =>
+                                                                setClassification(
+                                                                    'inherit',
+                                                                )
+                                                            }
+                                                        >
+                                                            {selectedModel?.model_type_id
+                                                                ? 'Ripristina dal tipo'
+                                                                : 'Ripristina predefinita'}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <InputError
+                                                    id="device-classification-error"
+                                                    message={
+                                                        errors.infrastructure_override
+                                                    }
+                                                />
+                                            </Field>
+                                        </FieldGroup>
                                     </div>
                                     <DialogFooter className="shrink-0 border-t p-6 sm:flex-wrap">
                                         {device ? (
@@ -518,15 +651,13 @@ export function DeviceForm({
                                                 variant="outline"
                                                 disabled={processing}
                                             >
-                                                {linked ? 'Chiudi' : 'Annulla'}
+                                                Annulla
                                             </Button>
                                         </DialogClose>
-                                        {!linked ? (
-                                            <SaveButton
-                                                processing={processing}
-                                                disabled={!!modelDraft}
-                                            />
-                                        ) : null}
+                                        <SaveButton
+                                            processing={processing}
+                                            disabled={!!modelDraft}
+                                        />
                                     </DialogFooter>
                                 </>
                             )}

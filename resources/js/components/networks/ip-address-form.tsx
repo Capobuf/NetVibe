@@ -3,6 +3,7 @@ import {
     type UnifiObservation,
 } from '@/components/networks/unifi-observation';
 import { SaveButton } from '@/components/save-button';
+import { MikrotikSourcesLoader } from '@/components/devices/mikrotik-sources-loader';
 import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import {
     MikrotikSourcesDialog,
@@ -108,12 +109,16 @@ export default function IpAddressForm({
     devices?: Device[];
     embedded?: boolean;
 }) {
-    const { auth, devices: pageDevices } = usePage<{ devices?: Device[] }>()
-        .props;
-    const { mikrotikSources = [], unifiObservations = [] } = usePage<{
+    const {
+        component,
+        props: { auth, devices: pageDevices },
+    } = usePage<{ devices?: Device[] }>();
+    const { mikrotikSources, unifiObservations = [] } = usePage<{
         mikrotikSources?: MikrotikSource[];
         unifiObservations?: UnifiObservation[];
     }>().props;
+    const loadingSources =
+        component === 'devices/show' && mikrotikSources === undefined;
     const devices = providedDevices ?? pageDevices ?? [];
     const canEdit = auth.canEditIpam;
     const initialInterface = devices
@@ -132,7 +137,7 @@ export default function IpAddressForm({
     const [ip, setIp] = useState(ipAddress?.ip ?? suggestedIp ?? '');
     const [macInput, setMac] = useState(initialMac);
     const [hostnameInput, setHostname] = useState(initialHostname);
-    const sources = mikrotikSources.filter(
+    const sources = (mikrotikSources ?? []).filter(
         (source) =>
             source.ip === ip ||
             (ipAddress && source.ip_address_id === ipAddress.id),
@@ -171,6 +176,7 @@ export default function IpAddressForm({
                     : 'flex flex-1 flex-col gap-6 p-6'
             }
         >
+            <MikrotikSourcesLoader />
             {ipAddress && !editing ? (
                 <>
                     <div className="flex items-center justify-between gap-3">
@@ -337,7 +343,7 @@ export default function IpAddressForm({
                                 setDeleting(true);
                                 return false;
                             }
-                            return canEdit && editing;
+                            return canEdit && editing && !loadingSources;
                         }}
                         options={{ preserveScroll: true }}
                         className="flex flex-col gap-6"
@@ -579,7 +585,10 @@ export default function IpAddressForm({
                                                 Libera IP…
                                             </Button>
                                         ) : (
-                                            <SaveButton processing={processing}>
+                                            <SaveButton
+                                                processing={processing}
+                                                disabled={loadingSources}
+                                            >
                                                 {errors.mac_confirmation
                                                     ? 'Sostituisci MAC'
                                                     : 'Salva'}

@@ -6,12 +6,15 @@ export type Manufacturer = {
     models_count?: number;
     devices_count?: number;
 };
+export type DeviceView = 'infrastructure' | 'all';
 export type ModelType = {
+    is_infrastructure: boolean;
     id: number;
     name: string;
     models_count?: number;
 };
 export type DeviceModel = {
+    is_infrastructure?: boolean;
     id: number;
     manufacturer_id: number;
     name: string;
@@ -45,6 +48,8 @@ export type DeviceInterface = {
     mikrotik?: MikrotikInterface | null;
 };
 export type Device = {
+    infrastructure_override: boolean | null;
+    is_infrastructure: boolean;
     id: number;
     image_url?: string | null;
     name: string;

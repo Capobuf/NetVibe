@@ -50,8 +50,16 @@ class RackController extends Controller
                 ? 'Il suggerimento non è più disponibile. Verifica le osservazioni e i cablaggi aggiornati.' : null,
             'cablingRevision' => (int) $site->fresh()->cabling_revision,
             'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
-            'devices' => $site->devices()->with(['model', 'interfaces', 'manufacturer:id,name', 'rackItem.rack:id,name'])->orderBy('name')->get()
-                ->map(fn ($device) => [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []]),
+            'devices' => $site->devices()->with([
+                'model', 'manufacturer:id,name', 'rackItem.rack:id,name',
+                'interfaces' => fn ($query) => $query->without('mikrotikSource'),
+            ])->orderBy('name')->get()
+                ->map(function ($device) {
+                    // Rack ports use documented aliases, not MikroTik diagnostics.
+                    $device->interfaces->each->setAppends([]);
+
+                    return [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []];
+                }),
         ]));
     }
 

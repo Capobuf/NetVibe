@@ -22,6 +22,7 @@ import {
 import { store as storeManufacturer } from '@/routes/manufacturers';
 import { store as storeType } from '@/routes/model-types';
 import type { Manufacturer, ModelType, CreatedModel } from '@/types/device';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
@@ -31,6 +32,7 @@ import type { RouteFormDefinition } from '@/wayfinder';
 
 export function CatalogForm({
     title,
+    kind,
     item,
     action,
     deletion,
@@ -45,12 +47,14 @@ export function CatalogForm({
     onCreated,
 }: {
     title: string;
+    kind?: 'model' | 'manufacturer' | 'type';
     item?: {
         id: number;
         name: string;
         model_type_id?: number | null;
         rack_height_u?: number | null;
         without_rack_ears?: boolean;
+        is_infrastructure?: boolean;
     };
     types?: ModelType[];
     deletionMessage?: string;
@@ -71,6 +75,9 @@ export function CatalogForm({
         String(manufacturerId ?? ''),
     );
     const [type, setType] = useState(String(item?.model_type_id ?? ''));
+    const [classification, setClassification] = useState(
+        item?.is_infrastructure ? 'infrastructure' : 'other',
+    );
     const [creating, setCreating] = useState(false);
     const formAction =
         typeof action === 'function'
@@ -87,6 +94,9 @@ export function CatalogForm({
         if (value) {
             setManufacturer(String(manufacturerId ?? ''));
             setType(String(item?.model_type_id ?? ''));
+            setClassification(
+                item?.is_infrastructure ? 'infrastructure' : 'other',
+            );
         }
     }
     return (
@@ -136,6 +146,10 @@ export function CatalogForm({
                         errorBag={onCreated ? 'newModel' : undefined}
                         transform={(data) => ({
                             ...data,
+                            ...(kind === 'type' && {
+                                is_infrastructure:
+                                    classification === 'infrastructure',
+                            }),
                             ...(types && {
                                 without_rack_ears:
                                     data.without_rack_ears === '1',
@@ -196,6 +210,50 @@ export function CatalogForm({
                                     />
                                     <InputError message={errors.name} />
                                 </Field>
+                                {kind === 'type' && (
+                                    <Field
+                                        data-invalid={
+                                            !!errors.is_infrastructure
+                                        }
+                                    >
+                                        <FieldLabel id={`${id}-classification`}>
+                                            Classificazione predefinita
+                                        </FieldLabel>
+                                        <ToggleGroup
+                                            type="single"
+                                            variant="outline"
+                                            value={classification}
+                                            onValueChange={(value) => {
+                                                if (value)
+                                                    setClassification(value);
+                                            }}
+                                            disabled={processing}
+                                            aria-labelledby={`${id}-classification`}
+                                            aria-invalid={
+                                                !!errors.is_infrastructure
+                                            }
+                                            aria-describedby={`${id}-classification-error`}
+                                            className="w-full"
+                                        >
+                                            <ToggleGroupItem
+                                                value="infrastructure"
+                                                className="flex-1"
+                                            >
+                                                Infrastruttura
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="other"
+                                                className="flex-1"
+                                            >
+                                                Altri dispositivi
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+                                        <InputError
+                                            id={`${id}-classification-error`}
+                                            message={errors.is_infrastructure}
+                                        />
+                                    </Field>
+                                )}
                                 {types && (
                                     <Field
                                         data-invalid={!!errors.model_type_id}

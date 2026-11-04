@@ -12,6 +12,7 @@ use App\Models\Site;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -69,6 +70,50 @@ class RackCablingTest extends TestCase
         return [...['name' => 'Rack A', 'revision' => $this->rack->fresh()->revision,
             'cabling_revision' => (int) $this->site->fresh()->cabling_revision,
             'cables' => Cable::query()->with('ends')->orderBy('id')->get()->map->workspaceData()->all()], ...$changes];
+    }
+
+    public function test_workspace_keeps_cross_rack_inventory_and_cables_without_interface_diagnostics(): void
+    {
+        $otherRack = $this->site->racks()->create(['name' => 'Rack B', 'height_u' => 24, 'numbering' => 'bottom-up']);
+        $otherRack->items()->create(['key' => str_repeat('e', 32), 'kind' => 'device', 'device_id' => $this->remote->id,
+            'position' => 0, 'height' => 1, 'width' => 100, 'x' => 0]);
+        $outside = $this->site->devices()->create(['name' => 'Outside', 'manufacturer_id' => $this->model->manufacturer_id, 'device_model_id' => $this->model->id]);
+        $interface = $this->source->interfaces()->create(['connector_id' => str_repeat('a', 32), 'name' => 'Documented uplink', 'kind' => 'physical']);
+        $source = $this->source->mikrotikSources()->make([
+            'generation' => (string) Str::uuid(), 'kind' => 'interface', 'source_key' => 'interface:*1',
+            'state' => 'current', 'seen_at' => now(), 'anchor' => [],
+            'data' => ['name' => 'Observed name', 'default_name' => 'ether1', 'mac_address' => null],
+        ]);
+        $source->forceFill(['site_id' => $this->site->id, 'device_interface_id' => $interface->id])->save();
+        $crossRack = Cable::create(['site_id' => $this->site->id, 'type' => 'copper', 'color' => '#2563eb']);
+        $crossRack->ends()->createMany([
+            ['side' => 'a', ...$this->cable()['a']], ['side' => 'b', ...$this->cable()['b']],
+        ]);
+        $unrelated = Cable::create(['site_id' => $this->site->id, 'type' => 'usb', 'color' => '#2563eb']);
+        $unrelated->ends()->createMany([
+            ['side' => 'a', 'device_id' => $this->remote->id, 'connector_id' => str_repeat('b', 32)],
+            ['side' => 'b', 'device_id' => $outside->id, 'connector_id' => str_repeat('b', 32)],
+        ]);
+        $foreign = $this->company->sites()->create(['name' => 'Foreign']);
+        $foreign->devices()->create(['name' => 'Foreign', 'manufacturer_id' => $this->model->manufacturer_id]);
+
+        $url = route('companies.sites.racks.show', [$this->company, $this->site, $this->rack]);
+        foreach ([0, 1] as $editing) {
+            $this->get($url.'?edit='.$editing)->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('devices', 3)->has('cables', 2)
+                ->where('devices.0.id', $this->remote->id)
+                ->where('devices.0.rack_item.rack.id', $otherRack->id)
+                ->where('devices.1.id', $outside->id)
+                ->where('devices.1.rack_item', null)
+                ->where('devices.2.interfaces.0.name', 'Documented uplink')
+                ->where('devices.2.interfaces.0.connector_id', str_repeat('a', 32))
+                ->missing('devices.2.interfaces.0.mikrotik')
+                ->where('devices.2.model.panel', $this->model->panel)
+                ->where('cables.0.b.device_id', $this->remote->id)
+                ->where('cables.1.b.device_id', $outside->id)
+                ->where('rack.revision', 0)->where('cablingRevision', 0));
+        }
+        $this->assertModelExists($source);
     }
 
     public function test_workspace_rejects_occupied_ports_and_stale_cabling_without_partially_saving_the_rack(): void

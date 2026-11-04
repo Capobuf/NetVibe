@@ -9,10 +9,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes'])]
+#[Fillable(['name', 'manufacturer_id', 'device_model_id', 'serial_number', 'asset_tag', 'notes', 'infrastructure_override'])]
 #[Hidden(['image_path'])]
 class Device extends Model
 {
+    protected function casts(): array
+    {
+        return ['infrastructure_override' => 'boolean'];
+    }
+
+    public function isInfrastructure(): bool
+    {
+        return $this->infrastructure_override ?? $this->model?->isInfrastructure() ?? false;
+    }
+
     public function imageUrl(int $companyId): ?string
     {
         if ($this->snipeItAsset) {

@@ -33,20 +33,34 @@ class DeviceController extends Controller
     /** @return Collection<int, Manufacturer> */
     private function catalog(): Collection
     {
-        return Manufacturer::query()->with(['models:id,manufacturer_id,name'])->orderBy('name')->get(['id', 'name']);
+        return Manufacturer::query()->with(['models:id,manufacturer_id,name,model_type_id', 'models.modelType:id,is_infrastructure'])->orderBy('name')->get(['id', 'name'])
+            ->each(fn ($manufacturer) => $manufacturer->models->each(fn ($model) => $model
+                ->setAttribute('is_infrastructure', $model->isInfrastructure())->unsetRelation('modelType')));
     }
 
     public function index(Request $request, Company $company, Site $site): Response
     {
+        $options = $request->validate(['view' => ['sometimes', 'in:infrastructure,all']]);
+
         return Inertia::render('devices/index', [
+            'view' => $options['view'] ?? 'infrastructure',
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'manufacturers' => $this->catalog(),
             'snipePending' => $request->user()->is_superadmin
                 ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name', 'snipeItAsset:id,device_id,snapshot', 'ipAddresses:id,device_id,address', 'unifiDevice.unifiSite.unifiConnection'])->withExists('mikrotikConnection')->orderBy('name')->get()
-                ->map(fn ($device) => [...$device->makeHidden(['unifiDevice', 'snipeItAsset'])->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
+            'devices' => $site->devices()
+                ->select(['id', 'site_id', 'name', 'manufacturer_id', 'device_model_id', 'infrastructure_override', 'image_path'])
+                ->with([
+                    'manufacturer:id,name', 'model:id,name,model_type_id', 'model.modelType:id,name,is_infrastructure',
+                    'snipeItAsset:id,device_id,snapshot', 'ipAddresses:id,device_id,address',
+                    'unifiDevice:id,device_id,unifi_site_id,observed,present,synced_at',
+                    'unifiDevice.unifiSite:id,site_id,unifi_connection_id,available,sync_status',
+                    'unifiDevice.unifiSite.unifiConnection:id,enabled',
+                ])->withExists('mikrotikConnection')->orderBy('name')->get()
+                ->map(fn ($device) => [...$device->makeHidden(['unifiDevice', 'snipeItAsset', 'ipAddresses'])->toArray(), 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address)),
                     'image_url' => $device->imageUrl($company->id),
+                    'is_infrastructure' => $device->isInfrastructure(),
                     'unifi' => $device->unifiDevice && $device->unifiDevice->unifiSite->site_id === $site->id ? [
                         'state' => $device->unifiDevice->observed['state'] ?? null,
                         'stale' => $device->unifiDevice->stale(), 'synced_at' => $device->unifiDevice->synced_at,
@@ -58,6 +72,7 @@ class DeviceController extends Controller
     public function show(Request $request, Company $company, Site $site, Device $device): Response
     {
         $options = $request->validate([
+            'view' => ['sometimes', 'in:infrastructure,all'],
             'interface' => ['sometimes', 'integer', 'min:1'],
             'tab' => ['sometimes', 'in:interfaces,ips,mikrotik'],
             'manage' => ['sometimes', 'in:general,mikrotik,snipe-it'],
@@ -66,6 +81,7 @@ class DeviceController extends Controller
         $device->load(['manufacturer', 'model.modelType', 'interfaces', 'ipAddresses.subnet.vlan']);
         $asset = $device->snipeItAsset()->with('sync.connection', 'externalModel.model')->first();
         $device->setRelation('snipeItAsset', $asset)->makeHidden('snipeItAsset');
+        $device->setAttribute('is_infrastructure', $device->isInfrastructure());
         $device->setAttribute('image_url', $device->imageUrl($company->id));
         $unifiSource = $device->unifiDevice()->with('unifiSite.unifiConnection')->first();
         if ($unifiSource) {
@@ -78,6 +94,7 @@ class DeviceController extends Controller
         $device->setAttribute('unifi', $unifi);
 
         return Inertia::render('devices/show', [
+            'view' => $options['view'] ?? 'infrastructure',
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'device' => $device,
             'mikrotikInterfaces' => $device->mikrotikSources()->where('kind', 'interface')
@@ -87,7 +104,7 @@ class DeviceController extends Controller
             'initialTab' => ($options['tab'] ?? null) === 'ips' ? 'ips' : 'interfaces',
             'initialManagementTab' => $options['manage'] ?? (($options['tab'] ?? null) === 'mikrotik' ? 'mikrotik' : null),
             'mikrotikSources' => $request->user()->is_superadmin
-                ? (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get()) : [],
+                ? Inertia::optional(fn () => (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get())) : [],
             'isMikrotik' => $device->manufacturer->isMikrotik(),
             'mikrotik' => $request->user()->is_superadmin && $device->manufacturer->isMikrotik()
                 ? $device->mikrotikConnection()->first()?->summary() : null,
@@ -104,10 +121,10 @@ class DeviceController extends Controller
             'manufacturers' => $this->catalog(),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'ips' => $device->ipAddresses->map(fn ($ip) => [...$ip->toArray(), 'ip' => long2ip($ip->address)]),
-            'availableIps' => IpAddress::query()->whereIn('subnet_id', $site->subnets()->visible()->select('id'))
+            'availableIps' => Inertia::optional(fn () => IpAddress::query()->whereIn('subnet_id', $site->subnets()->visible()->select('id'))
                 ->where(fn ($query) => $query->whereNull('device_id')->orWhere(fn ($query) => $query->where('device_id', $device->id)->whereNull('device_interface_id')))
                 ->with('subnet:id,cidr')->orderBy('address')->get()
-                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)]),
+                ->map(fn ($ip) => [...$ip->only('id', 'hostname', 'description', 'mac_address', 'subnet'), 'ip' => long2ip($ip->address)])),
             'subnets' => $site->subnets()->visible()->with('excludedRanges')->orderBy('network_address')->get(['id', 'cidr', 'name'])
                 ->map(fn ($subnet) => [...$subnet->only('id', 'cidr', 'name'),
                     'excludedRanges' => $subnet->excludedRanges->map(fn ($range) => [
@@ -141,6 +158,17 @@ class DeviceController extends Controller
     public function update(DeviceRequest $request, Company $company, Site $site, Device $device): RedirectResponse
     {
         return $this->save($request, $company, $site, $device);
+    }
+
+    public function classification(Request $request, Company $company, Site $site, Device $device): RedirectResponse
+    {
+        $data = $request->validate([
+            'infrastructure_override' => ['present', 'nullable', 'boolean'],
+        ], [], ['infrastructure_override' => 'classificazione']);
+        $device->update($data);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Classificazione salvata.']);
+
+        return back();
     }
 
     private function save(DeviceRequest $request, Company $company, Site $site, ?Device $device = null): RedirectResponse
@@ -194,7 +222,7 @@ class DeviceController extends Controller
         }
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo salvato.']);
 
-        return to_route('companies.sites.devices.show', [$company, $site, $record]);
+        return to_route('companies.sites.devices.show', [$company, $site, $record, 'view' => $request->query('view') === 'all' ? 'all' : 'infrastructure']);
     }
 
     public function deletionImpact(Company $company, Site $site, Device $device): JsonResponse

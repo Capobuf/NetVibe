@@ -91,6 +91,7 @@ export default function Models({
                         tab === 'types' ? (
                             <CatalogForm
                                 key="type"
+                                kind="type"
                                 title="Nuovo tipo"
                                 action={storeType.form()}
                             />
@@ -353,12 +354,23 @@ export default function Models({
                             columns={[
                                 { id: 'name', label: 'Tipo', visible: true },
                                 {
+                                    id: 'is_infrastructure',
+                                    label: 'Classificazione predefinita',
+                                    visible: true,
+                                },
+                                {
                                     id: 'models_count',
                                     label: 'Modelli',
                                     visible: true,
                                 },
                             ]}
-                            value={(type, column) => type[column] ?? 0}
+                            value={(type, column) =>
+                                column === 'is_infrastructure'
+                                    ? type.is_infrastructure
+                                        ? 'Infrastruttura'
+                                        : 'Altri dispositivi'
+                                    : (type[column] ?? 0)
+                            }
                             empty="Nessun tipo"
                             bulkActions={(items, clearSelection) => (
                                 <CatalogBulkDelete
@@ -370,6 +382,7 @@ export default function Models({
                             actions={(type) => (
                                 <CatalogForm
                                     title="Modifica tipo"
+                                    kind="type"
                                     item={type}
                                     action={updateType.form(type.id)}
                                     deletion={destroyType.form(type.id)}

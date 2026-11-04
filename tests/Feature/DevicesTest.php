@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
+use App\Models\SnipeItConnection;
+use App\Models\SnipeItSync;
+use App\Models\UnifiConnection;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +19,154 @@ use Tests\TestCase;
 class DevicesTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_index_keeps_list_and_creation_data_without_detail_fields_or_other_sites_devices(): void
+    {
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $type = ModelType::create(['name' => 'Switch', 'is_infrastructure' => true]);
+        $model = $vendor->models()->create(['name' => 'Core', 'model_type_id' => $type->id, 'panel' => $this->panel()]);
+        $device = $site->devices()->create([
+            'name' => 'A switch', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id,
+            'serial_number' => 'SN-001', 'asset_tag' => 'ASSET-001', 'notes' => 'Detail only',
+        ]);
+        $device->forceFill(['image_path' => 'devices/local.png'])->save();
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        foreach (['10.0.0.1', '10.0.0.2'] as $ip) {
+            $subnet->ipAddresses()->create(['address' => ip2long($ip), 'device_id' => $device->id]);
+        }
+        $otherSite = $company->sites()->create(['name' => 'Milano']);
+        $otherSite->devices()->create(['name' => 'Other site', 'manufacturer_id' => $vendor->id]);
+        $connection = UnifiConnection::create([
+            'name' => 'Controller', 'mode' => 'direct', 'server_url' => 'https://unifi.example.test',
+            'api_key' => 'test-key', 'revision' => '00000000-0000-0000-0000-000000000001', 'enabled' => true,
+        ]);
+        $source = $connection->unifiSites()->create([
+            'console_id' => 'direct', 'console_name' => 'Controller',
+            'external_site_id' => '00000000-0000-0000-0000-000000000002', 'name' => 'Source', 'version' => '10.1.84',
+            'available' => true, 'discovered_at' => now(), 'site_id' => $site->id, 'sync_status' => 'ok',
+        ]);
+        $source->unifiDevices()->create([
+            'external_id' => '00000000-0000-0000-0000-000000000003', 'device_id' => $device->id,
+            'observed' => ['state' => 'ONLINE'], 'present' => true, 'synced_at' => '2026-11-04 12:00:00',
+        ]);
+        $imported = $site->devices()->create([
+            'name' => 'B imported', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id,
+            'infrastructure_override' => false,
+        ]);
+        $snipe = SnipeItConnection::create(['server_url' => 'https://snipe.example.test', 'api_key' => 'test-key']);
+        $sync = SnipeItSync::create(['company_id' => $company->id, 'connection_id' => $snipe->id, 'external_company_id' => 1]);
+        $sync->assets()->create(['external_id' => 1, 'device_id' => $imported->id,
+            'snapshot' => ['image' => 'https://snipe.example.test/image.png']]);
+
+        $url = route('companies.sites.devices.index', [$company, $site]);
+        $this->actingAs($user)->get($url.'?view=all')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('devices/index')->where('view', 'all')->has('devices', 2)
+            ->where('devices.0.id', $device->id)->where('devices.0.name', 'A switch')
+            ->where('devices.0.manufacturer_id', $vendor->id)->where('devices.0.manufacturer.name', 'Vendor')
+            ->where('devices.0.model.id', $model->id)->where('devices.0.model.name', 'Core')
+            ->where('devices.0.model.model_type_id', $type->id)->where('devices.0.model.model_type.name', 'Switch')
+            ->where('devices.0.is_infrastructure', true)->where('devices.0.mikrotik_connection_exists', false)
+            ->where('devices.0.ips', ['10.0.0.1', '10.0.0.2'])
+            ->where('devices.0.image_url', route('companies.sites.devices.image', [$company, $site, $device]))
+            ->where('devices.0.unifi.state', 'ONLINE')->where('devices.0.unifi.stale', false)
+            ->where('devices.0.unifi.synced_at', '2026-11-04T12:00:00.000000Z')
+            ->missing('devices.0.ip_addresses')->missing('devices.0.notes')->missing('devices.0.serial_number')
+            ->missing('devices.0.asset_tag')->missing('devices.0.created_at')->missing('devices.0.updated_at')
+            ->missing('devices.0.image_path')->missing('devices.0.unifi_device')->missing('devices.0.model.panel')
+            ->where('devices.1.id', $imported->id)->where('devices.1.is_infrastructure', false)
+            ->where('devices.1.ips', [])->where('devices.1.unifi', null)
+            ->where('devices.1.image_url', 'https://snipe.example.test/image.png')->missing('devices.1.snipe_it_asset')
+            ->where('manufacturers.0.models.0.id', $model->id)->where('manufacturers.0.models.0.is_infrastructure', true)
+            ->where('types.0.id', $type->id));
+
+        $connection->update(['enabled' => false]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'infrastructure')->has('devices', 2)->where('devices.0.unifi.stale', true));
+    }
+
+    public function test_infrastructure_classification_inherits_live_defaults_and_preserves_explicit_choices(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $type = ModelType::create(['name' => 'Switch', 'is_infrastructure' => true]);
+        $model = $vendor->models()->create(['name' => 'Core', 'model_type_id' => $type->id]);
+        $untyped = $vendor->models()->create(['name' => 'Generic']);
+        $devices = collect([null, true, false])->map(fn ($override, $index) => $site->devices()->create([
+            'name' => 'Device '.$index, 'manufacturer_id' => $vendor->id,
+            'device_model_id' => $model->id, 'infrastructure_override' => $override,
+        ]));
+        $index = route('companies.sites.devices.index', [$company, $site]);
+        $this->get($index)->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'infrastructure')->has('devices', 3)
+            ->where('devices.0.is_infrastructure', true)->where('devices.1.is_infrastructure', true)
+            ->where('devices.2.is_infrastructure', false));
+        $this->patch(route('model-types.update', $type), ['name' => $type->name, 'is_infrastructure' => false])
+            ->assertSessionHasNoErrors();
+        $this->get($index.'?view=all')->assertInertia(fn (Assert $page) => $page
+            ->where('view', 'all')->has('devices', 3)
+            ->where('devices.0.is_infrastructure', false)->where('devices.1.is_infrastructure', true)
+            ->where('devices.2.is_infrastructure', false));
+        $this->assertSame([null, true, false], $site->devices()->orderBy('id')->pluck('infrastructure_override')->all());
+
+        $device = $devices[0];
+        $update = route('companies.sites.devices.update', [$company, $site, $device]);
+        $this->patch($update, ['name' => $device->name, 'device_model_id' => $untyped->id, 'infrastructure_override' => true])
+            ->assertSessionHasNoErrors();
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $this->patch($update, ['name' => $device->name, 'device_model_id' => $model->id])->assertSessionHasNoErrors();
+        $this->assertTrue($device->fresh()->infrastructure_override);
+        $this->patch(route('companies.sites.devices.classification', [$company, $site, $device]), ['infrastructure_override' => null])
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $type->refresh()->update(['is_infrastructure' => true]);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $model->update(['model_type_id' => null]);
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $device->update(['device_model_id' => null]);
+        $this->assertFalse($device->fresh()->isInfrastructure());
+        $device->update(['infrastructure_override' => true]);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+    }
+
+    public function test_classification_updates_validate_input_and_respect_company_site_and_catalog_permissions(): void
+    {
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $otherSite = $company->sites()->create(['name' => 'Milano']);
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $model = $vendor->models()->create(['name' => 'Switch']);
+        $device = $site->devices()->create(['name' => 'Core', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id]);
+        $url = route('companies.sites.devices.classification', [$company, $site, $device]);
+        $this->patch($url, ['infrastructure_override' => true])->assertRedirect(route('login'));
+        $user = User::factory()->create();
+        $this->actingAs($user)->patch($url, ['infrastructure_override' => true])->assertForbidden();
+        $company->users()->attach($user);
+        $this->patch(route('companies.sites.devices.classification', [$company, $otherSite, $device]), ['infrastructure_override' => true])->assertNotFound();
+        $this->patch($url, [])->assertSessionHasErrors('infrastructure_override');
+        $this->patch($url, ['infrastructure_override' => 'invalid'])->assertSessionHasErrors('infrastructure_override');
+        $this->assertNull($device->fresh()->infrastructure_override);
+        $this->patch($url, ['infrastructure_override' => true, 'name' => 'Unwanted change'])->assertSessionHasNoErrors();
+        $this->assertSame('Core', $device->fresh()->name);
+        $this->assertTrue($device->fresh()->isInfrastructure());
+        $this->post(route('companies.sites.devices.store', [$company, $site]), [
+            'name' => 'New device', 'device_model_id' => $model->id, 'infrastructure_override' => false,
+        ])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('devices', ['name' => 'New device', 'infrastructure_override' => false]);
+        $type = ModelType::create(['name' => 'Switch']);
+        $this->patch(route('model-types.update', $type), ['name' => 'Switch', 'is_infrastructure' => true])->assertForbidden();
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $this->postJson(route('model-types.store'), ['name' => 'Router'])->assertCreated();
+        $this->assertFalse(ModelType::where('name', 'Router')->sole()->is_infrastructure);
+        $this->patch(route('model-types.update', $type), ['name' => 'Switch', 'is_infrastructure' => 'invalid'])
+            ->assertSessionHasErrors('is_infrastructure');
+        $this->assertFalse($type->fresh()->is_infrastructure);
+    }
 
     public function test_device_images_can_be_created_replaced_removed_and_are_site_scoped(): void
     {
@@ -367,10 +518,12 @@ class DevicesTest extends TestCase
         $this->get(route('manufacturers.models.edit', [$target, $model]))->assertOk();
     }
 
-    public function test_interface_ip_choices_include_unassigned_device_ips_and_stay_within_the_site(): void
+    public function test_interface_ip_choices_load_on_demand_stay_within_the_site_and_refresh_after_assignment(): void
     {
-        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
         $company = Company::create(['name' => 'Alfa']);
+        $user = User::factory()->create();
+        $company->users()->attach($user);
+        $this->actingAs($user);
         $site = $company->sites()->create(['name' => 'Torino']);
         $otherSite = $company->sites()->create(['name' => 'Milano']);
         $manufacturer = Manufacturer::create(['name' => 'Vendor']);
@@ -378,17 +531,41 @@ class DevicesTest extends TestCase
         $interface = $device->interfaces()->create(['name' => 'Management', 'kind' => 'logical']);
         $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
         $subnet->excludedRanges()->create(['start_address' => ip2long('10.0.0.100'), 'end_address' => ip2long('10.0.0.110')]);
-        $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'description' => 'Available']);
+        $available = $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.1'), 'description' => 'Available']);
         $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.2'), 'device_id' => $device->id]);
         $subnet->ipAddresses()->create(['address' => ip2long('10.0.0.3'), 'device_id' => $device->id, 'device_interface_id' => $interface->id]);
         $otherSubnet = $otherSite->subnets()->create(Ipv4Cidr::parse('10.1.0.0/24'));
         $otherSubnet->ipAddresses()->create(['address' => ip2long('10.1.0.1'), 'description' => 'Other site']);
+        $secondSubnet = $site->subnets()->create(Ipv4Cidr::parse('10.2.0.0/24'));
+        $secondSubnet->ipAddresses()->create(['address' => ip2long('10.2.0.1'), 'description' => 'Second subnet']);
+        $otherCompany = Company::create(['name' => 'Beta']);
+        $foreignSite = $otherCompany->sites()->create(['name' => 'Roma']);
+        $foreignDevice = $foreignSite->devices()->create(['name' => 'Foreign', 'manufacturer_id' => $manufacturer->id]);
+        $foreignSite->subnets()->create(Ipv4Cidr::parse('10.3.0.0/24'))->ipAddresses()
+            ->create(['address' => ip2long('10.3.0.1'), 'description' => 'Other company']);
 
-        $this->get(route('companies.sites.devices.show', [$company, $site, $device]))
+        $url = route('companies.sites.devices.show', [$company, $site, $device, 'interface' => $interface->id]);
+        $this->get($url)
             ->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->has('availableIps', 2)->where('availableIps.0.ip', '10.0.0.1')->where('availableIps.1.ip', '10.0.0.2')
-            ->has('subnets', 1)->where('subnets.0.id', $subnet->id)
-            ->where('subnets.0.excludedRanges.0.start_ip', '10.0.0.100'));
+            ->missing('availableIps')->where('initialInterfaceId', $interface->id)
+            ->has('subnets', 2)->where('subnets.0.id', $subnet->id)
+            ->where('subnets.0.excludedRanges.0.start_ip', '10.0.0.100')
+            ->reloadOnly('availableIps', fn (Assert $reload) => $reload
+                ->has('availableIps', 3)->where('availableIps.0.ip', '10.0.0.1')
+                ->where('availableIps.1.ip', '10.0.0.2')->where('availableIps.2.ip', '10.2.0.1')));
+
+        $this->from($url)->post(route('companies.sites.devices.ip-addresses.store', [$company, $site, $device]), [
+            'ip_address_id' => $available->id, 'device_interface_id' => $interface->id,
+        ])->assertRedirect($url)->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('ip_addresses', [
+            'id' => $available->id, 'device_id' => $device->id, 'device_interface_id' => $interface->id,
+        ]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page
+            ->missing('availableIps')->reloadOnly('availableIps', fn (Assert $reload) => $reload
+            ->has('availableIps', 2)->where('availableIps.0.ip', '10.0.0.2')->where('availableIps.1.ip', '10.2.0.1')));
+        $this->get(route('companies.sites.devices.show', [$otherCompany, $foreignSite, $foreignDevice]), [
+            'X-Inertia-Partial-Component' => 'devices/show', 'X-Inertia-Partial-Data' => 'availableIps',
+        ])->assertForbidden();
     }
 
     public function test_mac_changes_are_atomic_confirmed_and_shared_in_both_directions(): void

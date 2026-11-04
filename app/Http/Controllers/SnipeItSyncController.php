@@ -78,12 +78,29 @@ class SnipeItSyncController extends Controller
             }
         }
         $rows = $query->orderBy($table.'.id')->paginate($filters['per_page'] ?? 25)->onEachSide(1)->withQueryString();
-        $rows->through(function ($row) use ($sync) {
+        $deviceQuery = $modelQuery = null;
+        foreach ($rows as $row) {
             $row->setRelation('sync', $sync);
-            $candidates = $row->device_id || $row->state === 'excluded' ? collect() : $this->synchronizer->deviceCandidates($row)->whereDoesntHave('snipeItAsset')->with('site', 'model.manufacturer', 'model.modelType')->get();
+            if (! $row->device_id && $row->state !== 'excluded') {
+                // Keep SQL matching rules and collation while batching only the current page.
+                $candidates = $this->synchronizer->deviceCandidates($row)->whereDoesntHave('snipeItAsset')
+                    ->select('devices.*')->selectRaw('? as candidate_asset_id', [$row->id]);
+                $deviceQuery = $deviceQuery ? $deviceQuery->unionAll($candidates) : $candidates;
+            }
+        }
+        foreach ($rows->getCollection()->pluck('externalModel')->filter()->unique('id') as $external) {
+            if (! $external->device_model_id) {
+                $candidates = $this->synchronizer->modelCandidates($external)
+                    ->select('device_models.*')->selectRaw('? as candidate_external_id', [$external->id]);
+                $modelQuery = $modelQuery ? $modelQuery->unionAll($candidates) : $candidates;
+            }
+        }
+        $devicesByAsset = $deviceQuery?->with('site', 'model.manufacturer', 'model.modelType')->get()->groupBy('candidate_asset_id') ?? collect();
+        $modelsByExternal = $modelQuery?->with('manufacturer', 'modelType')->get()->groupBy('candidate_external_id') ?? collect();
+        $rows->through(function ($row) use ($sync, $devicesByAsset, $modelsByExternal) {
+            $candidates = $devicesByAsset->get($row->id, collect());
             $external = $row->externalModel;
-            $modelCandidates = $external && ! $external->device_model_id
-                ? $this->synchronizer->modelCandidates($external)->with('manufacturer', 'modelType')->get() : collect();
+            $modelCandidates = $modelsByExternal->get($external?->id, collect());
             $model = $external?->model ?? ($modelCandidates->count() === 1 ? $modelCandidates->first() : null);
             $problem = $row->problem ?? ($row->device_id ? $this->synchronizer->modelProblem($external) : null);
             if (! $problem && ! $row->device_id && ! $row->ip_address_id && $row->state !== 'excluded') {

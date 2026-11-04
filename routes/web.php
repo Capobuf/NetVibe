@@ -63,6 +63,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
         Route::get('companies/{company}/sites/{site}/devices/{device}/integrations', [DeviceController::class, 'integrations'])->name('companies.sites.devices.integrations');
         Route::get('companies/{company}/sites/{site}/devices/{device}/image', [DeviceController::class, 'image'])->name('companies.sites.devices.image');
+        Route::patch('companies/{company}/sites/{site}/devices/{device}/classification', [DeviceController::class, 'classification'])->name('companies.sites.devices.classification');
         Route::resource('companies.sites.devices', DeviceController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::prefix('companies/{company}/sites/{site}/devices/{device}/mikrotik')->name('companies.sites.devices.mikrotik.')
             ->middleware(['can:administer', 'throttle:10,1'])->group(function () {

@@ -17,14 +17,22 @@ class Topology
             'model', 'rackItem.rack', 'mikrotikConnection',
             'interfaces' => fn ($query) => $query->without('mikrotikSource'),
         ])->orderBy('name')->orderBy('id')->get()->keyBy('id');
+        $inGeneration = fn ($source) => ! $devices[$source->device_id]->mikrotikConnection?->activated_at
+            || $source->generation === $devices[$source->device_id]->mikrotikConnection->source_generation;
         $sources = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
-            ->whereIn('kind', ['interface', 'observation', 'vlan'])->orderByDesc('seen_at')->orderByDesc('id')->get()
-            ->filter(fn ($source) => ! $devices[$source->device_id]->mikrotikConnection?->activated_at
-                || $source->generation === $devices[$source->device_id]->mikrotikConnection->source_generation);
+            ->where(fn ($query) => $query->where('kind', 'interface')
+                ->orWhere(fn ($query) => $query->where('kind', 'vlan')->where('data->menu', '/interface/vlan'))
+                ->orWhere(fn ($query) => $query->where('kind', 'observation')->where('data->menu', '/ip/neighbor')))
+            ->orderByDesc('seen_at')->orderByDesc('id')->get()->filter($inGeneration);
         $interfaces = $sources->where('kind', 'interface')->groupBy('device_id');
         $vlanInterfaces = $sources->where('kind', 'vlan')->where('data.menu', '/interface/vlan')->groupBy('device_id');
-        $indirect = $sources->where('kind', 'observation')->filter(fn ($source) => in_array($source->data['menu'] ?? null,
-            ['/ip/arp', '/ip/dhcp-server/lease', '/interface/bridge/host'], true))->groupBy('device_id');
+        // Indirect observations contribute counts, not individual topology links.
+        $indirect = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
+            ->where('kind', 'observation')->whereIn('data->menu', ['/ip/arp', '/ip/dhcp-server/lease', '/interface/bridge/host'])
+            ->select('device_id', 'generation', 'data->menu as menu')
+            ->selectRaw('COUNT(*) as total, MAX(seen_at) as seen_at, MAX(id) as last_id')
+            ->groupBy('device_id', 'generation', 'menu')->orderByDesc('seen_at')->orderByDesc('last_id')
+            ->get()->filter($inGeneration)->groupBy('device_id');
         $nodes = $edges = $ports = $names = $macs = $logicalInterfaces = [];
         foreach ($devices as $device) {
             $logicalInterfaces[$device->id] = array_unique([
@@ -36,8 +44,8 @@ class Topology
                 'id' => 'device:'.$device->id, 'device_id' => $device->id, 'label' => $device->name,
                 'model' => $device->model?->name, 'rack' => $rack?->only('id', 'name'), 'identity' => null, 'mac' => null,
                 'model_id' => $device->device_model_id,
-                'indirect' => $indirect->get($device->id, collect())->groupBy('data.menu')->map(fn ($items, $menu) => [
-                    'menu' => $menu, 'count' => $items->count(), 'seen_at' => $items->first()->seen_at?->toIso8601String(),
+                'indirect' => $indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
+                    'menu' => $menu, 'count' => (int) $items->sum('total'), 'seen_at' => $items->first()->seen_at?->toIso8601String(),
                 ])->values()->all(),
             ];
             $ports[$device->id] = collect($device->model?->connectors() ?? [])->keyBy('id');

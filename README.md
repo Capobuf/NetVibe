@@ -10,7 +10,7 @@ NetVibe è un IPAM IPv4 per MSP, utilizzabile senza integrazioni. Gestisce azien
 
 Starter [laravel/react-starter-kit](https://github.com/laravel/react-starter-kit/tree/dbd4817d2d2936be14bc1ca7c94692fcef20b6b1), commit `dbd4817d2d2936be14bc1ca7c94692fcef20b6b1`. I lockfile fissano le dipendenze risolte: Laravel 13, React 19, Inertia 3, Tailwind 4, shadcn/ui, Fortify e PHPUnit. La build resta quella ufficiale Vite Plus; Wayfinder genera le funzioni per le route.
 
-Sail esegue solo PHP 8.4 e MySQL 8.4. Gli asset sono statici, SSR è disabilitato e la coda è sincrona: non servono processi Node, Redis o worker permanenti. Autenticazione e impostazioni personali restano disponibili, inclusa la verifica email; la registrazione pubblica è disabilitata.
+Sail esegue solo PHP 8.5 (patch di sicurezza corrente, almeno 8.5.12) e MariaDB 11.4 LTS. Gli asset sono statici, SSR è disabilitato e la coda è sincrona: non servono processi Node, Redis o worker permanenti. Autenticazione e impostazioni personali restano disponibili, inclusa la verifica email; la registrazione pubblica è disabilitata.
 
 ## Primo avvio con Docker
 
@@ -25,8 +25,9 @@ Prima di avviare, imposta in `.env` `APP_URL` con l’indirizzo usato dal browse
 ```bash
 docker run --rm -e COMPOSER_ALLOW_SUPERUSER=1 \
   -u "$(id -u):$(id -g)" -v "$PWD:/var/www/html" -w /var/www/html \
-  laravelsail/php84-composer:latest composer install --no-interaction
+  composer:2 composer install --no-interaction --no-scripts
 ./vendor/bin/sail up -d
+./vendor/bin/sail composer install --no-interaction
 ./vendor/bin/sail artisan key:generate
 ./vendor/bin/sail artisan migrate
 ./vendor/bin/sail artisan netvibe:superadmin
@@ -70,7 +71,15 @@ Il `.env` è la configurazione di provisioning, non viene consultato a ogni logi
 
 Ricompila gli asset solo dopo modifiche frontend; esegui `composer install`/`npm ci` solo quando cambiano i lockfile, `artisan migrate` solo per nuove migrazioni, e ricostruisci l’immagine solo se cambia il runtime. Per fermare senza cancellare dati usa `./vendor/bin/sail stop`.
 
-Il database di sviluppo `netvibe` rimane nel volume `sail-mysql` del progetto Compose. Non usare `down -v`, `migrate:fresh`, reset o reseeding sull’istanza di revisione. Non lanciare `composer setup` su dati esistenti: lo script originale rigenera la chiave applicativa.
+Il database di sviluppo `netvibe` rimane nel volume `sail-mariadb` del progetto Compose. Non usare `down -v`, `migrate:fresh`, reset o reseeding sull’istanza di revisione. Non lanciare `composer setup` su dati esistenti: lo script originale rigenera la chiave applicativa.
+
+## Migrazione da MySQL e PHP 8.4
+
+Per un’istanza esistente seguire [la procedura di migrazione e rollback](docs/migration-mariadb.md) prima di avviare il nuovo stack. Il volume MySQL non deve essere montato su MariaDB. Conservare `.env`, `APP_KEY`, database originale e backup verificato fino all’accettazione.
+
+## Hosting PHP-FPM
+
+Servono PHP 8.5 aggiornato (CLI e PHP-FPM coerenti), le estensioni richieste dal lockfile e MariaDB 11.4 LTS. Verificare queste versioni con il provider prima del deploy: non è ancora stato convalidato un hosting di produzione. Configurare `DB_CONNECTION=mariadb` e host/credenziali forniti dall’hosting; il driver PHP resta `pdo_mysql`. Distribuire gli asset già compilati e puntare la document root a `public`, preservando `APP_KEY` negli aggiornamenti. Docker resta uno strumento di sviluppo.
 
 ## Sincronizzazione Snipe-IT e cron
 
@@ -86,9 +95,9 @@ Laravel avvia Snipe-IT all’inizio di ogni ora e impedisce esecuzioni sovrappos
 
 ## Test isolati — solo dopo approvazione manuale
 
-Sail crea `testing` sullo stesso MySQL. `docker/mysql/create-test-user.sql` crea `sail_test`, autorizzato soltanto su `testing`; lo sviluppo usa `sail` su `netvibe`. MySQL non espone porte sull’host.
+`docker/mariadb/create-test-user.sql` crea il database `testing` e `sail_test`, autorizzato soltanto su `testing`; lo sviluppo usa `sail` su `netvibe`. MariaDB non espone porte sull’host.
 
-`.env.testing` contiene esclusivamente valori di test. PHPUnit forza database, connessione e credenziali di test; `Tests\TestCase` blocca l’avvio prima di `RefreshDatabase` se la configurazione è in cache o non corrisponde al database/utente previsto. Il test di isolamento controlla anche che MySQL neghi l’accesso a `netvibe`.
+`.env.testing` contiene esclusivamente valori di test. PHPUnit forza database, connessione e credenziali di test; `Tests\TestCase` blocca l’avvio prima di `RefreshDatabase` se la configurazione è in cache o non corrisponde al database/utente previsto. Il test di isolamento controlla anche che MariaDB neghi l’accesso a `netvibe`.
 
 Dopo l’approvazione del Product Owner:
 
@@ -98,7 +107,7 @@ Dopo l’approvazione del Product Owner:
 
 Se il controllo segnala configurazione in cache, fermati e rimuovi esplicitamente la cache con `./vendor/bin/sail artisan config:clear`, poi ricontrolla la destinazione. Gli script SQL di inizializzazione vengono eseguiti solo alla creazione del volume: non cancellare un volume esistente per applicarli.
 
-La CI esegue Pint, build, TypeScript, test frontend e test mirati di autenticazione e IPAM su un MySQL temporaneo separato. Nessun E2E, coverage gate o analisi PHPStan aggiuntiva nella CI.
+La CI esegue Pint, build, TypeScript, test frontend e test mirati di autenticazione e IPAM su un MariaDB temporaneo separato. Nessun E2E, coverage gate o analisi PHPStan aggiuntiva nella CI.
 
 ## Strumenti per gli agenti
 

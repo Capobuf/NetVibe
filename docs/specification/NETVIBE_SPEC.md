@@ -23,7 +23,7 @@ NetVibe è un IPAM leggero rivolto principalmente a MSP che gestiscono più clie
 * Preferenza per architettura proporzionata: niente worker permanenti, Redis o ulteriori servizi obbligatori introdotti senza necessità verificata.
 ### 0.3 Stack applicativo confermato
 
-* Backend: Laravel. Frontend: React con Inertia e asset statici compilati, con componenti in stile shadcn/ui. Database: MySQL.
+* Backend: Laravel. Frontend: React con Inertia e asset statici compilati, con componenti in stile shadcn/ui. Database: MariaDB 11.4 LTS.
 * Sviluppo iniziale in Docker. Ambiente di produzione non ancora scelto: l’implementazione non deve imporre inutilmente Docker e deve restare valutabile per hosting condivisi PHP, cPanel e CloudPanel.
 * Node.js ammesso in build e nello sviluppo, non come servizio di produzione obbligatorio. Evitare SSR e altri processi permanenti non necessari.
 * Interfaccia curata, responsive e personalizzabile, con animazioni discrete e pagine custom quando migliorano il flusso.
@@ -408,7 +408,7 @@ Produrre archivi ZIP di backup caricabili su Google Drive per ripristinare un’
 * Cifratura del backup, protezione e recuperabilità della chiave, permessi Drive.
 * Retention, numero di versioni, cancellazione automatica o conservazione manuale.
 * Limiti di dimensione ZIP, allegati e tempi di esecuzione su hosting condiviso; eventuale creazione a blocchi se necessario.
-* Coerenza del database durante il backup e compatibilità del dump MySQL con gli hosting obiettivo.
+* Coerenza del database durante il backup e compatibilità del dump MariaDB con gli hosting obiettivo.
 * Separazione fra esportazione Excel, backup tecnico e funzionalità di importazione dati.
 * Scelta del perimetro del backup in caso di futura separazione del modulo rack in un altro prodotto.
 
@@ -485,8 +485,8 @@ Le sezioni «Da approfondire» non autorizzano gli agent a scegliere e implement
 - Ogni issue si lavora su un branch `issue/<numero>-<nome-breve>` dedicato. I compiti articolati senza issue usano un branch `task/...`. Piccole modifiche isolate senza issue possono essere fatte su `main`.
 - Dopo le modifiche, aggiornare l'istanza di sviluppo Docker **solo con le operazioni necessarie**, preservando i dati, e mostrare al Product Owner le schermate o i link realmente accessibili e alcuni passaggi per verificare.
 - Ricevere prima feedback e approvazione funzionale/UI. **I test automatizzati si eseguono soltanto dopo tale approvazione** e solo se proporzionati ai rischi reali della issue; una rinomina banale normalmente non richiede nuovi test.
-- Vietati browser E2E, percentuali di copertura obbligatorie, ripetizioni della stessa verifica a più livelli e suite estese senza necessità. Privilegiare un singolo test mirato di logica IPv4 oppure un test MySQL di persistenza/sicurezza quando serve.
-- Nei test usare un **database MySQL distinto** dal database dell'istanza Docker consultabile dal Product Owner. Mai azzerare o alterare quel database mediante i test.
+- Vietati browser E2E, percentuali di copertura obbligatorie, ripetizioni della stessa verifica a più livelli e suite estese senza necessità. Privilegiare un singolo test mirato di logica IPv4 oppure un test MariaDB di persistenza/sicurezza quando serve.
+- Nei test usare un **database MariaDB distinto** dal database dell'istanza Docker consultabile dal Product Owner. Mai azzerare o alterare quel database mediante i test.
 - Correzioni emerse dai test che modificano UI o comportamento devono essere ripresentate al Product Owner.
 - Dopo approvazione e test pertinenti, eseguire push, PR, merge e chiusura issue. Il push anticipato è possibile soltanto se l'attività chiede espressamente di pubblicare contenuti su GitHub, senza presumere l'autorizzazione al merge.
 

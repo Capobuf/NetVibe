@@ -15,17 +15,17 @@ jobs:
       APP_ENV: testing
       DB_HOST: 127.0.0.1
     services:
-      mysql:
-        image: mysql:8.4
+      mariadb:
+        image: mariadb:11.4
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: testing
-          MYSQL_USER: sail_test
-          MYSQL_PASSWORD: password
+          MARIADB_ROOT_PASSWORD: password
+          MARIADB_DATABASE: testing
+          MARIADB_USER: sail_test
+          MARIADB_PASSWORD: password
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -ppassword"
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
@@ -35,10 +35,12 @@ jobs:
           persist-credentials: false
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           tools: composer:v2
           extensions: pdo_mysql
           coverage: none
+        env:
+          update: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'

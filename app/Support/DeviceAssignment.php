@@ -19,7 +19,9 @@ class DeviceAssignment
                         AND mikrotik_sources.device_id = devices.id AND mikrotik_sources.kind = 'interface'
                         AND mikrotik_sources.problem IS NULL LIMIT 1),
                     (SELECT NULLIF(port.label, '') FROM JSON_TABLE(COALESCE(device_models.panel, JSON_OBJECT()),
-                        '$.faces.*.ports[*]' COLUMNS (id VARCHAR(64) PATH '$.id', label VARCHAR(255) PATH '$.label')) AS port
+                        '$.faces.*.ports[*]' COLUMNS (
+                            id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PATH '$.id',
+                            label VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PATH '$.label')) AS port
                         WHERE port.id = device_interfaces.connector_id LIMIT 1),
                     CONCAT('Porta ', LEFT(device_interfaces.connector_id, 8)), 'Interfaccia'))))
              FROM devices

@@ -50,7 +50,7 @@ class SubnetAddressTable
         if ($sourceSort) {
             $field = $sort === 'hostname' ? 'hostname_observed' : 'mac';
             $observed = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
-                ->selectRaw("address AS source_address, MIN(CASE WHEN JSON_TYPE(data->'$.{$field}') = 'STRING' THEN NULLIF(TRIM(data->>'$.{$field}'), '') END) AS sort_value")
+                ->selectRaw("address AS source_address, MIN(CASE WHEN JSON_TYPE(JSON_EXTRACT(data, '$.{$field}')) = 'STRING' THEN NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(data, '$.{$field}'))), '') END) AS sort_value")
                 ->groupBy('address');
             $documented = (clone $matching)->leftJoinSub($observed, 'observed', fn ($join) => $join->on('ip_addresses.address', '=', 'observed.source_address'))
                 ->select('ip_addresses.address')->selectRaw("COALESCE(NULLIF(ip_addresses.{$sort}, ''), observed.sort_value) AS sort_value");

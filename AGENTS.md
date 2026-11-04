@@ -48,7 +48,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 
 ## 3. Product boundaries and architecture
 
-- The currently chosen platform is Laravel + React/Inertia + TypeScript + Tailwind + **shadcn/ui** + MySQL. Docker Compose is the development environment. Framework versions and starter-kit details marked as proposals are **not approved merely by appearing in documentation**.
+- The currently chosen platform is Laravel + React/Inertia + TypeScript + Tailwind + **shadcn/ui** + MariaDB 11.4 LTS. Docker Compose is the development environment. Framework versions and starter-kit details marked as proposals are **not approved merely by appearing in documentation**.
 - **IPv4 only. No IPv6** implementation, fields, helpers, validation, compatibility layers, placeholders or future-proofing.
 - The IPAM must function without any integration. Respect A01 invariants and A03's distinction between documented data, external configuration and temporary observations.
 - Integrations are read-only toward managed infrastructure. No mandatory probes, remote agents, VPN, SNMP, general reconciliation engine, CQRS, microservices or plugin framework.
@@ -64,7 +64,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 4. After implementing or applying feedback, **refresh the actual Docker development instance**, including only required source/asset/dependency/container/migration updates. Preserve its development database and test data. Perform the minimum runtime check needed to know that the preview is accessible.
 5. Explain in Italian what changed, especially in UI, identify the branch, give only verified working page links, and list concrete steps A/B/C (with expected results) for the Product Owner to try. If unavailable, state the limitation; invent no links.
 6. **Owner reviews manually first.** Address feedback in the same branch, refresh Docker, and ask for review again where UI/UX changed.
-7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MySQL testing database. If fixes change UI/UX, notify the owner and obtain renewed review. Fixes that leave the approved UI/UX unchanged do not require renewed approval; complete relevant checks and continue the already authorized workflow.
+7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MariaDB testing database. If fixes change UI/UX, notify the owner and obtain renewed review. Fixes that leave the approved UI/UX unchanged do not require renewed approval; complete relevant checks and continue the already authorized workflow.
 8. After approval and successful relevant checks, push, create PR, merge and close the linked issue. **Do not push/open PR/merge/close before approval** unless the Product Owner explicitly asks for GitHub publication as the task's outcome; in that case publish the branch only and do not infer merge approval.
 9. Trivial approved direct-`main` tasks can commit/push without a PR. Never force-push or rewrite `main`.
 
@@ -72,9 +72,9 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 
 - No browser end-to-end tests (Playwright, Cypress or Selenium). The Product Owner manually verifies the UI/UX in Docker.
 - No coverage targets, duplicate test layers for the same behavior, routine snapshots, exhaustive matrices or tests of framework internals.
-- Add only a test that realistically catches an issue-specific regression: e.g. one unit test for tricky IPv4/CIDR/range calculation, or a focused MySQL feature test for persistence, tenant isolation, race conditions or authorization. Pure copy/rename usually needs none.
+- Add only a test that realistically catches an issue-specific regression: e.g. one unit test for tricky IPv4/CIDR/range calculation, or a focused MariaDB feature test for persistence, tenant isolation, race conditions or authorization. Pure copy/rename usually needs none.
 - Automated tests are **post-approval**, not a repetitive development ritual. When a test fails, fix the cause and rerun only the impacted check.
-- Use a distinct MySQL test database (e.g. `netvibe_test`) in Docker. Never reset/migrate/seed the browsable development database as part of a test. Abort a destructive test command if the database is not demonstrably isolated.
+- Use a distinct MariaDB test database (e.g. `netvibe_test`) in Docker. Never reset/migrate/seed the browsable development database as part of a test. Abort a destructive test command if the database is not demonstrably isolated.
 - Keep initial CI minimal: PHP formatting, approved relevant backend tests, and TypeScript/build checks as needed. Do not introduce E2E, coverage gates, PHPMD, Deptrac or additional scanning stages without approval.
 - Be transparent about which tests ran and which have been deferred.
 

@@ -212,12 +212,7 @@ function Step({
     );
 }
 
-function SnipeItForm({
-    company,
-    settings,
-    affectedCompanies,
-    sync,
-}: Props) {
+function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
     const form = useForm(defaults(settings));
     const test = useHttp<ReturnType<typeof defaults>, TestResult>(
         defaults(settings),
@@ -737,7 +732,10 @@ function SnipeItForm({
                         <Card>
                             <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
                                 <CardTitle className="flex items-center gap-3">
-                                    <Link2 className="size-4" aria-hidden="true" />
+                                    <Link2
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
                                     Connessione globale
                                     {!settings.connection ? (
                                         <Badge variant="outline">
@@ -813,7 +811,8 @@ function SnipeItForm({
                                                 {settings.use_global
                                                     ? 'Connessione globale'
                                                     : 'Server dedicato'}{' '}
-                                                · {settings.connection.server_url}
+                                                ·{' '}
+                                                {settings.connection.server_url}
                                             </span>
                                             <br />
                                             {checkLabel}
@@ -898,7 +897,9 @@ function SnipeItForm({
                                             <Button
                                                 type="button"
                                                 disabled={
-                                                    busy || !options || !selected
+                                                    busy ||
+                                                    !options ||
+                                                    !selected
                                                 }
                                                 onClick={submitAssociation}
                                             >

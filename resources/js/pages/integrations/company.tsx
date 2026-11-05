@@ -154,7 +154,9 @@ function IntegrationCard({
             <CardContent className="flex flex-1 flex-col gap-3">
                 {children}
             </CardContent>
-            {footer ? <CardFooter className="gap-2">{footer}</CardFooter> : null}
+            {footer ? (
+                <CardFooter className="gap-2">{footer}</CardFooter>
+            ) : null}
         </Card>
     );
 }
@@ -480,7 +482,9 @@ export default function CompanyIntegrations({
                     footer={
                         admin || unifi.length ? (
                             <ManageButton href={unifiHref}>
-                                {unifi.length ? 'Gestisci UniFi' : 'Collega sito UniFi'}
+                                {unifi.length
+                                    ? 'Gestisci UniFi'
+                                    : 'Collega sito UniFi'}
                             </ManageButton>
                         ) : null
                     }

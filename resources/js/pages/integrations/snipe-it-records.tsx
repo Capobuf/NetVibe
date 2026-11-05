@@ -374,7 +374,10 @@ function Records({
 
     function applyBulk() {
         if (!pendingBulk) return;
-        if (allMatching && (pendingBulk === 'exclude' || pendingBulk === 'restore')) {
+        if (
+            allMatching &&
+            (pendingBulk === 'exclude' || pendingBulk === 'restore')
+        ) {
             massForm.transform((data) => ({ ...data, action: pendingBulk }));
             massForm.submit(bulk(company.id), {
                 preserveScroll: true,
@@ -681,8 +684,8 @@ function Records({
                 {sync && !active ? (
                     <Alert>
                         <AlertDescription>
-                            Sincronizzazione sospesa. Riconferma l’azienda
-                            nelle impostazioni Snipe-IT.
+                            Sincronizzazione sospesa. Riconferma l’azienda nelle
+                            impostazioni Snipe-IT.
                         </AlertDescription>
                     </Alert>
                 ) : null}
@@ -763,7 +766,9 @@ function Records({
                                     <SelectGroup>
                                         {categories.map((category) => (
                                             <SelectItem
-                                                key={category.name ?? NO_CATEGORY}
+                                                key={
+                                                    category.name ?? NO_CATEGORY
+                                                }
                                                 value={
                                                     category.name ?? NO_CATEGORY
                                                 }
@@ -1045,9 +1050,7 @@ function Records({
                             pageCount={rows.last_page}
                             pageSize={rows.per_page}
                             onPageChange={(page) => visit({ page })}
-                            onPageSizeChange={(per_page) =>
-                                visit({ per_page })
-                            }
+                            onPageSizeChange={(per_page) => visit({ per_page })}
                         />
                     ) : null}
                 </Card>
@@ -1138,8 +1141,8 @@ function Records({
                                                     href={current.ipam_url}
                                                 >
                                                     {
-                                                        current.snapshot
-                                                            .network?.ip
+                                                        current.snapshot.network
+                                                            ?.ip
                                                     }
                                                 </TextLink>
                                             ) : (
@@ -1433,7 +1436,9 @@ function Records({
                         ) : null}
                         {pendingBulk === 'create' && multipleSites ? (
                             <Field>
-                                <FieldLabel htmlFor="asset-site">Sede</FieldLabel>
+                                <FieldLabel htmlFor="asset-site">
+                                    Sede
+                                </FieldLabel>
                                 <SitePicker
                                     sites={sites}
                                     value={bulkSite}

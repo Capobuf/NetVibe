@@ -220,22 +220,22 @@ class UnifiController extends Controller
                                 continue;
                             }
                             foreach ($client->sites($connection, $consoleId) as $site) {
-                            $devices = $client->devices($connection, $site['id'], $consoleId);
-                            try {
-                                $networks = $client->networks($connection, $site['id'], $info['applicationVersion'], $consoleId);
-                                $networksStatus = 'ok';
-                            } catch (UnifiException $exception) {
-                                if ($exception->status !== 'unsupported') {
-                                    throw $exception;
+                                $devices = $client->devices($connection, $site['id'], $consoleId);
+                                try {
+                                    $networks = $client->networks($connection, $site['id'], $info['applicationVersion'], $consoleId);
+                                    $networksStatus = 'ok';
+                                } catch (UnifiException $exception) {
+                                    if ($exception->status !== 'unsupported') {
+                                        throw $exception;
+                                    }
+                                    $networks = null;
+                                    $networksStatus = 'unsupported';
                                 }
-                                $networks = null;
-                                $networksStatus = 'unsupported';
-                            }
-                            $found[] = [
-                                'console_id' => $console['id'], 'console_name' => $console['name'], 'external_site_id' => $site['id'],
-                                'name' => $site['name'], 'version' => $info['applicationVersion'],
-                                'preview' => ['devices' => $devices, 'networks' => $networks, 'networks_status' => $networksStatus],
-                            ];
+                                $found[] = [
+                                    'console_id' => $console['id'], 'console_name' => $console['name'], 'external_site_id' => $site['id'],
+                                    'name' => $site['name'], 'version' => $info['applicationVersion'],
+                                    'preview' => ['devices' => $devices, 'networks' => $networks, 'networks_status' => $networksStatus],
+                                ];
                             }
                             $sources = [...$sources, ...$found];
                         } catch (UnifiException $exception) {

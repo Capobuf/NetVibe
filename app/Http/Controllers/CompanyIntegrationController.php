@@ -9,12 +9,52 @@ use App\Models\Device;
 use App\Models\SnipeItCompanyLink;
 use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync;
+use App\Models\UnifiConnection;
 use App\Models\UnifiSite;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CompanyIntegrationController extends Controller
 {
+    /** Installation-wide status of every integration for the administration overview. */
+    public function overview(): Response
+    {
+        $connection = SnipeItSetting::forCompany(null)->connection;
+        $syncs = SnipeItSync::with('company')->get()->filter->isActive();
+
+        return Inertia::render('integrations/index', [
+            'snipeIt' => [
+                'server_url' => $connection?->server_url,
+                'check_status' => $connection?->check_status,
+                'checked_at' => $connection?->checked_at,
+                'companies' => $syncs->map(fn (SnipeItSync $sync) => [
+                    'id' => $sync->company_id, 'name' => $sync->company->name,
+                    'synced_at' => $sync->synced_at, 'error' => $sync->error,
+                    'pending' => $sync->assets()->forView('pending')->count(),
+                ])->sortBy('name')->values(),
+            ],
+            'mikrotik' => Device::whereHas('mikrotikConnection')->with('site.company', 'mikrotikConnection')->orderBy('name')->get()
+                ->map(fn (Device $device) => [
+                    ...$device->only('id', 'name', 'site_id'),
+                    'company' => $device->site->company->only('id', 'name'),
+                    'synced_at' => $device->mikrotikConnection->synced_at,
+                    'error' => $device->mikrotikConnection->sync_status && $device->mikrotikConnection->sync_status !== 'ok'
+                        ? MikrotikException::messageFor($device->mikrotikConnection->sync_status) : null,
+                ])->sortBy('company.name')->values(),
+            'unifi' => [
+                'connections' => UnifiConnection::count(),
+                'errors' => UnifiConnection::whereNotNull('check_status')->where('check_status', '!=', 'ok')->count(),
+                'sites' => UnifiSite::whereNotNull('site_id')->with('site.company')->orderBy('name')->get()
+                    ->map(fn (UnifiSite $site) => [
+                        ...$site->only('id', 'name', 'console_name', 'last_synced_at'),
+                        'company' => $site->site->company->only('id', 'name'),
+                        'error' => $site->sync_status && $site->sync_status !== 'ok' ? UnifiException::messageFor($site->sync_status) : null,
+                    ]),
+                'unassigned' => UnifiSite::whereNull('site_id')->count(),
+            ],
+        ]);
+    }
+
     public function show(Company $company): Response
     {
         $setting = SnipeItSetting::forCompany($company);

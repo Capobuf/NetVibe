@@ -139,7 +139,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
-        Route::inertia('integrations', 'integrations/index')->name('integrations.index');
+        Route::get('integrations', [CompanyIntegrationController::class, 'overview'])->name('integrations.index');
         Route::prefix('integrations/unifi')->name('integrations.unifi.')->group(function () {
             Route::get('/', [UnifiController::class, 'index'])->name('index');
             Route::post('/', [UnifiController::class, 'store'])->middleware('throttle:20,1')->name('store');

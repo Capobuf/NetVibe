@@ -1,10 +1,13 @@
 import {
+    SubnetIpRow,
+    type IpColumn,
+    type IpRow,
+} from '@/components/networks/subnet-ip-row';
+import {
     UnifiObservationIndicator,
-    UnifiObservedValue,
     type UnifiObservation,
 } from '@/components/networks/unifi-observation';
 import { NetworkExclusionAction } from '@/components/networks/network-exclusion';
-import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import { show as vlanShow } from '@/routes/companies/sites/vlans';
 import {
     Empty,
@@ -15,14 +18,12 @@ import {
 } from '@/components/ui/empty';
 import {
     MikrotikIndicator,
-    MikrotikValue,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import {
     ArrowLeft,
-    Ban,
     ArrowUpRight,
     Search,
     Eye,
@@ -31,10 +32,8 @@ import {
     Pencil,
     SlidersHorizontal,
 } from 'lucide-react';
-import { DeviceAssociation } from '@/components/devices/device-association';
 import { IconButton } from '@/components/icon-button';
-import { CopyValue } from '@/components/copy-value';
-import { TableColumns, type TableColumn } from '@/components/table-columns';
+import { TableColumns } from '@/components/table-columns';
 import { TableSearch } from '@/components/table-search';
 import { TablePagination } from '@/components/table-pagination';
 import { TableSortHead } from '@/components/table-sort-head';
@@ -42,9 +41,7 @@ import { useTablePreferences } from '@/hooks/use-table-preferences';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import ExcludedRanges from '@/components/networks/excluded-ranges';
 import SubnetForm from '@/components/networks/subnet-form';
-import { TagBadge } from '@/components/networks/tag-badge';
 import { Badge } from '@/components/ui/badge';
-import { AvatarGroup } from '@/components/ui/avatar';
 import SubnetOccupancyChart from '@/components/networks/subnet-occupancy-chart';
 import SubnetSummary from '@/components/networks/subnet-summary';
 import {
@@ -70,36 +67,17 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type {
     ExcludedRange,
-    IpAddress,
     IpStatus,
     Tag,
     Subnet,
     SubnetSummaryEntry,
     Vlan,
 } from '@/types/network';
-
-type IpColumn = TableColumn<
-    | 'ip'
-    | 'hostname'
-    | 'mac_address'
-    | 'description'
-    | 'status'
-    | 'tags'
-    | 'device'
-    | 'sources'
->;
-
-type IpRow = Omit<IpAddress, 'id'> & { id: number | null; excluded: boolean };
 
 type Props = {
     company: Company;
@@ -646,318 +624,24 @@ export default function SubnetShow({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {ipAddresses.data.map((ipAddress) => {
-                                    const sources =
-                                        sourcesByIp.get(ipAddress.ip) ?? [];
-                                    const unifi =
-                                        unifiByIp.get(ipAddress.ip) ?? [];
-                                    const current = sources.filter(
-                                        (source) => source.state !== 'missing',
-                                    );
-                                    const sourceNotice = current.some(
-                                        (source) => source.problem,
-                                    )
-                                        ? 'Da verificare'
-                                        : current.length > 0 &&
-                                            current.every(
-                                                (source) => source.stale,
-                                            )
-                                          ? 'Non aggiornato'
-                                          : null;
-                                    const canOpen =
-                                        ipAddress.id !== null ||
-                                        auth.canEditIpam;
-                                    const openAddress = (
-                                        opener: HTMLElement,
-                                    ) => {
-                                        dialogOpener.current = opener;
-                                        setSelectedIp(ipAddress);
-                                    };
-
-                                    return (
-                                        <TableRow
-                                            key={ipAddress.ip}
-                                            id={`ip-row-${ipAddress.ip}`}
-                                            className={
-                                                canOpen
-                                                    ? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
-                                                    : undefined
-                                            }
-                                            tabIndex={canOpen ? 0 : undefined}
-                                            aria-label={
-                                                canOpen
-                                                    ? `${ipAddress.id !== null ? 'Visualizza' : 'Documenta'} IP ${ipAddress.ip}`
-                                                    : undefined
-                                            }
-                                            aria-haspopup={
-                                                canOpen ? 'dialog' : undefined
-                                            }
-                                            onClick={
-                                                canOpen
-                                                    ? (event) => {
-                                                          if (
-                                                              event.currentTarget.contains(
-                                                                  event.target as Node,
-                                                              ) &&
-                                                              window.getSelection()
-                                                                  ?.isCollapsed !==
-                                                                  false &&
-                                                              !(
-                                                                  event.target as HTMLElement
-                                                              ).closest(
-                                                                  'a,button,input,select,textarea,[role="button"]',
-                                                              )
-                                                          )
-                                                              openAddress(
-                                                                  event.currentTarget,
-                                                              );
-                                                      }
-                                                    : undefined
-                                            }
-                                            onKeyDown={
-                                                canOpen
-                                                    ? (event) => {
-                                                          if (
-                                                              event.target ===
-                                                                  event.currentTarget &&
-                                                              (event.key ===
-                                                                  'Enter' ||
-                                                                  event.key ===
-                                                                      ' ')
-                                                          ) {
-                                                              event.preventDefault();
-                                                              openAddress(
-                                                                  event.currentTarget,
-                                                              );
-                                                          }
-                                                      }
-                                                    : undefined
-                                            }
-                                        >
-                                            <TableCell />
-                                            {visibleColumns.map((column) => (
-                                                <TableCell
-                                                    key={column.id}
-                                                    className={
-                                                        column.id === 'ip' ||
-                                                        column.id ===
-                                                            'mac_address'
-                                                            ? 'px-4 tabular-nums'
-                                                            : 'whitespace-nowrap [&>span]:flex-nowrap'
-                                                    }
-                                                >
-                                                    {column.id === 'sources' ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <AvatarGroup
-                                                                aria-label={`Fonti per ${ipAddress.ip}`}
-                                                            >
-                                                                <SnipeItIp
-                                                                    source={
-                                                                        ipAddress.snipe_it
-                                                                    }
-                                                                    avatar
-                                                                />
-                                                                <MikrotikIndicator
-                                                                    sources={
-                                                                        sources
-                                                                    }
-                                                                    avatar
-                                                                />
-                                                                <UnifiObservationIndicator
-                                                                    observations={
-                                                                        unifi
-                                                                    }
-                                                                    company={
-                                                                        company.id
-                                                                    }
-                                                                    site={
-                                                                        site.id
-                                                                    }
-                                                                    avatar
-                                                                />
-                                                            </AvatarGroup>
-                                                            {sourceNotice ? (
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    {
-                                                                        sourceNotice
-                                                                    }
-                                                                </span>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : column.id === 'ip' ? (
-                                                        <div className="flex items-center gap-2 whitespace-nowrap">
-                                                            <CopyValue
-                                                                value={
-                                                                    ipAddress.ip
-                                                                }
-                                                                className="py-1 tabular-nums"
-                                                            />
-                                                            {ipAddress.excluded ? (
-                                                                <Tooltip>
-                                                                    <TooltipTrigger
-                                                                        asChild
-                                                                    >
-                                                                        <span
-                                                                            tabIndex={
-                                                                                0
-                                                                            }
-                                                                            onClick={(
-                                                                                event,
-                                                                            ) =>
-                                                                                event.stopPropagation()
-                                                                            }
-                                                                            role="img"
-                                                                            aria-label="IP escluso dai suggerimenti"
-                                                                            className="inline-flex rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                                        >
-                                                                            <Ban
-                                                                                className="size-3.5"
-                                                                                aria-hidden="true"
-                                                                            />
-                                                                        </span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>
-                                                                        Escluso
-                                                                        dai
-                                                                        suggerimenti
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : column.id ===
-                                                      'device' ? (
-                                                        <DeviceAssociation
-                                                            company={company.id}
-                                                            site={site.id}
-                                                            device={
-                                                                ipAddress.device
-                                                            }
-                                                            item={
-                                                                ipAddress.device_interface
-                                                            }
-                                                            label={
-                                                                ipAddress.assignment_label
-                                                            }
-                                                        />
-                                                    ) : column.id ===
-                                                          'hostname' ||
-                                                      column.id ===
-                                                          'mac_address' ? (
-                                                        <div className="flex flex-col items-start">
-                                                            <MikrotikValue
-                                                                showIndicator={
-                                                                    false
-                                                                }
-                                                                value={
-                                                                    ipAddress[
-                                                                        column
-                                                                            .id
-                                                                    ]
-                                                                }
-                                                                field={
-                                                                    column.id ===
-                                                                    'mac_address'
-                                                                        ? 'mac'
-                                                                        : 'hostname'
-                                                                }
-                                                                sources={
-                                                                    sources
-                                                                }
-                                                            />
-                                                            <UnifiObservedValue
-                                                                showIndicator={
-                                                                    false
-                                                                }
-                                                                observations={
-                                                                    unifi
-                                                                }
-                                                                company={
-                                                                    company.id
-                                                                }
-                                                                site={site.id}
-                                                                value={
-                                                                    ipAddress[
-                                                                        column
-                                                                            .id
-                                                                    ]
-                                                                }
-                                                                field={
-                                                                    column.id ===
-                                                                    'mac_address'
-                                                                        ? 'mac'
-                                                                        : 'hostname_observed'
-                                                                }
-                                                            />
-                                                        </div>
-                                                    ) : column.id ===
-                                                      'status' ? (
-                                                        ipAddress.status ? (
-                                                            <Badge variant="secondary">
-                                                                {
-                                                                    ipAddress
-                                                                        .status
-                                                                        .name
-                                                                }
-                                                            </Badge>
-                                                        ) : (
-                                                            ''
-                                                        )
-                                                    ) : column.id === 'tags' ? (
-                                                        ipAddress.tags
-                                                            .length ? (
-                                                            <div className="flex gap-1 whitespace-nowrap">
-                                                                {ipAddress.tags.map(
-                                                                    (tag) => (
-                                                                        <TagBadge
-                                                                            key={
-                                                                                tag.id
-                                                                            }
-                                                                            color={
-                                                                                tag.color
-                                                                            }
-                                                                        >
-                                                                            {
-                                                                                tag.name
-                                                                            }
-                                                                        </TagBadge>
-                                                                    ),
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            ''
-                                                        )
-                                                    ) : (
-                                                        <Tooltip>
-                                                            <TooltipTrigger
-                                                                asChild
-                                                            >
-                                                                <span className="block max-w-lg truncate">
-                                                                    {ipAddress[
-                                                                        column
-                                                                            .id
-                                                                    ] ?? ''}
-                                                                </span>
-                                                            </TooltipTrigger>
-                                                            {ipAddress[
-                                                                column.id
-                                                            ] ? (
-                                                                <TooltipContent>
-                                                                    {
-                                                                        ipAddress[
-                                                                            column
-                                                                                .id
-                                                                        ]
-                                                                    }
-                                                                </TooltipContent>
-                                                            ) : null}
-                                                        </Tooltip>
-                                                    )}
-                                                </TableCell>
-                                            ))}
-                                            <TableCell />
-                                        </TableRow>
-                                    );
-                                })}
+                                {ipAddresses.data.map((ipAddress) => (
+                                    <SubnetIpRow
+                                        key={ipAddress.ip}
+                                        ipAddress={ipAddress}
+                                        visibleColumns={visibleColumns}
+                                        sources={
+                                            sourcesByIp.get(ipAddress.ip) ?? []
+                                        }
+                                        unifi={unifiByIp.get(ipAddress.ip) ?? []}
+                                        company={company.id}
+                                        site={site.id}
+                                        canEdit={auth.canEditIpam}
+                                        onOpen={(address, opener) => {
+                                            dialogOpener.current = opener;
+                                            setSelectedIp(address);
+                                        }}
+                                    />
+                                ))}
                                 {ipAddresses.data.length === 0 ? (
                                     <TableRow>
                                         <TableCell

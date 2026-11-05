@@ -451,7 +451,9 @@ function SiteRow({
             items={destinations}
             value=""
             onChange={choose}
-            placeholder={source.site ? 'Scegli la nuova sede…' : 'Collega a una sede…'}
+            placeholder={
+                source.site ? 'Scegli la nuova sede…' : 'Collega a una sede…'
+            }
             createLabel="Aggiungi azienda"
             required
             disabled={busy}

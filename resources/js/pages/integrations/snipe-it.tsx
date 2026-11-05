@@ -12,7 +12,6 @@ import {
     SlidersHorizontal,
     Trash2,
 } from 'lucide-react';
-import { IntegrationTabs } from '@/components/integration-tabs';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { index as administration } from '@/routes/administration';
 import { index as integrationIndex } from '@/routes/administration/integrations';
@@ -59,7 +58,6 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import * as globalRoutes from '@/routes/administration/integrations/snipe-it';
 import { show as companyIntegrations } from '@/routes/companies/settings/integrations';
@@ -132,14 +130,11 @@ function defaults(settings: Settings) {
 }
 
 export default function SnipeIt(props: Props) {
-    const [tab, setTab] = useState('connection');
     // Reset transient form/list state after a save or a change of company; secrets never enter history state.
     return (
         <SnipeItForm
             key={`${props.company?.id ?? 'global'}:${props.settings.revision}:${props.settings.global_revision}`}
             {...props}
-            tab={tab}
-            onTabChange={setTab}
         />
     );
 }
@@ -222,12 +217,7 @@ function SnipeItForm({
     settings,
     affectedCompanies,
     sync,
-    tab,
-    onTabChange,
-}: Props & {
-    tab: string;
-    onTabChange: (tab: string) => void;
-}) {
+}: Props) {
     const form = useForm(defaults(settings));
     const test = useHttp<ReturnType<typeof defaults>, TestResult>(
         defaults(settings),
@@ -720,91 +710,62 @@ function SnipeItForm({
             <>
                 <Head title="Snipe-IT · Amministrazione" />
                 <div className="flex max-w-5xl flex-col gap-6 p-4 md:p-6">
-                    <h1 className="text-2xl font-medium tracking-tight">
-                        Snipe-IT
-                    </h1>
-                    <IntegrationTabs value="snipe-it" company={null}>
-                        <TabsContent
-                            value="snipe-it"
-                            className="flex flex-col gap-6"
+                    <header className="flex flex-col items-start gap-3">
+                        <Button
+                            asChild
+                            variant="ghost"
+                            size="sm"
+                            className="-ml-2"
                         >
-                            <Tabs
-                                value={settings.connection ? tab : 'connection'}
-                                onValueChange={onTabChange}
-                                className="gap-6"
-                            >
-                                <TabsList aria-label="Impostazioni Snipe-IT">
-                                    <TabsTrigger value="connection">
-                                        <Link2 aria-hidden="true" />
-                                        Connessione
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="fields"
-                                        disabled={
-                                            !settings.connection ||
-                                            busy ||
-                                            changed
-                                        }
-                                    >
-                                        <SlidersHorizontal aria-hidden="true" />
-                                        Mappatura Campi
-                                    </TabsTrigger>
-                                </TabsList>
-                                <TabsContent
-                                    value="connection"
-                                    forceMount
-                                    className="flex flex-col gap-6 data-[state=inactive]:hidden"
-                                >
-                                    {errorAlert}
-                                    <form
-                                        onSubmit={(event) => {
-                                            event.preventDefault();
-                                            save();
-                                        }}
-                                    >
-                                        <Card>
-                                            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-                                                <CardTitle className="flex items-center gap-3">
-                                                    Connessione globale
-                                                    {!settings.connection ? (
-                                                        <Badge variant="outline">
-                                                            Non configurata
-                                                        </Badge>
-                                                    ) : null}
-                                                </CardTitle>
-                                                <span className="text-sm text-muted-foreground">
-                                                    {checkLabel}
-                                                </span>
-                                            </CardHeader>
-                                            <CardContent className="flex flex-col gap-6">
-                                                {connectionFields}
-                                            </CardContent>
-                                            <CardFooter className="flex flex-wrap gap-3">
-                                                {connectionButtons}
-                                            </CardFooter>
-                                        </Card>
-                                    </form>
-                                </TabsContent>
-                                <TabsContent
-                                    value="fields"
-                                    forceMount
-                                    className="data-[state=inactive]:hidden"
-                                >
-                                    {settings.connection ? (
-                                        <SnipeItFields
-                                            revision={settings.revision}
-                                            globalRevision={
-                                                settings.global_revision
-                                            }
-                                            inherited={false}
-                                            disabled={busy || changed}
-                                            active={tab === 'fields'}
-                                        />
+                            <Link href={integrationIndex()}>
+                                <ArrowLeft data-icon="inline-start" />
+                                Integrazioni
+                            </Link>
+                        </Button>
+                        <h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight">
+                            <SnipeItMark className="size-6" />
+                            Snipe-IT
+                        </h1>
+                    </header>
+                    {errorAlert}
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            save();
+                        }}
+                    >
+                        <Card>
+                            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+                                <CardTitle className="flex items-center gap-3">
+                                    <Link2 className="size-4" aria-hidden="true" />
+                                    Connessione globale
+                                    {!settings.connection ? (
+                                        <Badge variant="outline">
+                                            Non configurata
+                                        </Badge>
                                     ) : null}
-                                </TabsContent>
-                            </Tabs>
-                        </TabsContent>
-                    </IntegrationTabs>
+                                </CardTitle>
+                                <span className="text-sm text-muted-foreground">
+                                    {checkLabel}
+                                </span>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-6">
+                                {connectionFields}
+                            </CardContent>
+                            <CardFooter className="flex flex-wrap gap-3">
+                                {connectionButtons}
+                            </CardFooter>
+                        </Card>
+                    </form>
+                    {settings.connection ? (
+                        <SnipeItFields
+                            revision={settings.revision}
+                            globalRevision={settings.global_revision}
+                            inherited={false}
+                            disabled={busy || changed}
+                            active
+                        />
+                    ) : null}
                 </div>
                 {dialog}
             </>

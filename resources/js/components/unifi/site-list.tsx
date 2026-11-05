@@ -1,9 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
-import { ArrowRight, Eye, Link2, MapPin, Server, Unlink } from 'lucide-react';
+import { ArrowRight, Eye, Server } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { CatalogCombobox } from '@/components/devices/catalog-combobox';
 import { IconButton } from '@/components/icon-button';
-import { SaveButton } from '@/components/save-button';
 import { store as storeCompany } from '@/routes/administration/companies';
 import type { CreatedCompany } from '@/types/company';
 import {
@@ -14,13 +13,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
@@ -36,7 +29,6 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
-import { FieldError } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/spinner';
 import {
     Table,
@@ -50,11 +42,11 @@ import { cn } from '@/lib/utils';
 import { UnifiSitePreview } from './site-preview';
 import type { UnifiCompany, UnifiConnection, UnifiSite } from './types';
 
-type Destination = { id: number; label: string };
+type Destination = { id: number; name: string };
 
 /**
  * Mapping table: UniFi consoles and sites on the left, the NetVibe company
- * and site they feed on the right. Cloud consoles are selected in place.
+ * and site they feed on the right, editable in place.
  */
 export function UnifiSiteList({
     connection,
@@ -70,7 +62,9 @@ export function UnifiSiteList({
     disabled?: boolean;
 }) {
     const [previewId, setPreviewId] = useState<number | null>(null);
-    const [confirm, setConfirm] = useState(false);
+    const [pendingConsoles, setPendingConsoles] = useState<string[] | null>(
+        null,
+    );
     const preview = connection.sites.find((source) => source.id === previewId);
     const selectable =
         !readonly &&
@@ -81,20 +75,16 @@ export function UnifiSiteList({
         selected_console_ids: saved,
         revision: connection.revision ?? '',
     });
-    const chosen = consoleForm.data.selected_console_ids;
-    const changed =
-        JSON.stringify([...chosen].sort()) !==
-        JSON.stringify([...saved].sort());
-    const removed = connection.sites.filter(
-        (source) =>
-            source.site &&
-            saved.includes(source.console_id) &&
-            !chosen.includes(source.console_id),
-    );
+    const removed = pendingConsoles
+        ? connection.sites.filter(
+              (source) =>
+                  source.site && !pendingConsoles.includes(source.console_id),
+          )
+        : [];
     const destinations = companies.flatMap((company) =>
         company.sites.map((site) => ({
             id: site.id,
-            label: site.name ? `${company.name} · ${site.name}` : company.name,
+            name: site.name ? `${company.name} · ${site.name}` : company.name,
         })),
     );
     const query = search.trim().toLocaleLowerCase();
@@ -128,15 +118,30 @@ export function UnifiSiteList({
     );
     const disabled = busy || consoleForm.processing;
 
-    function saveConsoles() {
-        consoleForm.transform((data) => ({
-            ...data,
+    function saveConsoles(ids: string[]) {
+        consoleForm.transform(() => ({
+            selected_console_ids: ids,
             revision: connection.revision,
         }));
         consoleForm.submit(selectConsoles(connection.id), {
             preserveScroll: true,
-            onSuccess: () => setConfirm(false),
+            onSuccess: () => setPendingConsoles(null),
         });
+    }
+
+    function toggleConsole(id: string, include: boolean) {
+        const ids = include
+            ? [...saved, id]
+            : saved.filter((item) => item !== id);
+        // Excluding a console with linked sites suspends their acquisitions: confirm it.
+        if (
+            !include &&
+            connection.sites.some(
+                (source) => source.site && source.console_id === id,
+            )
+        )
+            setPendingConsoles(ids);
+        else saveConsoles(ids);
     }
 
     return (
@@ -146,20 +151,31 @@ export function UnifiSiteList({
                     {selectable ? 'Console da integrare' : 'Siti UniFi'}
                 </CardTitle>
             </CardHeader>
-            <CardContent className="px-0">
+            <CardContent className="flex flex-col gap-0 px-0">
+                {consoleForm.hasErrors && !pendingConsoles ? (
+                    <Alert variant="destructive" className="mx-4 mb-4 w-auto">
+                        <AlertDescription>
+                            {Object.values(consoleForm.errors).join(' ')}
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
                 {consoles.length ? (
                     <Table aria-label="Collegamento dei siti UniFi alle sedi NetVibe">
                         <TableHeader className="bg-muted/50">
                             <TableRow>
-                                <TableHead scope="col">UniFi</TableHead>
+                                <TableHead scope="col" className="w-1/2">
+                                    UniFi
+                                </TableHead>
                                 <TableHead scope="col" className="w-10">
                                     <span className="sr-only">
                                         Collegamento
                                     </span>
                                 </TableHead>
-                                <TableHead scope="col">NetVibe</TableHead>
-                                <TableHead scope="col" className="w-0">
-                                    <span className="sr-only">Azioni</span>
+                                <TableHead scope="col" className="w-1/2">
+                                    NetVibe
+                                </TableHead>
+                                <TableHead scope="col" className="w-12">
+                                    <span className="sr-only">Anteprima</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
@@ -169,7 +185,7 @@ export function UnifiSiteList({
                                     (source) => source.console_id === item.id,
                                 );
                                 const included =
-                                    !selectable || chosen.includes(item.id);
+                                    !selectable || saved.includes(item.id);
                                 const checkboxId = `unifi-console-${connection.id}-${item.id}`;
                                 return (
                                     <Fragment key={item.id}>
@@ -184,21 +200,10 @@ export function UnifiSiteList({
                                                             onCheckedChange={(
                                                                 checked,
                                                             ) =>
-                                                                consoleForm.setData(
-                                                                    'selected_console_ids',
+                                                                toggleConsole(
+                                                                    item.id,
                                                                     checked ===
-                                                                        true
-                                                                        ? [
-                                                                              ...chosen,
-                                                                              item.id,
-                                                                          ]
-                                                                        : chosen.filter(
-                                                                              (
-                                                                                  id,
-                                                                              ) =>
-                                                                                  id !==
-                                                                                  item.id,
-                                                                          ),
+                                                                        true,
                                                                 )
                                                             }
                                                         />
@@ -214,16 +219,13 @@ export function UnifiSiteList({
                                                         <Server className="size-4 text-muted-foreground" />
                                                         {item.name}
                                                     </label>
-                                                    <Badge variant="outline">
-                                                        {sites.length}{' '}
-                                                        {sites.length === 1
-                                                            ? 'sito'
-                                                            : 'siti'}
-                                                    </Badge>
                                                     {!included ? (
                                                         <span className="text-sm text-muted-foreground">
                                                             Non integrata
                                                         </span>
+                                                    ) : null}
+                                                    {consoleForm.processing ? (
+                                                        <Spinner />
                                                     ) : null}
                                                 </div>
                                             </TableCell>
@@ -235,7 +237,13 @@ export function UnifiSiteList({
                                                 connection={connection}
                                                 destinations={destinations}
                                                 readonly={readonly}
-                                                included={included}
+                                                disabled={
+                                                    disabled ||
+                                                    !included ||
+                                                    !connection.enabled ||
+                                                    !source.available
+                                                }
+                                                dimmed={!included}
                                                 onPreview={() =>
                                                     setPreviewId(source.id)
                                                 }
@@ -276,26 +284,6 @@ export function UnifiSiteList({
                     </Empty>
                 )}
             </CardContent>
-            {selectable ? (
-                <CardFooter className="flex-wrap gap-3 border-t py-3">
-                    <SaveButton
-                        type="button"
-                        processing={consoleForm.processing}
-                        disabled={disabled || !changed}
-                        saved={!changed}
-                        onClick={() =>
-                            removed.length ? setConfirm(true) : saveConsoles()
-                        }
-                    >
-                        Salva console
-                    </SaveButton>
-                    <FieldError
-                        errors={Object.values(consoleForm.errors).map(
-                            (message) => ({ message }),
-                        )}
-                    />
-                </CardFooter>
-            ) : null}
             {preview ? (
                 <UnifiSitePreview
                     source={preview}
@@ -306,48 +294,53 @@ export function UnifiSiteList({
                 />
             ) : null}
             <Dialog
-                open={confirm}
+                open={pendingConsoles !== null}
                 onOpenChange={(open) => {
-                    if (!consoleForm.processing) setConfirm(open);
+                    if (!open && !consoleForm.processing)
+                        setPendingConsoles(null);
                 }}
             >
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>
-                            Modificare le console selezionate?
-                        </DialogTitle>
+                        <DialogTitle>Escludere la console?</DialogTitle>
                         <DialogDescription>
-                            Le nuove acquisizioni dei siti delle console
-                            deselezionate verranno sospese.
+                            Le nuove acquisizioni di questi siti verranno
+                            sospese. I dati documentati saranno conservati.
                         </DialogDescription>
                     </DialogHeader>
                     <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
                         {removed.map((source) => (
                             <li key={source.id}>
-                                {source.console_name} · {source.name}
+                                {source.console_name} · {source.name} →{' '}
+                                {[source.site?.company.name, source.site?.name]
+                                    .filter(Boolean)
+                                    .join(' · ')}
                             </li>
                         ))}
                     </ul>
-                    <FieldError
-                        errors={Object.values(consoleForm.errors).map(
-                            (message) => ({ message }),
-                        )}
-                    />
+                    {consoleForm.hasErrors ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>
+                                {Object.values(consoleForm.errors).join(' ')}
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
                     <DialogFooter>
                         <Button
                             variant="outline"
-                            onClick={() => setConfirm(false)}
+                            onClick={() => setPendingConsoles(null)}
                             disabled={consoleForm.processing}
                         >
                             Annulla
                         </Button>
-                        <SaveButton
-                            type="button"
-                            processing={consoleForm.processing}
-                            onClick={saveConsoles}
+                        <Button
+                            variant="destructive"
+                            disabled={consoleForm.processing}
+                            onClick={() => saveConsoles(pendingConsoles ?? [])}
                         >
-                            Conferma
-                        </SaveButton>
+                            {consoleForm.processing ? <Spinner /> : null}
+                            Escludi
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -360,36 +353,84 @@ function SiteRow({
     connection,
     destinations,
     readonly,
-    included,
+    disabled,
+    dimmed,
     onPreview,
 }: {
     source: UnifiSite;
     connection: UnifiConnection;
     destinations: Destination[];
     readonly: boolean;
-    included: boolean;
+    disabled: boolean;
+    dimmed: boolean;
     onPreview: () => void;
 }) {
-    const [selected, setSelected] = useState<Destination | null>(null);
-    const [editing, setEditing] = useState(false);
-    const [creatingCompany, setCreatingCompany] = useState(false);
-    const [confirm, setConfirm] = useState<'associate' | 'revoke' | null>(null);
+    const [target, setTarget] = useState<Destination | null>(null);
+    const [confirm, setConfirm] = useState<'change' | 'revoke' | null>(null);
+    // Remounting the selector restores the current site after a cancelled change.
+    const [resetKey, setResetKey] = useState(0);
     const form = useForm({
         site_id: 0,
         revision: connection.revision ?? '',
         confirmed: true,
     });
-    const destination = source.site
+    const current = source.site
         ? [source.site.company.name, source.site.name]
               .filter(Boolean)
               .join(' · ')
         : null;
-    const disabled = !connection.enabled || !source.available || !included;
-    const linked = !!source.site && !!source.confirmed_at && included;
+    const linked = !!source.site && !!source.confirmed_at && !dimmed;
+
+    function link(siteId: number) {
+        form.transform(() => ({
+            site_id: siteId,
+            revision: connection.revision,
+            confirmed: true,
+        }));
+        form.submit(
+            associate({ unifiConnection: connection.id, unifiSite: source.id }),
+            { preserveScroll: true, onSuccess: () => setConfirm(null) },
+        );
+    }
+
+    function unlink() {
+        form.transform(() => ({
+            site_id: 0,
+            revision: connection.revision,
+            confirmed: true,
+        }));
+        form.submit(
+            revoke({ unifiConnection: connection.id, unifiSite: source.id }),
+            { preserveScroll: true, onSuccess: () => setConfirm(null) },
+        );
+    }
+
+    function cancel() {
+        setConfirm(null);
+        setTarget(null);
+        form.clearErrors();
+        setResetKey((key) => key + 1);
+    }
+
+    function choose(value: string) {
+        if (!value) {
+            if (source.site) setConfirm('revoke');
+            return;
+        }
+        const next =
+            destinations.find((item) => String(item.id) === value) ?? null;
+        if (!next || next.id === source.site?.id) return;
+        // A first link is immediate; moving an existing link changes where data lands.
+        if (!source.site) link(next.id);
+        else {
+            setTarget(next);
+            setConfirm('change');
+        }
+    }
 
     return (
-        <TableRow className={cn(!included && 'opacity-60')}>
-            <TableCell className="pl-10 align-top whitespace-normal">
+        <TableRow className={cn(dimmed && 'opacity-60')}>
+            <TableCell className="pl-10 whitespace-normal">
                 <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium break-words">
@@ -398,54 +439,63 @@ function SiteRow({
                         {!source.available ? (
                             <Badge variant="outline">Non disponibile</Badge>
                         ) : null}
-                        {source.version ? (
-                            <Badge variant="outline">
-                                Network {source.version}
-                            </Badge>
-                        ) : null}
                     </div>
                     <span className="text-xs text-muted-foreground tabular-nums">
-                        {source.preview
-                            ? `${source.preview.devices.length} dispositivi · ${source.preview.networks === null ? 'reti non supportate' : `${source.preview.networks.length} reti`}`
-                            : 'Dati non ancora acquisiti'}
+                        {[
+                            source.version ? `Network ${source.version}` : null,
+                            source.preview
+                                ? `${source.preview.devices.length} dispositivi`
+                                : 'Dati non ancora acquisiti',
+                            source.preview
+                                ? source.preview.networks === null
+                                    ? 'reti non supportate'
+                                    : `${source.preview.networks.length} reti`
+                                : null,
+                        ]
+                            .filter(Boolean)
+                            .join(' · ')}
                     </span>
                 </div>
             </TableCell>
-            <TableCell className="align-top">
+            <TableCell>
                 <ArrowRight
                     className={cn(
-                        'mt-0.5 size-4',
+                        'size-4',
                         linked ? 'text-primary' : 'text-muted-foreground/40',
                     )}
                     aria-label={linked ? 'Collegato' : 'Non collegato'}
                 />
             </TableCell>
-            <TableCell className="align-top whitespace-normal">
-                {editing && !readonly ? (
-                    <div className="flex max-w-lg flex-col gap-2 sm:flex-row sm:items-start">
+            <TableCell className="whitespace-normal">
+                {readonly ? (
+                    current ? (
+                        <span className="break-words">{current}</span>
+                    ) : (
+                        <span className="text-muted-foreground">
+                            Non collegato
+                        </span>
+                    )
+                ) : (
+                    <div className="flex max-w-md items-start gap-2">
                         <div className="min-w-0 flex-1">
                             <CatalogCombobox
+                                key={resetKey}
                                 id={`unifi-site-${source.id}`}
                                 name="site_id"
-                                items={destinations.map((item) => ({
-                                    id: item.id,
-                                    name: item.label,
-                                }))}
-                                value={selected ? String(selected.id) : ''}
-                                onChange={(value) =>
-                                    setSelected(
-                                        destinations.find(
-                                            (item) => String(item.id) === value,
-                                        ) ?? null,
-                                    )
-                                }
-                                placeholder="Cerca azienda o sede…"
+                                items={destinations}
+                                value={source.site ? String(source.site.id) : ''}
+                                onChange={choose}
+                                placeholder="Collega a una sede…"
                                 createLabel="Aggiungi azienda"
                                 disabled={form.processing || disabled}
-                                error={form.errors.site_id}
-                                onCreatingChange={setCreatingCompany}
+                                error={
+                                    confirm
+                                        ? undefined
+                                        : Object.values(form.errors)[0]
+                                }
                                 onCreate={(name) =>
                                     new Promise<void>((resolve, reject) => {
+                                        let siteId: number | null = null;
                                         router.post(
                                             storeCompany(),
                                             { name, inline: true },
@@ -453,14 +503,14 @@ function SiteRow({
                                                 preserveScroll: true,
                                                 errorBag: 'newCompany',
                                                 onFlash: (flash) => {
-                                                    if (flash.createdCompany) {
-                                                        const company =
-                                                            flash.createdCompany as CreatedCompany;
-                                                        setSelected({
-                                                            id: company.site_id,
-                                                            label: company.name,
-                                                        });
-                                                    }
+                                                    if (flash.createdCompany)
+                                                        siteId = (
+                                                            flash.createdCompany as CreatedCompany
+                                                        ).site_id;
+                                                },
+                                                // Link only after the company request has finished.
+                                                onSuccess: () => {
+                                                    if (siteId) link(siteId);
                                                 },
                                                 onError: (errors) =>
                                                     reject(
@@ -478,85 +528,24 @@ function SiteRow({
                                 }
                             />
                         </div>
-                        <div className="flex gap-2">
+                        {source.site && !source.confirmed_at ? (
                             <Button
-                                size="sm"
-                                disabled={
-                                    !selected ||
-                                    creatingCompany ||
-                                    form.processing ||
-                                    disabled ||
-                                    (selected.id === source.site?.id &&
-                                        !!source.confirmed_at)
-                                }
-                                onClick={() => setConfirm('associate')}
+                                variant="outline"
+                                disabled={form.processing || disabled}
+                                onClick={() => link(source.site!.id)}
                             >
-                                Collega
+                                Conferma
                             </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={form.processing}
-                                onClick={() => setEditing(false)}
-                            >
-                                Annulla
-                            </Button>
-                        </div>
-                    </div>
-                ) : destination ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="break-words">{destination}</span>
-                        {!source.confirmed_at ? (
-                            <Badge variant="outline">Da riconfermare</Badge>
+                        ) : null}
+                        {form.processing ? (
+                            <Spinner className="mt-3" />
                         ) : null}
                     </div>
-                ) : (
-                    <span className="text-muted-foreground">Non collegato</span>
                 )}
-            </TableCell>
-            <TableCell className="align-top">
-                <div className="flex justify-end gap-1">
-                    <IconButton
-                        label={`Anteprima di ${source.name}`}
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={onPreview}
-                        disabled={!source.preview}
-                    >
-                        <Eye />
-                    </IconButton>
-                    {!readonly && !editing ? (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={
-                                disabled || form.processing || creatingCompany
-                            }
-                            onClick={() => setEditing(true)}
-                        >
-                            <Link2 data-icon="inline-start" />
-                            {source.site ? 'Modifica' : 'Collega'}
-                        </Button>
-                    ) : null}
-                    {!readonly && source.site ? (
-                        <IconButton
-                            label={`Scollega ${source.name}`}
-                            variant="ghost"
-                            size="icon"
-                            className="size-8"
-                            disabled={form.processing}
-                            onClick={() => setConfirm('revoke')}
-                        >
-                            <Unlink />
-                        </IconButton>
-                    ) : null}
-                </div>
                 <Dialog
                     open={confirm !== null}
                     onOpenChange={(open) => {
-                        if (!open && !form.processing) setConfirm(null);
+                        if (!open && !form.processing) cancel();
                     }}
                 >
                     <DialogContent>
@@ -564,51 +553,27 @@ function SiteRow({
                             <DialogTitle>
                                 {confirm === 'revoke'
                                     ? 'Scollegare il sito?'
-                                    : 'Collegare il sito alla sede?'}
+                                    : 'Cambiare la sede collegata?'}
                             </DialogTitle>
                             <DialogDescription>
                                 {confirm === 'revoke'
                                     ? 'Le nuove acquisizioni per questa sede verranno sospese. I dati documentati saranno conservati.'
-                                    : source.site &&
-                                        source.site.id !== selected?.id
-                                      ? 'Le nuove acquisizioni saranno associate alla nuova sede. I dati documentati nella sede precedente saranno conservati.'
-                                      : 'Conferma la destinazione del sito UniFi.'}
+                                    : 'Le nuove acquisizioni andranno alla nuova sede. I dati documentati nella sede precedente saranno conservati.'}
                             </DialogDescription>
                         </DialogHeader>
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
-                            <dt className="text-muted-foreground">
-                                Connessione
-                            </dt>
-                            <dd className="break-words">{connection.name}</dd>
-                            <dt className="text-muted-foreground">Console</dt>
-                            <dd className="break-words">
-                                {source.console_name}
-                            </dd>
-                            <dt className="text-muted-foreground">
-                                Sito UniFi
-                            </dt>
-                            <dd className="break-words">{source.name}</dd>
-                            {destination ? (
-                                <>
-                                    <dt className="text-muted-foreground">
-                                        Sede attuale
-                                    </dt>
-                                    <dd className="break-words">
-                                        {destination}
-                                    </dd>
-                                </>
-                            ) : null}
-                            {confirm === 'associate' ? (
-                                <>
-                                    <dt className="text-muted-foreground">
-                                        Destinazione
-                                    </dt>
-                                    <dd className="font-medium break-words">
-                                        {selected?.label}
-                                    </dd>
-                                </>
-                            ) : null}
-                        </dl>
+                        <p className="text-sm">
+                            {source.console_name} · {source.name}
+                            <ArrowRight className="mx-2 inline size-4 text-muted-foreground" />
+                            {confirm === 'revoke' ? (
+                                <span className="text-muted-foreground">
+                                    Non collegato
+                                </span>
+                            ) : (
+                                <span className="font-medium">
+                                    {target?.name}
+                                </span>
+                            )}
+                        </p>
                         {form.hasErrors ? (
                             <Alert variant="destructive">
                                 <AlertDescription>
@@ -619,7 +584,7 @@ function SiteRow({
                         <DialogFooter>
                             <Button
                                 variant="outline"
-                                onClick={() => setConfirm(null)}
+                                onClick={cancel}
                                 disabled={form.processing}
                             >
                                 Annulla
@@ -631,40 +596,31 @@ function SiteRow({
                                         : 'default'
                                 }
                                 disabled={form.processing}
-                                onClick={() => {
-                                    form.transform(() => ({
-                                        site_id: selected?.id ?? 0,
-                                        revision: connection.revision,
-                                        confirmed: true,
-                                    }));
-                                    form.submit(
-                                        confirm === 'revoke'
-                                            ? revoke({
-                                                  unifiConnection:
-                                                      connection.id,
-                                                  unifiSite: source.id,
-                                              })
-                                            : associate({
-                                                  unifiConnection:
-                                                      connection.id,
-                                                  unifiSite: source.id,
-                                              }),
-                                        {
-                                            preserveScroll: true,
-                                            onSuccess: () => {
-                                                setConfirm(null);
-                                                setEditing(false);
-                                            },
-                                        },
-                                    );
-                                }}
+                                onClick={() =>
+                                    confirm === 'revoke'
+                                        ? unlink()
+                                        : link(target!.id)
+                                }
                             >
                                 {form.processing ? <Spinner /> : null}
-                                {confirm === 'revoke' ? 'Scollega' : 'Collega'}
+                                {confirm === 'revoke'
+                                    ? 'Scollega'
+                                    : 'Cambia sede'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+            </TableCell>
+            <TableCell>
+                <IconButton
+                    label={`Anteprima di ${source.name}`}
+                    variant="ghost"
+                    className="size-8"
+                    onClick={onPreview}
+                    disabled={!source.preview}
+                >
+                    <Eye />
+                </IconButton>
             </TableCell>
         </TableRow>
     );

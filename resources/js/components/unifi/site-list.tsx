@@ -483,7 +483,9 @@ function SiteRow({
                                 id={`unifi-site-${source.id}`}
                                 name="site_id"
                                 items={destinations}
-                                value={source.site ? String(source.site.id) : ''}
+                                value={
+                                    source.site ? String(source.site.id) : ''
+                                }
                                 onChange={choose}
                                 placeholder="Collega a una sede…"
                                 createLabel="Aggiungi azienda"
@@ -537,9 +539,7 @@ function SiteRow({
                                 Conferma
                             </Button>
                         ) : null}
-                        {form.processing ? (
-                            <Spinner className="mt-3" />
-                        ) : null}
+                        {form.processing ? <Spinner className="mt-3" /> : null}
                     </div>
                 )}
                 <Dialog

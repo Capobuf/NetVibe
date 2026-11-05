@@ -60,7 +60,12 @@ export type UnifiConnection = {
     check_status: string | null;
     check_message: string | null;
     discovered_at: string | null;
-    hosts?: { id: string; name: string }[];
+    hosts?: {
+        id: string;
+        name: string;
+        status?: string | null;
+        message?: string | null;
+    }[];
     selected_console_ids?: string[];
     sites: UnifiSite[];
 };

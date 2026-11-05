@@ -36,7 +36,10 @@ class UnifiConnection extends Model
         if ($administration) {
             $summary += [
                 ...$this->only('server_url', 'allow_unverified_certificate', 'revision'),
-                'has_key' => true, 'hosts' => $this->hosts ?? [], 'selected_console_ids' => $this->selected_console_ids ?? [],
+                'has_key' => true, 'selected_console_ids' => $this->selected_console_ids ?? [],
+                'hosts' => collect($this->hosts ?? [])->map(fn ($host) => [...$host,
+                    'message' => ($host['status'] ?? null) ? UnifiException::messageFor($host['status']) : null,
+                ])->all(),
             ];
         }
 

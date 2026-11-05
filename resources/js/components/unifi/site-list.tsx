@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowRight,
     Eye,
     MoreHorizontal,
@@ -204,6 +205,10 @@ export function UnifiSiteList({
                                 );
                                 const included =
                                     !selectable || saved.includes(item.id);
+                                const failure = (connection.hosts ?? []).find(
+                                    (host) =>
+                                        host.id === item.id && host.status,
+                                );
                                 const checkboxId = `unifi-console-${connection.id}-${item.id}`;
                                 return (
                                     <Fragment key={item.id}>
@@ -241,6 +246,21 @@ export function UnifiSiteList({
                                                         <span className="text-sm text-muted-foreground">
                                                             Non integrata
                                                         </span>
+                                                    ) : failure ? (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="text-amber-700 dark:text-amber-500"
+                                                            title={
+                                                                failure.message ??
+                                                                undefined
+                                                            }
+                                                        >
+                                                            <AlertTriangle />
+                                                            {failure.status ===
+                                                            'forbidden'
+                                                                ? 'Non accessibile con questa chiave API'
+                                                                : failure.message}
+                                                        </Badge>
                                                     ) : null}
                                                     {consoleForm.processing ? (
                                                         <Spinner />
@@ -267,7 +287,9 @@ export function UnifiSiteList({
                                                 }
                                             />
                                         ))}
-                                        {(included && !sites.length) ||
+                                        {(included &&
+                                            !sites.length &&
+                                            !failure) ||
                                         reading === item.id ? (
                                             <TableRow>
                                                 <TableCell

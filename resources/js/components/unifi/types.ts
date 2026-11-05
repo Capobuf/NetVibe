@@ -34,6 +34,10 @@ export type UnifiSite = {
         networks_status: 'ok' | 'unsupported';
     } | null;
     site: { id: number; name: string | null; company: Company } | null;
+    linked_via: {
+        connection: string;
+        site: { id: number; name: string | null; company: Company };
+    } | null;
     confirmed_at: string | null;
     inventory?: {
         activated_at: string | null;

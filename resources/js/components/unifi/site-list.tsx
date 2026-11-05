@@ -379,7 +379,8 @@ function SiteRow({
               .filter(Boolean)
               .join(' · ')
         : null;
-    const linked = !!source.site && !!source.confirmed_at && !dimmed;
+    const via = source.linked_via;
+    const linked = (!!source.site && !!source.confirmed_at && !dimmed) || !!via;
 
     function link(siteId: number) {
         form.transform(() => ({
@@ -467,7 +468,19 @@ function SiteRow({
                 />
             </TableCell>
             <TableCell className="whitespace-normal">
-                {readonly ? (
+                {via ? (
+                    // Already fed through another connection: linking here would duplicate the site.
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="break-words">
+                            {[via.site.company.name, via.site.name]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </span>
+                        <Badge variant="secondary">
+                            tramite {via.connection}
+                        </Badge>
+                    </div>
+                ) : readonly ? (
                     current ? (
                         <span className="break-words">{current}</span>
                     ) : (

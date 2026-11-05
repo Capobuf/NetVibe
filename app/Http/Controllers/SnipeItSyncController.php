@@ -114,7 +114,7 @@ class SnipeItSyncController extends Controller
         return Inertia::render('integrations/snipe-it-records', [
             'company' => $company->only('id', 'name'), 'sync' => $sync?->only('id', 'revision', 'activated_at', 'synced_at', 'error'),
             'active' => $sync?->isActive() ?? false, 'view' => $view, 'filters' => $filters,
-            'counts' => $sync?->counts() ?? array_fill_keys([...SnipeItAsset::VIEWS, 'problems'], 0),
+            'counts' => $sync?->counts() ?? [...array_fill_keys([...SnipeItAsset::VIEWS, 'problems'], 0), 'problems_by_view' => []],
             'categories' => $this->filtered($sync, $view, $categoryFilters)
                 ->selectRaw("JSON_VALUE(source_model.snapshot, '$.category') as name, count(*) as total")
                 ->groupByRaw("JSON_VALUE(source_model.snapshot, '$.category')")->orderByRaw('name IS NULL')->orderBy('name')

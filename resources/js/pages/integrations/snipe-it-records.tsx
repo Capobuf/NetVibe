@@ -161,7 +161,9 @@ type Props = {
         direction?: 'asc' | 'desc';
         per_page?: number;
     };
-    counts: Record<View | 'problems', number>;
+    counts: Record<View | 'problems', number> & {
+        problems_by_view: Partial<Record<View, number>>;
+    };
     categories: { name: string | null; total: number }[];
     rows: {
         data: Row[];
@@ -698,6 +700,12 @@ function Records({
                     <TabsList aria-label="Destinazione degli asset">
                         {views.map((item) => (
                             <TabsTrigger key={item.value} value={item.value}>
+                                {counts.problems_by_view[item.value] ? (
+                                    <AlertTriangle
+                                        className="text-amber-600 dark:text-amber-500"
+                                        aria-label="Contiene asset da verificare"
+                                    />
+                                ) : null}
                                 {item.label}
                                 <Badge
                                     variant={
@@ -769,7 +777,7 @@ function Records({
                                     </SelectGroup>
                                 </SelectContent>
                             </Select>
-                            {counts.problems || problemOnly ? (
+                            {counts.problems_by_view[view] || problemOnly ? (
                                 <Toggle
                                     variant="outline"
                                     pressed={problemOnly}
@@ -780,6 +788,9 @@ function Records({
                                 >
                                     <AlertTriangle />
                                     Da verificare
+                                    <span className="tabular-nums">
+                                        {counts.problems_by_view[view] ?? 0}
+                                    </span>
                                 </Toggle>
                             ) : null}
                         </div>

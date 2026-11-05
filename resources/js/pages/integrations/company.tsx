@@ -40,6 +40,7 @@ type Counts = {
     ipam: number;
     excluded: number;
     problems: number;
+    problems_by_view: Partial<Record<'pending' | 'linked' | 'ipam', number>>;
 };
 type Props = {
     company: Company;
@@ -302,7 +303,17 @@ function SnipeIt({
                                     <Link
                                         href={records(company.id, {
                                             query: {
-                                                view: 'pending',
+                                                // Open the first view that actually holds a problem.
+                                                view:
+                                                    (
+                                                        ['pending', 'ipam', 'linked'] as const
+                                                    ).find(
+                                                        (view) =>
+                                                            counts
+                                                                .problems_by_view[
+                                                                view
+                                                            ],
+                                                    ) ?? 'pending',
                                                 problem: 1,
                                             },
                                         })}

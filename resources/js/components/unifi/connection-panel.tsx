@@ -168,7 +168,9 @@ export function UnifiConnectionPanel({
                             <Button
                                 variant="outline"
                                 size="sm"
-                                disabled={form.processing || !connection.enabled}
+                                disabled={
+                                    form.processing || !connection.enabled
+                                }
                                 onClick={() => run('verify')}
                             >
                                 {pending === 'verify' ? (

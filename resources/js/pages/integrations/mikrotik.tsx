@@ -199,7 +199,9 @@ export default function Mikrotik({ company, gateways, candidates }: Props) {
                                             role="listitem"
                                         >
                                             <ItemContent className="min-w-0">
-                                                <ItemTitle>{device.name}</ItemTitle>
+                                                <ItemTitle>
+                                                    {device.name}
+                                                </ItemTitle>
                                                 {context(device) ? (
                                                     <ItemDescription>
                                                         {context(device)}

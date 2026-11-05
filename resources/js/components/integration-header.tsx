@@ -129,17 +129,22 @@ export function SectionTabs<T extends string>({
             }}
         >
             <TabsList variant="line" aria-label={label}>
-                {sections.map(({ value: key, label, icon: Icon, count, disabled }) => (
-                    <TabsTrigger key={key} value={key} disabled={disabled}>
-                        <Icon aria-hidden="true" />
-                        {label}
-                        {count ? (
-                            <Badge variant="secondary" className="tabular-nums">
-                                {count}
-                            </Badge>
-                        ) : null}
-                    </TabsTrigger>
-                ))}
+                {sections.map(
+                    ({ value: key, label, icon: Icon, count, disabled }) => (
+                        <TabsTrigger key={key} value={key} disabled={disabled}>
+                            <Icon aria-hidden="true" />
+                            {label}
+                            {count ? (
+                                <Badge
+                                    variant="secondary"
+                                    className="tabular-nums"
+                                >
+                                    {count}
+                                </Badge>
+                            ) : null}
+                        </TabsTrigger>
+                    ),
+                )}
             </TabsList>
         </Tabs>
     );

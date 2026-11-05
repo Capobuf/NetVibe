@@ -123,7 +123,9 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onSelect={() =>
-                                                    setEditor({ mode: 'direct' })
+                                                    setEditor({
+                                                        mode: 'direct',
+                                                    })
                                                 }
                                             >
                                                 <Server />

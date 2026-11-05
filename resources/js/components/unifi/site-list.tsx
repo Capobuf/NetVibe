@@ -83,7 +83,8 @@ export function UnifiSiteList({
     });
     const chosen = consoleForm.data.selected_console_ids;
     const changed =
-        JSON.stringify([...chosen].sort()) !== JSON.stringify([...saved].sort());
+        JSON.stringify([...chosen].sort()) !==
+        JSON.stringify([...saved].sort());
     const removed = connection.sites.filter(
         (source) =>
             source.site &&
@@ -544,7 +545,7 @@ function SiteRow({
                             label={`Scollega ${source.name}`}
                             variant="ghost"
                             size="icon"
-                        className="size-8"
+                            className="size-8"
                             disabled={form.processing}
                             onClick={() => setConfirm('revoke')}
                         >

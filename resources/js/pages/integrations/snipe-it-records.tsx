@@ -1,20 +1,35 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Fragment, useState } from 'react';
-import { ArrowLeft, Check, ChevronDown, RefreshCw, Search } from 'lucide-react';
+import { useState } from 'react';
+import {
+    AlertTriangle,
+    ArrowLeft,
+    ArrowUpRight,
+    Ban,
+    Download,
+    Link2,
+    MoreHorizontal,
+    RefreshCw,
+    RotateCcw,
+    Settings2,
+} from 'lucide-react';
+import { IconButton } from '@/components/icon-button';
 import { SnipeItModelCell } from '@/components/devices/snipe-it-model-cell';
 import {
     SnipeItPicker,
     type SnipeOption,
 } from '@/components/devices/snipe-it-picker';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
+import { TablePagination } from '@/components/table-pagination';
+import { TableSearch } from '@/components/table-search';
 import { TableSortHead } from '@/components/table-sort-head';
+import TextLink from '@/components/text-link';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import type { TableSort } from '@/lib/table-sort';
-import { cn, formatDateTime } from '@/lib/utils';
-import TextLink from '@/components/text-link';
+import { formatDateTime } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Combobox,
@@ -37,31 +52,33 @@ import {
     DropdownMenuContent,
     DropdownMenuGroup,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Pagination,
-    PaginationContent,
-    PaginationItem,
-    PaginationLink,
-    PaginationPrevious,
-    PaginationNext,
-    PaginationEllipsis,
-} from '@/components/ui/pagination';
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from '@/components/ui/input-group';
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from '@/components/ui/empty';
+import { Field, FieldLabel } from '@/components/ui/field';
 import {
     Select,
     SelectContent,
     SelectGroup,
     SelectItem,
+    SelectSeparator,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
 import {
     Table,
@@ -71,7 +88,17 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { show as companyIntegrations } from '@/routes/companies/settings/integrations';
+import {
+    bulk,
     confirm,
     edit,
     records,
@@ -79,26 +106,19 @@ import {
 } from '@/routes/companies/settings/integrations/snipe-it';
 import type { Company, Site } from '@/types/company';
 
-type View =
-    | 'devices'
-    | 'review'
-    | 'linked'
-    | 'ipam'
-    | 'no-ip'
-    | 'sites'
-    | 'excluded';
-type Column = 'local' | 'name' | 'model' | 'serial' | 'ip' | 'state';
+type View = 'pending' | 'linked' | 'ipam' | 'excluded';
+type Column = 'name' | 'category' | 'model' | 'serial' | 'ip' | 'local';
 type Row = {
     id: number;
     snapshot: {
         name: string | null;
-        manufacturer?: string | null;
-        category?: string | null;
         serial?: string | null;
         asset_tag?: string | null;
         network?: { ip: string | null; mac: string | null };
     };
-    state: 'linked' | 'excluded' | 'review' | 'candidate' | 'new' | 'ipam';
+    state: View;
+    detached: boolean;
+    url: string | null;
     ipam_url: string | null;
     problem: string | null;
     present: boolean;
@@ -109,7 +129,6 @@ type Row = {
         manufacturer: string | null;
         category: string | null;
     } | null;
-    site_id: number | null;
     model_local: SnipeOption | null;
     model_linked: boolean;
     model_ambiguous: boolean;
@@ -136,11 +155,14 @@ type Props = {
     view: View;
     filters: {
         q?: string;
+        problem?: string | boolean | null;
+        category?: string | null;
         sort?: Column;
         direction?: 'asc' | 'desc';
         per_page?: number;
-        group?: 'category' | 'none';
     };
+    counts: Record<View | 'problems', number>;
+    categories: { name: string | null; total: number }[];
     rows: {
         data: Row[];
         current_page: number;
@@ -149,39 +171,33 @@ type Props = {
         per_page: number;
         from: number | null;
         to: number | null;
-        links: { url: string | null; label: string; active: boolean }[];
     };
     sites: Site[];
 };
-const titles: Record<View, string> = {
-    devices: 'Asset Snipe-IT',
-    ipam: 'Client nell’IPAM',
-    review: 'Da verificare',
-    linked: 'Apparati tecnici collegati',
-    'no-ip': 'Senza IP Ethernet',
-    sites: 'Da assegnare',
-    excluded: 'Esclusi',
-};
-const states = {
-    linked: 'Già collegato',
-    excluded: 'Escluso',
-    review: 'Da verificare',
-    candidate: 'Corrispondenza proposta',
-    new: 'Solo Snipe-IT',
-    ipam: 'Nell’IPAM',
-};
+
+const views: { value: View; label: string }[] = [
+    { value: 'pending', label: 'Da decidere' },
+    { value: 'linked', label: 'Apparati' },
+    { value: 'ipam', label: 'Client IPAM' },
+    { value: 'excluded', label: 'Esclusi' },
+];
+// Must match SnipeItSyncController::NO_CATEGORY.
+const NO_CATEGORY = '__none';
+const ALL_CATEGORIES = '__all';
+
+function assetName(row: Row) {
+    return row.snapshot.name || row.snapshot.asset_tag || '—';
+}
 
 function SitePicker({
     sites,
     value,
     onChange,
-    label,
     disabled,
 }: {
     sites: Site[];
     value: number | null;
     onChange: (id: number | null) => void;
-    label: string;
     disabled?: boolean;
 }) {
     return (
@@ -193,7 +209,7 @@ function SitePicker({
             isItemEqualToValue={(a: Site, b: Site) => a.id === b.id}
             disabled={disabled}
         >
-            <ComboboxInput aria-label={label} placeholder="Sede NetVibe…" />
+            <ComboboxInput id="asset-site" placeholder="Scegli la sede…" />
             <ComboboxContent>
                 <ComboboxEmpty>Nessuna sede trovata</ComboboxEmpty>
                 <ComboboxList>
@@ -208,212 +224,355 @@ function SitePicker({
     );
 }
 
+function defaultDecision(row: Row, sites: Site[]): Decision {
+    return {
+        id: row.id,
+        action:
+            row.state === 'excluded'
+                ? 'restore'
+                : row.candidates.length
+                  ? 'link'
+                  : 'create',
+        target_id: row.candidates.length === 1 ? row.candidates[0].id : null,
+        site_id: sites.length === 1 ? sites[0].id : null,
+        model_id: null,
+        change_model: false,
+    };
+}
+
 export default function SnipeItRecords(props: Props) {
+    // The search text is excluded so typing keeps focus; other changes reset local choices.
     return (
         <Records
-            key={`${props.company.id}:${props.view}:${props.rows.current_page}:${props.filters.q}:${props.filters.sort}:${props.filters.direction}:${props.filters.group}:${props.rows.per_page}:${props.sites.length}:${props.sync?.revision}`}
+            key={`${props.view}:${props.rows.current_page}:${props.filters.category}:${props.filters.problem}:${props.filters.sort}:${props.filters.direction}:${props.rows.per_page}:${props.sync?.revision}`}
             {...props}
         />
     );
 }
 
-function Records({ company, sync, active, view, filters, rows, sites }: Props) {
+function Records({
+    company,
+    sync,
+    active,
+    view,
+    filters,
+    counts,
+    categories,
+    rows,
+    sites,
+}: Props) {
     const [search, setSearch] = useState(filters.q ?? '');
     const [selected, setSelected] = useState<number[]>([]);
-    const [choices, setChoices] = useState<Record<number, Partial<Decision>>>(
-        {},
+    const [allMatching, setAllMatching] = useState(false);
+    const [openRow, setOpenRow] = useState<number | null>(null);
+    const [draft, setDraft] = useState<Decision | null>(null);
+    const [target, setTarget] = useState<SnipeOption | null>(null);
+    const [model, setModel] = useState<SnipeOption | null>(null);
+    const [pendingBulk, setPendingBulk] = useState<
+        'create' | 'link' | 'exclude' | 'restore' | null
+    >(null);
+    const [bulkSite, setBulkSite] = useState<number | null>(
+        sites.length === 1 ? sites[0].id : null,
     );
-    const [targets, setTargets] = useState<Record<number, SnipeOption | null>>(
-        {},
-    );
-    const [models, setModels] = useState<Record<number, SnipeOption | null>>(
-        {},
-    );
-    const [bulkSite, setBulkSite] = useState<number | null>(null);
-    const [review, setReview] = useState(false);
     const form = useForm({
         sync_id: sync?.id ?? 0,
         revision: sync?.revision ?? 0,
-        view,
         decisions: [] as Decision[],
         activate: false,
     });
+    const massForm = useForm({
+        sync_id: sync?.id ?? 0,
+        revision: sync?.revision ?? 0,
+        view,
+        action: 'exclude' as 'exclude' | 'restore',
+        q: filters.q ?? null,
+        problem: filters.problem ? 1 : null,
+        category: filters.category ?? null,
+    });
     const acquire = useForm({});
-    const busy = form.processing || acquire.processing;
-    const siteView = view === 'sites';
+    const busy = form.processing || massForm.processing || acquire.processing;
     const multipleSites = sites.length > 1;
-    const grouped = (filters.group ?? 'category') === 'category';
-    const defaults: TableColumn<Column>[] = siteView
-        ? [
-              { id: 'name', label: 'Dispositivo', visible: true },
-              { id: 'model', label: 'Produttore / Modello', visible: true },
-              { id: 'serial', label: 'Seriale', visible: true },
-              { id: 'ip', label: 'IP Ethernet', visible: true },
-              ...(multipleSites
-                  ? [
-                        {
-                            id: 'local' as const,
-                            label: 'Sede NetVibe',
-                            visible: true,
-                        },
-                    ]
-                  : []),
-              { id: 'state', label: 'Esito', visible: true },
-          ]
-        : [
-              { id: 'local', label: 'NetVibe', visible: true },
-              { id: 'name', label: 'Snipe-IT', visible: true },
-              { id: 'model', label: 'Produttore / Modello', visible: true },
-              { id: 'serial', label: 'Seriale', visible: true },
-              { id: 'ip', label: 'IP Ethernet', visible: true },
-              { id: 'state', label: 'Esito', visible: true },
-          ];
+    const editable = active && !busy;
+    const problemOnly = !!filters.problem && filters.problem !== '0';
+    const defaults: TableColumn<Column>[] = [
+        { id: 'name', label: 'Asset', visible: true },
+        { id: 'category', label: 'Tipo', visible: true },
+        { id: 'model', label: 'Modello', visible: true },
+        { id: 'serial', label: 'Seriale', visible: true },
+        { id: 'ip', label: 'IP / MAC', visible: true },
+        { id: 'local', label: 'In NetVibe', visible: true },
+    ];
     const { columns, setColumns, separators, setSeparators } =
-        useTablePreferences(`snipe-it-${view}`, defaults);
+        useTablePreferences('snipe-it-assets', defaults);
     const visible = columns.filter((column) => column.visible);
-    const actionable = rows.data.filter(
-        (row) => row.state !== 'linked' && (row.present || view === 'excluded'),
+    const selectable = rows.data.filter(
+        (row) => row.state !== 'linked' && row.present,
     );
+    const selectedRows = rows.data.filter((row) => selected.includes(row.id));
+    const linkable = selectedRows.filter((row) => row.candidates.length === 1);
     const sort: TableSort<Column> =
         filters.sort && filters.direction
             ? { column: filters.sort, direction: filters.direction }
             : null;
+    const current = rows.data.find((row) => row.id === openRow) ?? null;
     const error = [
         ...Object.values(form.errors),
+        ...Object.values(massForm.errors),
         ...Object.values(acquire.errors),
         sync?.error,
     ].find(
         (message): message is string =>
             typeof message === 'string' && message.length > 0,
     );
+    const pageSelected =
+        selectable.length > 0 &&
+        selectable.every((row) => selected.includes(row.id));
+    const bulkCount = allMatching ? rows.total : selected.length;
 
     function visit(changes: Record<string, string | number | null>) {
+        setSelected([]);
+        setAllMatching(false);
         router.get(
             records.url(company.id),
-            { view, ...filters, ...changes },
-            { preserveScroll: true },
+            {
+                view,
+                ...filters,
+                q: search || null,
+                problem: problemOnly ? 1 : null,
+                page: 1,
+                ...changes,
+            },
+            { preserveScroll: true, preserveState: true, replace: true },
         );
     }
-    function decision(row: Row): Decision {
-        return {
-            id: row.id,
-            model_id: null,
-            change_model: false,
-            action:
-                view === 'excluded'
-                    ? 'restore'
-                    : row.candidates.length
-                      ? 'link'
-                      : 'create',
-            target_id:
-                row.candidates.length === 1 ? row.candidates[0].id : null,
-            site_id: sites.length === 1 ? sites[0].id : null,
-            ...choices[row.id],
-        };
-    }
-    function choose(row: Row, change: Partial<Decision>) {
-        setChoices((previous) => ({
-            ...previous,
-            [row.id]: { ...previous[row.id], ...change },
-        }));
-        setSelected((previous) =>
-            previous.includes(row.id) ? previous : [...previous, row.id],
-        );
-    }
-    function applyBulk(change: Partial<Decision>) {
-        setChoices((previous) => ({
-            ...previous,
-            ...Object.fromEntries(
-                rows.data
-                    .filter((row) => selected.includes(row.id))
-                    .map((row) => [row.id, { ...decision(row), ...change }]),
-            ),
-        }));
-    }
-    function confirmSelection() {
-        form.transform((data) => ({
-            ...data,
-            decisions: rows.data
-                .filter((row) => selected.includes(row.id))
-                .map(decision),
-        }));
+
+    function submit(decisions: Decision[], onSuccess?: () => void) {
+        form.transform((data) => ({ ...data, decisions }));
         form.submit(confirm(company.id), {
             preserveScroll: true,
             onSuccess: () => {
-                setReview(false);
                 setSelected([]);
+                setPendingBulk(null);
+                onSuccess?.();
             },
-            onError: () => setReview(false),
+            onError: () => setPendingBulk(null),
         });
     }
-    function cell(row: Row, column: Column) {
-        const name = row.snapshot.name || '—';
-        const choice = decision(row);
-        if (column === 'name')
+
+    function openSheet(row: Row, action?: Decision['action']) {
+        const decision = defaultDecision(row, sites);
+        setOpenRow(row.id);
+        setDraft(action ? { ...decision, action } : decision);
+        setTarget(
+            row.candidates.find((item) => item.id === decision.target_id) ??
+                null,
+        );
+        setModel(null);
+    }
+
+    function applyBulk() {
+        if (!pendingBulk) return;
+        if (allMatching && (pendingBulk === 'exclude' || pendingBulk === 'restore')) {
+            massForm.transform((data) => ({ ...data, action: pendingBulk }));
+            massForm.submit(bulk(company.id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setSelected([]);
+                    setAllMatching(false);
+                    setPendingBulk(null);
+                },
+                onError: () => setPendingBulk(null),
+            });
+            return;
+        }
+        const source = pendingBulk === 'link' ? linkable : selectedRows;
+        submit(
+            source.map((row) => ({
+                ...defaultDecision(row, sites),
+                action: pendingBulk,
+                ...(pendingBulk === 'create' ? { site_id: bulkSite } : {}),
+            })),
+        );
+    }
+
+    function rowMenu(row: Row) {
+        const name = assetName(row);
+        return (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Azioni per ${name}`}
+                    >
+                        <MoreHorizontal />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuGroup>
+                        {(row.state === 'pending' || row.state === 'ipam') &&
+                        row.present ? (
+                            <>
+                                <DropdownMenuItem
+                                    disabled={!editable}
+                                    onSelect={() => openSheet(row, 'create')}
+                                >
+                                    <Download />
+                                    Importa come apparato…
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    disabled={!editable}
+                                    onSelect={() => openSheet(row, 'link')}
+                                >
+                                    <Link2 />
+                                    Collega a dispositivo esistente…
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    disabled={!editable}
+                                    onSelect={() =>
+                                        submit([
+                                            {
+                                                ...defaultDecision(row, sites),
+                                                action: 'exclude',
+                                            },
+                                        ])
+                                    }
+                                >
+                                    <Ban />
+                                    Escludi
+                                </DropdownMenuItem>
+                            </>
+                        ) : null}
+                        {row.state === 'excluded' ? (
+                            <DropdownMenuItem
+                                disabled={!editable}
+                                onSelect={() =>
+                                    submit([defaultDecision(row, sites)])
+                                }
+                            >
+                                <RotateCcw />
+                                Riammetti
+                            </DropdownMenuItem>
+                        ) : null}
+                        {row.local?.url ? (
+                            <DropdownMenuItem asChild>
+                                <Link href={row.local.url}>
+                                    <ArrowUpRight />
+                                    Apri dispositivo
+                                </Link>
+                            </DropdownMenuItem>
+                        ) : null}
+                    </DropdownMenuGroup>
+                    {row.url ? (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <a
+                                    href={row.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    <ArrowUpRight />
+                                    Apri in Snipe-IT
+                                </a>
+                            </DropdownMenuItem>
+                        </>
+                    ) : null}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
+    }
+
+    function netvibeCell(row: Row) {
+        if (row.local)
             return (
-                <div className="flex flex-col gap-1">
-                    <span className="font-medium">{name}</span>
-                    {!grouped ? (
+                <div className="flex flex-col gap-0.5">
+                    <TextLink href={row.local.url!}>{row.local.name}</TextLink>
+                    {row.local.detail ? (
                         <span className="text-xs text-muted-foreground">
-                            {row.model?.category || 'Senza tipo'}
+                            {row.local.detail}
                         </span>
                     ) : null}
                 </div>
             );
+        if (row.state === 'excluded')
+            return <span className="text-muted-foreground">Escluso</span>;
+        const client = row.ipam_url ? (
+            <TextLink href={row.ipam_url}>Client nell’IPAM</TextLink>
+        ) : null;
+        if (row.candidates.length)
+            return (
+                <div className="flex flex-col gap-0.5">
+                    {client}
+                    <button
+                        type="button"
+                        className="flex items-center gap-1.5 text-left text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        onClick={() => openSheet(row, 'link')}
+                        disabled={!editable}
+                    >
+                        <Link2 className="size-3.5 shrink-0" />
+                        {row.candidates.length === 1
+                            ? `Possibile: ${row.candidates[0].name}`
+                            : `${row.candidates.length} possibili corrispondenze`}
+                    </button>
+                </div>
+            );
+        return client ?? <span className="text-muted-foreground">—</span>;
+    }
+
+    function cell(row: Row, column: Column) {
+        if (column === 'name')
+            return (
+                <div className="flex items-start gap-2">
+                    <button
+                        type="button"
+                        className="flex flex-col items-start text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        onClick={() => openSheet(row)}
+                    >
+                        <span className="font-medium hover:text-primary">
+                            {assetName(row)}
+                        </span>
+                        {row.snapshot.asset_tag &&
+                        row.snapshot.asset_tag !== row.snapshot.name ? (
+                            <span className="text-xs text-muted-foreground">
+                                {row.snapshot.asset_tag}
+                            </span>
+                        ) : null}
+                    </button>
+                    {row.problem || row.model_problem || !row.present ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <AlertTriangle
+                                    className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-500"
+                                    aria-label={
+                                        row.problem ??
+                                        row.model_problem ??
+                                        'Non più presente in Snipe-IT'
+                                    }
+                                />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                                {row.problem ??
+                                    row.model_problem ??
+                                    'Non più presente in Snipe-IT'}
+                            </TooltipContent>
+                        </Tooltip>
+                    ) : null}
+                </div>
+            );
+        if (column === 'category')
+            return row.model?.category ? (
+                row.model.category
+            ) : (
+                <span className="text-muted-foreground">Senza tipo</span>
+            );
         if (column === 'model')
             return (
-                <SnipeItModelCell
-                    company={company.id}
-                    row={row}
-                    name={name}
-                    target={
-                        choice.action === 'link'
-                            ? (targets[row.id] ??
-                              row.candidates.find(
-                                  (item) => item.id === choice.target_id,
-                              ) ??
-                              null)
-                            : null
-                    }
-                    model={models[row.id] ?? row.model_local}
-                    modelChosen={!!models[row.id]}
-                    editable={
-                        !row.local &&
-                        view !== 'excluded' &&
-                        choice.action !== 'exclude'
-                    }
-                    changeModel={choice.change_model}
-                    disabled={busy || !active}
-                    onModelChange={(value) => {
-                        setModels((previous) => ({
-                            ...previous,
-                            [row.id]: value,
-                        }));
-                        choose(row, {
-                            model_id: value?.id ?? null,
-                            change_model: false,
-                        });
-                    }}
-                    onChangeModelChange={(change_model) =>
-                        choose(row, { change_model })
-                    }
-                />
-            );
-        if (column === 'ip')
-            return (
-                <div className="flex flex-col gap-1">
-                    <span className="tabular-nums">
-                        {row.ipam_url ? (
-                            <TextLink href={row.ipam_url}>
-                                {row.snapshot.network?.ip}
-                            </TextLink>
-                        ) : (
-                            row.snapshot.network?.ip || 'Non indicato'
-                        )}
-                    </span>
-                    {row.snapshot.network?.mac ? (
+                <div className="flex flex-col gap-0.5">
+                    <span>{row.model?.name || '—'}</span>
+                    {row.model?.manufacturer ? (
                         <span className="text-xs text-muted-foreground">
-                            {row.snapshot.network.mac}
+                            {row.model.manufacturer}
                         </span>
                     ) : null}
                 </div>
@@ -424,148 +583,72 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     {row.snapshot.serial || '—'}
                 </span>
             );
-        if (column === 'state')
+        if (column === 'ip')
             return (
-                <div className="flex flex-col items-start gap-2">
-                    <Badge
-                        variant={
-                            row.state === 'linked' ? 'secondary' : 'outline'
+                <div className="flex flex-col gap-0.5 tabular-nums">
+                    <span
+                        className={
+                            row.snapshot.network?.ip
+                                ? undefined
+                                : 'text-muted-foreground'
                         }
                     >
-                        {!row.present
-                            ? 'Non più presente'
-                            : selected.includes(row.id) &&
-                                choice.action === 'exclude'
-                              ? 'Da escludere'
-                              : row.problem || row.model_problem
-                                ? 'Da verificare'
-                                : states[row.state]}
-                    </Badge>
-                    {row.problem ? (
-                        <p className="text-xs text-muted-foreground">
-                            {row.problem}
-                        </p>
+                        {row.snapshot.network?.ip || 'Senza IP'}
+                    </span>
+                    {row.snapshot.network?.mac ? (
+                        <span className="text-xs text-muted-foreground">
+                            {row.snapshot.network.mac}
+                        </span>
                     ) : null}
                 </div>
             );
-        if (siteView && choice.action === 'exclude')
-            return <Badge variant="outline">Da escludere</Badge>;
-        if (siteView)
-            return (
-                <SitePicker
-                    sites={sites}
-                    value={choice.site_id}
-                    onChange={(site_id) => choose(row, { site_id })}
-                    label={`Sede per ${name}`}
-                    disabled={busy || !active}
-                />
-            );
-        if (row.local)
-            return (
-                <div className="flex flex-col gap-1">
-                    <TextLink href={row.local.url!}>{row.local.name}</TextLink>
-                    <span className="text-xs text-muted-foreground">
-                        {row.local.detail}
-                    </span>
-                </div>
-            );
-        if (view === 'excluded')
-            return (
-                <span className="text-muted-foreground">
-                    {selected.includes(row.id)
-                        ? 'Da riammettere'
-                        : 'Escluso dall’importazione'}
-                </span>
-            );
-        return (
-            <div className="flex min-w-56 flex-col gap-3">
-                <Select
-                    value={choice.action}
-                    onValueChange={(action: Decision['action']) =>
-                        choose(row, { action })
-                    }
-                    disabled={busy || !active}
-                >
-                    <SelectTrigger aria-label={`Azione per ${name}`}>
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            <SelectItem value="link">
-                                Collega apparato esistente
-                            </SelectItem>
-                            <SelectItem value="create">
-                                Crea apparato tecnico
-                            </SelectItem>
-                            <SelectItem value="exclude">Escludi</SelectItem>
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-                {choice.action === 'link' ? (
-                    <SnipeItPicker
-                        company={company.id}
-                        kind="devices"
-                        label={`Record NetVibe per ${name}`}
-                        disabled={busy || !active}
-                        value={
-                            targets[row.id] === undefined
-                                ? (row.candidates.find(
-                                      (item) => item.id === choice.target_id,
-                                  ) ?? null)
-                                : targets[row.id]
-                        }
-                        onChange={(value) => {
-                            setTargets((previous) => ({
-                                ...previous,
-                                [row.id]: value,
-                            }));
-                            choose(row, {
-                                target_id: value?.id ?? null,
-                                change_model: false,
-                            });
-                        }}
-                    />
-                ) : null}
-                {choice.action === 'create' && multipleSites ? (
-                    <SitePicker
-                        sites={sites}
-                        value={choice.site_id}
-                        onChange={(site_id) => choose(row, { site_id })}
-                        label={`Sede per ${name}`}
-                        disabled={busy || !active}
-                    />
-                ) : null}
-            </div>
-        );
+        return netvibeCell(row);
     }
+
+    const bulkLabels = {
+        create: `Importare ${bulkCount} asset come apparati?`,
+        link: `Collegare ${linkable.length} asset ai dispositivi proposti?`,
+        exclude: `Escludere ${bulkCount} asset?`,
+        restore: `Riammettere ${bulkCount} asset?`,
+    };
+    const bulkDescriptions = {
+        create: 'Verranno creati come dispositivi in NetVibe con nome, seriale e modello di Snipe-IT.',
+        link: 'Nome, seriale e modello dei dispositivi NetVibe saranno aggiornati con i dati di Snipe-IT.',
+        exclude:
+            'Non compariranno più tra gli asset da decidere. Puoi riammetterli in qualsiasi momento.',
+        restore: 'Torneranno tra gli asset da decidere.',
+    };
+    const selectedNames = (pendingBulk === 'link' ? linkable : selectedRows)
+        .slice(0, 6)
+        .map(assetName);
+
     return (
         <>
-            <Head title={`${titles[view]} · Snipe-IT · ${company.name}`} />
-            <div className="flex min-w-0 flex-col gap-6 p-4 md:p-6">
-                <div>
-                    <Button asChild variant="ghost" size="sm">
-                        <Link href={edit(company.id)}>
-                            <ArrowLeft data-icon="inline-start" />
-                            Sincronizzazione Snipe-IT
-                        </Link>
-                    </Button>
-                </div>
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-col gap-1">
-                        <p className="text-sm text-muted-foreground">
-                            {company.name} · Snipe-IT
+            <Head title={`Asset Snipe-IT · ${company.name}`} />
+            <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
+                <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="-mb-1 self-start"
+                >
+                    <Link href={companyIntegrations(company.id)}>
+                        <ArrowLeft data-icon="inline-start" />
+                        Integrazioni
+                    </Link>
+                </Button>
+                <header className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                        <h2 className="text-xl font-medium tracking-tight">
+                            Asset Snipe-IT
+                        </h2>
+                        <p className="text-sm text-muted-foreground tabular-nums">
+                            {sync?.synced_at
+                                ? `Ultima lettura ${formatDateTime(sync.synced_at)}`
+                                : 'Mai sincronizzata'}
                         </p>
-                        <h1 className="text-2xl font-medium tracking-tight">
-                            {titles[view]}
-                        </h1>
-                        {sync?.synced_at ? (
-                            <p className="text-sm text-muted-foreground">
-                                Ultimo aggiornamento:{' '}
-                                {formatDateTime(sync.synced_at)}
-                            </p>
-                        ) : null}
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             variant="outline"
                             disabled={busy || (!!sync && !active)}
@@ -582,13 +665,22 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                             )}
                             Sincronizza ora
                         </Button>
+                        <IconButton
+                            label="Impostazioni Snipe-IT"
+                            variant="ghost"
+                            asChild
+                        >
+                            <Link href={edit(company.id)}>
+                                <Settings2 />
+                            </Link>
+                        </IconButton>
                     </div>
                 </header>
                 {sync && !active ? (
                     <Alert>
                         <AlertDescription>
-                            Sincronizzazione sospesa. Riconferma l’azienda nelle
-                            impostazioni Snipe-IT.
+                            Sincronizzazione sospesa. Riconferma l’azienda
+                            nelle impostazioni Snipe-IT.
                         </AlertDescription>
                     </Alert>
                 ) : null}
@@ -597,514 +689,772 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                         <AlertDescription>{error}</AlertDescription>
                     </Alert>
                 ) : null}
-                <div className="flex flex-wrap items-center gap-3">
-                    <Select
-                        value={view}
-                        onValueChange={(view) => visit({ view, page: 1 })}
-                        disabled={busy}
-                    >
-                        <SelectTrigger
-                            aria-label="Mostra dispositivi"
-                            className="w-56"
-                        >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {Object.entries(titles).map(
-                                    ([value, label]) => (
-                                        <SelectItem key={value} value={value}>
-                                            {label}
-                                        </SelectItem>
-                                    ),
-                                )}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                    <form
-                        className="w-full max-w-sm"
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            visit({ q: search, page: 1 });
-                        }}
-                    >
-                        <InputGroup>
-                            <InputGroupAddon>
-                                <Search />
-                            </InputGroupAddon>
-                            <InputGroupInput
-                                aria-label="Cerca nell’intero elenco"
-                                placeholder="Cerca nell’elenco…"
-                                value={search}
-                                onChange={(event) =>
-                                    setSearch(event.target.value)
-                                }
-                            />
-                            <InputGroupAddon align="inline-end">
-                                <Button size="sm" variant="ghost" type="submit">
-                                    Cerca
-                                </Button>
-                            </InputGroupAddon>
-                        </InputGroup>
-                    </form>
-                    <Select
-                        value={filters.group ?? 'category'}
-                        onValueChange={(group) => visit({ group, page: 1 })}
-                        disabled={busy}
-                    >
-                        <SelectTrigger
-                            aria-label="Raggruppa dispositivi"
-                            className="w-52"
-                        >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="category">
-                                    Per tipo Snipe-IT
-                                </SelectItem>
-                                <SelectItem value="none">
-                                    Senza raggruppamento
-                                </SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                    <span className="ml-auto text-sm text-muted-foreground">
-                        {rows.total} risultati
-                    </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    {selected.length > 0 ? (
-                        <span
-                            className="text-sm text-muted-foreground"
-                            role="status"
-                        >
-                            {selected.length} selezionati nella pagina corrente
-                        </span>
-                    ) : null}
-                    {selected.length > 1 && view !== 'excluded' ? (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    disabled={busy || !active}
+                <Tabs
+                    value={view}
+                    onValueChange={(value) =>
+                        visit({ view: value, category: null, problem: null })
+                    }
+                >
+                    <TabsList aria-label="Destinazione degli asset">
+                        {views.map((item) => (
+                            <TabsTrigger key={item.value} value={item.value}>
+                                {item.label}
+                                <Badge
+                                    variant={
+                                        item.value === 'pending' &&
+                                        counts.pending
+                                            ? 'default'
+                                            : 'secondary'
+                                    }
+                                    className="tabular-nums"
                                 >
-                                    Azioni massive{' '}
-                                    <ChevronDown data-icon="inline-end" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuGroup>
-                                    <DropdownMenuItem
-                                        onSelect={() =>
-                                            applyBulk({
-                                                action: 'create',
-                                                change_model: false,
-                                            })
-                                        }
-                                    >
-                                        Crea apparati tecnici
-                                    </DropdownMenuItem>
-                                    {!siteView ? (
-                                        <DropdownMenuItem
-                                            onSelect={() =>
-                                                applyBulk({
-                                                    action: 'link',
-                                                    change_model: false,
-                                                })
-                                            }
-                                        >
-                                            Associa esistenti
-                                        </DropdownMenuItem>
-                                    ) : null}
-                                    <DropdownMenuItem
-                                        onSelect={() =>
-                                            applyBulk({ action: 'exclude' })
-                                        }
-                                    >
-                                        Escludi dall’importazione
-                                    </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    ) : null}
-                    {selected.length > 1 &&
-                    multipleSites &&
-                    view !== 'excluded' ? (
-                        <div className="w-64">
-                            <SitePicker
-                                sites={sites}
-                                value={bulkSite}
-                                onChange={(site_id) => {
-                                    setBulkSite(site_id);
-                                    applyBulk({ site_id });
+                                    {counts[item.value]}
+                                </Badge>
+                            </TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+                <Card className="gap-0 overflow-hidden py-0">
+                    <CardHeader className="gap-3 py-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <TableSearch
+                                value={search}
+                                maxLength={255}
+                                total={counts[view]}
+                                label="Cerca nome, seriale, modello, IP, MAC"
+                                onChange={(value) => {
+                                    setSearch(value);
+                                    visit({ q: value || null });
                                 }}
-                                label="Sede per i selezionati"
-                                disabled={busy || !active}
                             />
+                            <Select
+                                value={filters.category ?? ALL_CATEGORIES}
+                                onValueChange={(value) =>
+                                    visit({
+                                        category:
+                                            value === ALL_CATEGORIES
+                                                ? null
+                                                : value,
+                                    })
+                                }
+                                disabled={busy}
+                            >
+                                <SelectTrigger
+                                    aria-label="Filtra per tipo"
+                                    className="w-52"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        <SelectItem value={ALL_CATEGORIES}>
+                                            Tutti i tipi
+                                        </SelectItem>
+                                    </SelectGroup>
+                                    <SelectSeparator />
+                                    <SelectGroup>
+                                        {categories.map((category) => (
+                                            <SelectItem
+                                                key={category.name ?? NO_CATEGORY}
+                                                value={
+                                                    category.name ?? NO_CATEGORY
+                                                }
+                                            >
+                                                {category.name ?? 'Senza tipo'}
+                                                <span className="ml-auto text-muted-foreground tabular-nums">
+                                                    {category.total}
+                                                </span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                            {counts.problems || problemOnly ? (
+                                <Toggle
+                                    variant="outline"
+                                    pressed={problemOnly}
+                                    onPressedChange={(pressed) =>
+                                        visit({ problem: pressed ? 1 : null })
+                                    }
+                                    disabled={busy}
+                                >
+                                    <AlertTriangle />
+                                    Da verificare
+                                </Toggle>
+                            ) : null}
                         </div>
-                    ) : null}
-                    <Button
-                        className="ml-auto"
-                        disabled={!active || busy || !selected.length}
-                        onClick={() => setReview(true)}
-                    >
-                        <Check data-icon="inline-start" />
-                        {view === 'excluded'
-                            ? 'Riammetti selezionati'
-                            : 'Applica selezione'}
-                    </Button>
-                </div>
-                <div className="overflow-hidden rounded-xl border">
-                    <Table
-                        className={cn(
-                            'max-lg:[&_tbody]:block max-lg:[&_td]:block max-lg:[&_td]:min-w-48 max-lg:[&_td]:flex-1 max-lg:[&_tr]:flex max-lg:[&_tr]:flex-wrap',
-                            separators &&
-                                'lg:[&_td+td]:border-l lg:[&_th+th]:border-l',
-                        )}
-                    >
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-12">
-                                    <Checkbox
-                                        aria-label="Seleziona la pagina corrente"
-                                        disabled={
-                                            !actionable.length ||
-                                            busy ||
-                                            !active
-                                        }
-                                        checked={
-                                            actionable.length > 0 &&
-                                            actionable.every((row) =>
-                                                selected.includes(row.id),
-                                            )
-                                                ? true
-                                                : selected.length
-                                                  ? 'indeterminate'
-                                                  : false
-                                        }
-                                        onCheckedChange={(checked) =>
-                                            setSelected(
-                                                checked
-                                                    ? actionable.map(
-                                                          (row) => row.id,
-                                                      )
-                                                    : [],
-                                            )
-                                        }
-                                    />
-                                </TableHead>
-                                {visible.map((column) => (
-                                    <TableSortHead
-                                        key={column.id}
-                                        column={column}
-                                        sort={sort}
-                                        onSort={(value) =>
-                                            visit({
-                                                sort: value?.column ?? null,
-                                                direction:
-                                                    value?.direction ?? null,
-                                                page: 1,
-                                            })
-                                        }
-                                    />
-                                ))}
-                                <TableHead className="w-16 text-right">
-                                    <TableColumns
-                                        columns={columns}
-                                        onChange={setColumns}
-                                        separators={separators}
-                                        onSeparatorsChange={setSeparators}
-                                    />
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {rows.data.map((row, index) => {
-                                const category = row.model?.category ?? null;
-                                const startsGroup =
-                                    grouped &&
-                                    (index === 0 ||
-                                        category !==
-                                            (rows.data[index - 1].model
-                                                ?.category ?? null));
-                                const groupIds = startsGroup
-                                    ? actionable
-                                          .filter(
-                                              (item) =>
-                                                  (item.model?.category ??
-                                                      null) === category,
-                                          )
-                                          .map((item) => item.id)
-                                    : [];
-                                const selectedInGroup = groupIds.filter((id) =>
-                                    selected.includes(id),
-                                ).length;
-                                return (
-                                    <Fragment key={row.id}>
-                                        {startsGroup ? (
-                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                <TableHead
-                                                    colSpan={visible.length + 2}
-                                                    scope="rowgroup"
-                                                    className="h-auto py-3 font-medium text-foreground max-lg:w-full"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <Checkbox
-                                                            id={`snipe-group-${row.id}`}
-                                                            aria-label={`Seleziona ${row.model?.category || 'Senza tipo'} nella pagina corrente`}
-                                                            disabled={
-                                                                !groupIds.length ||
-                                                                busy ||
-                                                                !active
-                                                            }
-                                                            checked={
-                                                                groupIds.length >
-                                                                    0 &&
-                                                                selectedInGroup ===
-                                                                    groupIds.length
-                                                                    ? true
-                                                                    : selectedInGroup >
-                                                                        0
-                                                                      ? 'indeterminate'
-                                                                      : false
-                                                            }
-                                                            onCheckedChange={(
-                                                                checked,
-                                                            ) =>
-                                                                setSelected(
-                                                                    (
-                                                                        previous,
-                                                                    ) =>
-                                                                        checked ===
-                                                                        true
-                                                                            ? [
-                                                                                  ...new Set(
-                                                                                      [
-                                                                                          ...previous,
-                                                                                          ...groupIds,
-                                                                                      ],
-                                                                                  ),
-                                                                              ]
-                                                                            : previous.filter(
-                                                                                  (
-                                                                                      id,
-                                                                                  ) =>
-                                                                                      !groupIds.includes(
-                                                                                          id,
-                                                                                      ),
-                                                                              ),
-                                                                )
-                                                            }
-                                                        />
-                                                        <label
-                                                            htmlFor={`snipe-group-${row.id}`}
-                                                        >
-                                                            {row.model
-                                                                ?.category ||
-                                                                'Senza tipo'}
-                                                        </label>
-                                                    </div>
-                                                </TableHead>
-                                            </TableRow>
-                                        ) : null}
-                                        <TableRow
-                                            data-state={
-                                                selected.includes(row.id)
-                                                    ? 'selected'
-                                                    : undefined
+                        {selected.length ? (
+                            <div
+                                className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2"
+                                role="region"
+                                aria-label="Azioni sugli asset selezionati"
+                            >
+                                <span
+                                    className="text-sm font-medium tabular-nums"
+                                    role="status"
+                                >
+                                    {allMatching
+                                        ? `Tutti i ${rows.total} asset selezionati`
+                                        : `${selected.length} selezionati`}
+                                </span>
+                                {pageSelected &&
+                                !allMatching &&
+                                rows.total > selected.length &&
+                                view !== 'linked' ? (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-primary"
+                                        onClick={() => setAllMatching(true)}
+                                    >
+                                        Seleziona tutti i {rows.total}
+                                    </Button>
+                                ) : null}
+                                <div className="ml-auto flex flex-wrap items-center gap-2">
+                                    {view === 'excluded' ? (
+                                        <Button
+                                            size="sm"
+                                            disabled={!editable}
+                                            onClick={() =>
+                                                setPendingBulk('restore')
                                             }
                                         >
-                                            <TableCell className="max-lg:basis-full">
-                                                <Checkbox
-                                                    aria-label={`Seleziona ${row.snapshot.name || row.snapshot.serial || row.id}`}
-                                                    disabled={
-                                                        row.state ===
-                                                            'linked' ||
-                                                        (!row.present &&
-                                                            view !==
-                                                                'excluded') ||
-                                                        busy ||
-                                                        !active
+                                            <RotateCcw data-icon="inline-start" />
+                                            Riammetti
+                                        </Button>
+                                    ) : (
+                                        <>
+                                            {!allMatching ? (
+                                                <Button
+                                                    size="sm"
+                                                    disabled={!editable}
+                                                    onClick={() =>
+                                                        setPendingBulk('create')
                                                     }
-                                                    checked={selected.includes(
-                                                        row.id,
-                                                    )}
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        setSelected(
-                                                            (previous) =>
-                                                                checked
-                                                                    ? [
-                                                                          ...previous,
-                                                                          row.id,
-                                                                      ]
-                                                                    : previous.filter(
-                                                                          (
-                                                                              id,
-                                                                          ) =>
-                                                                              id !==
-                                                                              row.id,
-                                                                      ),
-                                                        )
-                                                    }
-                                                />
-                                            </TableCell>
-                                            {visible.map((column) => (
-                                                <TableCell
-                                                    key={column.id}
-                                                    className="max-w-lg py-4 align-top break-words whitespace-normal"
                                                 >
-                                                    <span className="mb-2 block text-xs text-muted-foreground lg:hidden">
-                                                        {column.label}
-                                                    </span>
-                                                    {cell(row, column.id)}
-                                                </TableCell>
-                                            ))}
-                                            <TableCell className="max-lg:hidden" />
-                                        </TableRow>
-                                    </Fragment>
-                                );
-                            })}
-                            {!rows.data.length ? (
+                                                    <Download data-icon="inline-start" />
+                                                    Importa come apparati
+                                                </Button>
+                                            ) : null}
+                                            {!allMatching && linkable.length ? (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={!editable}
+                                                    onClick={() =>
+                                                        setPendingBulk('link')
+                                                    }
+                                                >
+                                                    <Link2 data-icon="inline-start" />
+                                                    Collega ai proposti (
+                                                    {linkable.length})
+                                                </Button>
+                                            ) : null}
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!editable}
+                                                onClick={() =>
+                                                    setPendingBulk('exclude')
+                                                }
+                                            >
+                                                <Ban data-icon="inline-start" />
+                                                Escludi
+                                            </Button>
+                                        </>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                            setSelected([]);
+                                            setAllMatching(false);
+                                        }}
+                                    >
+                                        Annulla selezione
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : null}
+                    </CardHeader>
+                    <CardContent className="px-0">
+                        <Table
+                            className="text-left data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                            data-separators={separators}
+                            aria-label="Asset Snipe-IT"
+                        >
+                            <TableHeader className="bg-muted/50">
                                 <TableRow>
-                                    <TableCell colSpan={visible.length + 2}>
-                                        <Empty>
-                                            <EmptyHeader>
-                                                <EmptyTitle>
-                                                    {sync?.synced_at
-                                                        ? 'Nessun elemento in questa vista'
-                                                        : 'Sincronizza per caricare i dispositivi'}
-                                                </EmptyTitle>
-                                            </EmptyHeader>
-                                        </Empty>
-                                    </TableCell>
-                                </TableRow>
-                            ) : null}
-                        </TableBody>
-                    </Table>
-                </div>
-                <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
-                    <span className="text-center text-sm text-muted-foreground tabular-nums lg:text-left">
-                        {rows.from ?? 0}–{rows.to ?? 0} di {rows.total}
-                    </span>
-                    <Pagination>
-                        <PaginationContent>
-                            <PaginationItem>
-                                <PaginationPrevious
-                                    disabled={rows.current_page <= 1 || busy}
-                                    onClick={() =>
-                                        visit({ page: rows.current_page - 1 })
-                                    }
-                                />
-                            </PaginationItem>
-                            {rows.links.slice(1, -1).map((link, index) => (
-                                <PaginationItem key={`${link.label}-${index}`}>
-                                    {link.url ? (
-                                        <PaginationLink
-                                            isActive={link.active}
-                                            aria-label={`Pagina ${link.label}`}
-                                            disabled={busy}
-                                            onClick={() =>
+                                    <TableHead className="w-12" scope="col">
+                                        <Checkbox
+                                            aria-label="Seleziona la pagina"
+                                            disabled={
+                                                !selectable.length || !editable
+                                            }
+                                            checked={
+                                                pageSelected
+                                                    ? true
+                                                    : selected.length
+                                                      ? 'indeterminate'
+                                                      : false
+                                            }
+                                            onCheckedChange={(checked) => {
+                                                setAllMatching(false);
+                                                setSelected(
+                                                    checked
+                                                        ? selectable.map(
+                                                              (row) => row.id,
+                                                          )
+                                                        : [],
+                                                );
+                                            }}
+                                        />
+                                    </TableHead>
+                                    {visible.map((column) => (
+                                        <TableSortHead
+                                            key={column.id}
+                                            column={column}
+                                            sort={sort}
+                                            onSort={(value) =>
                                                 visit({
-                                                    page: Number(link.label),
+                                                    sort: value?.column ?? null,
+                                                    direction:
+                                                        value?.direction ??
+                                                        null,
                                                 })
                                             }
-                                        >
-                                            {link.label}
-                                        </PaginationLink>
-                                    ) : (
-                                        <PaginationEllipsis />
-                                    )}
-                                </PaginationItem>
-                            ))}
-                            <PaginationItem>
-                                <PaginationNext
-                                    disabled={
-                                        rows.current_page >= rows.last_page ||
-                                        busy
-                                    }
-                                    onClick={() =>
-                                        visit({ page: rows.current_page + 1 })
-                                    }
-                                />
-                            </PaginationItem>
-                        </PaginationContent>
-                    </Pagination>
-                    <div className="flex items-center justify-center gap-2 lg:justify-end">
-                        <label
-                            htmlFor="snipe-page-size"
-                            className="text-sm text-muted-foreground"
-                        >
-                            Voci per pagina
-                        </label>
-                        <Select
-                            value={String(rows.per_page)}
-                            onValueChange={(value) =>
-                                visit({ per_page: Number(value), page: 1 })
-                            }
-                            disabled={busy}
-                        >
-                            <SelectTrigger
-                                id="snipe-page-size"
-                                className="w-20"
-                            >
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {[25, 50, 100].map((size) => (
-                                        <SelectItem
-                                            key={size}
-                                            value={String(size)}
-                                        >
-                                            {size}
-                                        </SelectItem>
+                                        />
                                     ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
+                                    <TableHead className="w-12 text-right">
+                                        <TableColumns
+                                            columns={columns}
+                                            onChange={setColumns}
+                                            separators={separators}
+                                            onSeparatorsChange={setSeparators}
+                                        />
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {rows.data.map((row) => (
+                                    <TableRow
+                                        key={row.id}
+                                        data-state={
+                                            selected.includes(row.id)
+                                                ? 'selected'
+                                                : undefined
+                                        }
+                                        className={
+                                            row.present
+                                                ? undefined
+                                                : 'opacity-60'
+                                        }
+                                    >
+                                        <TableCell>
+                                            <Checkbox
+                                                aria-label={`Seleziona ${assetName(row)}`}
+                                                disabled={
+                                                    row.state === 'linked' ||
+                                                    !row.present ||
+                                                    !editable
+                                                }
+                                                checked={selected.includes(
+                                                    row.id,
+                                                )}
+                                                onCheckedChange={(checked) => {
+                                                    setAllMatching(false);
+                                                    setSelected((previous) =>
+                                                        checked
+                                                            ? [
+                                                                  ...previous,
+                                                                  row.id,
+                                                              ]
+                                                            : previous.filter(
+                                                                  (id) =>
+                                                                      id !==
+                                                                      row.id,
+                                                              ),
+                                                    );
+                                                }}
+                                            />
+                                        </TableCell>
+                                        {visible.map((column) => (
+                                            <TableCell
+                                                key={column.id}
+                                                className="max-w-xs py-2.5 align-top break-words whitespace-normal"
+                                            >
+                                                {cell(row, column.id)}
+                                            </TableCell>
+                                        ))}
+                                        <TableCell className="text-right align-top">
+                                            {rowMenu(row)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {!rows.data.length ? (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={visible.length + 2}
+                                            className="h-40 text-center whitespace-normal"
+                                        >
+                                            <Empty>
+                                                <EmptyHeader>
+                                                    <EmptyTitle>
+                                                        {!sync?.synced_at
+                                                            ? 'Sincronizza per caricare gli asset'
+                                                            : search ||
+                                                                filters.category ||
+                                                                problemOnly
+                                                              ? 'Nessun asset trovato'
+                                                              : view ===
+                                                                  'pending'
+                                                                ? 'Nessun asset da decidere'
+                                                                : 'Nessun asset in questa vista'}
+                                                    </EmptyTitle>
+                                                    {search ||
+                                                    filters.category ||
+                                                    problemOnly ? (
+                                                        <EmptyDescription>
+                                                            Modifica la ricerca
+                                                            o i filtri.
+                                                        </EmptyDescription>
+                                                    ) : null}
+                                                </EmptyHeader>
+                                            </Empty>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : null}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                    {rows.total > 10 ? (
+                        <TablePagination
+                            summary={`${rows.from ?? 0}–${rows.to ?? 0} di ${rows.total} asset`}
+                            page={rows.current_page}
+                            pageCount={rows.last_page}
+                            pageSize={rows.per_page}
+                            onPageChange={(page) => visit({ page })}
+                            onPageSizeChange={(per_page) =>
+                                visit({ per_page })
+                            }
+                        />
+                    ) : null}
+                </Card>
             </div>
-            <Dialog
-                open={review}
+
+            <Sheet
+                open={current !== null}
                 onOpenChange={(open) => {
-                    if (!busy) setReview(open);
+                    if (!open && !busy) setOpenRow(null);
                 }}
             >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            Conferma {selected.length} scelte
-                        </DialogTitle>
-                        <DialogDescription>
-                            {view === 'excluded'
-                                ? 'Gli asset selezionati riprenderanno l’aggiornamento automatico dell’IPAM.'
-                                : 'Le creazioni aggiungono gli asset selezionati a Dispositivi come apparati tecnici. Le associazioni aggiornano nome, seriale e modello degli apparati esistenti.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() => setReview(false)}
-                        >
-                            Annulla
-                        </Button>
-                        <Button
-                            disabled={
-                                busy ||
-                                (!selected.length && !form.data.activate)
-                            }
-                            onClick={confirmSelection}
-                        >
-                            {form.processing ? <Spinner /> : null}Conferma
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
+                {current && draft ? (
+                    <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+                        <SheetHeader>
+                            <SheetTitle>{assetName(current)}</SheetTitle>
+                            <SheetDescription>
+                                {[
+                                    current.model?.category ?? 'Senza tipo',
+                                    [
+                                        current.model?.manufacturer,
+                                        current.model?.name,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' '),
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                            </SheetDescription>
+                        </SheetHeader>
+                        <div className="flex flex-col gap-6 px-4">
+                            {current.problem ||
+                            current.model_problem ||
+                            !current.present ? (
+                                <Alert>
+                                    <AlertTriangle />
+                                    <AlertDescription>
+                                        {current.problem ??
+                                            current.model_problem ??
+                                            'Non più presente in Snipe-IT'}
+                                    </AlertDescription>
+                                </Alert>
+                            ) : null}
+                            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border text-sm">
+                                <div className="flex items-center justify-between gap-2 bg-muted px-3 py-2 font-medium">
+                                    Snipe-IT
+                                    {current.url ? (
+                                        <a
+                                            href={current.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                                            aria-label="Apri in Snipe-IT (nuova scheda)"
+                                        >
+                                            <ArrowUpRight className="size-4" />
+                                        </a>
+                                    ) : null}
+                                </div>
+                                <div className="bg-muted px-3 py-2 font-medium">
+                                    NetVibe
+                                </div>
+                                {(
+                                    [
+                                        [
+                                            'Nome',
+                                            assetName(current),
+                                            current.local?.name ??
+                                                (current.state === 'ipam'
+                                                    ? 'Client nell’IPAM'
+                                                    : '—'),
+                                        ],
+                                        [
+                                            'Seriale',
+                                            current.snapshot.serial,
+                                            current.local ? undefined : '—',
+                                        ],
+                                        [
+                                            'Modello',
+                                            current.model?.name,
+                                            current.local?.model?.name ??
+                                                current.model_local?.name ??
+                                                '—',
+                                        ],
+                                        [
+                                            'IP',
+                                            current.snapshot.network?.ip,
+                                            current.ipam_url ? (
+                                                <TextLink
+                                                    href={current.ipam_url}
+                                                >
+                                                    {
+                                                        current.snapshot
+                                                            .network?.ip
+                                                    }
+                                                </TextLink>
+                                            ) : (
+                                                '—'
+                                            ),
+                                        ],
+                                        [
+                                            'MAC',
+                                            current.snapshot.network?.mac,
+                                            current.local ||
+                                            current.state === 'ipam'
+                                                ? undefined
+                                                : '—',
+                                        ],
+                                    ] as const
+                                ).map(([label, external, local]) => (
+                                    <div key={label} className="contents">
+                                        <div className="flex flex-col bg-background px-3 py-2">
+                                            <span className="text-xs text-muted-foreground">
+                                                {label}
+                                            </span>
+                                            <span className="break-all">
+                                                {external || '—'}
+                                            </span>
+                                        </div>
+                                        <div className="flex flex-col bg-background px-3 py-2">
+                                            <span className="text-xs text-muted-foreground">
+                                                {label}
+                                            </span>
+                                            <span className="break-all">
+                                                {local ?? (external || '—')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {(current.state === 'pending' ||
+                                current.state === 'ipam') &&
+                            current.present ? (
+                                <div className="flex flex-col gap-4">
+                                    <Field>
+                                        <FieldLabel id="asset-action-label">
+                                            In NetVibe
+                                        </FieldLabel>
+                                        <ToggleGroup
+                                            type="single"
+                                            variant="outline"
+                                            aria-labelledby="asset-action-label"
+                                            value={draft.action}
+                                            onValueChange={(value) => {
+                                                if (value)
+                                                    setDraft({
+                                                        ...draft,
+                                                        action: value as Decision['action'],
+                                                        change_model: false,
+                                                    });
+                                            }}
+                                            disabled={!editable}
+                                            className="w-full"
+                                        >
+                                            <ToggleGroupItem
+                                                value="create"
+                                                className="flex-1"
+                                            >
+                                                <Download />
+                                                Importa come apparato
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="link"
+                                                className="flex-1"
+                                            >
+                                                <Link2 />
+                                                Collega a esistente
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+                                    </Field>
+                                    {draft.action === 'link' ? (
+                                        <Field>
+                                            <FieldLabel>
+                                                Dispositivo NetVibe
+                                            </FieldLabel>
+                                            {current.candidates.length ? (
+                                                <div className="flex flex-col gap-2">
+                                                    {current.candidates.map(
+                                                        (candidate) => (
+                                                            <Button
+                                                                key={
+                                                                    candidate.id
+                                                                }
+                                                                type="button"
+                                                                variant={
+                                                                    target?.id ===
+                                                                    candidate.id
+                                                                        ? 'secondary'
+                                                                        : 'outline'
+                                                                }
+                                                                aria-pressed={
+                                                                    target?.id ===
+                                                                    candidate.id
+                                                                }
+                                                                className="h-auto justify-start py-2 text-left"
+                                                                onClick={() => {
+                                                                    setTarget(
+                                                                        candidate,
+                                                                    );
+                                                                    setDraft({
+                                                                        ...draft,
+                                                                        target_id:
+                                                                            candidate.id,
+                                                                        change_model: false,
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <span className="flex flex-col">
+                                                                    <span>
+                                                                        {
+                                                                            candidate.name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-xs font-normal text-muted-foreground">
+                                                                        {
+                                                                            candidate.detail
+                                                                        }
+                                                                    </span>
+                                                                </span>
+                                                            </Button>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            ) : null}
+                                            <SnipeItPicker
+                                                company={company.id}
+                                                kind="devices"
+                                                label={`Cerca un dispositivo NetVibe per ${assetName(current)}`}
+                                                disabled={!editable}
+                                                value={target}
+                                                onChange={(value) => {
+                                                    setTarget(value);
+                                                    setDraft({
+                                                        ...draft,
+                                                        target_id:
+                                                            value?.id ?? null,
+                                                        change_model: false,
+                                                    });
+                                                }}
+                                            />
+                                        </Field>
+                                    ) : multipleSites ? (
+                                        <Field>
+                                            <FieldLabel htmlFor="asset-site">
+                                                Sede
+                                            </FieldLabel>
+                                            <SitePicker
+                                                sites={sites}
+                                                value={draft.site_id}
+                                                disabled={!editable}
+                                                onChange={(site_id) =>
+                                                    setDraft({
+                                                        ...draft,
+                                                        site_id,
+                                                    })
+                                                }
+                                            />
+                                        </Field>
+                                    ) : null}
+                                    <SnipeItModelCell
+                                        company={company.id}
+                                        row={current}
+                                        name={assetName(current)}
+                                        target={
+                                            draft.action === 'link'
+                                                ? target
+                                                : null
+                                        }
+                                        model={model ?? current.model_local}
+                                        modelChosen={!!model}
+                                        editable
+                                        changeModel={draft.change_model}
+                                        disabled={!editable}
+                                        onModelChange={(value) => {
+                                            setModel(value);
+                                            setDraft({
+                                                ...draft,
+                                                model_id: value?.id ?? null,
+                                                change_model: false,
+                                            });
+                                        }}
+                                        onChangeModelChange={(change_model) =>
+                                            setDraft({
+                                                ...draft,
+                                                change_model,
+                                            })
+                                        }
+                                    />
+                                </div>
+                            ) : null}
+                        </div>
+                        <SheetFooter className="flex-row flex-wrap">
+                            {(current.state === 'pending' ||
+                                current.state === 'ipam') &&
+                            current.present ? (
+                                <>
+                                    <Button
+                                        disabled={
+                                            !editable ||
+                                            (draft.action === 'link' &&
+                                                !draft.target_id) ||
+                                            (draft.action === 'create' &&
+                                                !draft.site_id)
+                                        }
+                                        onClick={() =>
+                                            submit([draft], () =>
+                                                setOpenRow(null),
+                                            )
+                                        }
+                                    >
+                                        {form.processing ? <Spinner /> : null}
+                                        {draft.action === 'link'
+                                            ? 'Collega'
+                                            : 'Importa'}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        disabled={!editable}
+                                        onClick={() =>
+                                            submit(
+                                                [
+                                                    {
+                                                        ...draft,
+                                                        action: 'exclude',
+                                                    },
+                                                ],
+                                                () => setOpenRow(null),
+                                            )
+                                        }
+                                    >
+                                        <Ban data-icon="inline-start" />
+                                        Escludi
+                                    </Button>
+                                </>
+                            ) : current.state === 'excluded' ? (
+                                <Button
+                                    disabled={!editable}
+                                    onClick={() =>
+                                        submit(
+                                            [defaultDecision(current, sites)],
+                                            () => setOpenRow(null),
+                                        )
+                                    }
+                                >
+                                    <RotateCcw data-icon="inline-start" />
+                                    Riammetti
+                                </Button>
+                            ) : current.local?.url ? (
+                                <Button asChild variant="outline">
+                                    <Link href={current.local.url}>
+                                        Apri dispositivo
+                                        <ArrowUpRight data-icon="inline-end" />
+                                    </Link>
+                                </Button>
+                            ) : null}
+                        </SheetFooter>
+                    </SheetContent>
+                ) : null}
+            </Sheet>
+
+            <Dialog
+                open={pendingBulk !== null}
+                onOpenChange={(open) => {
+                    if (!open && !busy) setPendingBulk(null);
+                }}
+            >
+                {pendingBulk ? (
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>{bulkLabels[pendingBulk]}</DialogTitle>
+                            <DialogDescription>
+                                {bulkDescriptions[pendingBulk]}
+                            </DialogDescription>
+                        </DialogHeader>
+                        {!allMatching ? (
+                            <p className="text-sm text-muted-foreground">
+                                {selectedNames.join(', ')}
+                                {(pendingBulk === 'link'
+                                    ? linkable.length
+                                    : selectedRows.length) > 6
+                                    ? ` e altri ${(pendingBulk === 'link' ? linkable.length : selectedRows.length) - 6}`
+                                    : ''}
+                            </p>
+                        ) : null}
+                        {pendingBulk === 'create' && multipleSites ? (
+                            <Field>
+                                <FieldLabel htmlFor="asset-site">Sede</FieldLabel>
+                                <SitePicker
+                                    sites={sites}
+                                    value={bulkSite}
+                                    disabled={busy}
+                                    onChange={setBulkSite}
+                                />
+                            </Field>
+                        ) : null}
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => setPendingBulk(null)}
+                            >
+                                Annulla
+                            </Button>
+                            <Button
+                                disabled={
+                                    busy ||
+                                    (pendingBulk === 'create' && !bulkSite)
+                                }
+                                onClick={applyBulk}
+                            >
+                                {busy ? <Spinner /> : null}
+                                Conferma
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                ) : null}
             </Dialog>
         </>
     );
 }
+
+SnipeItRecords.layout = () => ({ breadcrumbs: [] });

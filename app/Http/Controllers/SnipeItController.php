@@ -52,11 +52,7 @@ class SnipeItController extends Controller
             'sync' => $sync ? [
                 ...$sync->only('id', 'activated_at', 'synced_at', 'error'),
                 'active' => $sync->isActive(),
-                'ipam' => $sync->assets()->forView('ipam')->count(),
-                'linked' => $sync->assets()->forView('linked')->count(),
-                'review' => $sync->assets()->forView('review')->count(),
-                'without_ip' => $sync->assets()->forView('no-ip')->count(),
-                'excluded' => $sync->assets()->forView('excluded')->count(),
+                'counts' => $sync->counts(),
             ] : null,
         ]);
     }

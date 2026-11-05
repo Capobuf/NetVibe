@@ -1,14 +1,19 @@
 import { UnifiMark } from '@/components/unifi-mark';
-import { router, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { ArrowLeft } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { edit as adminSnipeIt } from '@/routes/administration/integrations/snipe-it';
 import { index as adminUnifi } from '@/routes/administration/integrations/unifi';
-import { edit as companySnipeIt } from '@/routes/companies/settings/integrations/snipe-it';
-import { index as companyUnifi } from '@/routes/companies/settings/integrations/unifi';
+import { show as companyIntegrations } from '@/routes/companies/settings/integrations';
 import type { Company } from '@/types/company';
 
+/**
+ * Administration pages switch integration with tabs; company pages are
+ * reached from the company integrations overview and link back to it.
+ */
 export function IntegrationTabs({
     value,
     company,
@@ -18,21 +23,31 @@ export function IntegrationTabs({
     company: Company | null;
 }>) {
     const { auth } = usePage().props;
+    if (company) {
+        return (
+            <Tabs value={value} className="min-w-0 gap-4">
+                <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="-mb-1 self-start"
+                >
+                    <Link href={companyIntegrations(company.id)}>
+                        <ArrowLeft data-icon="inline-start" />
+                        Integrazioni
+                    </Link>
+                </Button>
+                {children}
+            </Tabs>
+        );
+    }
     return (
         <Tabs
             value={value}
             activationMode="manual"
             className="min-w-0 gap-6"
             onValueChange={(next) =>
-                router.visit(
-                    next === 'unifi'
-                        ? company
-                            ? companyUnifi(company.id)
-                            : adminUnifi()
-                        : company
-                          ? companySnipeIt(company.id)
-                          : adminSnipeIt(),
-                )
+                router.visit(next === 'unifi' ? adminUnifi() : adminSnipeIt())
             }
         >
             <TabsList aria-label="Integrazioni">

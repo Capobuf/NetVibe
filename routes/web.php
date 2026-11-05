@@ -3,6 +3,7 @@
 use App\Http\Controllers\CableLabelController;
 use App\Http\Controllers\CableLabelTemplateController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CompanyIntegrationController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DeviceInterfaceController;
@@ -82,6 +83,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');
+        Route::get('companies/{company}/settings/integrations', [CompanyIntegrationController::class, 'show'])->name('companies.settings.integrations.show');
         Route::get('companies/{company}/settings/integrations/unifi', [UnifiController::class, 'index'])->name('companies.settings.integrations.unifi.index');
         Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])->name('companies.sites.deletion-impact');
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
@@ -100,6 +102,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('options', [SnipeItSyncController::class, 'options'])->name('options');
                 Route::post('sync', [SnipeItSyncController::class, 'refresh'])->middleware('throttle:5,1')->name('sync');
                 Route::post('confirm', [SnipeItSyncController::class, 'confirm'])->name('confirm');
+                Route::post('bulk', [SnipeItSyncController::class, 'bulk'])->name('bulk');
                 Route::post('detach', [SnipeItSyncController::class, 'detach'])->name('detach');
             });
         });

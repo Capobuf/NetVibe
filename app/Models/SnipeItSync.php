@@ -30,6 +30,17 @@ class SnipeItSync extends Model
         return $this->belongsTo(Company::class);
     }
 
+    /** Asset count per view (a partition of the assets) plus assets needing attention. */
+    public function counts(): array
+    {
+        return [
+            ...collect(SnipeItAsset::VIEWS)->mapWithKeys(fn ($view) => [$view => $this->assets()->forView($view)->count()])->all(),
+            'problems' => $this->assets()->forView('pending')->withProblem()->count()
+                + $this->assets()->forView('linked')->withProblem()->count()
+                + $this->assets()->forView('ipam')->withProblem()->count(),
+        ];
+    }
+
     public static function current(Company $company): ?self
     {
         $link = SnipeItCompanyLink::where('company_id', $company->id)->latest('id')->first();

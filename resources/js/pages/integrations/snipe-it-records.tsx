@@ -7,11 +7,14 @@ import {
     Download,
     Link2,
     MoreHorizontal,
-    RefreshCw,
     RotateCcw,
 } from 'lucide-react';
 import { IntegrationTabs } from '@/components/integration-tabs';
-import { SnipeItTabs } from '@/components/snipe-it-tabs';
+import {
+    SnipeItCompanyHeader,
+    SnipeItSections,
+    type SnipeItCompanyState,
+} from '@/components/snipe-it-company';
 import { SnipeItModelCell } from '@/components/devices/snipe-it-model-cell';
 import {
     SnipeItPicker,
@@ -24,9 +27,7 @@ import { TableSortHead } from '@/components/table-sort-head';
 import TextLink from '@/components/text-link';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import type { TableSort } from '@/lib/table-sort';
-import { formatDateTime } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -87,7 +88,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
@@ -99,7 +99,6 @@ import {
     bulk,
     confirm,
     records,
-    sync as refresh,
 } from '@/routes/companies/settings/integrations/snipe-it';
 import type { Company, Site } from '@/types/company';
 
@@ -149,6 +148,7 @@ type Props = {
         error: string | null;
     } | null;
     active: boolean;
+    integration: Omit<SnipeItCompanyState, 'sync'>;
     view: View;
     filters: {
         q?: string;
@@ -253,6 +253,7 @@ function Records({
     company,
     sync,
     active,
+    integration,
     view,
     filters,
     counts,
@@ -288,8 +289,7 @@ function Records({
         problem: filters.problem ? 1 : null,
         category: filters.category ?? null,
     });
-    const acquire = useForm({});
-    const busy = form.processing || massForm.processing || acquire.processing;
+    const busy = form.processing || massForm.processing;
     const multipleSites = sites.length > 1;
     const editable = active && !busy;
     const problemOnly = !!filters.problem && filters.problem !== '0';
@@ -317,8 +317,6 @@ function Records({
     const error = [
         ...Object.values(form.errors),
         ...Object.values(massForm.errors),
-        ...Object.values(acquire.errors),
-        sync?.error,
     ].find(
         (message): message is string =>
             typeof message === 'string' && message.length > 0,
@@ -629,36 +627,15 @@ function Records({
             <Head title={`Asset Snipe-IT · ${company.name}`} />
             <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
                 <IntegrationTabs value="snipe-it" company={company}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <SnipeItTabs
-                            company={company.id}
-                            value="assets"
-                            pending={counts.pending}
-                        />
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span className="text-sm text-muted-foreground tabular-nums">
-                                {sync?.synced_at
-                                    ? `Ultima lettura ${formatDateTime(sync.synced_at)}`
-                                    : 'Mai sincronizzata'}
-                            </span>
-                            <Button
-                                variant="outline"
-                                disabled={busy || !sync || !active}
-                                onClick={() =>
-                                    acquire.submit(refresh(company.id), {
-                                        preserveScroll: true,
-                                    })
-                                }
-                            >
-                                {acquire.processing ? (
-                                    <Spinner />
-                                ) : (
-                                    <RefreshCw data-icon="inline-start" />
-                                )}
-                                Sincronizza ora
-                            </Button>
-                        </div>
-                    </div>
+                    <SnipeItCompanyHeader
+                        company={company.id}
+                        state={{ ...integration, sync }}
+                    />
+                    <SnipeItSections
+                        company={company.id}
+                        value="assets"
+                        pending={counts.pending}
+                    />
                     {sync && !active ? (
                         <Alert>
                             <AlertDescription>
@@ -672,46 +649,42 @@ function Records({
                             <AlertDescription>{error}</AlertDescription>
                         </Alert>
                     ) : null}
-                    <Tabs
-                        value={view}
-                        onValueChange={(value) =>
-                            visit({
-                                view: value,
-                                category: null,
-                                problem: null,
-                            })
-                        }
-                    >
-                        <TabsList aria-label="Destinazione degli asset">
-                            {views.map((item) => (
-                                <TabsTrigger
-                                    key={item.value}
-                                    value={item.value}
-                                >
-                                    {counts.problems_by_view[item.value] ? (
-                                        <AlertTriangle
-                                            className="text-amber-600 dark:text-amber-500"
-                                            aria-label="Contiene asset da verificare"
-                                        />
-                                    ) : null}
-                                    {item.label}
-                                    <Badge
-                                        variant={
-                                            item.value === 'pending' &&
-                                            counts.pending
-                                                ? 'default'
-                                                : 'secondary'
-                                        }
-                                        className="tabular-nums"
-                                    >
-                                        {counts[item.value]}
-                                    </Badge>
-                                </TabsTrigger>
-                            ))}
-                        </TabsList>
-                    </Tabs>
                     <Card className="gap-0 overflow-hidden py-0">
                         <CardHeader className="gap-3 py-4">
+                            <ToggleGroup
+                                type="single"
+                                variant="outline"
+                                value={view}
+                                onValueChange={(value) => {
+                                    if (value)
+                                        visit({
+                                            view: value,
+                                            category: null,
+                                            problem: null,
+                                        });
+                                }}
+                                aria-label="Destinazione degli asset"
+                                className="flex-wrap"
+                            >
+                                {views.map((item) => (
+                                    <ToggleGroupItem
+                                        key={item.value}
+                                        value={item.value}
+                                        className="gap-2 px-3"
+                                    >
+                                        {counts.problems_by_view[item.value] ? (
+                                            <AlertTriangle
+                                                className="text-amber-600 dark:text-amber-500"
+                                                aria-label="Contiene asset da verificare"
+                                            />
+                                        ) : null}
+                                        {item.label}
+                                        <span className="text-muted-foreground tabular-nums">
+                                            {counts[item.value]}
+                                        </span>
+                                    </ToggleGroupItem>
+                                ))}
+                            </ToggleGroup>
                             <div className="flex flex-wrap items-center gap-3">
                                 <TableSearch
                                     value={search}

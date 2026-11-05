@@ -6,6 +6,8 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\SnipeItAsset;
+use App\Models\SnipeItCompanyLink;
+use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync;
 use App\Support\SnipeItSync as Synchronizer;
 use Illuminate\Database\Eloquent\Builder;
@@ -113,6 +115,7 @@ class SnipeItSyncController extends Controller
 
         return Inertia::render('integrations/snipe-it-records', [
             'company' => $company->only('id', 'name'), 'sync' => $sync?->only('id', 'revision', 'activated_at', 'synced_at', 'error'),
+            'integration' => $this->integration($company),
             'active' => $sync?->isActive() ?? false, 'view' => $view, 'filters' => $filters,
             'counts' => $sync?->counts() ?? [...array_fill_keys([...SnipeItAsset::VIEWS, 'problems'], 0), 'problems_by_view' => []],
             'categories' => $this->filtered($sync, $view, $categoryFilters)
@@ -143,6 +146,22 @@ class SnipeItSyncController extends Controller
             ? "{$ids->count()} asset esclusi." : "{$ids->count()} asset riammessi."]);
 
         return back();
+    }
+
+    /** Connection and association state shown in the Snipe-IT header. */
+    private function integration(Company $company): array
+    {
+        $setting = SnipeItSetting::forCompany($company);
+        $connection = $setting->use_global ? SnipeItSetting::forCompany(null)->connection : $setting->connection;
+        $link = SnipeItCompanyLink::where('company_id', $company->id)->latest('id')->first();
+
+        return [
+            'connected' => $connection !== null,
+            'association' => $link ? [
+                'name' => $link->external_company_name,
+                'confirmed' => $connection && $link->connection_id === $connection->id && $link->confirmed_at !== null,
+            ] : null,
+        ];
     }
 
     private function filterRules(): array

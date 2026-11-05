@@ -4,20 +4,26 @@ import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import {
     Check,
-    ChevronDown,
     Link2,
     RefreshCw,
     SlidersHorizontal,
     Trash2,
 } from 'lucide-react';
 import { IntegrationTabs } from '@/components/integration-tabs';
-import { SnipeItTabs } from '@/components/snipe-it-tabs';
+import {
+    IntegrationHeader,
+    SectionTabs,
+} from '@/components/integration-header';
+import { SnipeItMark } from '@/components/snipe-it-mark';
+import {
+    SnipeItCompanyHeader,
+    SnipeItSections,
+} from '@/components/snipe-it-company';
 import { index as administration } from '@/routes/administration';
 import { index as integrationIndex } from '@/routes/administration/integrations';
 import PasswordInput from '@/components/password-input';
 import { SnipeItFields } from '@/components/devices/snipe-it-fields';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -27,10 +33,15 @@ import {
     CardFooter,
 } from '@/components/ui/card';
 import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemFooter,
+    ItemGroup,
+    ItemMedia,
+    ItemTitle,
+} from '@/components/ui/item';
 import {
     Combobox,
     ComboboxInput,
@@ -57,7 +68,6 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import * as globalRoutes from '@/routes/administration/integrations/snipe-it';
 import * as companyRoutes from '@/routes/companies/settings/integrations/snipe-it';
@@ -149,7 +159,6 @@ function Step({
     state,
     summary,
     action,
-    last,
     children,
 }: {
     number: number;
@@ -157,60 +166,47 @@ function Step({
     state: StepState;
     summary?: ReactNode;
     action?: ReactNode;
-    last?: boolean;
     children?: ReactNode;
 }) {
     return (
-        <li className="relative flex gap-4">
-            {!last ? (
-                <span
-                    aria-hidden="true"
-                    className="absolute top-9 bottom-0 left-4 w-px -translate-x-1/2 bg-border"
-                />
-            ) : null}
-            <span
+        <Item variant="outline" role="listitem">
+            <ItemMedia
+                variant="icon"
                 aria-hidden="true"
                 className={cn(
-                    'relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium tabular-nums',
+                    'rounded-full text-xs font-medium tabular-nums',
                     state === 'done' &&
                         'border-primary bg-primary text-primary-foreground',
-                    state === 'current' && 'border-primary text-primary',
+                    state === 'current' &&
+                        'border-primary bg-background text-primary',
                     state === 'locked' && 'text-muted-foreground',
                 )}
             >
-                {state === 'done' ? <Check className="size-4" /> : number}
-            </span>
-            <div
-                className={cn(
-                    'flex min-w-0 flex-1 flex-col gap-3',
-                    !last && 'pb-8',
-                )}
-            >
-                <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                    <div className="flex min-w-0 flex-col">
-                        <h3
-                            className={cn(
-                                'font-medium',
-                                state === 'locked' && 'text-muted-foreground',
-                            )}
-                        >
-                            <span className="sr-only">Passo {number}: </span>
-                            {title}
-                            {state === 'done' ? (
-                                <span className="sr-only"> (completato)</span>
-                            ) : null}
-                        </h3>
-                        {summary ? (
-                            <div className="text-sm text-muted-foreground">
-                                {summary}
-                            </div>
-                        ) : null}
-                    </div>
-                    {action}
-                </div>
-                {children}
-            </div>
-        </li>
+                {state === 'done' ? <Check /> : number}
+            </ItemMedia>
+            <ItemContent className="min-w-0">
+                <ItemTitle
+                    className={
+                        state === 'locked' ? 'text-muted-foreground' : undefined
+                    }
+                >
+                    <span className="sr-only">Passo {number}: </span>
+                    {title}
+                    {state === 'done' ? (
+                        <span className="sr-only"> (completato)</span>
+                    ) : null}
+                </ItemTitle>
+                {summary ? (
+                    <ItemDescription className="line-clamp-none break-all">
+                        {summary}
+                    </ItemDescription>
+                ) : null}
+            </ItemContent>
+            {action ? <ItemActions>{action}</ItemActions> : null}
+            {children ? (
+                <ItemFooter className="block">{children}</ItemFooter>
+            ) : null}
+        </Item>
     );
 }
 
@@ -244,7 +240,6 @@ function SnipeItForm({
         external_company_id: 0,
         connection: '',
     });
-    const acquire = useForm<{ sync?: string }>({});
     const [savedCheck, setSavedCheck] = useState<
         TestResult | Connection | null
     >(settings.connection);
@@ -255,12 +250,12 @@ function SnipeItForm({
     const [confirm, setConfirm] = useState<'save' | 'remove' | null>(null);
     const [editConnection, setEditConnection] = useState(false);
     const [editCompany, setEditCompany] = useState(false);
+    const [showFields, setShowFields] = useState(false);
     const busy =
         form.processing ||
         test.processing ||
         list.processing ||
-        association.processing ||
-        acquire.processing;
+        association.processing;
     const usesGlobal = !!company && form.data.use_global;
     const selectedConnection = usesGlobal
         ? settings.global_connection
@@ -281,7 +276,6 @@ function SnipeItForm({
         test.errors.connection ||
         list.errors.connection ||
         association.errors.connection ||
-        acquire.errors.sync ||
         error;
     const urlError = form.errors.server_url || test.errors.server_url;
     const keyError = form.errors.api_key || test.errors.api_key;
@@ -293,12 +287,6 @@ function SnipeItForm({
         connectionStep !== 'done'
             ? 'locked'
             : confirmed && !editCompany
-              ? 'done'
-              : 'current';
-    const syncStep: StepState =
-        companyStep !== 'done'
-            ? 'locked'
-            : sync?.synced_at
               ? 'done'
               : 'current';
 
@@ -374,11 +362,6 @@ function SnipeItForm({
         if (companyStepOpen) loadOnOpen();
     }, [companyStepOpen]);
 
-    function synchronize() {
-        acquire.submit(companyRoutes.sync(company!.id), {
-            preserveScroll: true,
-        });
-    }
 
     const checkLabel = lastCheck?.checked_at
         ? `Verificata il ${formatDateTime(lastCheck.checked_at)} · ${
@@ -721,79 +704,75 @@ function SnipeItForm({
                         Integrazioni
                     </h1>
                     <IntegrationTabs value="snipe-it" company={null}>
-                        <Tabs
+                        <IntegrationHeader
+                            mark={<SnipeItMark className="size-5" />}
+                            title="Snipe-IT"
+                            state={
+                                !settings.connection
+                                    ? 'unconfigured'
+                                    : lastCheck &&
+                                        ('status' in lastCheck
+                                            ? lastCheck.status
+                                            : lastCheck.check_status) !==
+                                            'ok' &&
+                                        lastCheck.checked_at
+                                      ? 'error'
+                                      : 'active'
+                            }
+                            description={
+                                settings.connection
+                                    ? `${settings.connection.server_url} · ${checkLabel}`
+                                    : 'Connessione globale non configurata'
+                            }
+                        />
+                        <SectionTabs
+                            label="Snipe-IT"
                             value={settings.connection ? tab : 'connection'}
-                            onValueChange={onTabChange}
-                            className="gap-6"
-                        >
-                            <TabsList aria-label="Impostazioni Snipe-IT">
-                                <TabsTrigger value="connection">
-                                    <Link2 aria-hidden="true" />
-                                    Connessione
-                                </TabsTrigger>
-                                <TabsTrigger
-                                    value="fields"
-                                    disabled={
-                                        !settings.connection || busy || changed
-                                    }
-                                >
-                                    <SlidersHorizontal aria-hidden="true" />
-                                    Mappatura Campi
-                                </TabsTrigger>
-                            </TabsList>
-                            <TabsContent
-                                value="connection"
-                                forceMount
-                                className="flex flex-col gap-6 data-[state=inactive]:hidden"
+                            onChange={onTabChange}
+                            sections={[
+                                {
+                                    value: 'connection',
+                                    label: 'Connessione',
+                                    icon: Link2,
+                                },
+                                {
+                                    value: 'fields',
+                                    label: 'Mappatura campi',
+                                    icon: SlidersHorizontal,
+                                    disabled:
+                                        !settings.connection || busy || changed,
+                                },
+                            ]}
+                        />
+                        {errorAlert}
+                        {tab === 'fields' && settings.connection ? (
+                            <SnipeItFields
+                                revision={settings.revision}
+                                globalRevision={settings.global_revision}
+                                inherited={false}
+                                disabled={busy || changed}
+                                active
+                            />
+                        ) : (
+                            <form
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    save();
+                                }}
                             >
-                                {errorAlert}
-                                <form
-                                    onSubmit={(event) => {
-                                        event.preventDefault();
-                                        save();
-                                    }}
-                                >
-                                    <Card>
-                                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-                                            <CardTitle className="flex items-center gap-3">
-                                                Connessione globale
-                                                {!settings.connection ? (
-                                                    <Badge variant="outline">
-                                                        Non configurata
-                                                    </Badge>
-                                                ) : null}
-                                            </CardTitle>
-                                            <span className="text-sm text-muted-foreground">
-                                                {checkLabel}
-                                            </span>
-                                        </CardHeader>
-                                        <CardContent className="flex flex-col gap-6">
-                                            {connectionFields}
-                                        </CardContent>
-                                        <CardFooter className="flex flex-wrap gap-3">
-                                            {connectionButtons}
-                                        </CardFooter>
-                                    </Card>
-                                </form>
-                            </TabsContent>
-                            <TabsContent
-                                value="fields"
-                                forceMount
-                                className="data-[state=inactive]:hidden"
-                            >
-                                {settings.connection ? (
-                                    <SnipeItFields
-                                        revision={settings.revision}
-                                        globalRevision={
-                                            settings.global_revision
-                                        }
-                                        inherited={false}
-                                        disabled={busy || changed}
-                                        active={tab === 'fields'}
-                                    />
-                                ) : null}
-                            </TabsContent>
-                        </Tabs>
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Connessione globale</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-col gap-6">
+                                        {connectionFields}
+                                    </CardContent>
+                                    <CardFooter className="flex flex-wrap gap-3">
+                                        {connectionButtons}
+                                    </CardFooter>
+                                </Card>
+                            </form>
+                        )}
                     </IntegrationTabs>
                 </div>
                 {dialog}
@@ -808,16 +787,28 @@ function SnipeItForm({
             <Head title={`Snipe-IT · ${company.name}`} />
             <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
                 <IntegrationTabs value="snipe-it" company={company}>
-                    <SnipeItTabs
+                    <SnipeItCompanyHeader
+                        company={company.id}
+                        state={{
+                            connected: !!settings.connection,
+                            association: settings.association
+                                ? {
+                                      name: settings.association
+                                          .external_company_name,
+                                      confirmed,
+                                  }
+                                : null,
+                            sync,
+                        }}
+                    />
+                    <SnipeItSections
                         company={company.id}
                         value="settings"
                         pending={counts?.pending}
                     />
                     <div className="flex max-w-3xl flex-col gap-4">
                         {errorAlert}
-                        <Card>
-                            <CardContent>
-                                <ol className="flex flex-col">
+                        <ItemGroup className="gap-3">
                                     <Step
                                         number={1}
                                         title="Connessione"
@@ -969,99 +960,45 @@ function SnipeItForm({
                                             </div>
                                         ) : null}
                                     </Step>
-                                    <Step
-                                        number={3}
-                                        title="Sincronizzazione"
-                                        state={syncStep}
-                                        last
-                                        summary={
-                                            syncStep === 'done' &&
-                                            sync?.synced_at ? (
-                                                <>
-                                                    {sync.error ? (
-                                                        <span className="text-destructive">
-                                                            {sync.error}
-                                                        </span>
-                                                    ) : (
-                                                        'Attiva · ogni ora'
-                                                    )}
-                                                    <br />
-                                                    Ultima lettura{' '}
-                                                    {formatDateTime(
-                                                        sync.synced_at,
-                                                    )}
-                                                </>
-                                            ) : null
-                                        }
-                                        action={
-                                            syncStep !== 'locked' ? (
-                                                <Button
-                                                    variant={
-                                                        syncStep === 'done'
-                                                            ? 'outline'
-                                                            : 'default'
-                                                    }
-                                                    size={
-                                                        syncStep === 'done'
-                                                            ? 'sm'
-                                                            : 'default'
-                                                    }
-                                                    disabled={busy}
-                                                    onClick={synchronize}
-                                                >
-                                                    {acquire.processing ? (
-                                                        <Spinner />
-                                                    ) : (
-                                                        <RefreshCw />
-                                                    )}
-                                                    {syncStep === 'done'
-                                                        ? 'Sincronizza ora'
-                                                        : 'Avvia sincronizzazione'}
-                                                </Button>
-                                            ) : null
-                                        }
-                                    >
-                                        {syncStep === 'done' && counts ? (
-                                            <div className="flex flex-wrap items-center gap-3">
-                                                <span className="text-sm text-muted-foreground">
-                                                    {counts.pending} da decidere
-                                                    · {counts.linked} apparati ·{' '}
-                                                    {counts.ipam} client IPAM
-                                                </span>
-                                            </div>
-                                        ) : null}
-                                    </Step>
-                                </ol>
-                            </CardContent>
-                        </Card>
+                        </ItemGroup>
                         {settings.connection && !settings.use_global ? (
-                            <Collapsible>
-                                <CollapsibleTrigger asChild>
+                            <Item variant="outline">
+                                <ItemMedia variant="icon">
+                                    <SlidersHorizontal />
+                                </ItemMedia>
+                                <ItemContent>
+                                    <ItemTitle>Mappatura campi</ItemTitle>
+                                    <ItemDescription>
+                                        Campi Snipe-IT del server dedicato
+                                    </ItemDescription>
+                                </ItemContent>
+                                <ItemActions>
                                     <Button
-                                        variant="ghost"
-                                        className="group self-start"
-                                    >
-                                        <SlidersHorizontal data-icon="inline-start" />
-                                        Mappatura campi del server dedicato
-                                        <ChevronDown
-                                            data-icon="inline-end"
-                                            className="transition-transform group-data-[state=open]:rotate-180"
-                                        />
-                                    </Button>
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="pt-2">
-                                    <SnipeItFields
-                                        company={company.id}
-                                        revision={settings.revision}
-                                        globalRevision={
-                                            settings.global_revision
+                                        variant="outline"
+                                        size="sm"
+                                        aria-expanded={showFields}
+                                        onClick={() =>
+                                            setShowFields(!showFields)
                                         }
-                                        inherited={false}
-                                        disabled={busy || changed}
-                                        active
-                                    />
-                                </CollapsibleContent>
-                            </Collapsible>
+                                    >
+                                        {showFields ? 'Chiudi' : 'Modifica'}
+                                    </Button>
+                                </ItemActions>
+                                {showFields ? (
+                                    <ItemFooter className="block">
+                                        <SnipeItFields
+                                            company={company.id}
+                                            revision={settings.revision}
+                                            globalRevision={
+                                                settings.global_revision
+                                            }
+                                            inherited={false}
+                                            disabled={busy || changed}
+                                            active
+                                        />
+                                    </ItemFooter>
+                                ) : null}
+                            </Item>
                         ) : null}
                     </div>
                 </IntegrationTabs>

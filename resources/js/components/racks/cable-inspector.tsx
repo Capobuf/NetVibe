@@ -277,7 +277,11 @@ export function CableInspector({
                     {cableCode(cable)}
                 </h2>
                 <Badge variant="outline">
-                    {pending ? 'Da confermare' : 'Documentato'}
+                    {pending
+                        ? 'Da confermare'
+                        : cable.id < 0
+                          ? 'In bozza'
+                          : 'Documentato'}
                 </Badge>
             </div>
             {editing ? (

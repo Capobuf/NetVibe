@@ -2,7 +2,6 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import {
     AlertTriangle,
-    ArrowLeft,
     ArrowUpRight,
     Ban,
     Download,
@@ -10,9 +9,9 @@ import {
     MoreHorizontal,
     RefreshCw,
     RotateCcw,
-    Settings2,
 } from 'lucide-react';
-import { IconButton } from '@/components/icon-button';
+import { IntegrationTabs } from '@/components/integration-tabs';
+import { SnipeItTabs } from '@/components/snipe-it-tabs';
 import { SnipeItModelCell } from '@/components/devices/snipe-it-model-cell';
 import {
     SnipeItPicker,
@@ -96,11 +95,9 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { show as companyIntegrations } from '@/routes/companies/settings/integrations';
 import {
     bulk,
     confirm,
-    edit,
     records,
     sync as refresh,
 } from '@/routes/companies/settings/integrations/snipe-it';
@@ -631,32 +628,22 @@ function Records({
         <>
             <Head title={`Asset Snipe-IT · ${company.name}`} />
             <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
-                <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="-mb-1 self-start"
-                >
-                    <Link href={companyIntegrations(company.id)}>
-                        <ArrowLeft data-icon="inline-start" />
-                        Integrazioni
-                    </Link>
-                </Button>
-                <header className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-col gap-0.5">
-                        <h2 className="text-xl font-medium tracking-tight">
-                            Asset Snipe-IT
-                        </h2>
-                        <p className="text-sm text-muted-foreground tabular-nums">
+                <IntegrationTabs value="snipe-it" company={company}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <SnipeItTabs
+                        company={company.id}
+                        value="assets"
+                        pending={counts.pending}
+                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-sm text-muted-foreground tabular-nums">
                             {sync?.synced_at
                                 ? `Ultima lettura ${formatDateTime(sync.synced_at)}`
                                 : 'Mai sincronizzata'}
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                        </span>
                         <Button
                             variant="outline"
-                            disabled={busy || (!!sync && !active)}
+                            disabled={busy || !sync || !active}
                             onClick={() =>
                                 acquire.submit(refresh(company.id), {
                                     preserveScroll: true,
@@ -670,22 +657,13 @@ function Records({
                             )}
                             Sincronizza ora
                         </Button>
-                        <IconButton
-                            label="Impostazioni Snipe-IT"
-                            variant="ghost"
-                            asChild
-                        >
-                            <Link href={edit(company.id)}>
-                                <Settings2 />
-                            </Link>
-                        </IconButton>
                     </div>
-                </header>
+                </div>
                 {sync && !active ? (
                     <Alert>
                         <AlertDescription>
-                            Sincronizzazione sospesa. Riconferma l’azienda nelle
-                            impostazioni Snipe-IT.
+                            Sincronizzazione sospesa. Riconferma l’azienda in
+                            Configurazione.
                         </AlertDescription>
                     </Alert>
                 ) : null}
@@ -1016,7 +994,9 @@ function Records({
                                             <Empty>
                                                 <EmptyHeader>
                                                     <EmptyTitle>
-                                                        {!sync?.synced_at
+                                                        {!sync
+                                                            ? 'Snipe-IT non configurato per questa azienda'
+                                                            : !sync.synced_at
                                                             ? 'Sincronizza per caricare gli asset'
                                                             : search ||
                                                                 filters.category ||
@@ -1054,6 +1034,7 @@ function Records({
                         />
                     ) : null}
                 </Card>
+                </IntegrationTabs>
             </div>
 
             <Sheet

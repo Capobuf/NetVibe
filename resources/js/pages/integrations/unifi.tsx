@@ -1,9 +1,9 @@
 import { UnifiMark } from '@/components/unifi-mark';
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Cloud, Plus, Search, Server } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { Cloud, Plus, Search, Server } from 'lucide-react';
 import { useState } from 'react';
 import { index as administration } from '@/routes/administration';
-import { show as companyIntegrations } from '@/routes/companies/settings/integrations';
+import { IntegrationTabs } from '@/components/integration-tabs';
 import { index as unifiIndex } from '@/routes/administration/integrations/unifi';
 import { UnifiConnectionForm } from '@/components/unifi/connection-form';
 import { UnifiConnectionPanel } from '@/components/unifi/connection-panel';
@@ -58,24 +58,12 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
         <>
             <Head title={`UniFi · ${company?.name ?? 'Integrazioni'}`} />
             <div className="flex max-w-6xl flex-col gap-6 p-4 md:p-6">
-                <header className="flex flex-col items-start gap-3">
-                    <Button asChild variant="ghost" size="sm" className="-ml-2">
-                        <Link
-                            href={
-                                company
-                                    ? companyIntegrations(company.id)
-                                    : integrations()
-                            }
-                        >
-                            <ArrowLeft data-icon="inline-start" />
-                            Integrazioni
-                        </Link>
-                    </Button>
-                    <h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight">
-                        <UnifiMark className="size-6" />
-                        UniFi
+                {!company ? (
+                    <h1 className="text-2xl font-medium tracking-tight">
+                        Integrazioni
                     </h1>
-                </header>
+                ) : null}
+                <IntegrationTabs value="unifi" company={company}>
                 <div className="flex min-w-0 flex-col gap-6">
                     {!company ? (
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -186,6 +174,7 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                         </Empty>
                     ) : null}
                 </div>
+                </IntegrationTabs>
             </div>
             {editor ? (
                 <UnifiConnectionForm

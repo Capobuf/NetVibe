@@ -85,6 +85,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');
         Route::get('companies/{company}/settings/integrations', [CompanyIntegrationController::class, 'show'])->name('companies.settings.integrations.show');
         Route::get('companies/{company}/settings/integrations/unifi', [UnifiController::class, 'index'])->name('companies.settings.integrations.unifi.index');
+        Route::get('companies/{company}/settings/integrations/mikrotik', [CompanyIntegrationController::class, 'mikrotik'])->name('companies.settings.integrations.mikrotik');
         Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])->name('companies.sites.deletion-impact');
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
@@ -139,7 +140,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
-        Route::get('integrations', [CompanyIntegrationController::class, 'overview'])->name('integrations.index');
+        Route::redirect('integrations', '/administration/integrations/snipe-it')->name('integrations.index');
+        Route::get('integrations/mikrotik', [CompanyIntegrationController::class, 'mikrotik'])->name('integrations.mikrotik');
         Route::prefix('integrations/unifi')->name('integrations.unifi.')->group(function () {
             Route::get('/', [UnifiController::class, 'index'])->name('index');
             Route::post('/', [UnifiController::class, 'store'])->middleware('throttle:20,1')->name('store');

@@ -142,6 +142,38 @@ class RackCablingTest extends TestCase
         $this->assertModelExists($this->source);
     }
 
+    public function test_layout_and_multiple_draft_cables_are_saved_together_only_when_all_are_valid(): void
+    {
+        $items = [
+            ['key' => str_repeat('d', 32), 'kind' => 'device', 'device_id' => $this->source->id, 'shelf_key' => null,
+                'position' => 3, 'height' => 1, 'width' => 100, 'x' => 0],
+            ['key' => str_repeat('e', 32), 'kind' => 'device', 'device_id' => $this->remote->id, 'shelf_key' => null,
+                'position' => 6, 'height' => 1, 'width' => 100, 'x' => 0],
+        ];
+        $draft = $this->payload(['items' => $items, 'cables' => [
+            $this->cable(), [...$this->cable('b', 'usb'), 'id' => -2],
+        ]]);
+        $invalid = $draft;
+        $invalid['cables'][1]['type'] = 'copper';
+
+        $this->put($this->url(), $invalid)->assertSessionHasErrors('cables');
+        $this->assertDatabaseCount('cables', 0);
+        $this->assertDatabaseCount('cable_ends', 0);
+        $this->assertSame(0, $this->rack->fresh()->revision);
+        $this->assertSame(0, (int) $this->site->fresh()->cabling_revision);
+        $this->assertSame(0, $this->rack->items()->sole()->position);
+
+        $this->put($this->url(), $draft)->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('cables', 2);
+        $this->assertDatabaseCount('cable_ends', 4);
+        $this->assertSame(1, $this->rack->fresh()->revision);
+        $this->assertSame(1, (int) $this->site->fresh()->cabling_revision);
+        $this->assertSame(3, $this->rack->items()->where('device_id', $this->source->id)->sole()->position);
+        $this->assertSame(6, $this->rack->items()->where('device_id', $this->remote->id)->sole()->position);
+        $this->assertSame($this->cable()['a'], Cable::query()->where('type', 'copper')->sole()->workspaceData()['a']);
+        $this->assertSame($this->cable('b', 'usb')['b'], Cable::query()->where('type', 'usb')->sole()->workspaceData()['b']);
+    }
+
     public function test_terminations_cannot_cross_sites_or_connector_categories_and_model_ports_are_protected(): void
     {
         $foreignSite = $this->company->sites()->create(['name' => 'Milano']);

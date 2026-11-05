@@ -1,4 +1,3 @@
-import { SaveButton } from '@/components/save-button';
 import { useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { CableFields, EndpointPicker } from './cable-inspector';
@@ -18,37 +17,28 @@ import {
     type Cable,
     type CableEnd,
 } from '@/lib/rack-cabling';
-import { store } from '@/routes/companies/sites/racks/cables';
 import type { RackDevice } from '@/types/rack';
 
 export function CableCreateDialog({
     id,
-    route,
+    rackId,
     devices,
     cables,
-    revision,
-    removedCableIds,
     initialEnds,
     onClose,
     onDirtyChange,
-    onSaving,
-    onSaved,
+    onConfirm,
 }: {
     id: number;
-    route: { company: number; site: number; rack: number };
+    rackId: number;
     devices: RackDevice[];
     cables: Cable[];
-    revision: number;
-    removedCableIds: number[];
     initialEnds?: { a: CableEnd; b: CableEnd };
     onClose: () => void;
     onDirtyChange: (dirty: boolean) => void;
-    onSaving: (saving: boolean) => void;
-    onSaved: (cables: Cable[], revision: number) => void;
+    onConfirm: (cable: Cable) => boolean;
 }) {
-    const form = useForm<
-        Cable & { cabling_revision: number; removed_cable_ids: number[] }
-    >({
+    const form = useForm<Cable>({
         id,
         a: initialEnds?.a ?? { device_id: 0, connector_id: '' },
         b: initialEnds?.b ?? { device_id: 0, connector_id: '' },
@@ -56,8 +46,6 @@ export function CableCreateDialog({
         color: '#2563eb',
         purpose: null,
         name: null,
-        cabling_revision: revision,
-        removed_cable_ids: removedCableIds,
     });
     const [error, setError] = useState('');
     const [imageError, setImageError] = useState('');
@@ -67,7 +55,7 @@ export function CableCreateDialog({
     }, [form.isDirty, onDirtyChange]);
     useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
     const rackDevices = devices
-        .filter((device) => device.rack_item?.rack_id === route.rack)
+        .filter((device) => device.rack_item?.rack_id === rackId)
         .map((device) => device.id);
     const problem =
         cableError(form.data, cables, devices) ||
@@ -78,21 +66,18 @@ export function CableCreateDialog({
             : null);
     const feedback =
         error ||
-        Object.values(form.errors).join(' ') ||
         (form.data.a.connector_id && form.data.b.connector_id
             ? problem
             : null) ||
         imageError;
     function change(cable: Cable) {
         form.setData({ ...form.data, ...normalizeCableType(cable, devices) });
-        form.clearErrors();
         setError('');
     }
     function selectEnd(side: 'a' | 'b', end: CableEnd) {
         change({ ...form.data, [side]: end });
     }
     function close() {
-        if (form.processing) return;
         if (form.isDirty) setDiscard(true);
         else onClose();
     }
@@ -119,18 +104,7 @@ export function CableCreateDialog({
                                 setError(problem);
                                 return;
                             }
-                            onSaving(true);
-                            form.post(store.url(route), {
-                                preserveScroll: true,
-                                onSuccess: (page) => {
-                                    onSaved(
-                                        page.props.cables as Cable[],
-                                        page.props.cablingRevision as number,
-                                    );
-                                    onClose();
-                                },
-                                onFinish: () => onSaving(false),
-                            });
+                            if (onConfirm(form.data)) onClose();
                         }}
                     >
                         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -154,7 +128,7 @@ export function CableCreateDialog({
                                         devices={devices}
                                         cables={cables}
                                         cableId={form.data.id}
-                                        disabled={form.processing}
+                                        disabled={false}
                                         otherEnd={
                                             form.data[side === 'a' ? 'b' : 'a']
                                         }
@@ -177,7 +151,7 @@ export function CableCreateDialog({
                         <CableFields
                             cable={form.data}
                             devices={devices}
-                            disabled={form.processing}
+                            disabled={false}
                             onChange={change}
                             className="grid items-start gap-5 sm:grid-cols-2"
                         />
@@ -198,14 +172,11 @@ export function CableCreateDialog({
                             <Button
                                 type="button"
                                 variant="outline"
-                                disabled={form.processing}
                                 onClick={close}
                             >
                                 Annulla
                             </Button>
-                            <SaveButton processing={form.processing}>
-                                Salva collegamento
-                            </SaveButton>
+                            <Button type="submit">Aggiungi alla bozza</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

@@ -20,14 +20,13 @@ import {
     Pencil,
     Printer,
 } from 'lucide-react';
-import { DeviceTable } from '@/components/devices/device-table';
+import { RackCableTable } from '@/components/racks/rack-cable-table';
 import { RackFloorField } from '@/components/racks/rack-floor-field';
 import { CableInspector } from '@/components/racks/cable-inspector';
 import { CableCreateDialog } from '@/components/racks/cable-create-dialog';
 import { DevicePortsList } from '@/components/racks/device-ports-list';
 import {
     cableCode,
-    cableTypes,
     cableError,
     bundleKey,
     devicePorts,
@@ -79,10 +78,7 @@ import {
     show,
     update,
 } from '@/routes/companies/sites/racks';
-import {
-    store as storeCable,
-    labels as cableLabels,
-} from '@/routes/companies/sites/racks/cables';
+import { labels as cableLabels } from '@/routes/companies/sites/racks/cables';
 import { show as showDevice } from '@/routes/companies/sites/devices';
 import {
     isRackMounted,
@@ -180,9 +176,8 @@ function RackEditor({
             : company.name;
     const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
     const { data, setData, errors } = form;
-    const [savingConnection, setSavingConnection] = useState(false);
-    const processing = form.processing || savingConnection;
-    const [editing, setEditing] = useState(initialEditing);
+    const processing = form.processing;
+    const [editing, setEditing] = useState(initialEditing || !!topologySuggestion);
     const [selectedCableId, setSelectedCableId] = useState<number | null>(null);
     const [focusedBundle, setFocusedBundle] = useState<string | null>(null);
     const [cableDraft, setCableDraft] = useState<Cable | null>(null);
@@ -515,57 +510,7 @@ function RackEditor({
             devices,
         );
         if (a && b) {
-            if (
-                !savedRackDeviceIds.has(a.device_id) &&
-                !savedRackDeviceIds.has(b.device_id)
-            ) {
-                setError(
-                    'Salva prima la disposizione dei nuovi dispositivi nel rack, poi collega il cavo.',
-                );
-                return;
-            }
-            const problem = cableError(draft, data.cables, devices);
-            if (problem) {
-                setError(problem);
-                return;
-            }
-            setError('');
-            setSavingConnection(true);
-            allowLeave.current = true;
-            router.post(
-                storeCable.url(route),
-                {
-                    ...draft,
-                    cabling_revision: data.cabling_revision,
-                    removed_cable_ids: data.removed_cable_ids,
-                },
-                {
-                    preserveScroll: true,
-                    onSuccess: (page) => {
-                        const saved = page.props.cables as Cable[];
-                        acceptCreatedCables(
-                            saved,
-                            page.props.cablingRevision as number,
-                        );
-                        const created = saved.find(
-                            (cable) =>
-                                endKey(cable.a) === endKey(a) &&
-                                endKey(cable.b) === endKey(b),
-                        );
-                        setCableDraft(null);
-                        setSelectedPort(null);
-                        setSelectedCableId(created?.id ?? null);
-                        setFocusedBundle(created ? bundleKey(created) : null);
-                        setTab('cables');
-                    },
-                    onError: (errors) =>
-                        setError(Object.values(errors).join(' ')),
-                    onFinish: () => {
-                        setSavingConnection(false);
-                        allowLeave.current = false;
-                    },
-                },
-            );
+            applyCable(draft);
             return;
         }
         setPan(false);
@@ -575,34 +520,6 @@ function RackEditor({
         setFocusedBundle(null);
         setTab('cables');
         setError('');
-    }
-    function acceptCreatedCables(savedCables: Cable[], revision: number) {
-        const savedIds = new Set(savedCables.map((cable) => cable.id));
-        for (const deletion of deletions.current) {
-            if (
-                deletion.kind === 'cable' &&
-                deletion.cable.id > 0 &&
-                !savedIds.has(deletion.cable.id)
-            ) {
-                // A committed deletion must be restored as a new draft, not a stale database ID.
-                deletion.cable = {
-                    ...deletion.cable,
-                    id: nextCableId.current--,
-                };
-            }
-        }
-        const added = savedCables.filter(
-            (cable) => !cables.some((saved) => saved.id === cable.id),
-        );
-        form.setData((current) => ({
-            ...current,
-            cables: [...current.cables, ...added],
-            cabling_revision: revision,
-            removed_cable_ids: current.removed_cable_ids.filter((id) =>
-                savedIds.has(id),
-            ),
-        }));
-        form.setDefaults({ cables: savedCables, cabling_revision: revision });
     }
     function cancelCable() {
         setCableDraft(null);
@@ -621,8 +538,11 @@ function RackEditor({
         ]);
         setCableDraft(null);
         setSelectedKey(null);
+        setSelectedPort(null);
         setSelectedCableId(cable.id);
         setFocusedBundle(bundleKey(cable));
+        setTab('cables');
+        form.clearErrors();
         setError('');
         return true;
     }
@@ -1801,87 +1721,23 @@ function RackEditor({
                         </div>
                     </aside>
                 </div>
-                <section
-                    className="flex flex-col gap-4"
-                    aria-label="Cablaggi del rack"
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-base font-medium">Cablaggi</h2>
-                        <Button
-                            disabled={processing || !!cableDraft}
-                            onClick={() =>
-                                setCreatingCable(nextCableId.current--)
-                            }
-                        >
-                            <Plus />
-                            Nuovo
-                        </Button>
-                    </div>
-                    <DeviceTable
-                        name="rack-cables"
-                        rows={relevantCables}
-                        rowOpensDialog={false}
-                        columns={[
-                            { id: 'code', label: 'Codice', visible: true },
-                            { id: 'name', label: 'Nome', visible: true },
-                            { id: 'a', label: 'Partenza', visible: true },
-                            { id: 'b', label: 'Destinazione', visible: true },
-                            { id: 'type', label: 'Tipo', visible: true },
-                            { id: 'purpose', label: 'Scopo', visible: true },
-                            { id: 'color', label: 'Colore', visible: true },
-                        ]}
-                        value={(cable, column) =>
-                            column === 'code'
-                                ? cableCode(cable)
-                                : column === 'a' || column === 'b'
-                                  ? endLabel(cable[column], devices, '@')
-                                  : column === 'type'
-                                    ? cableTypes[cable.type]
-                                    : cable[column]
-                        }
-                        render={(cable, column) =>
-                            column === 'color' ? (
-                                <span
-                                    role="img"
-                                    aria-label={`Colore del cavo ${cable.color}`}
-                                    className="block h-1 w-16 rounded-sm ring-1 ring-foreground/20 ring-inset"
-                                    style={{ background: cable.color }}
-                                />
-                            ) : column === 'code' ? (
-                                <Badge
-                                    variant={
-                                        selectedCableId === cable.id
-                                            ? 'default'
-                                            : 'outline'
-                                    }
-                                >
-                                    {cableCode(cable)}
-                                </Badge>
-                            ) : column === 'a' || column === 'b' ? (
-                                endLabel(cable[column], devices, '@')
-                            ) : column === 'type' ? (
-                                cableTypes[cable.type]
-                            ) : (
-                                cable[column] || '—'
-                            )
-                        }
-                        onRowClick={(cable) =>
-                            selectedCableId === cable.id
-                                ? selectBundle(null)
-                                : selectCable(cable)
-                        }
-                        actions={(cable) => (
-                            <IconButton
-                                label="Prepara etichette"
-                                disabled={processing || cable.id < 1}
-                                onClick={() => printCable(cable)}
-                            >
-                                <Printer />
-                            </IconButton>
-                        )}
-                        empty="Nessun cavo documentato"
-                    />
-                </section>
+                <RackCableTable
+                    cables={relevantCables}
+                    devices={devices}
+                    selectedCableId={selectedCableId}
+                    processing={processing}
+                    createDisabled={processing || !!cableDraft}
+                    onCreate={() => {
+                        setEditing(true);
+                        setCreatingCable(nextCableId.current--);
+                    }}
+                    onRowClick={(cable) =>
+                        selectedCableId === cable.id
+                            ? selectBundle(null)
+                            : selectCable(cable)
+                    }
+                    onPrint={printCable}
+                />
             </div>
             {creatingCable !== null && (
                 <CableCreateDialog
@@ -1891,23 +1747,12 @@ function RackEditor({
                             ? (topologySuggestion ?? undefined)
                             : undefined
                     }
-                    route={route}
-                    devices={devices}
-                    cables={[
-                        ...cables.filter(
-                            (cable) =>
-                                !data.removed_cable_ids.includes(cable.id),
-                        ),
-                        ...data.cables,
-                    ]}
-                    removedCableIds={data.removed_cable_ids}
-                    revision={data.cabling_revision}
+                    rackId={rack.id}
+                    devices={cableDevices}
+                    cables={data.cables}
                     onClose={() => setCreatingCable(null)}
                     onDirtyChange={setModalDirty}
-                    onSaving={(saving) => {
-                        allowLeave.current = saving;
-                    }}
-                    onSaved={acceptCreatedCables}
+                    onConfirm={applyCable}
                 />
             )}
             <Dialog

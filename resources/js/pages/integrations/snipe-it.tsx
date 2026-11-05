@@ -247,7 +247,7 @@ function SnipeItForm({
         external_company_id: 0,
         connection: '',
     });
-    const acquire = useForm({});
+    const acquire = useForm<{ sync?: string }>({});
     const [savedCheck, setSavedCheck] = useState<
         TestResult | Connection | null
     >(settings.connection);

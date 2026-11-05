@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Fragment, useState } from 'react';
 import { ArrowLeft, Check, ChevronDown, RefreshCw, Search } from 'lucide-react';
+import { SnipeItModelCell } from '@/components/devices/snipe-it-model-cell';
 import {
     SnipeItPicker,
     type SnipeOption,
@@ -48,7 +49,6 @@ import {
     PaginationEllipsis,
 } from '@/components/ui/pagination';
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { Field, FieldLabel } from '@/components/ui/field';
 import {
     InputGroup,
     InputGroupAddon,
@@ -360,90 +360,45 @@ function Records({ company, sync, active, view, filters, rows, sites }: Props) {
                     ) : null}
                 </div>
             );
-        if (column === 'model') {
-            const target =
-                choice.action === 'link'
-                    ? (targets[row.id] ??
-                      row.candidates.find(
-                          (item) => item.id === choice.target_id,
-                      ))
-                    : null;
-            const model = models[row.id] ?? row.model_local;
-            const different =
-                !!target && (!target.model || target.model.id !== model?.id);
-            const editable =
-                !row.local &&
-                view !== 'excluded' &&
-                choice.action !== 'exclude';
+        if (column === 'model')
             return (
-                <div className="flex min-w-48 flex-col gap-2">
-                    <span className="font-medium">
-                        {row.model?.name || '—'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                        {row.model?.manufacturer || '—'}
-                    </span>
-                    {row.model_problem ? (
-                        <div className="flex flex-col gap-1 text-xs">
-                            <p className="text-destructive">
-                                {row.model_problem}
-                            </p>
-                            <span>
-                                Snipe-IT ·{' '}
-                                {row.model?.category || 'Senza categoria'}
-                            </span>
-                            <span>
-                                NetVibe · {row.model_local?.name} ·{' '}
-                                {row.model_local?.detail || 'Senza tipologia'}
-                            </span>
-                        </div>
-                    ) : null}
-                    {editable &&
-                    !row.model_linked &&
-                    (row.model_ambiguous || different || !!models[row.id]) ? (
-                        <Field>
-                            <FieldLabel>Modello NetVibe</FieldLabel>
-                            <SnipeItPicker
-                                company={company.id}
-                                kind="models"
-                                label={`Modello NetVibe per ${name}`}
-                                value={model}
-                                disabled={busy || !active}
-                                onChange={(value) => {
-                                    setModels((previous) => ({
-                                        ...previous,
-                                        [row.id]: value,
-                                    }));
-                                    choose(row, {
-                                        model_id: value?.id ?? null,
-                                        change_model: false,
-                                    });
-                                }}
-                            />
-                        </Field>
-                    ) : null}
-                    {editable && different ? (
-                        <Field orientation="horizontal">
-                            <Checkbox
-                                id={`change-model-${row.id}`}
-                                checked={choice.change_model}
-                                disabled={busy || !active}
-                                onCheckedChange={(checked) =>
-                                    choose(row, {
-                                        change_model: checked === true,
-                                    })
-                                }
-                            />
-                            <FieldLabel htmlFor={`change-model-${row.id}`}>
-                                Cambia modello da{' '}
-                                {target?.model?.name ?? 'nessun modello'} a{' '}
-                                {model?.name ?? row.model?.name}
-                            </FieldLabel>
-                        </Field>
-                    ) : null}
-                </div>
+                <SnipeItModelCell
+                    company={company.id}
+                    row={row}
+                    name={name}
+                    target={
+                        choice.action === 'link'
+                            ? (targets[row.id] ??
+                              row.candidates.find(
+                                  (item) => item.id === choice.target_id,
+                              ) ??
+                              null)
+                            : null
+                    }
+                    model={models[row.id] ?? row.model_local}
+                    modelChosen={!!models[row.id]}
+                    editable={
+                        !row.local &&
+                        view !== 'excluded' &&
+                        choice.action !== 'exclude'
+                    }
+                    changeModel={choice.change_model}
+                    disabled={busy || !active}
+                    onModelChange={(value) => {
+                        setModels((previous) => ({
+                            ...previous,
+                            [row.id]: value,
+                        }));
+                        choose(row, {
+                            model_id: value?.id ?? null,
+                            change_model: false,
+                        });
+                    }}
+                    onChangeModelChange={(change_model) =>
+                        choose(row, { change_model })
+                    }
+                />
             );
-        }
         if (column === 'ip')
             return (
                 <div className="flex flex-col gap-1">

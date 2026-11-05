@@ -629,411 +629,446 @@ function Records({
             <Head title={`Asset Snipe-IT · ${company.name}`} />
             <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
                 <IntegrationTabs value="snipe-it" company={company}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <SnipeItTabs
-                        company={company.id}
-                        value="assets"
-                        pending={counts.pending}
-                    />
-                    <div className="flex flex-wrap items-center gap-3">
-                        <span className="text-sm text-muted-foreground tabular-nums">
-                            {sync?.synced_at
-                                ? `Ultima lettura ${formatDateTime(sync.synced_at)}`
-                                : 'Mai sincronizzata'}
-                        </span>
-                        <Button
-                            variant="outline"
-                            disabled={busy || !sync || !active}
-                            onClick={() =>
-                                acquire.submit(refresh(company.id), {
-                                    preserveScroll: true,
-                                })
-                            }
-                        >
-                            {acquire.processing ? (
-                                <Spinner />
-                            ) : (
-                                <RefreshCw data-icon="inline-start" />
-                            )}
-                            Sincronizza ora
-                        </Button>
-                    </div>
-                </div>
-                {sync && !active ? (
-                    <Alert>
-                        <AlertDescription>
-                            Sincronizzazione sospesa. Riconferma l’azienda in
-                            Configurazione.
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-                {error ? (
-                    <Alert variant="destructive">
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                ) : null}
-                <Tabs
-                    value={view}
-                    onValueChange={(value) =>
-                        visit({ view: value, category: null, problem: null })
-                    }
-                >
-                    <TabsList aria-label="Destinazione degli asset">
-                        {views.map((item) => (
-                            <TabsTrigger key={item.value} value={item.value}>
-                                {counts.problems_by_view[item.value] ? (
-                                    <AlertTriangle
-                                        className="text-amber-600 dark:text-amber-500"
-                                        aria-label="Contiene asset da verificare"
-                                    />
-                                ) : null}
-                                {item.label}
-                                <Badge
-                                    variant={
-                                        item.value === 'pending' &&
-                                        counts.pending
-                                            ? 'default'
-                                            : 'secondary'
-                                    }
-                                    className="tabular-nums"
-                                >
-                                    {counts[item.value]}
-                                </Badge>
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
-                </Tabs>
-                <Card className="gap-0 overflow-hidden py-0">
-                    <CardHeader className="gap-3 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <SnipeItTabs
+                            company={company.id}
+                            value="assets"
+                            pending={counts.pending}
+                        />
                         <div className="flex flex-wrap items-center gap-3">
-                            <TableSearch
-                                value={search}
-                                maxLength={255}
-                                total={counts[view]}
-                                label="Cerca nome, seriale, modello, IP, MAC"
-                                onChange={(value) => {
-                                    setSearch(value);
-                                    visit({ q: value || null });
-                                }}
-                            />
-                            <Select
-                                value={filters.category ?? ALL_CATEGORIES}
-                                onValueChange={(value) =>
-                                    visit({
-                                        category:
-                                            value === ALL_CATEGORIES
-                                                ? null
-                                                : value,
+                            <span className="text-sm text-muted-foreground tabular-nums">
+                                {sync?.synced_at
+                                    ? `Ultima lettura ${formatDateTime(sync.synced_at)}`
+                                    : 'Mai sincronizzata'}
+                            </span>
+                            <Button
+                                variant="outline"
+                                disabled={busy || !sync || !active}
+                                onClick={() =>
+                                    acquire.submit(refresh(company.id), {
+                                        preserveScroll: true,
                                     })
                                 }
-                                disabled={busy}
                             >
-                                <SelectTrigger
-                                    aria-label="Filtra per tipo"
-                                    className="w-52"
+                                {acquire.processing ? (
+                                    <Spinner />
+                                ) : (
+                                    <RefreshCw data-icon="inline-start" />
+                                )}
+                                Sincronizza ora
+                            </Button>
+                        </div>
+                    </div>
+                    {sync && !active ? (
+                        <Alert>
+                            <AlertDescription>
+                                Sincronizzazione sospesa. Riconferma l’azienda
+                                in Configurazione.
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    {error ? (
+                        <Alert variant="destructive">
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    ) : null}
+                    <Tabs
+                        value={view}
+                        onValueChange={(value) =>
+                            visit({
+                                view: value,
+                                category: null,
+                                problem: null,
+                            })
+                        }
+                    >
+                        <TabsList aria-label="Destinazione degli asset">
+                            {views.map((item) => (
+                                <TabsTrigger
+                                    key={item.value}
+                                    value={item.value}
                                 >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value={ALL_CATEGORIES}>
-                                            Tutti i tipi
-                                        </SelectItem>
-                                    </SelectGroup>
-                                    <SelectSeparator />
-                                    <SelectGroup>
-                                        {categories.map((category) => (
-                                            <SelectItem
-                                                key={
-                                                    category.name ?? NO_CATEGORY
-                                                }
-                                                value={
-                                                    category.name ?? NO_CATEGORY
-                                                }
-                                            >
-                                                {category.name ?? 'Senza tipo'}
-                                                <span className="ml-auto text-muted-foreground tabular-nums">
-                                                    {category.total}
-                                                </span>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            {counts.problems_by_view[view] || problemOnly ? (
-                                <Toggle
-                                    variant="outline"
-                                    pressed={problemOnly}
-                                    onPressedChange={(pressed) =>
-                                        visit({ problem: pressed ? 1 : null })
+                                    {counts.problems_by_view[item.value] ? (
+                                        <AlertTriangle
+                                            className="text-amber-600 dark:text-amber-500"
+                                            aria-label="Contiene asset da verificare"
+                                        />
+                                    ) : null}
+                                    {item.label}
+                                    <Badge
+                                        variant={
+                                            item.value === 'pending' &&
+                                            counts.pending
+                                                ? 'default'
+                                                : 'secondary'
+                                        }
+                                        className="tabular-nums"
+                                    >
+                                        {counts[item.value]}
+                                    </Badge>
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                    </Tabs>
+                    <Card className="gap-0 overflow-hidden py-0">
+                        <CardHeader className="gap-3 py-4">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <TableSearch
+                                    value={search}
+                                    maxLength={255}
+                                    total={counts[view]}
+                                    label="Cerca nome, seriale, modello, IP, MAC"
+                                    onChange={(value) => {
+                                        setSearch(value);
+                                        visit({ q: value || null });
+                                    }}
+                                />
+                                <Select
+                                    value={filters.category ?? ALL_CATEGORIES}
+                                    onValueChange={(value) =>
+                                        visit({
+                                            category:
+                                                value === ALL_CATEGORIES
+                                                    ? null
+                                                    : value,
+                                        })
                                     }
                                     disabled={busy}
                                 >
-                                    <AlertTriangle />
-                                    Da verificare
-                                    <span className="tabular-nums">
-                                        {counts.problems_by_view[view] ?? 0}
-                                    </span>
-                                </Toggle>
-                            ) : null}
-                        </div>
-                        {selected.length ? (
-                            <div
-                                className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2"
-                                role="region"
-                                aria-label="Azioni sugli asset selezionati"
-                            >
-                                <span
-                                    className="text-sm font-medium tabular-nums"
-                                    role="status"
-                                >
-                                    {allMatching
-                                        ? `Tutti i ${rows.total} asset selezionati`
-                                        : `${selected.length} selezionati`}
-                                </span>
-                                {pageSelected &&
-                                !allMatching &&
-                                rows.total > selected.length &&
-                                view !== 'linked' ? (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-primary"
-                                        onClick={() => setAllMatching(true)}
+                                    <SelectTrigger
+                                        aria-label="Filtra per tipo"
+                                        className="w-52"
                                     >
-                                        Seleziona tutti i {rows.total}
-                                    </Button>
-                                ) : null}
-                                <div className="ml-auto flex flex-wrap items-center gap-2">
-                                    {view === 'excluded' ? (
-                                        <Button
-                                            size="sm"
-                                            disabled={!editable}
-                                            onClick={() =>
-                                                setPendingBulk('restore')
-                                            }
-                                        >
-                                            <RotateCcw data-icon="inline-start" />
-                                            Riammetti
-                                        </Button>
-                                    ) : (
-                                        <>
-                                            {!allMatching ? (
-                                                <Button
-                                                    size="sm"
-                                                    disabled={!editable}
-                                                    onClick={() =>
-                                                        setPendingBulk('create')
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            <SelectItem value={ALL_CATEGORIES}>
+                                                Tutti i tipi
+                                            </SelectItem>
+                                        </SelectGroup>
+                                        <SelectSeparator />
+                                        <SelectGroup>
+                                            {categories.map((category) => (
+                                                <SelectItem
+                                                    key={
+                                                        category.name ??
+                                                        NO_CATEGORY
+                                                    }
+                                                    value={
+                                                        category.name ??
+                                                        NO_CATEGORY
                                                     }
                                                 >
-                                                    <Download data-icon="inline-start" />
-                                                    Importa come apparati
-                                                </Button>
-                                            ) : null}
-                                            {!allMatching && linkable.length ? (
+                                                    {category.name ??
+                                                        'Senza tipo'}
+                                                    <span className="ml-auto text-muted-foreground tabular-nums">
+                                                        {category.total}
+                                                    </span>
+                                                </SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select>
+                                {counts.problems_by_view[view] ||
+                                problemOnly ? (
+                                    <Toggle
+                                        variant="outline"
+                                        pressed={problemOnly}
+                                        onPressedChange={(pressed) =>
+                                            visit({
+                                                problem: pressed ? 1 : null,
+                                            })
+                                        }
+                                        disabled={busy}
+                                    >
+                                        <AlertTriangle />
+                                        Da verificare
+                                        <span className="tabular-nums">
+                                            {counts.problems_by_view[view] ?? 0}
+                                        </span>
+                                    </Toggle>
+                                ) : null}
+                            </div>
+                            {selected.length ? (
+                                <div
+                                    className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2"
+                                    role="region"
+                                    aria-label="Azioni sugli asset selezionati"
+                                >
+                                    <span
+                                        className="text-sm font-medium tabular-nums"
+                                        role="status"
+                                    >
+                                        {allMatching
+                                            ? `Tutti i ${rows.total} asset selezionati`
+                                            : `${selected.length} selezionati`}
+                                    </span>
+                                    {pageSelected &&
+                                    !allMatching &&
+                                    rows.total > selected.length &&
+                                    view !== 'linked' ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-primary"
+                                            onClick={() => setAllMatching(true)}
+                                        >
+                                            Seleziona tutti i {rows.total}
+                                        </Button>
+                                    ) : null}
+                                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                                        {view === 'excluded' ? (
+                                            <Button
+                                                size="sm"
+                                                disabled={!editable}
+                                                onClick={() =>
+                                                    setPendingBulk('restore')
+                                                }
+                                            >
+                                                <RotateCcw data-icon="inline-start" />
+                                                Riammetti
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                {!allMatching ? (
+                                                    <Button
+                                                        size="sm"
+                                                        disabled={!editable}
+                                                        onClick={() =>
+                                                            setPendingBulk(
+                                                                'create',
+                                                            )
+                                                        }
+                                                    >
+                                                        <Download data-icon="inline-start" />
+                                                        Importa come apparati
+                                                    </Button>
+                                                ) : null}
+                                                {!allMatching &&
+                                                linkable.length ? (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        disabled={!editable}
+                                                        onClick={() =>
+                                                            setPendingBulk(
+                                                                'link',
+                                                            )
+                                                        }
+                                                    >
+                                                        <Link2 data-icon="inline-start" />
+                                                        Collega ai proposti (
+                                                        {linkable.length})
+                                                    </Button>
+                                                ) : null}
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
                                                     disabled={!editable}
                                                     onClick={() =>
-                                                        setPendingBulk('link')
+                                                        setPendingBulk(
+                                                            'exclude',
+                                                        )
                                                     }
                                                 >
-                                                    <Link2 data-icon="inline-start" />
-                                                    Collega ai proposti (
-                                                    {linkable.length})
+                                                    <Ban data-icon="inline-start" />
+                                                    Escludi
                                                 </Button>
-                                            ) : null}
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={!editable}
-                                                onClick={() =>
-                                                    setPendingBulk('exclude')
-                                                }
-                                            >
-                                                <Ban data-icon="inline-start" />
-                                                Escludi
-                                            </Button>
-                                        </>
-                                    )}
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => {
-                                            setSelected([]);
-                                            setAllMatching(false);
-                                        }}
-                                    >
-                                        Annulla selezione
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : null}
-                    </CardHeader>
-                    <CardContent className="px-0">
-                        <Table
-                            className="text-left data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
-                            data-separators={separators}
-                            aria-label="Asset Snipe-IT"
-                        >
-                            <TableHeader className="bg-muted/50">
-                                <TableRow>
-                                    <TableHead className="w-12" scope="col">
-                                        <Checkbox
-                                            aria-label="Seleziona la pagina"
-                                            disabled={
-                                                !selectable.length || !editable
-                                            }
-                                            checked={
-                                                pageSelected
-                                                    ? true
-                                                    : selected.length
-                                                      ? 'indeterminate'
-                                                      : false
-                                            }
-                                            onCheckedChange={(checked) => {
+                                            </>
+                                        )}
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => {
+                                                setSelected([]);
                                                 setAllMatching(false);
-                                                setSelected(
-                                                    checked
-                                                        ? selectable.map(
-                                                              (row) => row.id,
-                                                          )
-                                                        : [],
-                                                );
                                             }}
-                                        />
-                                    </TableHead>
-                                    {visible.map((column) => (
-                                        <TableSortHead
-                                            key={column.id}
-                                            column={column}
-                                            sort={sort}
-                                            onSort={(value) =>
-                                                visit({
-                                                    sort: value?.column ?? null,
-                                                    direction:
-                                                        value?.direction ??
-                                                        null,
-                                                })
-                                            }
-                                        />
-                                    ))}
-                                    <TableHead className="w-12 text-right">
-                                        <TableColumns
-                                            columns={columns}
-                                            onChange={setColumns}
-                                            separators={separators}
-                                            onSeparatorsChange={setSeparators}
-                                        />
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rows.data.map((row) => (
-                                    <TableRow
-                                        key={row.id}
-                                        data-state={
-                                            selected.includes(row.id)
-                                                ? 'selected'
-                                                : undefined
-                                        }
-                                        className={
-                                            row.present
-                                                ? undefined
-                                                : 'opacity-60'
-                                        }
-                                    >
-                                        <TableCell>
+                                        >
+                                            Annulla selezione
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </CardHeader>
+                        <CardContent className="px-0">
+                            <Table
+                                className="text-left data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
+                                data-separators={separators}
+                                aria-label="Asset Snipe-IT"
+                            >
+                                <TableHeader className="bg-muted/50">
+                                    <TableRow>
+                                        <TableHead className="w-12" scope="col">
                                             <Checkbox
-                                                aria-label={`Seleziona ${assetName(row)}`}
+                                                aria-label="Seleziona la pagina"
                                                 disabled={
-                                                    row.state === 'linked' ||
-                                                    !row.present ||
+                                                    !selectable.length ||
                                                     !editable
                                                 }
-                                                checked={selected.includes(
-                                                    row.id,
-                                                )}
+                                                checked={
+                                                    pageSelected
+                                                        ? true
+                                                        : selected.length
+                                                          ? 'indeterminate'
+                                                          : false
+                                                }
                                                 onCheckedChange={(checked) => {
                                                     setAllMatching(false);
-                                                    setSelected((previous) =>
+                                                    setSelected(
                                                         checked
-                                                            ? [
-                                                                  ...previous,
-                                                                  row.id,
-                                                              ]
-                                                            : previous.filter(
-                                                                  (id) =>
-                                                                      id !==
+                                                            ? selectable.map(
+                                                                  (row) =>
                                                                       row.id,
-                                                              ),
+                                                              )
+                                                            : [],
                                                     );
                                                 }}
                                             />
-                                        </TableCell>
+                                        </TableHead>
                                         {visible.map((column) => (
-                                            <TableCell
+                                            <TableSortHead
                                                 key={column.id}
-                                                className="max-w-xs py-2.5 align-top break-words whitespace-normal"
-                                            >
-                                                {cell(row, column.id)}
-                                            </TableCell>
+                                                column={column}
+                                                sort={sort}
+                                                onSort={(value) =>
+                                                    visit({
+                                                        sort:
+                                                            value?.column ??
+                                                            null,
+                                                        direction:
+                                                            value?.direction ??
+                                                            null,
+                                                    })
+                                                }
+                                            />
                                         ))}
-                                        <TableCell className="text-right align-top">
-                                            {rowMenu(row)}
-                                        </TableCell>
+                                        <TableHead className="w-12 text-right">
+                                            <TableColumns
+                                                columns={columns}
+                                                onChange={setColumns}
+                                                separators={separators}
+                                                onSeparatorsChange={
+                                                    setSeparators
+                                                }
+                                            />
+                                        </TableHead>
                                     </TableRow>
-                                ))}
-                                {!rows.data.length ? (
-                                    <TableRow>
-                                        <TableCell
-                                            colSpan={visible.length + 2}
-                                            className="h-40 text-center whitespace-normal"
+                                </TableHeader>
+                                <TableBody>
+                                    {rows.data.map((row) => (
+                                        <TableRow
+                                            key={row.id}
+                                            data-state={
+                                                selected.includes(row.id)
+                                                    ? 'selected'
+                                                    : undefined
+                                            }
+                                            className={
+                                                row.present
+                                                    ? undefined
+                                                    : 'opacity-60'
+                                            }
                                         >
-                                            <Empty>
-                                                <EmptyHeader>
-                                                    <EmptyTitle>
-                                                        {!sync
-                                                            ? 'Snipe-IT non configurato per questa azienda'
-                                                            : !sync.synced_at
-                                                            ? 'Sincronizza per caricare gli asset'
-                                                            : search ||
-                                                                filters.category ||
-                                                                problemOnly
-                                                              ? 'Nessun asset trovato'
-                                                              : view ===
-                                                                  'pending'
-                                                                ? 'Nessun asset da decidere'
-                                                                : 'Nessun asset in questa vista'}
-                                                    </EmptyTitle>
-                                                    {search ||
-                                                    filters.category ||
-                                                    problemOnly ? (
-                                                        <EmptyDescription>
-                                                            Modifica la ricerca
-                                                            o i filtri.
-                                                        </EmptyDescription>
-                                                    ) : null}
-                                                </EmptyHeader>
-                                            </Empty>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : null}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                    {rows.total > 10 ? (
-                        <TablePagination
-                            summary={`${rows.from ?? 0}–${rows.to ?? 0} di ${rows.total} asset`}
-                            page={rows.current_page}
-                            pageCount={rows.last_page}
-                            pageSize={rows.per_page}
-                            onPageChange={(page) => visit({ page })}
-                            onPageSizeChange={(per_page) => visit({ per_page })}
-                        />
-                    ) : null}
-                </Card>
+                                            <TableCell>
+                                                <Checkbox
+                                                    aria-label={`Seleziona ${assetName(row)}`}
+                                                    disabled={
+                                                        row.state ===
+                                                            'linked' ||
+                                                        !row.present ||
+                                                        !editable
+                                                    }
+                                                    checked={selected.includes(
+                                                        row.id,
+                                                    )}
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        setAllMatching(false);
+                                                        setSelected(
+                                                            (previous) =>
+                                                                checked
+                                                                    ? [
+                                                                          ...previous,
+                                                                          row.id,
+                                                                      ]
+                                                                    : previous.filter(
+                                                                          (
+                                                                              id,
+                                                                          ) =>
+                                                                              id !==
+                                                                              row.id,
+                                                                      ),
+                                                        );
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            {visible.map((column) => (
+                                                <TableCell
+                                                    key={column.id}
+                                                    className="max-w-xs py-2.5 align-top break-words whitespace-normal"
+                                                >
+                                                    {cell(row, column.id)}
+                                                </TableCell>
+                                            ))}
+                                            <TableCell className="text-right align-top">
+                                                {rowMenu(row)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {!rows.data.length ? (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={visible.length + 2}
+                                                className="h-40 text-center whitespace-normal"
+                                            >
+                                                <Empty>
+                                                    <EmptyHeader>
+                                                        <EmptyTitle>
+                                                            {!sync
+                                                                ? 'Snipe-IT non configurato per questa azienda'
+                                                                : !sync.synced_at
+                                                                  ? 'Sincronizza per caricare gli asset'
+                                                                  : search ||
+                                                                      filters.category ||
+                                                                      problemOnly
+                                                                    ? 'Nessun asset trovato'
+                                                                    : view ===
+                                                                        'pending'
+                                                                      ? 'Nessun asset da decidere'
+                                                                      : 'Nessun asset in questa vista'}
+                                                        </EmptyTitle>
+                                                        {search ||
+                                                        filters.category ||
+                                                        problemOnly ? (
+                                                            <EmptyDescription>
+                                                                Modifica la
+                                                                ricerca o i
+                                                                filtri.
+                                                            </EmptyDescription>
+                                                        ) : null}
+                                                    </EmptyHeader>
+                                                </Empty>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : null}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                        {rows.total > 10 ? (
+                            <TablePagination
+                                summary={`${rows.from ?? 0}–${rows.to ?? 0} di ${rows.total} asset`}
+                                page={rows.current_page}
+                                pageCount={rows.last_page}
+                                pageSize={rows.per_page}
+                                onPageChange={(page) => visit({ page })}
+                                onPageSizeChange={(per_page) =>
+                                    visit({ per_page })
+                                }
+                            />
+                        ) : null}
+                    </Card>
                 </IntegrationTabs>
             </div>
 

@@ -214,7 +214,17 @@ function Step({
     );
 }
 
-function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
+function SnipeItForm({
+    company,
+    settings,
+    affectedCompanies,
+    sync,
+    tab,
+    onTabChange,
+}: Props & {
+    tab: string;
+    onTabChange: (tab: string) => void;
+}) {
     const form = useForm(defaults(settings));
     const test = useHttp<ReturnType<typeof defaults>, TestResult>(
         defaults(settings),
@@ -774,7 +784,9 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
                                 {settings.connection ? (
                                     <SnipeItFields
                                         revision={settings.revision}
-                                        globalRevision={settings.global_revision}
+                                        globalRevision={
+                                            settings.global_revision
+                                        }
                                         inherited={false}
                                         disabled={busy || changed}
                                         active={tab === 'fields'}
@@ -796,246 +808,262 @@ function SnipeItForm({ company, settings, affectedCompanies, sync }: Props) {
             <Head title={`Snipe-IT · ${company.name}`} />
             <div className="flex min-w-0 flex-col gap-4 p-4 md:p-6">
                 <IntegrationTabs value="snipe-it" company={company}>
-                <SnipeItTabs
-                    company={company.id}
-                    value="settings"
-                    pending={counts?.pending}
-                />
-                <div className="flex max-w-3xl flex-col gap-4">
-                {errorAlert}
-                <Card>
-                    <CardContent>
-                        <ol className="flex flex-col">
-                            <Step
-                                number={1}
-                                title="Connessione"
-                                state={connectionStep}
-                                summary={
-                                    connectionStep === 'done' &&
-                                    settings.connection ? (
-                                        <>
-                                            <span className="break-all">
-                                                {settings.use_global
-                                                    ? 'Connessione globale'
-                                                    : 'Server dedicato'}{' '}
-                                                ·{' '}
-                                                {settings.connection.server_url}
-                                            </span>
-                                            <br />
-                                            {checkLabel}
-                                        </>
-                                    ) : null
-                                }
-                                action={
-                                    connectionStep === 'done' ? (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() =>
-                                                setEditConnection(true)
-                                            }
-                                        >
-                                            Modifica
-                                        </Button>
-                                    ) : null
-                                }
-                            >
-                                {connectionStep === 'current' ? (
-                                    <form
-                                        className="flex flex-col gap-5 rounded-lg border p-4"
-                                        onSubmit={(event) => {
-                                            event.preventDefault();
-                                            save();
-                                        }}
-                                    >
-                                        {connectionFields}
-                                        <div className="flex flex-wrap gap-3">
-                                            {connectionButtons}
-                                            {settings.connection ? (
+                    <SnipeItTabs
+                        company={company.id}
+                        value="settings"
+                        pending={counts?.pending}
+                    />
+                    <div className="flex max-w-3xl flex-col gap-4">
+                        {errorAlert}
+                        <Card>
+                            <CardContent>
+                                <ol className="flex flex-col">
+                                    <Step
+                                        number={1}
+                                        title="Connessione"
+                                        state={connectionStep}
+                                        summary={
+                                            connectionStep === 'done' &&
+                                            settings.connection ? (
+                                                <>
+                                                    <span className="break-all">
+                                                        {settings.use_global
+                                                            ? 'Connessione globale'
+                                                            : 'Server dedicato'}{' '}
+                                                        ·{' '}
+                                                        {
+                                                            settings.connection
+                                                                .server_url
+                                                        }
+                                                    </span>
+                                                    <br />
+                                                    {checkLabel}
+                                                </>
+                                            ) : null
+                                        }
+                                        action={
+                                            connectionStep === 'done' ? (
                                                 <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    disabled={busy}
-                                                    onClick={() => {
-                                                        form.reset();
-                                                        clearFeedback();
-                                                        setEditConnection(
-                                                            false,
-                                                        );
-                                                    }}
-                                                >
-                                                    Annulla
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                    </form>
-                                ) : null}
-                            </Step>
-                            <Step
-                                number={2}
-                                title="Azienda Snipe-IT"
-                                state={companyStep}
-                                summary={
-                                    companyStep === 'done'
-                                        ? settings.association
-                                              ?.external_company_name
-                                        : settings.association && !confirmed
-                                          ? `${settings.association.external_company_name} · da riconfermare`
-                                          : null
-                                }
-                                action={
-                                    companyStep === 'done' ? (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() => setEditCompany(true)}
-                                        >
-                                            Cambia
-                                        </Button>
-                                    ) : null
-                                }
-                            >
-                                {companyStep === 'current' ? (
-                                    <div className="flex flex-col gap-4 rounded-lg border p-4">
-                                        {companyPicker}
-                                        <div className="flex flex-wrap gap-3">
-                                            <Button
-                                                type="button"
-                                                disabled={
-                                                    busy ||
-                                                    !options ||
-                                                    !selected
-                                                }
-                                                onClick={submitAssociation}
-                                            >
-                                                {association.processing ? (
-                                                    <Spinner />
-                                                ) : (
-                                                    <Link2 />
-                                                )}
-                                                Associa
-                                            </Button>
-                                            {!options && !list.processing ? (
-                                                <Button
-                                                    type="button"
                                                     variant="outline"
+                                                    size="sm"
                                                     disabled={busy}
                                                     onClick={() =>
-                                                        void loadCompanies()
+                                                        setEditConnection(true)
                                                     }
                                                 >
-                                                    <RefreshCw />
-                                                    Carica aziende
+                                                    Modifica
                                                 </Button>
-                                            ) : null}
-                                            {confirmed ? (
+                                            ) : null
+                                        }
+                                    >
+                                        {connectionStep === 'current' ? (
+                                            <form
+                                                className="flex flex-col gap-5 rounded-lg border p-4"
+                                                onSubmit={(event) => {
+                                                    event.preventDefault();
+                                                    save();
+                                                }}
+                                            >
+                                                {connectionFields}
+                                                <div className="flex flex-wrap gap-3">
+                                                    {connectionButtons}
+                                                    {settings.connection ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            disabled={busy}
+                                                            onClick={() => {
+                                                                form.reset();
+                                                                clearFeedback();
+                                                                setEditConnection(
+                                                                    false,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Annulla
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
+                                            </form>
+                                        ) : null}
+                                    </Step>
+                                    <Step
+                                        number={2}
+                                        title="Azienda Snipe-IT"
+                                        state={companyStep}
+                                        summary={
+                                            companyStep === 'done'
+                                                ? settings.association
+                                                      ?.external_company_name
+                                                : settings.association &&
+                                                    !confirmed
+                                                  ? `${settings.association.external_company_name} · da riconfermare`
+                                                  : null
+                                        }
+                                        action={
+                                            companyStep === 'done' ? (
                                                 <Button
-                                                    type="button"
-                                                    variant="ghost"
+                                                    variant="outline"
+                                                    size="sm"
                                                     disabled={busy}
                                                     onClick={() =>
-                                                        setEditCompany(false)
+                                                        setEditCompany(true)
                                                     }
                                                 >
-                                                    Annulla
+                                                    Cambia
                                                 </Button>
-                                            ) : null}
-                                        </div>
-                                    </div>
-                                ) : null}
-                            </Step>
-                            <Step
-                                number={3}
-                                title="Sincronizzazione"
-                                state={syncStep}
-                                last
-                                summary={
-                                    syncStep === 'done' && sync?.synced_at ? (
-                                        <>
-                                            {sync.error ? (
-                                                <span className="text-destructive">
-                                                    {sync.error}
+                                            ) : null
+                                        }
+                                    >
+                                        {companyStep === 'current' ? (
+                                            <div className="flex flex-col gap-4 rounded-lg border p-4">
+                                                {companyPicker}
+                                                <div className="flex flex-wrap gap-3">
+                                                    <Button
+                                                        type="button"
+                                                        disabled={
+                                                            busy ||
+                                                            !options ||
+                                                            !selected
+                                                        }
+                                                        onClick={
+                                                            submitAssociation
+                                                        }
+                                                    >
+                                                        {association.processing ? (
+                                                            <Spinner />
+                                                        ) : (
+                                                            <Link2 />
+                                                        )}
+                                                        Associa
+                                                    </Button>
+                                                    {!options &&
+                                                    !list.processing ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                void loadCompanies()
+                                                            }
+                                                        >
+                                                            <RefreshCw />
+                                                            Carica aziende
+                                                        </Button>
+                                                    ) : null}
+                                                    {confirmed ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                setEditCompany(
+                                                                    false,
+                                                                )
+                                                            }
+                                                        >
+                                                            Annulla
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </Step>
+                                    <Step
+                                        number={3}
+                                        title="Sincronizzazione"
+                                        state={syncStep}
+                                        last
+                                        summary={
+                                            syncStep === 'done' &&
+                                            sync?.synced_at ? (
+                                                <>
+                                                    {sync.error ? (
+                                                        <span className="text-destructive">
+                                                            {sync.error}
+                                                        </span>
+                                                    ) : (
+                                                        'Attiva · ogni ora'
+                                                    )}
+                                                    <br />
+                                                    Ultima lettura{' '}
+                                                    {formatDateTime(
+                                                        sync.synced_at,
+                                                    )}
+                                                </>
+                                            ) : null
+                                        }
+                                        action={
+                                            syncStep !== 'locked' ? (
+                                                <Button
+                                                    variant={
+                                                        syncStep === 'done'
+                                                            ? 'outline'
+                                                            : 'default'
+                                                    }
+                                                    size={
+                                                        syncStep === 'done'
+                                                            ? 'sm'
+                                                            : 'default'
+                                                    }
+                                                    disabled={busy}
+                                                    onClick={synchronize}
+                                                >
+                                                    {acquire.processing ? (
+                                                        <Spinner />
+                                                    ) : (
+                                                        <RefreshCw />
+                                                    )}
+                                                    {syncStep === 'done'
+                                                        ? 'Sincronizza ora'
+                                                        : 'Avvia sincronizzazione'}
+                                                </Button>
+                                            ) : null
+                                        }
+                                    >
+                                        {syncStep === 'done' && counts ? (
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <span className="text-sm text-muted-foreground">
+                                                    {counts.pending} da decidere
+                                                    · {counts.linked} apparati ·{' '}
+                                                    {counts.ipam} client IPAM
                                                 </span>
-                                            ) : (
-                                                'Attiva · ogni ora'
-                                            )}
-                                            <br />
-                                            Ultima lettura{' '}
-                                            {formatDateTime(sync.synced_at)}
-                                        </>
-                                    ) : null
-                                }
-                                action={
-                                    syncStep !== 'locked' ? (
-                                        <Button
-                                            variant={
-                                                syncStep === 'done'
-                                                    ? 'outline'
-                                                    : 'default'
-                                            }
-                                            size={
-                                                syncStep === 'done'
-                                                    ? 'sm'
-                                                    : 'default'
-                                            }
-                                            disabled={busy}
-                                            onClick={synchronize}
-                                        >
-                                            {acquire.processing ? (
-                                                <Spinner />
-                                            ) : (
-                                                <RefreshCw />
-                                            )}
-                                            {syncStep === 'done'
-                                                ? 'Sincronizza ora'
-                                                : 'Avvia sincronizzazione'}
-                                        </Button>
-                                    ) : null
-                                }
-                            >
-                                {syncStep === 'done' && counts ? (
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <span className="text-sm text-muted-foreground">
-                                            {counts.pending} da decidere ·{' '}
-                                            {counts.linked} apparati ·{' '}
-                                            {counts.ipam} client IPAM
-                                        </span>
-                                    </div>
-                                ) : null}
-                            </Step>
-                        </ol>
-                    </CardContent>
-                </Card>
-                {settings.connection && !settings.use_global ? (
-                    <Collapsible>
-                        <CollapsibleTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                className="group self-start"
-                            >
-                                <SlidersHorizontal data-icon="inline-start" />
-                                Mappatura campi del server dedicato
-                                <ChevronDown
-                                    data-icon="inline-end"
-                                    className="transition-transform group-data-[state=open]:rotate-180"
-                                />
-                            </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="pt-2">
-                            <SnipeItFields
-                                company={company.id}
-                                revision={settings.revision}
-                                globalRevision={settings.global_revision}
-                                inherited={false}
-                                disabled={busy || changed}
-                                active
-                            />
-                        </CollapsibleContent>
-                    </Collapsible>
-                ) : null}
-                </div>
+                                            </div>
+                                        ) : null}
+                                    </Step>
+                                </ol>
+                            </CardContent>
+                        </Card>
+                        {settings.connection && !settings.use_global ? (
+                            <Collapsible>
+                                <CollapsibleTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="group self-start"
+                                    >
+                                        <SlidersHorizontal data-icon="inline-start" />
+                                        Mappatura campi del server dedicato
+                                        <ChevronDown
+                                            data-icon="inline-end"
+                                            className="transition-transform group-data-[state=open]:rotate-180"
+                                        />
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="pt-2">
+                                    <SnipeItFields
+                                        company={company.id}
+                                        revision={settings.revision}
+                                        globalRevision={
+                                            settings.global_revision
+                                        }
+                                        inherited={false}
+                                        disabled={busy || changed}
+                                        active
+                                    />
+                                </CollapsibleContent>
+                            </Collapsible>
+                        ) : null}
+                    </div>
                 </IntegrationTabs>
             </div>
             {dialog}

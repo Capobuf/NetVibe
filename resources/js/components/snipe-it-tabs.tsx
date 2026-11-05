@@ -2,7 +2,10 @@ import { router } from '@inertiajs/react';
 import { Boxes, Link2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { edit, records } from '@/routes/companies/settings/integrations/snipe-it';
+import {
+    edit,
+    records,
+} from '@/routes/companies/settings/integrations/snipe-it';
 
 /** Second-level selector of the company Snipe-IT integration. */
 export function SnipeItTabs({

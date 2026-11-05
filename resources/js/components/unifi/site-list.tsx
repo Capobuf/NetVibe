@@ -1,8 +1,14 @@
 import { router, useForm } from '@inertiajs/react';
-import { ArrowRight, Eye, Server } from 'lucide-react';
+import {
+    ArrowRight,
+    Eye,
+    MoreHorizontal,
+    Pencil,
+    Server,
+    Unlink,
+} from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { CatalogCombobox } from '@/components/devices/catalog-combobox';
-import { IconButton } from '@/components/icon-button';
 import { store as storeCompany } from '@/routes/administration/companies';
 import type { CreatedCompany } from '@/types/company';
 import {
@@ -15,6 +21,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Dialog,
     DialogContent,
@@ -65,6 +78,7 @@ export function UnifiSiteList({
     const [pendingConsoles, setPendingConsoles] = useState<string[] | null>(
         null,
     );
+    const [reading, setReading] = useState<string | null>(null);
     const preview = connection.sites.find((source) => source.id === previewId);
     const selectable =
         !readonly &&
@@ -126,6 +140,7 @@ export function UnifiSiteList({
         consoleForm.submit(selectConsoles(connection.id), {
             preserveScroll: true,
             onSuccess: () => setPendingConsoles(null),
+            onFinish: () => setReading(null),
         });
     }
 
@@ -141,7 +156,10 @@ export function UnifiSiteList({
             )
         )
             setPendingConsoles(ids);
-        else saveConsoles(ids);
+        else {
+            if (include) setReading(id);
+            saveConsoles(ids);
+        }
     }
 
     return (
@@ -175,7 +193,7 @@ export function UnifiSiteList({
                                     NetVibe
                                 </TableHead>
                                 <TableHead scope="col" className="w-12">
-                                    <span className="sr-only">Anteprima</span>
+                                    <span className="sr-only">Azioni</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
@@ -249,13 +267,21 @@ export function UnifiSiteList({
                                                 }
                                             />
                                         ))}
-                                        {included && !sites.length ? (
+                                        {(included && !sites.length) ||
+                                        reading === item.id ? (
                                             <TableRow>
                                                 <TableCell
                                                     colSpan={4}
                                                     className="pl-10 text-sm text-muted-foreground"
                                                 >
-                                                    Siti non ancora acquisiti
+                                                    {reading === item.id ? (
+                                                        <span className="flex items-center gap-2">
+                                                            <Spinner />
+                                                            Lettura dei siti…
+                                                        </span>
+                                                    ) : (
+                                                        'Nessun sito letto'
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ) : null}
@@ -365,22 +391,22 @@ function SiteRow({
     dimmed: boolean;
     onPreview: () => void;
 }) {
+    const [editing, setEditing] = useState(false);
     const [target, setTarget] = useState<Destination | null>(null);
     const [confirm, setConfirm] = useState<'change' | 'revoke' | null>(null);
-    // Remounting the selector restores the current site after a cancelled change.
-    const [resetKey, setResetKey] = useState(0);
     const form = useForm({
         site_id: 0,
         revision: connection.revision ?? '',
         confirmed: true,
     });
-    const current = source.site
-        ? [source.site.company.name, source.site.name]
-              .filter(Boolean)
-              .join(' · ')
-        : null;
     const via = source.linked_via;
-    const linked = (!!source.site && !!source.confirmed_at && !dimmed) || !!via;
+    const site = source.site ?? via?.site ?? null;
+    const label = site
+        ? [site.company.name, site.name].filter(Boolean).join(' · ')
+        : null;
+    const linked = !!site && !dimmed;
+    const editable = !readonly && !via;
+    const busy = form.processing || disabled;
 
     function link(siteId: number) {
         form.transform(() => ({
@@ -406,18 +432,7 @@ function SiteRow({
         );
     }
 
-    function cancel() {
-        setConfirm(null);
-        setTarget(null);
-        form.clearErrors();
-        setResetKey((key) => key + 1);
-    }
-
     function choose(value: string) {
-        if (!value) {
-            if (source.site) setConfirm('revoke');
-            return;
-        }
         const next =
             destinations.find((item) => String(item.id) === value) ?? null;
         if (!next || next.id === source.site?.id) return;
@@ -428,6 +443,61 @@ function SiteRow({
             setConfirm('change');
         }
     }
+
+    const selector = (
+        <CatalogCombobox
+            id={`unifi-site-${source.id}`}
+            name="site_id"
+            items={destinations}
+            value=""
+            onChange={choose}
+            placeholder={source.site ? 'Scegli la nuova sede…' : 'Collega a una sede…'}
+            createLabel="Aggiungi azienda"
+            required
+            disabled={busy}
+            error={confirm ? undefined : Object.values(form.errors)[0]}
+            onCreate={(name) =>
+                new Promise<void>((resolve, reject) => {
+                    let created: Destination | null = null;
+                    router.post(
+                        storeCompany(),
+                        { name, inline: true },
+                        {
+                            preserveScroll: true,
+                            errorBag: 'newCompany',
+                            onFlash: (flash) => {
+                                if (flash.createdCompany) {
+                                    const company =
+                                        flash.createdCompany as CreatedCompany;
+                                    created = {
+                                        id: company.site_id,
+                                        name: company.name,
+                                    };
+                                }
+                            },
+                            // Link only after the company request has finished.
+                            onSuccess: () => {
+                                if (!created) return;
+                                if (!source.site) link(created.id);
+                                else {
+                                    setTarget(created);
+                                    setConfirm('change');
+                                }
+                            },
+                            onError: (errors) =>
+                                reject(
+                                    new Error(
+                                        Object.values(errors)[0] ??
+                                            'Impossibile creare l’azienda.',
+                                    ),
+                                ),
+                            onFinish: () => resolve(),
+                        },
+                    );
+                })
+            }
+        />
+    );
 
     return (
         <TableRow className={cn(dimmed && 'opacity-60')}>
@@ -468,100 +538,99 @@ function SiteRow({
                 />
             </TableCell>
             <TableCell className="whitespace-normal">
-                {via ? (
-                    // Already fed through another connection: linking here would duplicate the site.
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="break-words">
-                            {[via.site.company.name, via.site.name]
-                                .filter(Boolean)
-                                .join(' · ')}
-                        </span>
-                        <Badge variant="secondary">
-                            tramite {via.connection}
-                        </Badge>
-                    </div>
-                ) : readonly ? (
-                    current ? (
-                        <span className="break-words">{current}</span>
-                    ) : (
-                        <span className="text-muted-foreground">
-                            Non collegato
-                        </span>
-                    )
-                ) : (
+                {editable && (!source.site || editing) ? (
                     <div className="flex max-w-md items-start gap-2">
-                        <div className="min-w-0 flex-1">
-                            <CatalogCombobox
-                                key={resetKey}
-                                id={`unifi-site-${source.id}`}
-                                name="site_id"
-                                items={destinations}
-                                value={
-                                    source.site ? String(source.site.id) : ''
-                                }
-                                onChange={choose}
-                                placeholder="Collega a una sede…"
-                                createLabel="Aggiungi azienda"
-                                disabled={form.processing || disabled}
-                                error={
-                                    confirm
-                                        ? undefined
-                                        : Object.values(form.errors)[0]
-                                }
-                                onCreate={(name) =>
-                                    new Promise<void>((resolve, reject) => {
-                                        let siteId: number | null = null;
-                                        router.post(
-                                            storeCompany(),
-                                            { name, inline: true },
-                                            {
-                                                preserveScroll: true,
-                                                errorBag: 'newCompany',
-                                                onFlash: (flash) => {
-                                                    if (flash.createdCompany)
-                                                        siteId = (
-                                                            flash.createdCompany as CreatedCompany
-                                                        ).site_id;
-                                                },
-                                                // Link only after the company request has finished.
-                                                onSuccess: () => {
-                                                    if (siteId) link(siteId);
-                                                },
-                                                onError: (errors) =>
-                                                    reject(
-                                                        new Error(
-                                                            Object.values(
-                                                                errors,
-                                                            )[0] ??
-                                                                'Impossibile creare l’azienda.',
-                                                        ),
-                                                    ),
-                                                onFinish: () => resolve(),
-                                            },
-                                        );
-                                    })
-                                }
-                            />
-                        </div>
-                        {source.site && !source.confirmed_at ? (
+                        <div className="min-w-0 flex-1">{selector}</div>
+                        {editing ? (
                             <Button
-                                variant="outline"
-                                disabled={form.processing || disabled}
-                                onClick={() => link(source.site!.id)}
+                                variant="ghost"
+                                disabled={form.processing}
+                                onClick={() => {
+                                    setEditing(false);
+                                    form.clearErrors();
+                                }}
                             >
-                                Conferma
+                                Annulla
                             </Button>
                         ) : null}
                         {form.processing ? <Spinner className="mt-3" /> : null}
                     </div>
+                ) : label ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium break-words">{label}</span>
+                        {via ? (
+                            <Badge variant="secondary">
+                                tramite {via.connection}
+                            </Badge>
+                        ) : null}
+                        {editable && !source.confirmed_at ? (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => link(source.site!.id)}
+                            >
+                                {form.processing ? <Spinner /> : null}
+                                Conferma
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : (
+                    <span className="text-muted-foreground">Non collegato</span>
                 )}
+            </TableCell>
+            <TableCell className="text-right">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`Azioni per ${source.name}`}
+                        >
+                            <MoreHorizontal />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            disabled={!source.preview}
+                            onSelect={onPreview}
+                        >
+                            <Eye />
+                            Anteprima
+                        </DropdownMenuItem>
+                        {editable && source.site ? (
+                            <>
+                                <DropdownMenuItem
+                                    disabled={busy}
+                                    onSelect={() => setEditing(true)}
+                                >
+                                    <Pencil />
+                                    Cambia sede…
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    disabled={form.processing}
+                                    onSelect={() => setConfirm('revoke')}
+                                >
+                                    <Unlink />
+                                    Scollega
+                                </DropdownMenuItem>
+                            </>
+                        ) : null}
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <Dialog
                     open={confirm !== null}
                     onOpenChange={(open) => {
-                        if (!open && !form.processing) cancel();
+                        if (!open && !form.processing) {
+                            setConfirm(null);
+                            form.clearErrors();
+                        }
                     }}
                 >
-                    <DialogContent>
+                    <DialogContent className="text-left">
                         <DialogHeader>
                             <DialogTitle>
                                 {confirm === 'revoke'
@@ -578,8 +647,8 @@ function SiteRow({
                             {source.console_name} · {source.name}
                             <ArrowRight className="mx-2 inline size-4 text-muted-foreground" />
                             {confirm === 'revoke' ? (
-                                <span className="text-muted-foreground">
-                                    Non collegato
+                                <span className="text-muted-foreground line-through">
+                                    {label}
                                 </span>
                             ) : (
                                 <span className="font-medium">
@@ -597,7 +666,7 @@ function SiteRow({
                         <DialogFooter>
                             <Button
                                 variant="outline"
-                                onClick={cancel}
+                                onClick={() => setConfirm(null)}
                                 disabled={form.processing}
                             >
                                 Annulla
@@ -623,17 +692,6 @@ function SiteRow({
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-            </TableCell>
-            <TableCell>
-                <IconButton
-                    label={`Anteprima di ${source.name}`}
-                    variant="ghost"
-                    className="size-8"
-                    onClick={onPreview}
-                    disabled={!source.preview}
-                >
-                    <Eye />
-                </IconButton>
             </TableCell>
         </TableRow>
     );

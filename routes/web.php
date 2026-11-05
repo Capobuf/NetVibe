@@ -154,7 +154,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('{unifiConnection}/inventory/{unifiDevice}/resolve', [UnifiInventoryController::class, 'resolve'])->name('inventory.resolve');
             Route::post('{unifiConnection}/inventory/{unifiDevice}/adopt', [UnifiInventoryController::class, 'adopt'])->name('inventory.adopt');
             Route::post('{unifiConnection}/inventory/{unifiDevice}/port', [UnifiInventoryController::class, 'port'])->name('inventory.port');
-            Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->name('select-consoles');
+            Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->middleware('throttle:5,1')->name('select-consoles');
             Route::put('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'associate'])->name('associate');
             Route::delete('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'revoke'])->name('revoke');
         });

@@ -99,9 +99,10 @@ class UnifiController extends Controller
         return $this->inspect($request, $unifiConnection, $client, true);
     }
 
-    public function selectConsoles(Request $request, UnifiConnection $unifiConnection): RedirectResponse
+    public function selectConsoles(Request $request, UnifiConnection $unifiConnection, UnifiClient $client): RedirectResponse
     {
         $data = $request->validate(['selected_console_ids' => ['present', 'array'], 'selected_console_ids.*' => ['required', 'string', 'distinct', 'max:255']]);
+        $added = array_diff($data['selected_console_ids'], $unifiConnection->selected_console_ids ?? []);
         $this->locked($request, $unifiConnection, function (UnifiConnection $connection) use ($data) {
             if ($connection->mode !== 'cloud' || $connection->check_status !== 'ok') {
                 throw ValidationException::withMessages(['connection' => 'Verifica la connessione cloud prima di scegliere le console.']);
@@ -112,6 +113,12 @@ class UnifiController extends Controller
             $connection->selected_console_ids = $data['selected_console_ids'];
             $connection->unifiSites()->whereNotIn('console_id', $data['selected_console_ids'])->update(['available' => false]);
         });
+        if ($added) {
+            // A newly included console is useful only with its sites: read them right away.
+            $request->merge(['revision' => $unifiConnection->fresh()->revision]);
+
+            return $this->inspect($request, $unifiConnection->fresh(), $client, true);
+        }
 
         return $this->saved('Console selezionate.');
     }

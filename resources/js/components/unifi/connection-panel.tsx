@@ -14,7 +14,6 @@ import { useState } from 'react';
 import {
     destroy,
     discover,
-    selectConsoles,
     update,
     verify,
 } from '@/actions/App/Http/Controllers/UnifiController';
@@ -22,11 +21,8 @@ import {
     IntegrationStatus,
     type IntegrationState,
 } from '@/components/integration-header';
-import { SaveButton } from '@/components/save-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -43,14 +39,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-    FieldLegend,
-    FieldSet,
-} from '@/components/ui/field';
 import {
     Item,
     ItemActions,
@@ -268,15 +256,6 @@ export function UnifiConnectionPanel({
             </div>
             {!readonly &&
             connection.mode === 'cloud' &&
-            (connection.hosts?.length ?? 0) > 0 ? (
-                <ConsoleSelection
-                    key={`${connection.id}:${savedConsoles.join(',')}`}
-                    connection={connection}
-                    disabled={!connection.enabled || form.processing}
-                />
-            ) : null}
-            {!readonly &&
-            connection.mode === 'cloud' &&
             connection.check_status === 'ok' &&
             !connection.hosts?.length ? (
                 <Alert>
@@ -292,10 +271,12 @@ export function UnifiConnectionPanel({
                 />
             </div>
             <UnifiSiteList
+                key={`${connection.id}:${savedConsoles.join(',')}`}
                 connection={connection}
                 companies={companies}
                 search={search}
                 readonly={readonly}
+                disabled={!connection.enabled || form.processing}
             />
             <Dialog
                 open={confirm !== null}
@@ -365,151 +346,5 @@ export function UnifiConnectionPanel({
                 </DialogContent>
             </Dialog>
         </section>
-    );
-}
-
-function ConsoleSelection({
-    connection,
-    disabled,
-}: {
-    connection: UnifiConnection;
-    disabled: boolean;
-}) {
-    const form = useForm({
-        selected_console_ids: connection.selected_console_ids ?? [],
-        revision: connection.revision ?? '',
-    });
-    const [confirm, setConfirm] = useState(false);
-    const removed = connection.sites.filter(
-        (source) =>
-            source.site &&
-            (connection.selected_console_ids ?? []).includes(
-                source.console_id,
-            ) &&
-            !form.data.selected_console_ids.includes(source.console_id),
-    );
-    const changed =
-        JSON.stringify([...form.data.selected_console_ids].sort()) !==
-        JSON.stringify([...(connection.selected_console_ids ?? [])].sort());
-
-    function save() {
-        form.transform((data) => ({ ...data, revision: connection.revision }));
-        form.submit(selectConsoles(connection.id), {
-            preserveScroll: true,
-            onSuccess: () => setConfirm(false),
-        });
-    }
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Console da integrare</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-                <FieldSet disabled={disabled || form.processing}>
-                    <FieldLegend className="sr-only">
-                        Console accessibili
-                    </FieldLegend>
-                    <FieldGroup className="gap-3 sm:grid sm:grid-cols-2">
-                        {(connection.hosts ?? []).map((host) => (
-                            <Field
-                                key={host.id}
-                                orientation="horizontal"
-                                className="rounded-lg border p-3"
-                            >
-                                <Checkbox
-                                    id={`unifi-console-${connection.id}-${host.id}`}
-                                    checked={form.data.selected_console_ids.includes(
-                                        host.id,
-                                    )}
-                                    disabled={disabled || form.processing}
-                                    onCheckedChange={(checked) =>
-                                        form.setData(
-                                            'selected_console_ids',
-                                            checked === true
-                                                ? [
-                                                      ...form.data
-                                                          .selected_console_ids,
-                                                      host.id,
-                                                  ]
-                                                : form.data.selected_console_ids.filter(
-                                                      (id) => id !== host.id,
-                                                  ),
-                                        )
-                                    }
-                                />
-                                <FieldLabel
-                                    htmlFor={`unifi-console-${connection.id}-${host.id}`}
-                                    className="min-w-0 break-words"
-                                >
-                                    {host.name}
-                                </FieldLabel>
-                            </Field>
-                        ))}
-                    </FieldGroup>
-                </FieldSet>
-                <FieldError
-                    errors={Object.values(form.errors).map((message) => ({
-                        message,
-                    }))}
-                />
-                <SaveButton
-                    type="button"
-                    className="self-start"
-                    processing={form.processing}
-                    disabled={disabled || !changed}
-                    saved={!changed}
-                    onClick={() => (removed.length ? setConfirm(true) : save())}
-                >
-                    Salva console
-                </SaveButton>
-            </CardContent>
-            <Dialog
-                open={confirm}
-                onOpenChange={(open) => {
-                    if (!form.processing) setConfirm(open);
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            Modificare le console selezionate?
-                        </DialogTitle>
-                        <DialogDescription>
-                            Le nuove acquisizioni dei siti delle console
-                            deselezionate verranno sospese.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
-                        {removed.map((source) => (
-                            <li key={source.id}>
-                                {source.console_name} · {source.name}
-                            </li>
-                        ))}
-                    </ul>
-                    <FieldError
-                        errors={Object.values(form.errors).map((message) => ({
-                            message,
-                        }))}
-                    />
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setConfirm(false)}
-                            disabled={form.processing}
-                        >
-                            Annulla
-                        </Button>
-                        <SaveButton
-                            type="button"
-                            processing={form.processing}
-                            onClick={save}
-                        >
-                            Conferma
-                        </SaveButton>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </Card>
     );
 }

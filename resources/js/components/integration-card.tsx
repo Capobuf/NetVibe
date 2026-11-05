@@ -14,7 +14,10 @@ import { formatDateTime } from '@/lib/utils';
 
 export type Status = { label: string; tone: 'ok' | 'idle' | 'error' };
 
-export function syncStatus(activated: string | null, error: string | null): Status {
+export function syncStatus(
+    activated: string | null,
+    error: string | null,
+): Status {
     if (error) return { label: 'Errore', tone: 'error' };
     return activated
         ? { label: 'Attiva · ogni ora', tone: 'ok' }

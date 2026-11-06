@@ -1,40 +1,39 @@
 import { Form, router, usePage } from '@inertiajs/react';
-import { ArrowRight, Search } from 'lucide-react';
+import { ArrowRight, Layers3, Network, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
 import {
     Combobox,
+    ComboboxCollection,
     ComboboxContent,
     ComboboxEmpty,
+    ComboboxGroup,
     ComboboxInput,
     ComboboxItem,
+    ComboboxLabel,
     ComboboxList,
-    ComboboxSeparator,
 } from '@/components/ui/combobox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { InputGroupAddon, InputGroupButton } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 import { index, suggestions } from '@/routes/companies/sites/search';
-import { show } from '@/routes/companies/sites/subnets';
 
-type Suggestion = {
-    id: number | null;
-    ip: string;
-    hostname: string | null;
-    mac_address: string | null;
-    assignment_label: string | null;
-    site_id: number;
+type Row = {
+    key: string;
+    kind: 'vlan' | 'subnet' | 'ip' | 'all' | 'device' | 'model';
+    label: string;
+    detail: string | null;
+    href: string;
+    depth: number;
     site: string | null;
-    subnet_id: number;
-    subnet: string;
 };
-type Option = Suggestion | { all: number };
-type Loaded = {
-    term: string;
-    results: Suggestion[];
-    total: number;
-    failed?: boolean;
-};
+type Section = { label: string; rows: Row[] };
+type Group = { value: string; items: Row[] };
+type Loaded = { term: string; groups: Group[]; failed?: boolean };
+
+const icons = { vlan: Layers3, subnet: Network, all: ArrowRight };
+const indent = ['pl-2', 'pl-8', 'pl-14'];
 
 export function GlobalSearch() {
     const {
@@ -101,17 +100,18 @@ function SearchBox({
             )
                 .then(async (response) => {
                     if (!response.ok) throw new Error();
-                    const data: Omit<Loaded, 'term'> = await response.json();
-                    setLoaded({ term, ...data });
+                    const sections: Section[] = await response.json();
+                    setLoaded({
+                        term,
+                        groups: sections.map((section) => ({
+                            value: section.label,
+                            items: section.rows,
+                        })),
+                    });
                 })
                 .catch(() => {
                     if (!controller.signal.aborted)
-                        setLoaded({
-                            term,
-                            results: [],
-                            total: 0,
-                            failed: true,
-                        });
+                        setLoaded({ term, groups: [], failed: true });
                 });
         }, 200);
         return () => {
@@ -121,32 +121,24 @@ function SearchBox({
     }, [term, company, site]);
 
     // Previous suggestions stay visible while the next ones load.
-    const results = term === '' ? [] : (loaded?.results ?? []);
-    const total = term === '' ? 0 : (loaded?.total ?? 0);
-    const options: Option[] =
-        total > results.length ? [...results, { all: total }] : results;
-
-    function showAll() {
-        router.get(
-            index.url({ company, site }, { query: { ...view, search: term } }),
-        );
-    }
+    const groups = term === '' ? [] : (loaded?.groups ?? []);
 
     return (
         <Form
             {...index.form({ company, site })}
             role="search"
-            aria-label="Ricerca IP nell’azienda"
+            aria-label="Ricerca nell’azienda"
             options={{ preserveState: true }}
             className="w-full min-w-0 xl:w-72"
         >
             {({ processing, errors }) => (
                 <Field data-invalid={Boolean(errors.search)}>
                     <FieldLabel htmlFor="global-search" className="sr-only">
-                        Cerca IPv4, MAC o hostname nelle sedi dell’azienda
+                        Cerca IPv4, subnet, VLAN, dispositivi e modelli
+                        nell’azienda
                     </FieldLabel>
-                    <Combobox<Option>
-                        items={options}
+                    <Combobox
+                        items={groups}
                         filter={null}
                         value={null}
                         inputValue={text}
@@ -159,33 +151,15 @@ function SearchBox({
                         }}
                         open={open && term !== ''}
                         onOpenChange={setOpen}
-                        itemToStringLabel={(option) =>
-                            'ip' in option ? option.ip : term
-                        }
-                        onValueChange={(option) => {
-                            if (!option) return;
-                            if ('all' in option) return showAll();
-                            router.visit(
-                                show.url(
-                                    {
-                                        company,
-                                        site: option.site_id,
-                                        subnet: option.subnet_id,
-                                    },
-                                    {
-                                        query: {
-                                            search: option.ip,
-                                            ip_address: option.id ?? undefined,
-                                        },
-                                    },
-                                ),
-                            );
+                        itemToStringLabel={(row: Row) => row.label}
+                        onValueChange={(row: Row | null) => {
+                            if (row) router.visit(row.href);
                         }}
                     >
                         <ComboboxInput
                             id="global-search"
                             type="search"
-                            placeholder="Cerca IP, MAC, hostname…"
+                            placeholder="Cerca IP, subnet, dispositivi…"
                             maxLength={255}
                             autoComplete="off"
                             className="w-full"
@@ -214,7 +188,7 @@ function SearchBox({
                         </ComboboxInput>
                         <ComboboxContent
                             align="end"
-                            className="w-[max(var(--anchor-width),24rem)]"
+                            className="w-[max(var(--anchor-width),26rem)]"
                         >
                             <ComboboxEmpty>
                                 {loading ? (
@@ -229,59 +203,25 @@ function SearchBox({
                                 )}
                             </ComboboxEmpty>
                             <ComboboxList>
-                                {(option: Option) =>
-                                    'all' in option ? (
-                                        <div key="all">
-                                            <ComboboxSeparator />
-                                            <ComboboxItem
-                                                value={option}
-                                                className="text-muted-foreground"
-                                            >
-                                                <ArrowRight />
-                                                Mostra tutti i{' '}
-                                                {option.all.toLocaleString(
-                                                    'it-IT',
-                                                )}{' '}
-                                                risultati
-                                            </ComboboxItem>
-                                        </div>
-                                    ) : (
-                                        <ComboboxItem
-                                            key={`${option.subnet_id}:${option.ip}`}
-                                            value={option}
-                                            className="items-start gap-3 pr-2"
-                                        >
-                                            <div className="flex min-w-0 flex-1 flex-col">
-                                                <span className="font-medium tabular-nums">
-                                                    {option.ip}
-                                                </span>
-                                                {option.hostname ||
-                                                option.assignment_label ||
-                                                option.mac_address ? (
-                                                    <span className="truncate text-xs text-muted-foreground">
-                                                        {[
-                                                            option.hostname,
-                                                            option.assignment_label,
-                                                            option.mac_address,
-                                                        ]
-                                                            .filter(Boolean)
-                                                            .join(' · ')}
-                                                    </span>
-                                                ) : null}
-                                            </div>
-                                            <div className="flex max-w-[45%] shrink-0 flex-col text-right text-xs text-muted-foreground">
-                                                {option.site ? (
-                                                    <span className="truncate">
-                                                        {option.site}
-                                                    </span>
-                                                ) : null}
-                                                <span className="tabular-nums">
-                                                    {option.subnet}
-                                                </span>
-                                            </div>
-                                        </ComboboxItem>
-                                    )
-                                }
+                                {(group: Group) => (
+                                    <ComboboxGroup
+                                        key={group.value}
+                                        items={group.items}
+                                        className="not-first:mt-1 not-first:border-t not-first:pt-1"
+                                    >
+                                        <ComboboxLabel>
+                                            {group.value}
+                                        </ComboboxLabel>
+                                        <ComboboxCollection>
+                                            {(row: Row) => (
+                                                <SuggestionItem
+                                                    key={row.key}
+                                                    row={row}
+                                                />
+                                            )}
+                                        </ComboboxCollection>
+                                    </ComboboxGroup>
+                                )}
                             </ComboboxList>
                         </ComboboxContent>
                     </Combobox>
@@ -303,5 +243,42 @@ function SearchBox({
                 </Field>
             )}
         </Form>
+    );
+}
+
+function SuggestionItem({ row }: { row: Row }) {
+    const Icon = row.kind in icons ? icons[row.kind as keyof typeof icons] : null;
+
+    return (
+        <ComboboxItem
+            value={row}
+            className={cn(
+                'gap-2 pr-2',
+                indent[row.depth] ?? indent[0],
+                row.kind === 'all' && 'text-muted-foreground',
+            )}
+        >
+            {Icon ? <Icon className="text-muted-foreground" /> : null}
+            <span
+                className={cn(
+                    'shrink-0',
+                    row.kind !== 'all' && 'font-medium',
+                    ['vlan', 'subnet', 'ip'].includes(row.kind) &&
+                        'tabular-nums',
+                )}
+            >
+                {row.label}
+            </span>
+            {row.detail ? (
+                <span className="min-w-0 truncate text-muted-foreground">
+                    {row.detail}
+                </span>
+            ) : null}
+            {row.site ? (
+                <span className="ml-auto max-w-[40%] shrink-0 truncate pl-2 text-xs text-muted-foreground">
+                    {row.site}
+                </span>
+            ) : null}
+        </ComboboxItem>
     );
 }

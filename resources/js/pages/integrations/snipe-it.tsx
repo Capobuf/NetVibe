@@ -758,7 +758,10 @@ function SnipeItForm({
                                         onValueChange={(value) =>
                                             router.put(
                                                 globalRoutes.interval(),
-                                                { sync_interval: Number(value) },
+                                                {
+                                                    sync_interval:
+                                                        Number(value),
+                                                },
                                                 { preserveScroll: true },
                                             )
                                         }

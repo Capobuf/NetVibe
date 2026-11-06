@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\MikrotikConnection;
+use App\Models\SnipeItSetting;
 use App\Models\UnifiConnection;
 use App\Support\MikrotikSync;
 use App\Support\SnipeItSync;
@@ -17,7 +18,7 @@ Artisan::command('inspire', function () {
 Artisan::command('snipe-it:sync', function (SnipeItSync $synchronizer) {
     $failed = false;
     // The command runs every 15 minutes; the margin keeps a sync finished a few seconds late from slipping a whole slot.
-    $due = now()->subMinutes(App\Models\SnipeItSetting::forCompany(null)->sync_interval)->addMinutes(5);
+    $due = now()->subMinutes(SnipeItSetting::forCompany(null)->sync_interval)->addMinutes(5);
     foreach (App\Models\SnipeItSync::whereNotNull('activated_at')
         ->where(fn ($query) => $query->whereNull('synced_at')->orWhere('synced_at', '<=', $due))
         ->with('company')->lazyById() as $sync) {

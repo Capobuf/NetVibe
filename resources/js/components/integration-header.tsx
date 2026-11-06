@@ -42,11 +42,7 @@ export function intervalLabel(minutes: number) {
 }
 
 /** Label/value pairs shown in the status tooltip. */
-export function StatusDetails({
-    items,
-}: {
-    items: [string, ReactNode][];
-}) {
+export function StatusDetails({ items }: { items: [string, ReactNode][] }) {
     return (
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
             {items.map(([label, value]) => (

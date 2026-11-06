@@ -296,8 +296,8 @@ class MikrotikTest extends TestCase
     }
 
     #[TestWith([true, 35, true, 'ok', 3])]
-    #[TestWith([false, 35, true, 'tls', 1])]
-    #[TestWith([true, 35, false, 'tls', 2])]
+    #[TestWith([false, 35, true, 'tls', 2])]
+    #[TestWith([true, 35, false, 'tls', 3])]
     #[TestWith([true, 28, true, 'timeout', 1])]
     public function test_anonymous_tls_retries_only_an_opted_in_handshake_failure(bool $allow, int $errno, bool $respond, string $status, int $expectedAttempts): void
     {
@@ -329,7 +329,8 @@ class MikrotikTest extends TestCase
         $connection = $this->device->mikrotikConnection()->sole();
         $this->assertSame($status, $connection->check_status);
         $this->assertSame($expectedAttempts, $attempts);
-        $this->assertSame($expectedAttempts > 1 ? 1 : 0, substr_count($connection->check_log, 'Nuovo tentativo: TLS 1.2 anonimo'));
+        $this->assertSame($allow && $errno === 35 ? 1 : 0, substr_count($connection->check_log, 'Nuovo tentativo: TLS 1.2 anonimo'));
+        $this->assertSame($status === 'tls' ? 1 : 0, substr_count($connection->check_log, 'Nuovo tentativo: handshake TLS interrotto'));
         $this->assertStringNotContainsString('synthetic-secret', $connection->check_log);
     }
 

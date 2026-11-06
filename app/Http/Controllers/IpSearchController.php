@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Device;
+use App\Models\DeviceModel;
 use App\Models\IpAddress;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Models\UnifiObservation;
+use App\Models\Vlan;
 use App\Support\DeviceAssignment;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -56,25 +59,79 @@ class IpSearchController extends Controller
         ]);
     }
 
+    /** Header search: networks as a VLAN → subnet → IP tree, then devices and catalog models. */
     public function suggestions(Request $request, Company $company, Site $site): JsonResponse
     {
         $search = $request->validate(['search' => ['required', 'string', 'max:255']])['search'];
+        $pattern = $this->pattern($search);
+        $sites = $company->sites()->pluck('name', 'id');
         $matches = $this->matches($company, $search);
+        $ipTotal = (clone $matches)->count();
+        $ips = $matches->orderBy('address')->orderBy('subnet_id')->limit(6)->get();
+        $matchedSubnets = Subnet::visible()->whereIn('site_id', $sites->keys())
+            ->where(fn ($query) => $query->whereRaw("cidr LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("name LIKE ? ESCAPE '!'", [$pattern])->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern]))
+            ->orderBy('network_address')->limit(5)->pluck('id');
+        $matchedVlans = Vlan::visible()->whereIn('site_id', $sites->keys())
+            ->where(fn ($query) => $query->whereRaw("CAST(tag AS CHAR) LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("name LIKE ? ESCAPE '!'", [$pattern]))
+            ->orderBy('tag')->limit(5)->pluck('id');
+        // Parents of matching rows are included so every result appears under its VLAN and subnet.
+        $subnets = Subnet::whereIn('id', $matchedSubnets->merge($ips->pluck('subnet_id')))->orderBy('network_address')->get();
+        $vlans = Vlan::whereIn('id', $matchedVlans->merge($subnets->pluck('vlan_id')->filter()))->orderBy('tag')->get();
+        $route = fn (int $siteId) => ['company' => $company->id, 'site' => $siteId];
+        $row = fn (string $kind, int|string $key, string $label, ?string $detail, string $href, int $depth, ?int $siteId = null) => [
+            'key' => "{$kind}:{$key}", 'kind' => $kind, 'label' => $label, 'detail' => $detail, 'href' => $href,
+            'depth' => $depth, 'site' => $depth === 0 && $siteId ? $sites->get($siteId) : null,
+        ];
+        $subnetRows = fn (Subnet $subnet, int $depth) => [
+            $row('subnet', $subnet->id, $subnet->cidr, $subnet->name, route('companies.sites.subnets.show', [...$route($subnet->site_id), 'subnet' => $subnet->id], false), $depth, $subnet->site_id),
+            ...$ips->where('subnet_id', $subnet->id)->map(fn ($ip) => $row('ip', "{$subnet->id}:{$ip->address}", long2ip($ip->address),
+                collect([$ip->hostname, $ip->assignment_label])->filter()->unique()->implode(' · ') ?: null,
+                route('companies.sites.subnets.show', [...$route($subnet->site_id), 'subnet' => $subnet->id, 'search' => long2ip($ip->address), 'ip_address' => $ip->id], false), $depth + 1)),
+        ];
+        $network = [];
+        foreach ($vlans as $vlan) {
+            $network[] = $row('vlan', $vlan->id, "VLAN {$vlan->tag}", $vlan->name, route('companies.sites.vlans.show', [...$route($vlan->site_id), 'vlan' => $vlan->id], false), 0, $vlan->site_id);
+            foreach ($subnets->where('vlan_id', $vlan->id) as $subnet) {
+                array_push($network, ...$subnetRows($subnet, 1));
+            }
+        }
+        foreach ($subnets->whereNull('vlan_id') as $subnet) {
+            array_push($network, ...$subnetRows($subnet, 0));
+        }
+        if ($ipTotal > $ips->count()) {
+            $network[] = $row('all', 'ip', "Mostra tutti gli IP ({$ipTotal})", null, route('companies.sites.search.index', [...$route($site->id), 'search' => $search], false), 0);
+        }
+        $devices = Device::whereIn('site_id', $sites->keys())->with('manufacturer:id,name', 'model:id,name')
+            ->where(fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("serial_number LIKE ? ESCAPE '!'", [$pattern])->orWhereRaw("asset_tag LIKE ? ESCAPE '!'", [$pattern]))
+            ->orderBy('name')->limit(5)->get()->map(fn (Device $device) => $row('device', $device->id, $device->name,
+                trim("{$device->manufacturer?->name} {$device->model?->name}") ?: null,
+                route('companies.sites.devices.show', [...$route($device->site_id), 'device' => $device->id], false), 0, $device->site_id));
+        $models = DeviceModel::with('manufacturer:id,name', 'modelType:id,name')
+            ->where(fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereHas('manufacturer', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])))
+            ->orderBy('name')->limit(5)->get()->map(fn (DeviceModel $model) => $row('model', $model->id, $model->name,
+                collect([$model->manufacturer?->name, $model->modelType?->name])->filter()->implode(' · ') ?: null,
+                route('device-models.index', ['model' => $model->id], false), 0));
 
-        return response()->json([
-            'total' => (clone $matches)->count(),
-            'results' => $matches->orderBy('address')->orderBy('subnet_id')->limit(6)->get()->map(fn ($row) => [
-                'id' => $row->id, 'ip' => long2ip($row->address), 'hostname' => $row->hostname,
-                'mac_address' => $row->mac_address, 'assignment_label' => $row->assignment_label,
-                'site_id' => $row->site_id, 'site' => $row->site, 'subnet_id' => $row->subnet_id, 'subnet' => $row->subnet,
-            ]),
-        ]);
+        return response()->json(collect([
+            ['label' => 'Rete', 'rows' => $network],
+            ['label' => 'Dispositivi', 'rows' => $devices->all()],
+            ['label' => 'Modelli', 'rows' => $models->all()],
+        ])->filter(fn ($section) => $section['rows'] !== [])->values());
+    }
+
+    private function pattern(string $search): string
+    {
+        return '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
     }
 
     /** Documented addresses and external UniFi observations of the company that match the search text. */
     private function matches(Company $company, string $search): Builder
     {
-        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+        $pattern = $this->pattern($search);
         $observations = UnifiObservation::query()->join('subnets', fn ($join) => $join
             ->on('subnets.site_id', '=', 'unifi_observations.site_id')
             ->on('subnets.network_address', '<=', 'unifi_observations.address')

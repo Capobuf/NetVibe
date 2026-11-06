@@ -188,7 +188,7 @@ class MikrotikClient
         return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? [$host] : (gethostbynamel($host) ?: []);
     }
 
-    private function read(#[\SensitiveParameter] MikrotikConnection $connection, string $url, string $address, string $path, string $properties, float $deadline, int &$budget, bool &$attempted): array
+    private function read(#[\SensitiveParameter] MikrotikConnection $connection, string $url, string $address, string $path, string $properties, float $deadline, int &$budget, bool &$attempted, bool $handshakeRetry = true): array
     {
         $remaining = $deadline - microtime(true);
         if ($remaining <= 0) {
@@ -206,7 +206,7 @@ class MikrotikClient
         $port = parse_url($url, PHP_URL_PORT) ?? 443;
         $trace = fopen('php://memory', 'w+');
         $handlerError = null;
-        $retryAnonymous = false;
+        $retryAnonymous = $retryHandshake = false;
         // Pin validated DNS results for both TLS attempts.
         $curlOptions = [CURLOPT_RESOLVE => ["{$host}:{$port}:{$address}"]];
         if ($this->anonymousTls) {
@@ -250,7 +250,9 @@ class MikrotikClient
                 }
             }
             $retryAnonymous = $handlerError === 35 && $connection->allow_unverified_certificate && ! $this->anonymousTls;
-            if (! $retryAnonymous) {
+            // RouterOS occasionally aborts a single handshake (e.g. "bad record mac"); one retry avoids failing the whole sync.
+            $retryHandshake = $handlerError === 35 && ! $retryAnonymous && $handshakeRetry;
+            if (! $retryAnonymous && ! $retryHandshake) {
                 throw new MikrotikException(match ($handlerError) {
                     28 => 'timeout',
                     35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91, 98 => 'tls',
@@ -280,6 +282,11 @@ class MikrotikClient
             $this->log('Nuovo tentativo: TLS 1.2 anonimo senza certificato (opzione abilitata).');
 
             return $this->read($connection, $url, $address, $path, $properties, $deadline, $budget, $attempted);
+        }
+        if ($retryHandshake) {
+            $this->log('Nuovo tentativo: handshake TLS interrotto dal dispositivo.');
+
+            return $this->read($connection, $url, $address, $path, $properties, $deadline, $budget, $attempted, false);
         }
         $this->log('HTTP '.$response->status());
         $body = $response->body();

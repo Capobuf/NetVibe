@@ -3,11 +3,14 @@ import { cn, formatDateTime } from '@/lib/utils';
 import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import {
-    Check,
+    Building2,
+    ExternalLink,
     Link2,
+    Server,
     RefreshCw,
     SlidersHorizontal,
     Trash2,
+    type LucideIcon,
 } from 'lucide-react';
 import { IntegrationTabs } from '@/components/integration-tabs';
 import {
@@ -24,6 +27,7 @@ import { index as integrationIndex } from '@/routes/administration/integrations'
 import PasswordInput from '@/components/password-input';
 import { SnipeItFields } from '@/components/devices/snipe-it-fields';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -32,16 +36,6 @@ import {
     CardContent,
     CardFooter,
 } from '@/components/ui/card';
-import {
-    Item,
-    ItemActions,
-    ItemContent,
-    ItemDescription,
-    ItemFooter,
-    ItemGroup,
-    ItemMedia,
-    ItemTitle,
-} from '@/components/ui/item';
 import {
     Combobox,
     ComboboxInput,
@@ -153,60 +147,76 @@ export default function SnipeIt(props: Props) {
 
 type StepState = 'done' | 'current' | 'locked';
 
-function Step({
-    number,
-    title,
-    state,
-    summary,
+/**
+ * One configuration row: label on the left, current value in the middle and
+ * its action on the right; the editor opens below the row, inside the card.
+ */
+function SettingRow({
+    icon: Icon,
+    label,
+    locked = false,
     action,
+    editor,
     children,
 }: {
-    number: number;
-    title: string;
-    state: StepState;
-    summary?: ReactNode;
+    icon: LucideIcon;
+    label: string;
+    locked?: boolean;
     action?: ReactNode;
-    children?: ReactNode;
+    editor?: ReactNode;
+    children: ReactNode;
 }) {
     return (
-        <Item variant="outline" role="listitem">
-            <ItemMedia
-                variant="icon"
+        <section
+            aria-label={label}
+            className={cn(
+                'flex flex-col gap-4 px-5 py-4 sm:px-6',
+                locked && 'text-muted-foreground',
+            )}
+        >
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 sm:flex-nowrap">
+                <div className="flex w-full items-center gap-3 sm:w-48 sm:shrink-0">
+                    <span
+                        aria-hidden="true"
+                        className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/50 [&_svg]:size-4"
+                    >
+                        <Icon />
+                    </span>
+                    <span className="text-sm font-medium">{label}</span>
+                </div>
+                <div className="min-w-0 flex-1 text-sm">{children}</div>
+                {action ? <div className="shrink-0">{action}</div> : null}
+            </div>
+            {editor ? (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                    {editor}
+                </div>
+            ) : null}
+        </section>
+    );
+}
+
+function StatusLine({
+    tone,
+    children,
+}: {
+    tone: 'ok' | 'error' | 'warning' | 'muted';
+    children: ReactNode;
+}) {
+    return (
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span
                 aria-hidden="true"
                 className={cn(
-                    'rounded-full text-xs font-medium tabular-nums',
-                    state === 'done' &&
-                        'border-primary bg-primary text-primary-foreground',
-                    state === 'current' &&
-                        'border-primary bg-background text-primary',
-                    state === 'locked' && 'text-muted-foreground',
+                    'size-1.5 shrink-0 rounded-full',
+                    tone === 'ok' && 'bg-emerald-500',
+                    tone === 'error' && 'bg-destructive',
+                    tone === 'warning' && 'bg-amber-500',
+                    tone === 'muted' && 'bg-muted-foreground',
                 )}
-            >
-                {state === 'done' ? <Check /> : number}
-            </ItemMedia>
-            <ItemContent className="min-w-0">
-                <ItemTitle
-                    className={
-                        state === 'locked' ? 'text-muted-foreground' : undefined
-                    }
-                >
-                    <span className="sr-only">Passo {number}: </span>
-                    {title}
-                    {state === 'done' ? (
-                        <span className="sr-only"> (completato)</span>
-                    ) : null}
-                </ItemTitle>
-                {summary ? (
-                    <ItemDescription className="line-clamp-none break-all">
-                        {summary}
-                    </ItemDescription>
-                ) : null}
-            </ItemContent>
-            {action ? <ItemActions>{action}</ItemActions> : null}
-            {children ? (
-                <ItemFooter className="block">{children}</ItemFooter>
-            ) : null}
-        </Item>
+            />
+            {children}
+        </span>
     );
 }
 
@@ -371,6 +381,10 @@ function SnipeItForm({
                   : 'non riuscita'
           }`
         : 'Mai verificata';
+    const checkOk =
+        !!lastCheck &&
+        ('status' in lastCheck ? lastCheck.status : lastCheck.check_status) ===
+            'ok';
 
     const errorAlert = connectionError ? (
         <Alert variant="destructive">
@@ -809,27 +823,10 @@ function SnipeItForm({
                     />
                     <div className="flex max-w-3xl flex-col gap-4">
                         {errorAlert}
-                        <ItemGroup className="gap-3">
-                            <Step
-                                number={1}
-                                title="Connessione"
-                                state={connectionStep}
-                                summary={
-                                    connectionStep === 'done' &&
-                                    settings.connection ? (
-                                        <>
-                                            <span className="break-all">
-                                                {settings.use_global
-                                                    ? 'Connessione globale'
-                                                    : 'Server dedicato'}{' '}
-                                                ·{' '}
-                                                {settings.connection.server_url}
-                                            </span>
-                                            <br />
-                                            {checkLabel}
-                                        </>
-                                    ) : null
-                                }
+                        <Card className="gap-0 divide-y overflow-hidden py-0">
+                            <SettingRow
+                                icon={Server}
+                                label="Connessione"
                                 action={
                                     connectionStep === 'done' ? (
                                         <Button
@@ -844,50 +841,94 @@ function SnipeItForm({
                                         </Button>
                                     ) : null
                                 }
-                            >
-                                {connectionStep === 'current' ? (
-                                    <form
-                                        className="flex flex-col gap-5 rounded-lg border p-4"
-                                        onSubmit={(event) => {
-                                            event.preventDefault();
-                                            save();
-                                        }}
-                                    >
-                                        {connectionFields}
-                                        <div className="flex flex-wrap gap-3">
-                                            {connectionButtons}
-                                            {settings.connection ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    disabled={busy}
-                                                    onClick={() => {
-                                                        form.reset();
-                                                        clearFeedback();
-                                                        setEditConnection(
-                                                            false,
-                                                        );
-                                                    }}
-                                                >
-                                                    Annulla
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                    </form>
-                                ) : null}
-                            </Step>
-                            <Step
-                                number={2}
-                                title="Azienda Snipe-IT"
-                                state={companyStep}
-                                summary={
-                                    companyStep === 'done'
-                                        ? settings.association
-                                              ?.external_company_name
-                                        : settings.association && !confirmed
-                                          ? `${settings.association.external_company_name} · da riconfermare`
-                                          : null
+                                editor={
+                                    connectionStep === 'current' ? (
+                                        <form
+                                            className="flex flex-col gap-5"
+                                            onSubmit={(event) => {
+                                                event.preventDefault();
+                                                save();
+                                            }}
+                                        >
+                                            {connectionFields}
+                                            <div className="flex flex-wrap gap-3">
+                                                {connectionButtons}
+                                                {settings.connection ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        disabled={busy}
+                                                        onClick={() => {
+                                                            form.reset();
+                                                            clearFeedback();
+                                                            setEditConnection(
+                                                                false,
+                                                            );
+                                                        }}
+                                                    >
+                                                        Annulla
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        </form>
+                                    ) : null
                                 }
+                            >
+                                {settings.connection ? (
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <a
+                                                href={
+                                                    settings.connection
+                                                        .server_url
+                                                }
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex min-w-0 items-center gap-1.5 font-medium break-all text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                                            >
+                                                {settings.connection.server_url.replace(
+                                                    /^https?:\/\//,
+                                                    '',
+                                                )}
+                                                <ExternalLink
+                                                    aria-hidden="true"
+                                                    className="size-3.5 shrink-0 text-muted-foreground"
+                                                />
+                                                <span className="sr-only">
+                                                    (apre Snipe-IT in una
+                                                    nuova scheda)
+                                                </span>
+                                            </a>
+                                            <Badge variant="outline">
+                                                {settings.use_global
+                                                    ? 'Globale'
+                                                    : 'Dedicato'}
+                                            </Badge>
+                                        </div>
+                                        <StatusLine
+                                            tone={
+                                                !lastCheck?.checked_at
+                                                    ? 'muted'
+                                                    : checkOk
+                                                      ? 'ok'
+                                                      : 'error'
+                                            }
+                                        >
+                                            {!lastCheck?.checked_at
+                                                ? 'Mai verificata'
+                                                : `${checkOk ? 'Verificata' : 'Verifica non riuscita'} · ${formatDateTime(lastCheck.checked_at)}`}
+                                        </StatusLine>
+                                    </div>
+                                ) : (
+                                    <span className="text-muted-foreground">
+                                        Non configurata
+                                    </span>
+                                )}
+                            </SettingRow>
+                            <SettingRow
+                                icon={Building2}
+                                label="Azienda Snipe-IT"
+                                locked={companyStep === 'locked'}
                                 action={
                                     companyStep === 'done' ? (
                                         <Button
@@ -900,96 +941,128 @@ function SnipeItForm({
                                         </Button>
                                     ) : null
                                 }
-                            >
-                                {companyStep === 'current' ? (
-                                    <div className="flex flex-col gap-4 rounded-lg border p-4">
-                                        {companyPicker}
-                                        <div className="flex flex-wrap gap-3">
-                                            <Button
-                                                type="button"
-                                                disabled={
-                                                    busy ||
-                                                    !options ||
-                                                    !selected
-                                                }
-                                                onClick={submitAssociation}
-                                            >
-                                                {association.processing ? (
-                                                    <Spinner />
-                                                ) : (
-                                                    <Link2 />
-                                                )}
-                                                Associa
-                                            </Button>
-                                            {!options && !list.processing ? (
+                                editor={
+                                    companyStep === 'current' ? (
+                                        <div className="flex flex-col gap-4">
+                                            {companyPicker}
+                                            <div className="flex flex-wrap gap-3">
                                                 <Button
                                                     type="button"
-                                                    variant="outline"
-                                                    disabled={busy}
-                                                    onClick={() =>
-                                                        void loadCompanies()
+                                                    disabled={
+                                                        busy ||
+                                                        !options ||
+                                                        !selected
                                                     }
+                                                    onClick={submitAssociation}
                                                 >
-                                                    <RefreshCw />
-                                                    Carica aziende
+                                                    {association.processing ? (
+                                                        <Spinner />
+                                                    ) : (
+                                                        <Link2 />
+                                                    )}
+                                                    Associa
                                                 </Button>
-                                            ) : null}
-                                            {confirmed ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    disabled={busy}
-                                                    onClick={() =>
-                                                        setEditCompany(false)
-                                                    }
-                                                >
-                                                    Annulla
-                                                </Button>
-                                            ) : null}
+                                                {!options &&
+                                                !list.processing ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            void loadCompanies()
+                                                        }
+                                                    >
+                                                        <RefreshCw />
+                                                        Carica aziende
+                                                    </Button>
+                                                ) : null}
+                                                {confirmed ? (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            setEditCompany(
+                                                                false,
+                                                            )
+                                                        }
+                                                    >
+                                                        Annulla
+                                                    </Button>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                    </div>
-                                ) : null}
-                            </Step>
-                        </ItemGroup>
-                        {settings.connection && !settings.use_global ? (
-                            <Item variant="outline">
-                                <ItemMedia variant="icon">
-                                    <SlidersHorizontal />
-                                </ItemMedia>
-                                <ItemContent>
-                                    <ItemTitle>Mappatura campi</ItemTitle>
-                                    <ItemDescription>
-                                        Campi Snipe-IT del server dedicato
-                                    </ItemDescription>
-                                </ItemContent>
-                                <ItemActions>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        aria-expanded={showFields}
-                                        onClick={() =>
-                                            setShowFields(!showFields)
-                                        }
-                                    >
-                                        {showFields ? 'Chiudi' : 'Modifica'}
-                                    </Button>
-                                </ItemActions>
-                                {showFields ? (
-                                    <ItemFooter className="block">
-                                        <SnipeItFields
-                                            company={company.id}
-                                            revision={settings.revision}
-                                            globalRevision={
-                                                settings.global_revision
+                                    ) : null
+                                }
+                            >
+                                {settings.association ? (
+                                    <div className="flex flex-col gap-1">
+                                        <span className="font-medium text-foreground">
+                                            {
+                                                settings.association
+                                                    .external_company_name
                                             }
-                                            inherited={false}
-                                            disabled={busy || changed}
-                                            active
-                                        />
-                                    </ItemFooter>
-                                ) : null}
-                            </Item>
-                        ) : null}
+                                        </span>
+                                        {confirmed ? (
+                                            settings.association
+                                                .confirmed_at ? (
+                                                <StatusLine tone="ok">
+                                                    Associata ·{' '}
+                                                    {formatDateTime(
+                                                        settings.association
+                                                            .confirmed_at,
+                                                    )}
+                                                </StatusLine>
+                                            ) : null
+                                        ) : (
+                                            <StatusLine tone="warning">
+                                                Da riconfermare
+                                            </StatusLine>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-muted-foreground">
+                                        Non associata
+                                    </span>
+                                )}
+                            </SettingRow>
+                            {settings.connection && !settings.use_global ? (
+                                <SettingRow
+                                    icon={SlidersHorizontal}
+                                    label="Mappatura campi"
+                                    action={
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            aria-expanded={showFields}
+                                            onClick={() =>
+                                                setShowFields(!showFields)
+                                            }
+                                        >
+                                            {showFields ? 'Chiudi' : 'Modifica'}
+                                        </Button>
+                                    }
+                                    editor={
+                                        showFields ? (
+                                            <SnipeItFields
+                                                company={company.id}
+                                                revision={settings.revision}
+                                                globalRevision={
+                                                    settings.global_revision
+                                                }
+                                                inherited={false}
+                                                disabled={busy || changed}
+                                                active
+                                            />
+                                        ) : null
+                                    }
+                                >
+                                    <span className="text-muted-foreground">
+                                        Server dedicato
+                                    </span>
+                                </SettingRow>
+                            ) : null}
+                        </Card>
                     </div>
                 </IntegrationTabs>
             </div>

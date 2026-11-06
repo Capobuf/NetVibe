@@ -33,8 +33,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index, show } from '@/routes/companies/sites/devices';
-import { show as manufacturerShow } from '@/routes/manufacturers';
-import { edit as editModel } from '@/routes/manufacturers/models';
+import { index as modelIndex } from '@/routes/device-models';
 import type { Company, Site } from '@/types/company';
 import {
     type Device,
@@ -62,7 +61,7 @@ function DeviceList({
     snipePending,
     view,
 }: Props) {
-    const { auth, companyNavigation } = usePage().props;
+    const { companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
     const [type, setType] = useState('all');
     const activeFilters =
@@ -274,23 +273,21 @@ function DeviceList({
                                             {d.name}
                                         </TextLink>
                                     </div>
-                                ) : c === 'manufacturer' &&
-                                  auth.user.is_superadmin ? (
+                                ) : c === 'manufacturer' ? (
                                     <TextLink
-                                        href={manufacturerShow(
-                                            d.manufacturer_id,
-                                        )}
+                                        href={modelIndex({
+                                            query: {
+                                                manufacturer: d.manufacturer_id,
+                                            },
+                                        })}
                                         className="whitespace-nowrap"
                                     >
                                         {d.manufacturer.name}
                                     </TextLink>
-                                ) : c === 'model' &&
-                                  d.model &&
-                                  auth.user.is_superadmin ? (
+                                ) : c === 'model' && d.model ? (
                                     <TextLink
-                                        href={editModel({
-                                            manufacturer: d.manufacturer_id,
-                                            model: d.model.id,
+                                        href={modelIndex({
+                                            query: { model: d.model.id },
                                         })}
                                         className="whitespace-nowrap"
                                     >

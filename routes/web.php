@@ -40,10 +40,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('device-models/{model}/assets/{asset}', [DeviceModelController::class, 'asset'])->name('device-models.assets');
+    Route::get('devices/models', [DeviceModelController::class, 'index'])->name('device-models.index');
     Route::prefix('devices')->middleware('can:administer')->scopeBindings()->group(function () {
         Route::delete('model-types', [ModelTypeController::class, 'bulkDestroy'])->name('model-types.bulk-destroy');
         Route::resource('model-types', ModelTypeController::class)->parameters(['model-types' => 'modelType'])->only(['store', 'update', 'destroy']);
-        Route::get('models', [DeviceModelController::class, 'index'])->name('device-models.index');
         Route::delete('manufacturers', [ManufacturerController::class, 'bulkDestroy'])->name('manufacturers.bulk-destroy');
         Route::resource('manufacturers', ManufacturerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('manufacturers/{manufacturer}/models/{model}/deletion-impact', [DeviceModelController::class, 'deletionImpact'])->name('manufacturers.models.deletion-impact');

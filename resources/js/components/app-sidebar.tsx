@@ -173,16 +173,6 @@ export function AppSidebar() {
                                         isActive:
                                             component === 'devices/index' ||
                                             component === 'devices/show',
-                                        items: auth.user.is_superadmin
-                                            ? [
-                                                  {
-                                                      title: 'Catalogo',
-                                                      href: modelIndex(),
-                                                      icon: BookOpen,
-                                                      isActive: catalogActive,
-                                                  },
-                                              ]
-                                            : [],
                                     },
                                     {
                                         title: 'Rack',
@@ -193,6 +183,12 @@ export function AppSidebar() {
                                         isActive:
                                             !!networkContext &&
                                             component.startsWith('racks/'),
+                                    },
+                                    {
+                                        title: 'Catalogo',
+                                        href: modelIndex(),
+                                        icon: BookOpen,
+                                        isActive: catalogActive,
                                     },
                                 ]}
                             />

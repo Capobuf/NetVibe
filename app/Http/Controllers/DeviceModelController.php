@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ConfirmDeletionRequest;
+use App\Models\Company;
+use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
 use App\Models\ModelType;
 use App\Models\RackItem;
 use App\Support\DeletionImpact;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -27,15 +30,26 @@ class DeviceModelController extends Controller
         $filters = $request->validate([
             'tab' => ['sometimes', 'in:models,manufacturers,types'],
             'manufacturer' => ['nullable', 'integer', 'exists:manufacturers,id'],
+            // A deleted model simply closes the sheet instead of failing the page.
+            'model' => ['nullable', 'integer'],
         ]);
+        $user = $request->user();
+        // The catalog is global; device usage is limited to the companies the user can see.
+        $visible = fn (Builder $devices) => $user->is_superadmin ? $devices
+            : $devices->whereHas('site', fn (Builder $sites) => $sites->whereIn('company_id', Company::query()->accessibleTo($user)->select('id')));
+        $modelId = isset($filters['model']) ? (int) $filters['model'] : null;
 
         return Inertia::render('devices/models', [
-            'tab' => $filters['tab'] ?? 'models',
+            'tab' => $user->is_superadmin ? ($filters['tab'] ?? 'models') : 'models',
             'manufacturerId' => isset($filters['manufacturer']) ? (int) $filters['manufacturer'] : null,
-            'types' => ModelType::query()->withCount('models')->orderBy('name')->get(),
-            'manufacturers' => Manufacturer::query()->withCount(['models', 'devices'])->orderBy('name')->get(),
-            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->withCount('devices')->orderBy('name')->get()
+            'modelId' => $modelId,
+            'types' => ModelType::query()->when($user->is_superadmin, fn ($query) => $query->withCount('models'))->orderBy('name')->get(),
+            'manufacturers' => Manufacturer::query()->when($user->is_superadmin, fn ($query) => $query->withCount(['models', 'devices']))->orderBy('name')->get(),
+            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->withCount(['devices' => $visible])->orderBy('name')->get()
                 ->map(fn ($model) => [...$model->toArray(), 'assetUrls' => $model->assetUrls()]),
+            'modelDevices' => fn () => $modelId === null ? [] : $visible(Device::query()->where('device_model_id', $modelId))
+                ->with('site:id,name,company_id', 'site.company:id,name')->orderBy('name')->get(['id', 'name', 'site_id'])
+                ->map(fn (Device $device) => ['id' => $device->id, 'name' => $device->name, 'site' => $device->site->only('id', 'name'), 'company' => $device->site->company->only('id', 'name')]),
         ]);
     }
 

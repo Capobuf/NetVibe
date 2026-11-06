@@ -81,8 +81,13 @@ export default function HardwareEditor({
         catalogModel?.manufacturer.name.trim().toLowerCase() === 'ubiquiti';
     const currentDocument = useRef(e.doc);
     currentDocument.current = e.doc;
+    // Return to the page that opened the editor; only same-origin paths are accepted.
+    const from = catalogModel
+        ? new URLSearchParams(window.location.search).get('from')
+        : null;
+    const returnTo = from && /^\/(?![/\\])/.test(from) ? from : null;
     const exitRoute = catalogModel
-        ? modelIndex({ query: { tab: 'models' } })
+        ? (returnTo ?? modelIndex({ query: { model: catalogModel.id } }))
         : administration();
     const canvas = useRef<CanvasApi>(null);
     const context = useRef<HTMLDivElement>(null);
@@ -542,7 +547,11 @@ export default function HardwareEditor({
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                         <IconButton
                             label={
-                                catalogModel ? 'Catalogo' : 'Amministrazione'
+                                returnTo
+                                    ? 'Indietro'
+                                    : catalogModel
+                                      ? 'Catalogo'
+                                      : 'Amministrazione'
                             }
                             variant="ghost"
                             asChild

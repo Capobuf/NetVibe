@@ -49,10 +49,7 @@ import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { cn } from '@/lib/utils';
 import { show } from '@/routes/companies/sites/subnets';
 import { index } from '@/routes/companies/sites/search';
-import {
-    index as companiesIndex,
-    show as companyShow,
-} from '@/routes/companies';
+import { show as companyShow } from '@/routes/companies';
 import type { Company, Site } from '@/types/company';
 
 const groupLabels = {
@@ -554,7 +551,6 @@ export default function SearchIndex({
 
 SearchIndex.layout = ({ company, site }: { company: Company; site: Site }) => ({
     breadcrumbs: [
-        { title: 'Aziende', href: companiesIndex() },
         { title: company.name, href: companyShow(company.id) },
         {
             title: 'Ricerca IP',

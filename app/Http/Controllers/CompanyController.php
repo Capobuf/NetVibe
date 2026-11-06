@@ -16,8 +16,21 @@ use Inertia\Response;
 
 class CompanyController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
+        // Outside administration there is no company list: users always work inside a company.
+        if (! $request->routeIs('administration.*')) {
+            $companies = Company::query()->accessibleTo($request->user());
+            $company = (clone $companies)->find($request->session()->get('navigation.company'))
+                ?? $companies->orderBy('name')->orderBy('id')->first();
+            if (! $company) {
+                return Inertia::render('companies/empty');
+            }
+            $sites = $company->sites()->orderBy('id');
+            $site = (clone $sites)->find($request->session()->get('navigation.site')) ?? $sites->firstOrFail();
+
+            return to_route('companies.sites.subnets.index', [$company, $site]);
+        }
         $options = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
             'sort' => ['sometimes', 'in:name,sites_count'],
@@ -106,6 +119,7 @@ class CompanyController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Azienda eliminata.']);
 
-        return to_route('administration.companies.index');
+        // Deleting from the company settings returns to the workspace, which picks the next company.
+        return $request->boolean('workspace') ? to_route('companies.index') : to_route('administration.companies.index');
     }
 }

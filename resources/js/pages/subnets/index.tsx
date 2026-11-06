@@ -46,7 +46,6 @@ import {
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { groupSubnetsByVlan } from '@/lib/subnet-list';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
-import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type { Subnet, Vlan } from '@/types/network';
@@ -603,7 +602,6 @@ function SubnetList({
 
 SubnetIndex.layout = ({ company, site }: Props) => ({
     breadcrumbs: [
-        { title: 'Aziende', href: companiesIndex() },
         {
             title: 'Subnet',
             href: index({ company: company.id, site: site.id }),

@@ -39,7 +39,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/vlans';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
@@ -468,7 +467,6 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
 
 VlanIndex.layout = ({ company, site }: Props) => ({
     breadcrumbs: [
-        { title: 'Aziende', href: companiesIndex() },
         { title: 'VLAN', href: index({ company: company.id, site: site.id }) },
     ],
 });

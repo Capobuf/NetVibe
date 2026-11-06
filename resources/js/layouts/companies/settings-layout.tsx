@@ -1,5 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
 import { MapPin, Users, Plug } from 'lucide-react';
+import CompanyForm from '@/components/companies/company-form';
 import type { PropsWithChildren } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCurrentUrl } from '@/hooks/use-current-url';
@@ -12,7 +13,7 @@ export default function CompanySettingsLayout({
     company,
     children,
 }: PropsWithChildren<{ company: Company }>) {
-    const { auth } = usePage().props;
+    const { auth, companyNavigation } = usePage().props;
     const { isCurrentOrParentUrl } = useCurrentUrl();
     const tab = isCurrentOrParentUrl(integrations(company.id))
         ? 'integrations'
@@ -25,14 +26,27 @@ export default function CompanySettingsLayout({
             className="flex min-w-0 flex-1 flex-col gap-6 pt-4 md:pt-6"
             aria-labelledby="company-settings-heading"
         >
-            <header className="flex flex-col gap-1 px-4 md:px-6">
-                <h1
-                    id="company-settings-heading"
-                    className="text-2xl font-medium tracking-tight"
-                >
-                    Impostazioni azienda
-                </h1>
-                <p className="text-sm text-muted-foreground">{company.name}</p>
+            <header className="flex flex-wrap items-start justify-between gap-4 px-4 md:px-6">
+                <div className="flex min-w-0 flex-col gap-1">
+                    <h1
+                        id="company-settings-heading"
+                        className="text-2xl font-medium tracking-tight"
+                    >
+                        Impostazioni azienda
+                    </h1>
+                    <p className="text-sm break-words text-muted-foreground">
+                        {company.name}
+                    </p>
+                </div>
+                {auth.user.is_superadmin ? (
+                    <CompanyForm
+                        company={{
+                            ...company,
+                            sites: companyNavigation?.sites ?? [],
+                        }}
+                        afterDeletion="workspace"
+                    />
+                ) : null}
             </header>
             <Tabs
                 value={tab}

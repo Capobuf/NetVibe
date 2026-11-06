@@ -51,11 +51,7 @@ export function AppSidebar() {
         component,
     } = usePage();
     const inAdministration = navigationArea === 'administration';
-    // The company list is "Tutte le aziende": the remembered company is not selected there.
-    const settingsCompany =
-        component === 'companies/index'
-            ? null
-            : (companyNavigation?.currentCompanyId ?? null);
+    const settingsCompany = companyNavigation?.currentCompanyId ?? null;
     const catalogActive =
         component === 'devices/models' ||
         (component === 'administration/hardware-editor' &&
@@ -175,20 +171,7 @@ export function AppSidebar() {
                                 ]}
                             />
                         </>
-                    ) : (
-                        // Site-scoped sections need a company and site; only the global catalog applies here.
-                        <NavMain
-                            label="Inventario"
-                            items={[
-                                {
-                                    title: 'Catalogo',
-                                    href: modelIndex(),
-                                    icon: BookOpen,
-                                    isActive: catalogActive,
-                                },
-                            ]}
-                        />
-                    )}
+                    ) : null}
                 </SidebarNavigation>
             </SidebarContent>
 
@@ -214,7 +197,7 @@ export function AppSidebar() {
                             {
                                 title: networkContext
                                     ? 'Torna all’azienda'
-                                    : 'Aziende',
+                                    : 'Esci da Amministrazione',
                                 href: networkContext
                                     ? subnetIndex(networkContext)
                                     : companyIndex(),

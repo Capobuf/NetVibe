@@ -430,7 +430,7 @@ class SnipeItSyncTest extends TestCase
             }
             // The default view lists only assets still to import: the linked one is in its own view.
             $response->assertOk()->assertJsonPath('props.rows.total', 99)
-                ->assertJsonCount($size, 'props.rows.data');
+                ->assertJsonCount(min($size, 99), 'props.rows.data');
             foreach ($response->json('props.rows.data') as $row) {
                 $ids = array_column($row['candidates'], 'id');
                 sort($ids);

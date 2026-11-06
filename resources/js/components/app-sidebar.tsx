@@ -197,25 +197,23 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                {!inAdministration && (
+                {/* Company settings exist only in the context of a selected company. */}
+                {!inAdministration && companyNavigation?.currentCompanyId ? (
                     <NavMain
                         items={[
                             {
                                 title: 'Impostazioni',
-                                href: companyNavigation?.currentCompanyId
-                                    ? companySettings(
-                                          companyNavigation.currentCompanyId,
-                                      )
-                                    : companyIndex(),
+                                href: companySettings(
+                                    companyNavigation.currentCompanyId,
+                                ),
                                 icon: Settings2,
-                                isActive: companyNavigation?.currentCompanyId
-                                    ? undefined
-                                    : false,
                             },
                         ]}
                     />
-                )}
-                <SidebarSeparator />
+                ) : null}
+                {inAdministration || companyNavigation?.currentCompanyId ? (
+                    <SidebarSeparator />
+                ) : null}
                 {inAdministration ? (
                     <NavMain
                         items={[

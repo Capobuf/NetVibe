@@ -437,7 +437,7 @@ class SnipeItSyncTest extends TestCase
                 $this->assertSame($candidateIds, $ids);
                 $this->assertSame($model->id, $row['model_local']['id']);
                 $this->assertFalse($row['model_linked']);
-                $this->assertSame('review', $row['state']);
+                $this->assertSame('pending', $row['state']);
                 $this->assertSame('Possibile dispositivo esistente: verifica la corrispondenza.', $row['problem']);
             }
         }

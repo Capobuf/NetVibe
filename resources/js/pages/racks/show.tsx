@@ -117,7 +117,8 @@ type Draft = Pick<
     removed_cable_ids: number[];
 };
 type Deletion = { index: number } & (
-    { kind: 'item'; item: RackItem } | { kind: 'cable'; cable: Cable }
+    | { kind: 'item'; item: RackItem }
+    | { kind: 'cable'; cable: Cable }
 );
 function draftOf(rack: Rack, cables: Cable[], cablingRevision: number): Draft {
     return {
@@ -178,9 +179,7 @@ function RackEditor({
     const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
     const { data, setData, errors } = form;
     const processing = form.processing;
-    const [editing, setEditing] = useState(
-        initialEditing || !!topologySuggestion,
-    );
+    const [editing, setEditing] = useState(initialEditing || !!topologySuggestion);
     // A cable opened from the search starts selected in the cabling tab.
     const linkedCable = cables.find((cable) => cable.id === linkedCableId);
     const [selectedCableId, setSelectedCableId] = useState<number | null>(

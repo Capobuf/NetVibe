@@ -124,40 +124,28 @@ export function AppSidebar() {
                                 },
                             ]}
                         />
-                    ) : (
+                    ) : networkContext ? (
                         <>
                             <NavMain
                                 label="Rete"
                                 items={[
                                     {
                                         title: 'Topologia',
-                                        href: networkContext
-                                            ? topologyIndex(networkContext)
-                                            : companyIndex(),
+                                        href: topologyIndex(networkContext),
                                         icon: Workflow,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('topology/'),
+                                        isActive: component.startsWith('topology/'),
                                     },
                                     {
                                         title: 'Subnet',
-                                        href: networkContext
-                                            ? subnetIndex(networkContext)
-                                            : companyIndex(),
+                                        href: subnetIndex(networkContext),
                                         icon: Network,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('subnets/'),
+                                        isActive: component.startsWith('subnets/'),
                                     },
                                     {
                                         title: 'VLAN',
-                                        href: networkContext
-                                            ? vlanIndex(networkContext)
-                                            : companyIndex(),
+                                        href: vlanIndex(networkContext),
                                         icon: Layers3,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('vlans/'),
+                                        isActive: component.startsWith('vlans/'),
                                     },
                                 ]}
                             />
@@ -166,9 +154,7 @@ export function AppSidebar() {
                                 items={[
                                     {
                                         title: 'Dispositivi',
-                                        href: networkContext
-                                            ? deviceIndex(networkContext)
-                                            : companyIndex(),
+                                        href: deviceIndex(networkContext),
                                         icon: Monitor,
                                         isActive:
                                             component === 'devices/index' ||
@@ -176,13 +162,9 @@ export function AppSidebar() {
                                     },
                                     {
                                         title: 'Rack',
-                                        href: networkContext
-                                            ? rackIndex(networkContext)
-                                            : companyIndex(),
+                                        href: rackIndex(networkContext),
                                         icon: RackIcon,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('racks/'),
+                                        isActive: component.startsWith('racks/'),
                                     },
                                     {
                                         title: 'Catalogo',
@@ -193,6 +175,19 @@ export function AppSidebar() {
                                 ]}
                             />
                         </>
+                    ) : (
+                        // Site-scoped sections need a company and site; only the global catalog applies here.
+                        <NavMain
+                            label="Inventario"
+                            items={[
+                                {
+                                    title: 'Catalogo',
+                                    href: modelIndex(),
+                                    icon: BookOpen,
+                                    isActive: catalogActive,
+                                },
+                            ]}
+                        />
                     )}
                 </SidebarNavigation>
             </SidebarContent>

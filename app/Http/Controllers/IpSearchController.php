@@ -3,13 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
-use App\Models\Device;
-use App\Models\DeviceModel;
 use App\Models\IpAddress;
 use App\Models\Site;
 use App\Models\Subnet;
 use App\Models\UnifiObservation;
 use App\Models\Vlan;
+use App\Support\CompanySearch;
 use App\Support\DeviceAssignment;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
@@ -30,8 +29,10 @@ class IpSearchController extends Controller
             'direction' => ['sometimes', 'in:asc,desc'],
             'group' => ['sometimes', 'in:none,site'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:2147483647'],
+            'tab' => ['sometimes', 'in:ip,devices,models,racks,cables'],
         ]);
         $search = $options['search'] ?? '';
+        $inventory = new CompanySearch($company, $search);
         $sort = $options['sort'] ?? null;
         $group = $options['group'] ?? 'none';
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
@@ -56,14 +57,19 @@ class IpSearchController extends Controller
         return Inertia::render('search/index', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'results' => $results, 'query' => compact('search', 'sort', 'direction', 'group'),
+            'tab' => $options['tab'] ?? null,
+            // Inventory matches are few per company, so each list is sorted and paged in the browser.
+            ...collect(['devices', 'models', 'racks', 'cables'])->mapWithKeys(fn ($kind) => [
+                $kind => $search === '' ? [] : $inventory->{$kind}()['rows'],
+            ]),
         ]);
     }
 
-    /** Header search: networks as a VLAN → subnet → IP tree, then devices and catalog models. */
+    /** Header search: networks as a VLAN → subnet → IP tree, then inventory and cabling sections. */
     public function suggestions(Request $request, Company $company, Site $site): JsonResponse
     {
         $search = $request->validate(['search' => ['required', 'string', 'max:255']])['search'];
-        $pattern = $this->pattern($search);
+        $pattern = CompanySearch::pattern($search);
         $sites = $company->sites()->pluck('name', 'id');
         $matches = $this->matches($company, $search);
         $ipTotal = (clone $matches)->count();
@@ -101,37 +107,32 @@ class IpSearchController extends Controller
             array_push($network, ...$subnetRows($subnet, 0));
         }
         if ($ipTotal > $ips->count()) {
-            $network[] = $row('all', 'ip', "Mostra tutti gli IP ({$ipTotal})", null, route('companies.sites.search.index', [...$route($site->id), 'search' => $search], false), 0);
+            $network[] = $row('all', 'ip', "Mostra tutti gli IP ({$ipTotal})", null, route('companies.sites.search.index', [...$route($site->id), 'search' => $search, 'tab' => 'ip'], false), 0);
         }
-        $devices = Device::whereIn('site_id', $sites->keys())->with('manufacturer:id,name', 'model:id,name')
-            ->where(fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])
-                ->orWhereRaw("serial_number LIKE ? ESCAPE '!'", [$pattern])->orWhereRaw("asset_tag LIKE ? ESCAPE '!'", [$pattern]))
-            ->orderBy('name')->limit(5)->get()->map(fn (Device $device) => $row('device', $device->id, $device->name,
-                trim("{$device->manufacturer?->name} {$device->model?->name}") ?: null,
-                route('companies.sites.devices.show', [...$route($device->site_id), 'device' => $device->id], false), 0, $device->site_id));
-        $models = DeviceModel::with('manufacturer:id,name', 'modelType:id,name')
-            ->where(fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])
-                ->orWhereHas('manufacturer', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])))
-            ->orderBy('name')->limit(5)->get()->map(fn (DeviceModel $model) => $row('model', $model->id, $model->name,
-                collect([$model->manufacturer?->name, $model->modelType?->name])->filter()->implode(' · ') ?: null,
-                route('device-models.index', ['model' => $model->id], false), 0));
+        $all = fn (string $tab, int $total, int $shown) => $total > $shown
+            ? [$row('all', $tab, "Mostra tutti ({$total})", null, route('companies.sites.search.index', [...$route($site->id), 'search' => $search, 'tab' => $tab], false), 0)] : [];
+        $section = fn (string $label, string $tab, array $result, callable $map) => [
+            'label' => $label, 'rows' => [...$result['rows']->map($map), ...$all($tab, $result['total'], $result['rows']->count())],
+        ];
+        $inventory = new CompanySearch($company, $search);
 
         return response()->json(collect([
             ['label' => 'Rete', 'rows' => $network],
-            ['label' => 'Dispositivi', 'rows' => $devices->all()],
-            ['label' => 'Modelli', 'rows' => $models->all()],
+            $section('Dispositivi', 'devices', $inventory->devices(5), fn ($device) => $row('device', $device['id'], $device['name'],
+                trim("{$device['manufacturer']} {$device['model']}") ?: null, $device['href'], 0, $device['site_id'])),
+            $section('Modelli', 'models', $inventory->models(5), fn ($model) => $row('model', $model['id'], $model['name'],
+                collect([$model['manufacturer'], $model['type']])->filter()->implode(' · ') ?: null, $model['href'], 0)),
+            $section('Rack', 'racks', $inventory->racks(5), fn ($rack) => $row('rack', $rack['id'], $rack['name'],
+                $rack['floor'], $rack['href'], 0, $rack['site_id'])),
+            $section('Cablaggi', 'cables', $inventory->cables(5), fn ($cable) => $row('cable', $cable['id'], $cable['name'] ?: $cable['code'],
+                "{$cable['a']} → {$cable['b']}", $cable['href'], 0, $cable['site_id'])),
         ])->filter(fn ($section) => $section['rows'] !== [])->values());
-    }
-
-    private function pattern(string $search): string
-    {
-        return '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
     }
 
     /** Documented addresses and external UniFi observations of the company that match the search text. */
     private function matches(Company $company, string $search): Builder
     {
-        $pattern = $this->pattern($search);
+        $pattern = CompanySearch::pattern($search);
         $observations = UnifiObservation::query()->join('subnets', fn ($join) => $join
             ->on('subnets.site_id', '=', 'unifi_observations.site_id')
             ->on('subnets.network_address', '<=', 'unifi_observations.address')

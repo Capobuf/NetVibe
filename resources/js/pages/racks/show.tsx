@@ -104,6 +104,7 @@ type Props = {
     editing: boolean;
     topologySuggestion: { a: CableEnd; b: CableEnd } | null;
     topologyNotice: string | null;
+    selectedCable: number | null;
 };
 type Draft = Pick<
     Rack,
@@ -167,6 +168,7 @@ function RackEditor({
     editing: initialEditing,
     topologySuggestion,
     topologyNotice,
+    selectedCable: linkedCableId,
 }: Props) {
     const { companyNavigation } = usePage().props;
     const route = { company: company.id, site: site.id, rack: rack.id };
@@ -178,8 +180,14 @@ function RackEditor({
     const { data, setData, errors } = form;
     const processing = form.processing;
     const [editing, setEditing] = useState(initialEditing || !!topologySuggestion);
-    const [selectedCableId, setSelectedCableId] = useState<number | null>(null);
-    const [focusedBundle, setFocusedBundle] = useState<string | null>(null);
+    // A cable opened from the search starts selected in the cabling tab.
+    const linkedCable = cables.find((cable) => cable.id === linkedCableId);
+    const [selectedCableId, setSelectedCableId] = useState<number | null>(
+        linkedCable?.id ?? null,
+    );
+    const [focusedBundle, setFocusedBundle] = useState<string | null>(
+        linkedCable ? bundleKey(linkedCable) : null,
+    );
     const [cableDraft, setCableDraft] = useState<Cable | null>(null);
     const [selectedPort, setSelectedPort] = useState<CableEnd | null>(null);
     const [disconnecting, setDisconnecting] = useState<Cable | null>(null);
@@ -210,7 +218,7 @@ function RackEditor({
     const [zoom, setZoom] = useState(1);
     const canvas = useRef<RackCanvasApi>(null);
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [tab, setTab] = useState('properties');
+    const [tab, setTab] = useState(linkedCable ? 'cables' : 'properties');
     const [search, setSearch] = useState('');
     const [supportKey, setSupportKey] = useState('');
     const [error, setError] = useState('');

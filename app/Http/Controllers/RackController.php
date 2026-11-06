@@ -32,7 +32,7 @@ class RackController extends Controller
 
     public function show(Request $request, Company $company, Site $site, Rack $rack): Response
     {
-        $request->validate(['edit' => ['sometimes', 'boolean'], 'topology_edge' => ['sometimes', 'string', 'max:255']]);
+        $request->validate(['edit' => ['sometimes', 'boolean'], 'topology_edge' => ['sometimes', 'string', 'max:255'], 'cable' => ['sometimes', 'integer']]);
         $suggestion = null;
         if ($request->filled('topology_edge')) {
             $edge = collect((new Topology)->forSite($site)['edges'])->firstWhere('id', $request->string('topology_edge')->toString());
@@ -49,6 +49,7 @@ class RackController extends Controller
             'topologyNotice' => $request->filled('topology_edge') && ! $suggestion
                 ? 'Il suggerimento non è più disponibile. Verifica le osservazioni e i cablaggi aggiornati.' : null,
             'cablingRevision' => (int) $site->fresh()->cabling_revision,
+            'selectedCable' => $request->integer('cable') ?: null,
             'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
             'devices' => $site->devices()->with([
                 'model', 'manufacturer:id,name', 'rackItem.rack:id,name',

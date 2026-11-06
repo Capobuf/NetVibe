@@ -188,7 +188,7 @@ function SearchBox({
                         </ComboboxInput>
                         <ComboboxContent
                             align="end"
-                            className="w-[max(var(--anchor-width),26rem)]"
+                            className="max-h-[min(36rem,var(--available-height))] w-[max(var(--anchor-width),26rem)]"
                         >
                             <ComboboxEmpty>
                                 {loading ? (
@@ -202,7 +202,7 @@ function SearchBox({
                                     'Nessun risultato'
                                 )}
                             </ComboboxEmpty>
-                            <ComboboxList>
+                            <ComboboxList className="max-h-[min(36rem,var(--available-height))]">
                                 {(group: Group) => (
                                     <ComboboxGroup
                                         key={group.value}

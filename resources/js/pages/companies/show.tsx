@@ -1,7 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, ArrowRight, Building2, MapPin, Search } from 'lucide-react';
+import { ArrowRight, MapPin, Search } from 'lucide-react';
 import { useState } from 'react';
-import CompanyForm from '@/components/companies/company-form';
 import SiteForm from '@/components/companies/site-form';
 import { IconButton } from '@/components/icon-button';
 import { TableColumns } from '@/components/table-columns';
@@ -31,8 +30,6 @@ import {
 } from '@/components/ui/table';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
-import { index } from '@/routes/administration/companies';
-import { index as administration } from '@/routes/administration';
 import { show as companyShow } from '@/routes/companies';
 import { show as siteShow } from '@/routes/companies/sites';
 import { show as settingsShow } from '@/routes/companies/settings';
@@ -41,11 +38,9 @@ import type { Company, Site } from '@/types/company';
 export default function CompanyShow({
     company,
     sites,
-    administration: isAdministration,
 }: {
     company: Company;
     sites: Site[];
-    administration: boolean;
 }) {
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<'name'>>(null);
@@ -67,54 +62,9 @@ export default function CompanyShow({
     return (
         <>
             <Head
-                title={`${isAdministration ? 'Amministrazione' : 'Sedi'} · ${company.name}`}
+                title={`Sedi · ${company.name}`}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
-                {isAdministration ? (
-                    <div className="flex items-center gap-3">
-                        <IconButton label="Torna alle aziende" asChild>
-                            <Link href={index()}>
-                                <ArrowLeft />
-                            </Link>
-                        </IconButton>
-                    </div>
-                ) : null}
-                {isAdministration ? (
-                    <Card>
-                        <CardHeader>
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div className="flex min-w-0 items-center gap-4">
-                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted">
-                                        <Building2 className="size-6 text-muted-foreground" />
-                                    </div>
-                                    <div className="flex min-w-0 flex-col gap-2">
-                                        <CardDescription>
-                                            Azienda
-                                        </CardDescription>
-                                        <CardTitle>
-                                            <h1 className="text-2xl font-medium tracking-tight break-words">
-                                                {company.name}
-                                            </h1>
-                                        </CardTitle>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <CompanyForm
-                                        company={{ ...company, sites }}
-                                    />
-                                    <IconButton
-                                        label="Apri subnet dell’azienda"
-                                        asChild
-                                    >
-                                        <Link href={companyShow(company.id)}>
-                                            <ArrowRight />
-                                        </Link>
-                                    </IconButton>
-                                </div>
-                            </div>
-                        </CardHeader>
-                    </Card>
-                ) : null}
                 {sites.length > 1 ? (
                     <section
                         className="flex flex-col gap-4"
@@ -136,7 +86,6 @@ export default function CompanyShow({
                             <SiteForm
                                 company={company}
                                 sites={sites}
-                                administration={isAdministration}
                             />
                         </header>
                         <Card className="gap-0 overflow-hidden py-0">
@@ -234,9 +183,6 @@ export default function CompanyShow({
                                                             company={company}
                                                             sites={sites}
                                                             site={site}
-                                                            administration={
-                                                                isAdministration
-                                                            }
                                                         />
                                                         <IconButton
                                                             label={
@@ -296,7 +242,6 @@ export default function CompanyShow({
                             <SiteForm
                                 company={company}
                                 sites={sites}
-                                administration={isAdministration}
                             />
                         </CardHeader>
                     </Card>
@@ -306,20 +251,9 @@ export default function CompanyShow({
     );
 }
 
-CompanyShow.layout = ({
-    company,
-    administration: isAdministration,
-}: {
-    company: Company;
-    administration: boolean;
-}) => ({
-    breadcrumbs: isAdministration
-        ? [
-              { title: 'Amministrazione', href: administration() },
-              { title: 'Aziende', href: index() },
-          ]
-        : [
-              { title: company.name, href: companyShow(company.id) },
-              { title: 'Impostazioni', href: settingsShow(company.id) },
-          ],
+CompanyShow.layout = ({ company }: { company: Company }) => ({
+    breadcrumbs: [
+        { title: company.name, href: companyShow(company.id) },
+        { title: 'Impostazioni', href: settingsShow(company.id) },
+    ],
 });

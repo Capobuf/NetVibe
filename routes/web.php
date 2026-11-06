@@ -177,15 +177,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');
         Route::put('email', [SmtpSettingController::class, 'update'])->name('email.update');
         Route::post('email/test', [SmtpSettingController::class, 'sendTest'])->middleware('throttle:smtp-test')->name('email.test');
-        Route::redirect('/', '/administration/companies')->name('index');
+        Route::redirect('/', '/administration/users')->name('index');
         Route::get('ip-statuses/{ipStatus}/deletion-impact', [IpStatusController::class, 'deletionImpact'])->name('ip-statuses.deletion-impact');
         Route::get('companies/{company}/deletion-impact', [CompanyController::class, 'deletionImpact'])->name('companies.deletion-impact');
-        Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])
-            ->scopeBindings()->name('companies.sites.deletion-impact');
         Route::resource('ip-statuses', IpStatusController::class)
             ->parameters(['ip-statuses' => 'ipStatus'])->only(['index', 'store', 'update', 'destroy']);
-        Route::resource('companies', CompanyController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
-        Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy'])->scoped();
+        Route::resource('companies', CompanyController::class)->only(['store', 'update', 'destroy']);
     });
 });
 

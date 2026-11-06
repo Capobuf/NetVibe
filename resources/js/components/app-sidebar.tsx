@@ -14,7 +14,6 @@ import {
     Shield,
     Monitor,
     BookOpen,
-    Building2,
     Tags,
     Mail,
     Plug,
@@ -37,7 +36,6 @@ import {
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
 import { index as administration } from '@/routes/administration';
-import { index as adminCompanies } from '@/routes/administration/companies';
 import { index as adminUsers } from '@/routes/administration/users';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
 import { index as integrations } from '@/routes/administration/integrations';
@@ -92,11 +90,6 @@ export function AppSidebar() {
                         <NavMain
                             label="Amministrazione"
                             items={[
-                                {
-                                    title: 'Aziende',
-                                    href: adminCompanies(),
-                                    icon: Building2,
-                                },
                                 {
                                     title: 'Utenti',
                                     href: adminUsers(),

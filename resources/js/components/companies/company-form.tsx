@@ -31,14 +31,12 @@ export default function CompanyForm({
     open: controlledOpen,
     onOpenChange,
     onCreated,
-    afterDeletion,
 }: {
     company?: Company & { sites: Site[] };
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     // Creation from the workspace stays on the page and lets the caller enter the new company.
     onCreated?: (company: CreatedCompany) => void;
-    afterDeletion?: 'workspace';
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const open = controlledOpen ?? internalOpen;
@@ -158,12 +156,7 @@ export default function CompanyForm({
                 </div>
                 {deleting && company ? (
                     <GuidedDeletion
-                        action={destroy.form(
-                            company.id,
-                            afterDeletion
-                                ? { query: { workspace: 1 } }
-                                : undefined,
-                        )}
+                        action={destroy.form(company.id)}
                         kind="company"
                         previewUrl={deletionImpact.url(company.id)}
                         onCancel={() => {

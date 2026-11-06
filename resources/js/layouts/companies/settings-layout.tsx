@@ -44,7 +44,6 @@ export default function CompanySettingsLayout({
                             ...company,
                             sites: companyNavigation?.sites ?? [],
                         }}
-                        afterDeletion="workspace"
                     />
                 ) : null}
             </header>

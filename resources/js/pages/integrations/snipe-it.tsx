@@ -900,213 +900,217 @@ function SnipeItForm({
                             />
                         </div>
                     ) : (
-                    <div className="flex max-w-3xl flex-col gap-4">
-                        {errorAlert}
-                        <Card className="gap-0 divide-y overflow-hidden py-0">
-                            <SettingRow
-                                icon={Server}
-                                label="Connessione"
-                                action={
-                                    connectionStep === 'done' ? (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() =>
-                                                setEditConnection(true)
-                                            }
-                                        >
-                                            Modifica
-                                        </Button>
-                                    ) : null
-                                }
-                                editor={
-                                    connectionStep === 'current' ? (
-                                        <form
-                                            className="flex flex-col gap-5"
-                                            onSubmit={(event) => {
-                                                event.preventDefault();
-                                                submit();
-                                            }}
-                                        >
-                                            {connectionFields}
-                                            <div className="flex flex-wrap gap-3">
-                                                {connectionButtons}
-                                                {settings.connection ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        disabled={busy}
-                                                        onClick={() => {
-                                                            form.reset();
-                                                            clearFeedback();
-                                                            setEditConnection(
-                                                                false,
-                                                            );
-                                                        }}
-                                                    >
-                                                        Annulla
-                                                    </Button>
-                                                ) : null}
-                                            </div>
-                                        </form>
-                                    ) : null
-                                }
-                            >
-                                {settings.connection ? (
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                            <a
-                                                href={
-                                                    settings.connection
-                                                        .server_url
+                        <div className="flex max-w-3xl flex-col gap-4">
+                            {errorAlert}
+                            <Card className="gap-0 divide-y overflow-hidden py-0">
+                                <SettingRow
+                                    icon={Server}
+                                    label="Connessione"
+                                    action={
+                                        connectionStep === 'done' ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                    setEditConnection(true)
                                                 }
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="inline-flex min-w-0 items-center gap-1.5 font-medium break-all text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                                             >
-                                                {settings.connection.server_url.replace(
-                                                    /^https?:\/\//,
-                                                    '',
-                                                )}
-                                                <ExternalLink
-                                                    aria-hidden="true"
-                                                    className="size-3.5 shrink-0 text-muted-foreground"
-                                                />
-                                                <span className="sr-only">
-                                                    (apre Snipe-IT in una nuova
-                                                    scheda)
-                                                </span>
-                                            </a>
-                                            <Badge variant="outline">
-                                                {settings.use_global
-                                                    ? 'Globale'
-                                                    : 'Dedicato'}
-                                            </Badge>
-                                        </div>
-                                        <StatusLine
-                                            tone={
-                                                !lastCheck?.checked_at
-                                                    ? 'muted'
-                                                    : checkOk
-                                                      ? 'ok'
-                                                      : 'error'
-                                            }
-                                        >
-                                            {!lastCheck?.checked_at
-                                                ? 'Mai verificata'
-                                                : `${checkOk ? 'Verificata' : 'Verifica non riuscita'} · ${formatDateTime(lastCheck.checked_at)}`}
-                                        </StatusLine>
-                                    </div>
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        Non configurata
-                                    </span>
-                                )}
-                            </SettingRow>
-                            <SettingRow
-                                icon={Building2}
-                                label="Azienda Snipe-IT"
-                                locked={companyStep === 'locked'}
-                                action={
-                                    companyStep === 'done' ? (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() => setEditCompany(true)}
-                                        >
-                                            Cambia
-                                        </Button>
-                                    ) : null
-                                }
-                                editor={
-                                    companyStep === 'current' ? (
-                                        <div className="flex flex-col gap-4">
-                                            {companyPicker}
-                                            <div className="flex flex-wrap gap-3">
-                                                <Button
-                                                    type="button"
-                                                    disabled={
-                                                        busy ||
-                                                        !options ||
-                                                        !selected
+                                                Modifica
+                                            </Button>
+                                        ) : null
+                                    }
+                                    editor={
+                                        connectionStep === 'current' ? (
+                                            <form
+                                                className="flex flex-col gap-5"
+                                                onSubmit={(event) => {
+                                                    event.preventDefault();
+                                                    submit();
+                                                }}
+                                            >
+                                                {connectionFields}
+                                                <div className="flex flex-wrap gap-3">
+                                                    {connectionButtons}
+                                                    {settings.connection ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            disabled={busy}
+                                                            onClick={() => {
+                                                                form.reset();
+                                                                clearFeedback();
+                                                                setEditConnection(
+                                                                    false,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Annulla
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
+                                            </form>
+                                        ) : null
+                                    }
+                                >
+                                    {settings.connection ? (
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <a
+                                                    href={
+                                                        settings.connection
+                                                            .server_url
                                                     }
-                                                    onClick={submitAssociation}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex min-w-0 items-center gap-1.5 font-medium break-all text-foreground no-underline transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                                                 >
-                                                    {association.processing ? (
-                                                        <Spinner />
-                                                    ) : (
-                                                        <Link2 />
+                                                    {settings.connection.server_url.replace(
+                                                        /^https?:\/\//,
+                                                        '',
                                                     )}
-                                                    Associa
-                                                </Button>
-                                                {!options &&
-                                                !list.processing ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        disabled={busy}
-                                                        onClick={() =>
-                                                            void loadCompanies()
-                                                        }
-                                                    >
-                                                        <RefreshCw />
-                                                        Carica aziende
-                                                    </Button>
-                                                ) : null}
-                                                {confirmed ? (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        disabled={busy}
-                                                        onClick={() =>
-                                                            setEditCompany(
-                                                                false,
-                                                            )
-                                                        }
-                                                    >
-                                                        Annulla
-                                                    </Button>
-                                                ) : null}
+                                                    <ExternalLink
+                                                        aria-hidden="true"
+                                                        className="size-3.5 shrink-0 text-muted-foreground"
+                                                    />
+                                                    <span className="sr-only">
+                                                        (apre Snipe-IT in una
+                                                        nuova scheda)
+                                                    </span>
+                                                </a>
+                                                <Badge variant="outline">
+                                                    {settings.use_global
+                                                        ? 'Globale'
+                                                        : 'Dedicato'}
+                                                </Badge>
                                             </div>
-                                        </div>
-                                    ) : null
-                                }
-                            >
-                                {settings.association ? (
-                                    <div className="flex flex-col gap-1">
-                                        <span className="font-medium text-foreground">
-                                            {
-                                                settings.association
-                                                    .external_company_name
-                                            }
-                                        </span>
-                                        {confirmed ? (
-                                            settings.association
-                                                .confirmed_at ? (
-                                                <StatusLine tone="ok">
-                                                    Associata ·{' '}
-                                                    {formatDateTime(
-                                                        settings.association
-                                                            .confirmed_at,
-                                                    )}
-                                                </StatusLine>
-                                            ) : null
-                                        ) : (
-                                            <StatusLine tone="warning">
-                                                Da riconfermare
+                                            <StatusLine
+                                                tone={
+                                                    !lastCheck?.checked_at
+                                                        ? 'muted'
+                                                        : checkOk
+                                                          ? 'ok'
+                                                          : 'error'
+                                                }
+                                            >
+                                                {!lastCheck?.checked_at
+                                                    ? 'Mai verificata'
+                                                    : `${checkOk ? 'Verificata' : 'Verifica non riuscita'} · ${formatDateTime(lastCheck.checked_at)}`}
                                             </StatusLine>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        Non associata
-                                    </span>
-                                )}
-                            </SettingRow>
-                        </Card>
-                    </div>
+                                        </div>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            Non configurata
+                                        </span>
+                                    )}
+                                </SettingRow>
+                                <SettingRow
+                                    icon={Building2}
+                                    label="Azienda Snipe-IT"
+                                    locked={companyStep === 'locked'}
+                                    action={
+                                        companyStep === 'done' ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                    setEditCompany(true)
+                                                }
+                                            >
+                                                Cambia
+                                            </Button>
+                                        ) : null
+                                    }
+                                    editor={
+                                        companyStep === 'current' ? (
+                                            <div className="flex flex-col gap-4">
+                                                {companyPicker}
+                                                <div className="flex flex-wrap gap-3">
+                                                    <Button
+                                                        type="button"
+                                                        disabled={
+                                                            busy ||
+                                                            !options ||
+                                                            !selected
+                                                        }
+                                                        onClick={
+                                                            submitAssociation
+                                                        }
+                                                    >
+                                                        {association.processing ? (
+                                                            <Spinner />
+                                                        ) : (
+                                                            <Link2 />
+                                                        )}
+                                                        Associa
+                                                    </Button>
+                                                    {!options &&
+                                                    !list.processing ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                void loadCompanies()
+                                                            }
+                                                        >
+                                                            <RefreshCw />
+                                                            Carica aziende
+                                                        </Button>
+                                                    ) : null}
+                                                    {confirmed ? (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                setEditCompany(
+                                                                    false,
+                                                                )
+                                                            }
+                                                        >
+                                                            Annulla
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        ) : null
+                                    }
+                                >
+                                    {settings.association ? (
+                                        <div className="flex flex-col gap-1">
+                                            <span className="font-medium text-foreground">
+                                                {
+                                                    settings.association
+                                                        .external_company_name
+                                                }
+                                            </span>
+                                            {confirmed ? (
+                                                settings.association
+                                                    .confirmed_at ? (
+                                                    <StatusLine tone="ok">
+                                                        Associata ·{' '}
+                                                        {formatDateTime(
+                                                            settings.association
+                                                                .confirmed_at,
+                                                        )}
+                                                    </StatusLine>
+                                                ) : null
+                                            ) : (
+                                                <StatusLine tone="warning">
+                                                    Da riconfermare
+                                                </StatusLine>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            Non associata
+                                        </span>
+                                    )}
+                                </SettingRow>
+                            </Card>
+                        </div>
                     )}
                 </IntegrationTabs>
             </div>

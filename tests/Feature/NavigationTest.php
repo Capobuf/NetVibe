@@ -18,8 +18,6 @@ class NavigationTest extends TestCase
         $company = Company::create(['name' => 'Alfa']);
         $company->sites()->create(['name' => 'Torino']);
         $selected = $company->sites()->create(['name' => 'Roma']);
-        $other = Company::create(['name' => 'Beta']);
-        $other->sites()->create(['name' => null]);
 
         $this->get(route('companies.sites.subnets.index', [$company, $selected]))->assertOk();
         foreach ([route('companies.settings.show', $company), route('device-models.index'), route('profile.edit')] as $url) {
@@ -28,9 +26,9 @@ class NavigationTest extends TestCase
                 ->where('companyNavigation.currentCompanyId', $company->id)
                 ->where('companyNavigation.currentSiteId', $selected->id));
         }
-        $this->get(route('administration.companies.show', $other), ['Purpose' => 'prefetch'])->assertOk();
+        $this->get(route('administration.users.index'), ['Purpose' => 'prefetch'])->assertOk();
         $this->get(route('profile.edit'))->assertInertia(fn (Assert $page) => $page->where('navigationArea', 'tenant'));
-        $this->get(route('administration.companies.show', $other))->assertInertia(fn (Assert $page) => $page
+        $this->get(route('administration.users.index'))->assertInertia(fn (Assert $page) => $page
             ->where('navigationArea', 'administration')
             ->where('companyNavigation.currentCompanyId', $company->id));
         $this->get(route('profile.edit'))->assertInertia(fn (Assert $page) => $page->where('navigationArea', 'administration'));

@@ -26,11 +26,10 @@ class UserManagementTest extends TestCase
         $user->companies()->attach($company);
         $this->actingAs($user);
 
-        $this->get(route('companies.index'))->assertInertia(fn (Assert $page) => $page
-            ->where('companies.total', 1)->where('companies.data.0.id', $company->id)
-            ->has('companyNavigation.companies', 1)->where('companyNavigation.companies.0.id', $company->id));
+        $this->get(route('companies.index'))->assertRedirect(route('companies.sites.subnets.index', [$company, $site]));
         $this->get(route('companies.sites.subnets.index', [$company, $site]))
-            ->assertInertia(fn (Assert $page) => $page->where('auth.canEditIpam', true));
+            ->assertInertia(fn (Assert $page) => $page->where('auth.canEditIpam', true)
+                ->has('companyNavigation.companies', 1)->where('companyNavigation.companies.0.id', $company->id));
         $this->post(route('companies.sites.subnets.store', [$company, $site]), ['cidr' => '192.168.1.0/24'])->assertSessionHasNoErrors();
         $subnet = $site->subnets()->sole();
         $this->post(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), [

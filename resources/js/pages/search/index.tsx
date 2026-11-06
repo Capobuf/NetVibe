@@ -5,7 +5,7 @@ import {
 } from '@/components/networks/unifi-observation';
 import { DeviceAssociation } from '@/components/devices/device-association';
 import type { DeviceInterface } from '@/types/device';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowRight,
@@ -17,7 +17,13 @@ import {
     Search,
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
+import { DeviceTable } from '@/components/devices/device-table';
 import { IconButton } from '@/components/icon-button';
+import { type TableColumn } from '@/components/table-columns';
+import TextLink from '@/components/text-link';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cableTypes } from '@/lib/rack-cabling';
 import { TableColumns } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -57,6 +63,52 @@ const groupLabels = {
     site: 'Sede',
 };
 
+const tabLabels = {
+    ip: 'IP',
+    devices: 'Dispositivi',
+    models: 'Modelli',
+    racks: 'Rack',
+    cables: 'Cablaggi',
+};
+type Tab = keyof typeof tabLabels;
+type DeviceResult = {
+    id: number;
+    href: string;
+    name: string;
+    manufacturer: string | null;
+    model: string | null;
+    rack: string | null;
+    site: string | null;
+    serial_number: string | null;
+};
+type ModelResult = {
+    id: number;
+    href: string;
+    name: string;
+    manufacturer: string | null;
+    type: string | null;
+    devices_count: number;
+};
+type RackResult = {
+    id: number;
+    href: string;
+    name: string;
+    floor: string | null;
+    site: string | null;
+    devices_count: number;
+};
+type CableResult = {
+    id: number;
+    href: string;
+    code: string;
+    name: string | null;
+    a: string;
+    b: string;
+    type: keyof typeof cableTypes;
+    purpose: string | null;
+    site: string | null;
+};
+
 type Column = 'ip' | 'hostname' | 'mac_address' | 'site' | 'subnet' | 'device';
 type Result = {
     id: number | null;
@@ -78,9 +130,16 @@ export default function SearchIndex({
     site,
     results,
     query,
+    tab,
+    ...inventory
 }: {
     company: Company;
     site: Site;
+    tab: Tab | null;
+    devices: DeviceResult[];
+    models: ModelResult[];
+    racks: RackResult[];
+    cables: CableResult[];
     results: {
         data: Result[];
         total: number;
@@ -119,26 +178,124 @@ export default function SearchIndex({
     }>({ key: viewKey, groups: [] });
     const collapsedGroups =
         collapsedView.key === viewKey ? collapsedView.groups : [];
+    const { companyNavigation } = usePage().props;
+    const multipleSites = (companyNavigation?.sites.length ?? 0) > 1;
+    const counts: Record<Tab, number> = {
+        ip: results.total,
+        devices: inventory.devices.length,
+        models: inventory.models.length,
+        racks: inventory.racks.length,
+        cables: inventory.cables.length,
+    };
+    const tabs = (Object.keys(tabLabels) as Tab[]).filter(
+        (key) => counts[key] > 0,
+    );
+    const total = tabs.reduce((sum, key) => sum + counts[key], 0);
+    const [chosenTab, setChosenTab] = useState(tab);
+    // A new search keeps the chosen tab only while it still has results.
+    const activeTab =
+        chosenTab && tabs.includes(chosenTab) ? chosenTab : tabs[0];
 
     return (
         <>
-            <Head title={`Ricerca IP · ${company.name}`} />
+            <Head title={`Ricerca · ${company.name}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:gap-8">
                 <header className="flex flex-col gap-2">
                     <h1 className="text-2xl font-medium tracking-tight text-balance">
-                        Ricerca IP
+                        Ricerca
                     </h1>
                     {query.search ? (
                         <p
                             role="status"
                             className="text-sm break-words text-muted-foreground tabular-nums"
                         >
-                            {results.total.toLocaleString('it-IT')}{' '}
-                            {results.total === 1 ? 'risultato' : 'risultati'}{' '}
+                            {total.toLocaleString('it-IT')}{' '}
+                            {total === 1 ? 'risultato' : 'risultati'}{' '}
                             per «{query.search}»
                         </p>
                     ) : null}
                 </header>
+                {activeTab ? (
+                    <Tabs
+                        value={activeTab}
+                        onValueChange={(value) => setChosenTab(value as Tab)}
+                        className="gap-4"
+                    >
+                        <TabsList aria-label="Tipo di risultato">
+                            {tabs.map((key) => (
+                                <TabsTrigger key={key} value={key}>
+                                    {tabLabels[key]}
+                                    <Badge
+                                        variant="secondary"
+                                        className="tabular-nums"
+                                    >
+                                        {counts[key].toLocaleString('it-IT')}
+                                    </Badge>
+                                </TabsTrigger>
+                            ))}
+                        </TabsList>
+                        <TabsContent value="devices">
+                            <ResultTable
+                                name="search-devices"
+                                rows={inventory.devices}
+                                columns={[
+                                    { id: 'name', label: 'Nome', visible: true },
+                                    { id: 'manufacturer', label: 'Produttore', visible: true },
+                                    { id: 'model', label: 'Modello', visible: true },
+                                    { id: 'rack', label: 'Rack', visible: true },
+                                    { id: 'site', label: 'Sede', visible: multipleSites },
+                                    { id: 'serial_number', label: 'Numero di serie', visible: true },
+                                ]}
+                                value={(row, column) => row[column]}
+                            />
+                        </TabsContent>
+                        <TabsContent value="models">
+                            <ResultTable
+                                name="search-models"
+                                rows={inventory.models}
+                                columns={[
+                                    { id: 'name', label: 'Modello', visible: true },
+                                    { id: 'manufacturer', label: 'Produttore', visible: true },
+                                    { id: 'type', label: 'Tipo', visible: true },
+                                    { id: 'devices_count', label: 'Dispositivi', visible: true },
+                                ]}
+                                value={(row, column) => row[column]}
+                            />
+                        </TabsContent>
+                        <TabsContent value="racks">
+                            <ResultTable
+                                name="search-racks"
+                                rows={inventory.racks}
+                                columns={[
+                                    { id: 'name', label: 'Nome', visible: true },
+                                    { id: 'floor', label: 'Piano', visible: true },
+                                    { id: 'site', label: 'Sede', visible: multipleSites },
+                                    { id: 'devices_count', label: 'Dispositivi', visible: true },
+                                ]}
+                                value={(row, column) => row[column]}
+                            />
+                        </TabsContent>
+                        <TabsContent value="cables">
+                            <ResultTable
+                                name="search-cables"
+                                rows={inventory.cables}
+                                columns={[
+                                    { id: 'code', label: 'Codice', visible: true },
+                                    { id: 'name', label: 'Nome', visible: true },
+                                    { id: 'a', label: 'Partenza', visible: true },
+                                    { id: 'b', label: 'Destinazione', visible: true },
+                                    { id: 'type', label: 'Tipo', visible: true },
+                                    { id: 'purpose', label: 'Scopo', visible: true },
+                                    { id: 'site', label: 'Sede', visible: multipleSites },
+                                ]}
+                                value={(row, column) =>
+                                    column === 'type'
+                                        ? cableTypes[row.type]
+                                        : row[column]
+                                }
+                            />
+                        </TabsContent>
+                        <TabsContent value="ip">
                 <Card className="gap-0 overflow-hidden py-0">
                     <CardContent className="px-0">
                         <Table
@@ -544,8 +701,60 @@ export default function SearchIndex({
                         </CardFooter>
                     ) : null}
                 </Card>
+                        </TabsContent>
+                    </Tabs>
+                ) : (
+                    <Empty className="border">
+                        <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                                <Search />
+                            </EmptyMedia>
+                            <EmptyTitle>
+                                {query.search
+                                    ? 'Nessun risultato'
+                                    : 'Inserisci un testo nella ricerca in alto'}
+                            </EmptyTitle>
+                        </EmptyHeader>
+                    </Empty>
+                )}
             </div>
         </>
+    );
+}
+
+/** Inventory results: the first column links to the record, as does the whole row. */
+function ResultTable<
+    Row extends { id: number; href: string },
+    Column extends string,
+>({
+    name,
+    rows,
+    columns,
+    value,
+}: {
+    name: string;
+    rows: Row[];
+    columns: TableColumn<Column>[];
+    value: (row: Row, column: Column) => string | number | null;
+}) {
+    return (
+        <DeviceTable
+            name={name}
+            variant="list"
+            searchLabel="Cerca nei risultati"
+            rows={rows}
+            columns={columns}
+            value={value}
+            render={(row, column) =>
+                column === columns[0].id ? (
+                    <TextLink href={row.href}>{value(row, column)}</TextLink>
+                ) : (
+                    (value(row, column) ?? '—')
+                )
+            }
+            onRowClick={(row) => router.visit(row.href)}
+            rowOpensDialog={false}
+        />
     );
 }
 
@@ -553,7 +762,7 @@ SearchIndex.layout = ({ company, site }: { company: Company; site: Site }) => ({
     breadcrumbs: [
         { title: company.name, href: companyShow(company.id) },
         {
-            title: 'Ricerca IP',
+            title: 'Ricerca',
             href: index({ company: company.id, site: site.id }),
         },
     ],

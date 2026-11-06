@@ -118,6 +118,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('companies/{company}/sites/{site}/vlans/{vlan}/exclusion', [NetworkExclusionController::class, 'vlan'])->name('companies.sites.vlans.exclusion.update');
             Route::get('companies/{company}/sites/{site}/search', [IpSearchController::class, 'index'])
                 ->name('companies.sites.search.index');
+            Route::get('companies/{company}/sites/{site}/search/suggestions', [IpSearchController::class, 'suggestions'])
+                ->name('companies.sites.search.suggestions');
             Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);
             Route::resource('companies.sites.vlans', VlanController::class)->only(['index', 'show']);
         });

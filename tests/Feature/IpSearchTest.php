@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Cable;
 use App\Models\Company;
+use App\Models\Manufacturer;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -81,5 +83,50 @@ class IpSearchTest extends TestCase
         $this->get($show.'?ip_address='.$otherIp->id)->assertInertia(fn (Assert $page) => $page
             ->where('initialIpAddress', null));
         $this->get(route('companies.sites.subnets.show', [$company, $site, $otherSubnet]))->assertNotFound();
+    }
+
+    public function test_suggestions_and_results_list_company_inventory_and_cabling_under_their_network(): void
+    {
+        $vendor = Manufacturer::create(['name' => 'Vendor']);
+        $model = $vendor->models()->create(['name' => 'Edge Switch']);
+        $sites = collect(['Alfa', 'Beta'])->map(function (string $name) use ($vendor, $model) {
+            $site = Company::create(['name' => $name])->sites()->create(['name' => 'Sede']);
+            $vlan = $site->vlans()->create(['tag' => 30, 'name' => 'Server']);
+            $subnet = $site->subnets()->create([...Ipv4Cidr::parse('10.0.30.0/24'), 'vlan_id' => $vlan->id]);
+            $subnet->ipAddresses()->create(['address' => ip2long('10.0.30.5'), 'hostname' => "edge-host-{$name}"]);
+            $devices = collect(['a', 'b'])->map(fn ($end) => $site->devices()->create([
+                'name' => "edge-{$name}-{$end}", 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id,
+            ]));
+            $rack = $site->racks()->create(['name' => "edge-rack-{$name}", 'height_u' => 24, 'numbering' => 'bottom-up']);
+            $rack->items()->create(['key' => str_repeat('d', 32), 'kind' => 'device', 'device_id' => $devices[0]->id, 'position' => 0, 'height' => 1, 'width' => 100, 'x' => 0]);
+            $cable = Cable::create(['site_id' => $site->id, 'type' => 'copper', 'color' => '#2563eb']);
+            $cable->ends()->createMany([
+                ['side' => 'a', 'device_id' => $devices[0]->id, 'connector_id' => str_repeat('a', 32)],
+                ['side' => 'b', 'device_id' => $devices[1]->id, 'connector_id' => str_repeat('a', 32)],
+            ]);
+
+            return compact('site', 'vlan', 'subnet', 'rack', 'cable');
+        });
+        ['site' => $site, 'vlan' => $vlan, 'subnet' => $subnet, 'rack' => $rack, 'cable' => $cable] = $sites[0];
+        $company = $site->company_id;
+        $suggestions = route('companies.sites.search.suggestions', [$company, $site]).'?search=edge';
+        $this->actingAs(User::factory()->create(['is_superadmin' => false]));
+        $this->getJson($suggestions)->assertForbidden();
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+
+        $sections = collect($this->getJson($suggestions)->assertOk()->json())->keyBy('label');
+        $this->assertSame(['Rete', 'Dispositivi', 'Modelli', 'Rack', 'Cablaggi'], $sections->keys()->all());
+        $this->assertSame([['vlan', 0], ['subnet', 1], ['ip', 2]], collect($sections['Rete']['rows'])->map(fn ($row) => [$row['kind'], $row['depth']])->all());
+        $this->assertSame('edge-host-Alfa', $sections['Rete']['rows'][2]['detail']);
+        $this->assertSame(['edge-Alfa-a', 'edge-Alfa-b'], array_column($sections['Dispositivi']['rows'], 'label'));
+        $this->assertSame(['edge-rack-Alfa'], array_column($sections['Rack']['rows'], 'label'));
+        $this->assertSame(route('companies.sites.racks.show', [$company, $site, $rack, 'cable' => $cable->id], false), $sections['Cablaggi']['rows'][0]['href']);
+
+        $this->get(route('companies.sites.search.index', [$company, $site]).'?search=edge&tab=cables')->assertInertia(fn (Assert $page) => $page
+            ->where('tab', 'cables')->where('results.total', 1)->has('devices', 2)->has('models', 1)->where('models.0.devices_count', 2)
+            ->has('racks', 1)->where('racks.0.devices_count', 1)->has('cables', 1)->where('cables.0.a', 'edge-Alfa-a@aaaaaaaa'));
+        $this->get(route('companies.sites.racks.show', [$company, $site, $rack]).'?cable='.$cable->id)
+            ->assertInertia(fn (Assert $page) => $page->where('selectedCable', $cable->id));
+        $this->getJson(route('companies.sites.search.suggestions', [$company, $sites[1]['site']]).'?search=edge')->assertNotFound();
     }
 }

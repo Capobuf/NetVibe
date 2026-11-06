@@ -2,15 +2,18 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\UnifiException;
 use App\Models\Company;
 use App\Models\UnifiConnection;
 use App\Models\UnifiSite;
 use App\Models\User;
+use App\Support\UnifiClient;
 use App\Support\UnifiSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use Mockery;
 use Tests\TestCase;
 
 class UnifiTest extends TestCase
@@ -113,6 +116,30 @@ class UnifiTest extends TestCase
         $this->assertFalse($source->fresh()->available);
         $this->assertDatabaseCount('unifi_sites', 1);
         Http::assertSentCount(5);
+    }
+
+    public function test_an_unreadable_cloud_console_does_not_fail_the_connection_or_its_other_consoles(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $connection = $this->connection();
+        $connection->update(['mode' => 'cloud', 'selected_console_ids' => ['console-a', 'console-b']]);
+        $siteId = (string) Str::uuid();
+        $client = $this->mock(UnifiClient::class);
+        $client->shouldReceive('hosts')->andReturn([['id' => 'console-a', 'name' => 'Readable'], ['id' => 'console-b', 'name' => 'Locked']]);
+        $client->shouldReceive('info')->with(Mockery::any(), 'console-a')->andReturn(['applicationVersion' => '11.0.97']);
+        $client->shouldReceive('info')->with(Mockery::any(), 'console-b')->andThrow(new UnifiException('forbidden'));
+        $client->shouldReceive('sites')->with(Mockery::any(), 'console-a')->andReturn([['id' => $siteId, 'name' => 'Default']]);
+        $client->shouldReceive('devices')->andReturn([]);
+        $client->shouldReceive('networks')->andReturn([]);
+
+        $this->post($this->url('discover', $connection), ['revision' => $connection->revision])
+            ->assertSessionHasNoErrors()->assertRedirect();
+
+        $connection->refresh();
+        $this->assertSame('ok', $connection->check_status);
+        $this->assertSame(['console-a' => null, 'console-b' => 'forbidden'], collect($connection->hosts)->pluck('status', 'id')->all());
+        $site = $connection->unifiSites()->sole();
+        $this->assertSame([$siteId, 'console-a', true], [$site->external_site_id, $site->console_id, $site->available]);
     }
 
     private function connection(): UnifiConnection

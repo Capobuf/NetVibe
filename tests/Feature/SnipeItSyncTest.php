@@ -428,11 +428,10 @@ class SnipeItSyncTest extends TestCase
             } finally {
                 DB::disableQueryLog();
             }
-            $response->assertOk()->assertJsonPath('props.rows.total', 100)
-                ->assertJsonCount($size, 'props.rows.data')
-                ->assertJsonPath('props.rows.data.0.state', 'linked')
-                ->assertJsonPath('props.rows.data.0.candidates', []);
-            foreach (array_slice($response->json('props.rows.data'), 1) as $row) {
+            // The default view lists only assets still to import: the linked one is in its own view.
+            $response->assertOk()->assertJsonPath('props.rows.total', 99)
+                ->assertJsonCount($size, 'props.rows.data');
+            foreach ($response->json('props.rows.data') as $row) {
                 $ids = array_column($row['candidates'], 'id');
                 sort($ids);
                 $this->assertSame($candidateIds, $ids);
@@ -652,11 +651,12 @@ class SnipeItSyncTest extends TestCase
         ])->all())->assertSessionHasNoErrors();
 
         $this->get($this->url('edit'))->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('sync.linked', 2)->where('sync.review', 1)->where('sync.without_ip', 2)->where('sync.excluded', 0));
-        $this->get($this->url('records').'?view=review')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('sync.counts.linked', 2)->where('sync.counts.pending', 1)->where('sync.counts.excluded', 0)
+            ->where('sync.counts.problems_by_view.linked', 1));
+        $this->get($this->url('records').'?view=linked&problem=1')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('rows.total', 1)->where('rows.data.0.snapshot.name', 'Device 2'));
-        $this->get($this->url('records').'?view=no-ip&group=none')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('rows.total', 2)->where('rows.data.0.snapshot.name', 'Device 1')->where('rows.data.1.snapshot.name', 'Device 3'));
+        $this->get($this->url('records'))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('rows.total', 1)->where('rows.data.0.snapshot.name', 'Device 3'));
         $this->get($this->url('records').'?view=linked&q=10.0.0.10&sort=ip&direction=asc')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('rows.total', 1)->where('rows.data.0.snapshot.network.ip', '10.0.0.10'));
     }
@@ -679,7 +679,7 @@ class SnipeItSyncTest extends TestCase
         $this->assertDatabaseCount('device_models', 0);
         $this->assertDatabaseCount('manufacturers', 0);
         $this->get($this->url('edit'))->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('sync.ipam', 1)->where('sync.linked', 0)->where('sync.review', 0));
+            ->where('sync.counts.ipam', 1)->where('sync.counts.linked', 0)->where('sync.counts.pending', 0));
         $this->get(route('companies.sites.subnets.show', [$this->company, $this->site, $subnet, 'search' => 'Device 1']))
             ->assertOk()->assertDontSee('test-key')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.snipe_it.url', $this->connection->server_url.'/hardware/1'));
@@ -746,6 +746,38 @@ class SnipeItSyncTest extends TestCase
         $this->assertSame('AA:BB:CC:DD:EE:FF', $source->fresh()->data['mac']);
         $this->assertSame('AA:BB:CC:DD:EE:02', $asset->ipamData()['mac']);
         $this->assertDatabaseCount('devices', 1);
+    }
+
+    public function test_scheduled_sync_waits_for_the_configured_interval(): void
+    {
+        $this->activate();
+        $sync = SnipeItSync::current($this->company);
+        $this->put(route('administration.integrations.snipe-it.interval'), ['sync_interval' => 45])->assertSessionHasErrors('sync_interval');
+        $this->put(route('administration.integrations.snipe-it.interval'), ['sync_interval' => 120])->assertSessionHasNoErrors();
+
+        $sync->update(['synced_at' => now()->subHour()]);
+        $this->artisan('snipe-it:sync')->assertSuccessful();
+        $this->assertTrue($sync->fresh()->synced_at->lt(now()->subMinutes(50)));
+
+        $sync->update(['synced_at' => now()->subHours(2)]);
+        $this->artisan('snipe-it:sync')->assertSuccessful();
+        $this->assertTrue($sync->fresh()->synced_at->gt(now()->subMinute()));
+    }
+
+    public function test_company_on_the_global_connection_edits_the_shared_field_mapping(): void
+    {
+        $this->server([], fields: [['db_column_name' => '_snipeit_ip_address_wlan_3', 'name' => 'IP Address [wlan]']]);
+        $global = SnipeItSetting::findOrFail('global');
+        $setting = SnipeItSetting::forCompany($this->company);
+        $mapping = ['ip' => 'custom:_snipeit_ip_address_wlan_3', 'mac' => null, 'name' => 'asset_tag', 'description' => 'notes'];
+
+        $this->put($this->url('map-fields'), [
+            'revision' => $setting->revision, 'global_revision' => $global->revision, 'field_mapping' => $mapping,
+        ])->assertSessionHasNoErrors()->assertRedirect($this->url('mapping'));
+
+        $this->assertEquals($mapping, $this->connection->fresh()->mapping());
+        // Open pages of every company on the global connection must reload before overwriting it.
+        $this->assertSame($global->revision + 1, $global->fresh()->revision);
     }
 
     private function activate(): void

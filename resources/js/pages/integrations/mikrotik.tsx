@@ -93,6 +93,11 @@ export default function Mikrotik({ company, gateways, candidates }: Props) {
                         mark={<MikrotikMark className="h-5" />}
                         title="MikroTik"
                         state={state}
+                        details={
+                            state === 'active'
+                                ? 'Sincronizzazione ogni ora'
+                                : undefined
+                        }
                         description={[
                             gateways.length === 1
                                 ? '1 apparato collegato'

@@ -16,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -48,6 +49,7 @@ class SnipeItController extends Controller
                     'confirmed' => $connection && $link->connection_id === $connection->id && $link->confirmed_at !== null,
                 ] : null,
             ],
+            'syncInterval' => $global->sync_interval,
             'affectedCompanies' => $affected,
             'sync' => $sync ? [
                 ...$sync->only('id', 'activated_at', 'synced_at', 'error'),
@@ -97,6 +99,15 @@ class SnipeItController extends Controller
         });
 
         return $this->saved($company, 'Connessione salvata.');
+    }
+
+    public function interval(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['sync_interval' => ['required', 'integer', Rule::in(SnipeItSetting::SYNC_INTERVALS)]]);
+        SnipeItSetting::whereKey('global')->update($data);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Frequenza di sincronizzazione salvata.']);
+
+        return back();
     }
 
     public function destroy(Request $request, ?Company $company = null): RedirectResponse

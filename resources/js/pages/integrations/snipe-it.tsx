@@ -4,6 +4,7 @@ import { Head, Link, router, useForm, useHttp } from '@inertiajs/react';
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import {
     Building2,
+    Clock,
     ExternalLink,
     Link2,
     Server,
@@ -15,8 +16,16 @@ import {
 import { IntegrationTabs } from '@/components/integration-tabs';
 import {
     IntegrationHeader,
+    intervalLabel,
     SectionTabs,
 } from '@/components/integration-header';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import {
     SnipeItCompanyHeader,
@@ -105,6 +114,7 @@ type Sync = {
 type Props = {
     company: Company | null;
     settings: Settings;
+    syncInterval: number;
     affectedCompanies: Company[];
     sync: Sync | null;
 };
@@ -119,6 +129,9 @@ type CompanyList = {
     connection_id: number;
     suggested_id: number | null;
 };
+
+// Mirrors SnipeItSetting::SYNC_INTERVALS (minutes).
+const SYNC_INTERVALS = [15, 30, 60, 120, 360, 720, 1440];
 
 function defaults(settings: Settings) {
     return {
@@ -223,6 +236,7 @@ function StatusLine({
 function SnipeItForm({
     company,
     settings,
+    syncInterval,
     affectedCompanies,
     sync,
     tab,
@@ -737,6 +751,43 @@ function SnipeItForm({
                                     ? `${settings.connection.server_url} · ${checkLabel}`
                                     : 'Connessione globale non configurata'
                             }
+                            actions={
+                                settings.connection ? (
+                                    <Select
+                                        value={String(syncInterval)}
+                                        onValueChange={(value) =>
+                                            router.put(
+                                                globalRoutes.interval(),
+                                                { sync_interval: Number(value) },
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger
+                                            aria-label="Frequenza di sincronizzazione"
+                                            className="min-w-44"
+                                        >
+                                            <Clock aria-hidden="true" />
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent align="end">
+                                            {SYNC_INTERVALS.map((minutes) => (
+                                                <SelectItem
+                                                    key={minutes}
+                                                    value={String(minutes)}
+                                                >
+                                                    {intervalLabel(minutes)
+                                                        .charAt(0)
+                                                        .toUpperCase() +
+                                                        intervalLabel(
+                                                            minutes,
+                                                        ).slice(1)}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : null
+                            }
                         />
                         <SectionTabs
                             label="Snipe-IT"
@@ -806,6 +857,7 @@ function SnipeItForm({
                         company={company.id}
                         state={{
                             connected: !!settings.connection,
+                            interval: syncInterval,
                             association: settings.association
                                 ? {
                                       name: settings.association

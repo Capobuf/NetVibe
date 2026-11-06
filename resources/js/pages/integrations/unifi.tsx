@@ -95,6 +95,11 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                             mark={<UnifiMark className="size-5" />}
                             title="UniFi"
                             state={state}
+                            details={
+                                state === 'active'
+                                    ? 'Sincronizzazione ogni ora'
+                                    : undefined
+                            }
                             description={[
                                 connections.length === 1
                                     ? '1 connessione'

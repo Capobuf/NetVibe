@@ -152,11 +152,13 @@ class SnipeItSyncController extends Controller
     private function integration(Company $company): array
     {
         $setting = SnipeItSetting::forCompany($company);
-        $connection = $setting->use_global ? SnipeItSetting::forCompany(null)->connection : $setting->connection;
+        $global = SnipeItSetting::forCompany(null);
+        $connection = $setting->use_global ? $global->connection : $setting->connection;
         $link = SnipeItCompanyLink::where('company_id', $company->id)->latest('id')->first();
 
         return [
             'connected' => $connection !== null,
+            'interval' => $global->sync_interval,
             'association' => $link ? [
                 'name' => $link->external_company_name,
                 'confirmed' => $connection && $link->connection_id === $connection->id && $link->confirmed_at !== null,

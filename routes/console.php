@@ -16,7 +16,11 @@ Artisan::command('inspire', function () {
 
 Artisan::command('snipe-it:sync', function (SnipeItSync $synchronizer) {
     $failed = false;
-    foreach (App\Models\SnipeItSync::whereNotNull('activated_at')->with('company')->lazyById() as $sync) {
+    // The command runs every 15 minutes; the margin keeps a sync finished a few seconds late from slipping a whole slot.
+    $due = now()->subMinutes(App\Models\SnipeItSetting::forCompany(null)->sync_interval)->addMinutes(5);
+    foreach (App\Models\SnipeItSync::whereNotNull('activated_at')
+        ->where(fn ($query) => $query->whereNull('synced_at')->orWhere('synced_at', '<=', $due))
+        ->with('company')->lazyById() as $sync) {
         if (! $sync->isActive()) {
             continue;
         }
@@ -31,7 +35,7 @@ Artisan::command('snipe-it:sync', function (SnipeItSync $synchronizer) {
     return $failed ? 1 : 0;
 })->purpose('Sincronizza le aziende Snipe-IT attivate');
 
-Schedule::command('snipe-it:sync')->hourly()->withoutOverlapping();
+Schedule::command('snipe-it:sync')->everyFifteenMinutes()->withoutOverlapping();
 
 Artisan::command('mikrotik:sync', function (MikrotikSync $synchronizer) {
     $failed = false;

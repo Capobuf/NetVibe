@@ -12,6 +12,11 @@ import {
     ItemTitle,
 } from '@/components/ui/item';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export type IntegrationState =
@@ -22,16 +27,47 @@ export type IntegrationState =
     | 'error';
 
 const states: Record<IntegrationState, string> = {
-    active: 'Attiva · ogni ora',
+    active: 'Attiva',
     pending: 'Da avviare',
     unconfigured: 'Da configurare',
     suspended: 'Sospesa',
     error: 'Errore',
 };
 
-/** One vocabulary for the state of every integration. */
-export function IntegrationStatus({ state }: { state: IntegrationState }) {
+/** Human label for an automatic sync interval in minutes. */
+export function intervalLabel(minutes: number) {
+    if (minutes === 60) return 'ogni ora';
+    if (minutes === 1440) return 'una volta al giorno';
+    return minutes < 60 ? `ogni ${minutes} minuti` : `ogni ${minutes / 60} ore`;
+}
+
+/** Label/value pairs shown in the status tooltip. */
+export function StatusDetails({
+    items,
+}: {
+    items: [string, ReactNode][];
+}) {
     return (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            {items.map(([label, value]) => (
+                <div key={label} className="contents">
+                    <dt className="opacity-70">{label}</dt>
+                    <dd className="font-medium">{value}</dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
+
+/** One vocabulary for the state of every integration; details open in a tooltip. */
+export function IntegrationStatus({
+    state,
+    details,
+}: {
+    state: IntegrationState;
+    details?: ReactNode;
+}) {
+    const badge = (
         <Badge
             variant={
                 state === 'error'
@@ -55,6 +91,23 @@ export function IntegrationStatus({ state }: { state: IntegrationState }) {
             {states[state]}
         </Badge>
     );
+    if (!details) return badge;
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    className="rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                    {badge}
+                </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="start">
+                {details}
+            </TooltipContent>
+        </Tooltip>
+    );
 }
 
 /** Summary shown at the top of every integration page: brand, state, context and main actions. */
@@ -62,12 +115,14 @@ export function IntegrationHeader({
     mark,
     title,
     state,
+    details,
     description,
     actions,
 }: {
     mark: ReactNode;
     title: string;
     state: IntegrationState;
+    details?: ReactNode;
     description?: ReactNode;
     actions?: ReactNode;
 }) {
@@ -79,7 +134,7 @@ export function IntegrationHeader({
             <ItemContent className="min-w-0">
                 <ItemTitle className="text-base">
                     {title}
-                    <IntegrationStatus state={state} />
+                    <IntegrationStatus state={state} details={details} />
                 </ItemTitle>
                 {description ? (
                     <ItemDescription className="line-clamp-none text-pretty">

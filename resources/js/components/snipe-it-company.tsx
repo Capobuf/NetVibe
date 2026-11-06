@@ -2,7 +2,9 @@ import { useForm } from '@inertiajs/react';
 import { Boxes, RefreshCw, Settings2 } from 'lucide-react';
 import {
     IntegrationHeader,
+    intervalLabel,
     SectionTabs,
+    StatusDetails,
     type IntegrationState,
 } from '@/components/integration-header';
 import { SnipeItMark } from '@/components/snipe-it-mark';
@@ -17,6 +19,7 @@ import {
 
 export type SnipeItCompanyState = {
     connected: boolean;
+    interval: number;
     association: { name: string; confirmed: boolean } | null;
     sync: { synced_at: string | null; error: string | null } | null;
 };
@@ -30,7 +33,7 @@ export function SnipeItCompanyHeader({
     state: SnipeItCompanyState;
 }) {
     const form = useForm<{ sync?: string }>({});
-    const { connected, association, sync } = state;
+    const { connected, interval, association, sync } = state;
     const status: IntegrationState =
         !connected || !association
             ? 'unconfigured'
@@ -48,21 +51,28 @@ export function SnipeItCompanyHeader({
             mark={<SnipeItMark className="size-5" />}
             title="Snipe-IT"
             state={status}
+            details={
+                association ? (
+                    <StatusDetails
+                        items={[
+                            ['Azienda Snipe-IT', association.name],
+                            ['Sincronizzazione', intervalLabel(interval)],
+                            [
+                                'Ultima lettura',
+                                sync?.synced_at
+                                    ? formatDateTime(sync.synced_at)
+                                    : 'mai',
+                            ],
+                        ]}
+                    />
+                ) : undefined
+            }
             description={
                 form.errors.sync || sync?.error ? (
                     <span className="text-destructive">
                         {form.errors.sync ?? sync?.error}
                     </span>
-                ) : association ? (
-                    [
-                        `Azienda Snipe-IT: ${association.name}`,
-                        sync?.synced_at
-                            ? `ultima lettura ${formatDateTime(sync.synced_at)}`
-                            : null,
-                    ]
-                        .filter(Boolean)
-                        .join(' · ')
-                ) : (
+                ) : association ? undefined : (
                     'Nessuna azienda Snipe-IT associata'
                 )
             }

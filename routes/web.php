@@ -162,6 +162,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
             Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
             Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
+            Route::put('interval', [SnipeItController::class, 'interval'])->name('interval');
             Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
             Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
             Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');

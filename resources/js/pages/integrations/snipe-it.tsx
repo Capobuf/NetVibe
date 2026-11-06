@@ -8,6 +8,7 @@ import {
     ExternalLink,
     Link2,
     Server,
+    ShieldCheck,
     RefreshCw,
     SlidersHorizontal,
     Trash2,
@@ -450,20 +451,22 @@ function SnipeItForm({
                     {usesGlobal ? (
                         <Field>
                             <FieldLabel>URL server</FieldLabel>
-                            <p className="text-sm break-all">
-                                {settings.global_connection?.server_url ??
-                                    'Connessione globale non configurata'}
-                            </p>
-                            <Button
-                                asChild
-                                variant="outline"
-                                size="sm"
-                                className="w-fit"
-                            >
-                                <Link href={globalRoutes.edit()}>
-                                    Gestisci connessione globale
-                                </Link>
-                            </Button>
+                            <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background py-1 pr-1 pl-3 text-sm">
+                                <span className="min-w-0 break-all">
+                                    {settings.global_connection?.server_url ??
+                                        'Connessione globale non configurata'}
+                                </span>
+                                <Button
+                                    asChild
+                                    variant="ghost"
+                                    size="sm"
+                                    className="shrink-0"
+                                >
+                                    <Link href={globalRoutes.edit()}>
+                                        Gestisci
+                                    </Link>
+                                </Button>
+                            </div>
                         </Field>
                     ) : (
                         <>
@@ -550,22 +553,32 @@ function SnipeItForm({
         </>
     );
 
+    // One primary action: verify the draft first, then the same button saves it.
+    const verified = changed && result?.status === 'ok';
+
+    function submit() {
+        if (verified) save();
+        else void verify();
+    }
+
     const connectionButtons = (
         <>
-            <SaveButton
-                processing={form.processing}
-                saved={!!settings.connection && !changed}
-                disabled={busy || !changed}
-            />
-            <Button
-                type="button"
-                variant="outline"
-                disabled={busy || (usesGlobal && !selectedConnection)}
-                onClick={() => void verify()}
-            >
-                {test.processing ? <Spinner /> : <RefreshCw />}
-                Verifica connessione
-            </Button>
+            {verified ? (
+                <SaveButton processing={form.processing} disabled={busy} />
+            ) : (
+                <Button
+                    type="submit"
+                    variant={
+                        changed || !settings.connection ? 'default' : 'outline'
+                    }
+                    className="min-w-36"
+                    disabled={busy || (usesGlobal && !selectedConnection)}
+                    aria-busy={test.processing}
+                >
+                    {test.processing ? <Spinner /> : <ShieldCheck />}
+                    {test.processing ? 'Verifica…' : 'Verifica connessione'}
+                </Button>
+            )}
             {settings.own_connection && (!company || !settings.use_global) ? (
                 <Button
                     type="button"
@@ -824,7 +837,7 @@ function SnipeItForm({
                             <form
                                 onSubmit={(event) => {
                                     event.preventDefault();
-                                    save();
+                                    submit();
                                 }}
                             >
                                 <Card>
@@ -902,7 +915,7 @@ function SnipeItForm({
                                             className="flex flex-col gap-5"
                                             onSubmit={(event) => {
                                                 event.preventDefault();
-                                                save();
+                                                submit();
                                             }}
                                         >
                                             {connectionFields}

@@ -63,7 +63,7 @@ class IpSearchController extends Controller
 
         return response()->json([
             'total' => (clone $matches)->count(),
-            'results' => $matches->orderBy('address')->orderBy('subnet_id')->limit(8)->get()->map(fn ($row) => [
+            'results' => $matches->orderBy('address')->orderBy('subnet_id')->limit(6)->get()->map(fn ($row) => [
                 'id' => $row->id, 'ip' => long2ip($row->address), 'hostname' => $row->hostname,
                 'mac_address' => $row->mac_address, 'assignment_label' => $row->assignment_label,
                 'site_id' => $row->site_id, 'site' => $row->site, 'subnet_id' => $row->subnet_id, 'subnet' => $row->subnet,

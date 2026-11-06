@@ -57,10 +57,6 @@ export function GlobalSearch() {
             key={`${component}:${search}`}
             company={company}
             site={site}
-            companyName={
-                companyNavigation.companies.find(({ id }) => id === company)
-                    ?.name ?? ''
-            }
             search={search}
             view={
                 searching
@@ -78,13 +74,11 @@ export function GlobalSearch() {
 function SearchBox({
     company,
     site,
-    companyName,
     search,
     view,
 }: {
     company: number;
     site: number;
-    companyName: string;
     search: string;
     view: Record<string, string> | null;
 }) {
@@ -276,9 +270,11 @@ function SearchBox({
                                                 ) : null}
                                             </div>
                                             <div className="flex max-w-[45%] shrink-0 flex-col text-right text-xs text-muted-foreground">
-                                                <span className="truncate">
-                                                    {option.site ?? companyName}
-                                                </span>
+                                                {option.site ? (
+                                                    <span className="truncate">
+                                                        {option.site}
+                                                    </span>
+                                                ) : null}
                                                 <span className="tabular-nums">
                                                     {option.subnet}
                                                 </span>

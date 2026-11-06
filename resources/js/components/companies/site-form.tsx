@@ -19,12 +19,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
-    deletionImpact as adminDeletionImpact,
-    destroy as adminDestroy,
-    store as adminStore,
-    update as adminUpdate,
-} from '@/routes/administration/companies/sites';
-import {
     deletionImpact,
     destroy,
     store,
@@ -36,21 +30,12 @@ export default function SiteForm({
     company,
     sites,
     site,
-    administration = true,
 }: {
     company: Company;
     sites: Site[];
     site?: Site;
-    administration?: boolean;
 }) {
-    const actions = administration
-        ? {
-              deletionImpact: adminDeletionImpact,
-              destroy: adminDestroy,
-              store: adminStore,
-              update: adminUpdate,
-          }
-        : { deletionImpact, destroy, store, update };
+    const actions = { deletionImpact, destroy, store, update };
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const id = useId();

@@ -16,28 +16,19 @@ use Inertia\Response;
 
 class CompanyController extends Controller
 {
-    public function index(Request $request): Response
+    /** There is no company list: users always work inside a company. */
+    public function index(Request $request): Response|RedirectResponse
     {
-        $options = $request->validate([
-            'search' => ['nullable', 'string', 'max:255'],
-            'sort' => ['sometimes', 'in:name,sites_count'],
-            'direction' => ['sometimes', 'in:asc,desc'],
-        ]);
-        $search = $options['search'] ?? '';
-        $sort = $options['sort'] ?? 'name';
-        $direction = $options['direction'] ?? 'asc';
+        $companies = Company::query()->accessibleTo($request->user());
+        $company = (clone $companies)->find($request->session()->get('navigation.company'))
+            ?? $companies->orderBy('name')->orderBy('id')->first();
+        if (! $company) {
+            return Inertia::render('companies/empty');
+        }
+        $sites = $company->sites()->orderBy('id');
+        $site = (clone $sites)->find($request->session()->get('navigation.site')) ?? $sites->firstOrFail();
 
-        return Inertia::render('companies/index', [
-            'companies' => Company::query()->accessibleTo($request->user())->select('id', 'name')->withCount('sites')
-                ->with(['sites' => fn ($query) => $query->orderBy('id')->select('id', 'company_id', 'name')])
-                ->when($search !== '', fn ($query) => $query->whereRaw(
-                    "name LIKE ? ESCAPE '!'",
-                    ['%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%'],
-                ))
-                ->orderBy($sort, $direction)->orderBy('id')->paginate(20)->withQueryString(),
-            'query' => compact('search', 'sort', 'direction'),
-            'administration' => $request->routeIs('administration.*'),
-        ]);
+        return to_route('companies.sites.subnets.index', [$company, $site]);
     }
 
     public function store(CompanyRequest $request): RedirectResponse
@@ -58,21 +49,20 @@ class CompanyController extends Controller
             return back();
         }
 
-        return to_route('administration.companies.show', $company);
+        return to_route('companies.show', $company);
     }
 
     public function show(Request $request, Company $company, ?Site $site = null): Response|RedirectResponse
     {
         $sites = $company->sites()->orderBy('id')->get(['id', 'name']);
 
-        if (! $request->routeIs('administration.*', 'companies.settings.*')) {
+        if (! $request->routeIs('companies.settings.*')) {
             return to_route('companies.sites.subnets.index', [$company, $site ?? $sites->firstOrFail()]);
         }
 
         return Inertia::render('companies/show', [
             'company' => $company->only('id', 'name'),
             'sites' => $sites,
-            'administration' => $request->routeIs('administration.*'),
         ]);
     }
 
@@ -106,6 +96,7 @@ class CompanyController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Azienda eliminata.']);
 
-        return to_route('administration.companies.index');
+        // The workspace entry point picks the next company, or shows the empty state.
+        return to_route('companies.index');
     }
 }

@@ -14,7 +14,6 @@ import {
     Shield,
     Monitor,
     BookOpen,
-    Building2,
     Tags,
     Mail,
     Plug,
@@ -37,7 +36,6 @@ import {
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
 import { index as administration } from '@/routes/administration';
-import { index as adminCompanies } from '@/routes/administration/companies';
 import { index as adminUsers } from '@/routes/administration/users';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
 import { index as integrations } from '@/routes/administration/integrations';
@@ -51,19 +49,15 @@ export function AppSidebar() {
         component,
     } = usePage();
     const inAdministration = navigationArea === 'administration';
-    // The company list is "Tutte le aziende": the remembered company is not selected there.
-    const settingsCompany =
-        component === 'companies/index'
-            ? null
-            : (companyNavigation?.currentCompanyId ?? null);
+    const settingsCompany = companyNavigation?.currentCompanyId ?? null;
     const catalogActive =
         component === 'devices/models' ||
         (component === 'administration/hardware-editor' &&
             catalogModel !== undefined);
     const networkContext =
-        companyNavigation?.currentCompanyId && companyNavigation.currentSiteId
+        settingsCompany && companyNavigation?.currentSiteId
             ? {
-                  company: companyNavigation.currentCompanyId,
+                  company: settingsCompany,
                   site: companyNavigation.currentSiteId,
               }
             : null;
@@ -97,11 +91,6 @@ export function AppSidebar() {
                             label="Amministrazione"
                             items={[
                                 {
-                                    title: 'Aziende',
-                                    href: adminCompanies(),
-                                    icon: Building2,
-                                },
-                                {
                                     title: 'Utenti',
                                     href: adminUsers(),
                                     icon: Users,
@@ -124,40 +113,28 @@ export function AppSidebar() {
                                 },
                             ]}
                         />
-                    ) : (
+                    ) : networkContext ? (
                         <>
                             <NavMain
                                 label="Rete"
                                 items={[
                                     {
                                         title: 'Topologia',
-                                        href: networkContext
-                                            ? topologyIndex(networkContext)
-                                            : companyIndex(),
+                                        href: topologyIndex(networkContext),
                                         icon: Workflow,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('topology/'),
+                                        isActive: component.startsWith('topology/'),
                                     },
                                     {
                                         title: 'Subnet',
-                                        href: networkContext
-                                            ? subnetIndex(networkContext)
-                                            : companyIndex(),
+                                        href: subnetIndex(networkContext),
                                         icon: Network,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('subnets/'),
+                                        isActive: component.startsWith('subnets/'),
                                     },
                                     {
                                         title: 'VLAN',
-                                        href: networkContext
-                                            ? vlanIndex(networkContext)
-                                            : companyIndex(),
+                                        href: vlanIndex(networkContext),
                                         icon: Layers3,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('vlans/'),
+                                        isActive: component.startsWith('vlans/'),
                                     },
                                 ]}
                             />
@@ -166,38 +143,28 @@ export function AppSidebar() {
                                 items={[
                                     {
                                         title: 'Dispositivi',
-                                        href: networkContext
-                                            ? deviceIndex(networkContext)
-                                            : companyIndex(),
+                                        href: deviceIndex(networkContext),
                                         icon: Monitor,
                                         isActive:
                                             component === 'devices/index' ||
                                             component === 'devices/show',
-                                        items: auth.user.is_superadmin
-                                            ? [
-                                                  {
-                                                      title: 'Catalogo',
-                                                      href: modelIndex(),
-                                                      icon: BookOpen,
-                                                      isActive: catalogActive,
-                                                  },
-                                              ]
-                                            : [],
                                     },
                                     {
                                         title: 'Rack',
-                                        href: networkContext
-                                            ? rackIndex(networkContext)
-                                            : companyIndex(),
+                                        href: rackIndex(networkContext),
                                         icon: RackIcon,
-                                        isActive:
-                                            !!networkContext &&
-                                            component.startsWith('racks/'),
+                                        isActive: component.startsWith('racks/'),
+                                    },
+                                    {
+                                        title: 'Catalogo',
+                                        href: modelIndex(),
+                                        icon: BookOpen,
+                                        isActive: catalogActive,
                                     },
                                 ]}
                             />
                         </>
-                    )}
+                    ) : null}
                 </SidebarNavigation>
             </SidebarContent>
 
@@ -223,7 +190,7 @@ export function AppSidebar() {
                             {
                                 title: networkContext
                                     ? 'Torna all’azienda'
-                                    : 'Aziende',
+                                    : 'Esci da Amministrazione',
                                 href: networkContext
                                     ? subnetIndex(networkContext)
                                     : companyIndex(),

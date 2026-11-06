@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/popover';
 import { index, show } from '@/routes/companies/sites/devices';
 import { edit as editModel } from '@/routes/manufacturers/models';
+import { index as modelIndex } from '@/routes/device-models';
 import { ReleaseIp } from '@/components/devices/release-ip';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { connectorTypes, type Port } from '@/lib/hardware-editor/document';
@@ -106,7 +107,8 @@ export default function DeviceShow({
     tags,
     initialInterfaceId,
 }: Props) {
-    const { auth, companyNavigation } = usePage().props;
+    const page = usePage();
+    const { auth, companyNavigation } = page.props;
     const [tab, setTab] = useState(initialTab);
     const [releasingIp, setReleasingIp] = useState<{
         id: number;
@@ -278,9 +280,14 @@ export default function DeviceShow({
                                     {device.manufacturer.name}
                                 </span>
                                 {device.model?.name ? (
-                                    <span className="min-w-0 font-medium break-words">
+                                    <TextLink
+                                        href={modelIndex({
+                                            query: { model: device.model.id },
+                                        })}
+                                        className="min-w-0 break-words"
+                                    >
                                         {device.model.name}
-                                    </span>
+                                    </TextLink>
                                 ) : null}
                             </p>
                         </div>
@@ -335,11 +342,14 @@ export default function DeviceShow({
                     <PanelViewer
                         editHref={
                             auth.user.is_superadmin && device.model
-                                ? editModel.url({
-                                      manufacturer:
-                                          device.model.manufacturer_id,
-                                      model: device.model.id,
-                                  })
+                                ? editModel.url(
+                                      {
+                                          manufacturer:
+                                              device.model.manufacturer_id,
+                                          model: device.model.id,
+                                      },
+                                      { query: { from: page.url } },
+                                  )
                                 : undefined
                         }
                         initialPortId={initialPort?.id}

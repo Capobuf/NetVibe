@@ -1,7 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { CompanySwitcher } from '@/components/companies/company-switcher';
-import { SiteSwitcher } from '@/components/companies/site-switcher';
 import { GlobalSearch } from '@/components/global-search';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -22,10 +21,7 @@ export function AppSidebarHeader({
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center xl:ml-auto xl:w-auto">
                 {navigationArea !== 'administration' && <GlobalSearch />}
-                <div className="flex min-w-0 items-center gap-2">
-                    <CompanySwitcher />
-                    {navigationArea !== 'administration' && <SiteSwitcher />}
-                </div>
+                <CompanySwitcher />
             </div>
         </header>
     );

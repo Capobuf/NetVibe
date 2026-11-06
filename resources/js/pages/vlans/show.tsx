@@ -45,7 +45,6 @@ import {
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
 import { cn } from '@/lib/utils';
-import { index as companiesIndex } from '@/routes/companies';
 import { show as subnetShow } from '@/routes/companies/sites/subnets';
 import { index, show } from '@/routes/companies/sites/vlans';
 import type { Company, Site } from '@/types/company';
@@ -313,7 +312,6 @@ export default function VlanShow({
 
 VlanShow.layout = ({ company, site, vlan }: Props) => ({
     breadcrumbs: [
-        { title: 'Aziende', href: companiesIndex() },
         { title: 'VLAN', href: index({ company: company.id, site: site.id }) },
         {
             title: `VLAN ${vlan.tag}`,

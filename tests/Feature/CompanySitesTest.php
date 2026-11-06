@@ -12,11 +12,11 @@ class CompanySitesTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_administration_opens_the_companies_tab(): void
+    public function test_administration_opens_the_users_tab(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
-        $this->get(route('administration.index'))->assertRedirect('/administration/companies');
+        $this->get(route('administration.index'))->assertRedirect('/administration/users');
     }
 
     public function test_inline_company_creation_returns_to_unifi_with_its_local_site_without_linking_it(): void
@@ -38,38 +38,30 @@ class CompanySitesTest extends TestCase
         $this->assertDatabaseCount('unifi_sites', 0);
     }
 
-    public function test_company_search_and_sort_apply_before_pagination(): void
+    public function test_entry_point_opens_the_remembered_accessible_company_or_the_empty_state(): void
     {
-        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
-        for ($i = 0; $i < 21; $i++) {
-            $company = Company::create(['name' => sprintf('Match %02d', $i)]);
-            $company->sites()->create(['name' => null]);
-        }
-        $company->sites()->create(['name' => 'Roma']);
-        $excluded = Company::create(['name' => 'Excluded']);
-        $excluded->sites()->create(['name' => null]);
+        $beta = Company::create(['name' => 'Beta']);
+        $betaSite = $beta->sites()->create(['name' => null]);
+        $alfa = Company::create(['name' => 'Alfa']);
+        $alfaFirst = $alfa->sites()->create(['name' => 'Torino']);
+        $alfaSecond = $alfa->sites()->create(['name' => 'Roma']);
+        $foreign = Company::create(['name' => 'Aaa']);
+        $foreignSite = $foreign->sites()->create(['name' => null]);
+        $user = User::factory()->create(['is_superadmin' => false]);
+        $user->companies()->attach([$alfa->id, $beta->id]);
+        $this->actingAs($user);
 
-        $this->get(route('administration.companies.index', [
-            'search' => 'Match', 'sort' => 'sites_count', 'direction' => 'desc',
-        ]))->assertInertia(fn (Assert $page) => $page
-            ->component('companies/index')
-            ->where('companies.total', 21)
-            ->has('companies.data', 20)
-            ->where('companies.data.0.id', $company->id)
-            ->where('companies.data.0.sites_count', 2)
-            ->where('companies.next_page_url', fn (string $url) => str_contains($url, 'search=Match')
-                && str_contains($url, 'sort=sites_count') && str_contains($url, 'direction=desc'))
-        );
+        $this->get(route('companies.index'))->assertRedirect(route('companies.sites.subnets.index', [$alfa, $alfaFirst]));
+        $this->withSession(['navigation.company' => $beta->id, 'navigation.site' => $alfaSecond->id])
+            ->get(route('companies.index'))->assertRedirect(route('companies.sites.subnets.index', [$beta, $betaSite]));
+        $this->withSession(['navigation.company' => $alfa->id, 'navigation.site' => $alfaSecond->id])
+            ->get(route('companies.index'))->assertRedirect(route('companies.sites.subnets.index', [$alfa, $alfaSecond]));
+        // A remembered company the user cannot access is never opened.
+        $this->withSession(['navigation.company' => $foreign->id, 'navigation.site' => $foreignSite->id])
+            ->get(route('companies.index'))->assertRedirect(route('companies.sites.subnets.index', [$alfa, $alfaFirst]));
 
-        $this->get(route('administration.companies.index', [
-            'search' => 'Match 20',
-        ]))->assertInertia(fn (Assert $page) => $page
-            ->where('companies.total', 1)->where('companies.data.0.id', $company->id)
-        );
-
-        $this->get(route('administration.companies.index', [
-            'search' => 'Match %',
-        ]))->assertInertia(fn (Assert $page) => $page->where('companies.total', 0));
+        $user->companies()->detach();
+        $this->get(route('companies.index'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('companies/empty'));
     }
 
     public function test_adding_a_second_site_preserves_the_original_site_and_company_boundaries(): void
@@ -81,12 +73,12 @@ class CompanySitesTest extends TestCase
         $otherCompany = Company::create(['name' => 'Beta']);
         $otherSite = $otherCompany->sites()->create(['name' => 'Milano']);
 
-        $this->post(route('administration.companies.sites.store', $company), [
+        $this->post(route('companies.sites.store', $company), [
             'name' => 'Roma',
         ])->assertSessionHasErrors('existing_site_name');
         $this->assertDatabaseCount('sites', 2);
 
-        $this->post(route('administration.companies.sites.store', $company), [
+        $this->post(route('companies.sites.store', $company), [
             'existing_site_name' => 'Torino',
             'name' => 'Roma',
         ])->assertRedirect();
@@ -100,7 +92,7 @@ class CompanySitesTest extends TestCase
         $this->assertDatabaseHas('sites', ['company_id' => $company->id, 'name' => 'Roma']);
 
         $this->get(route('companies.sites.show', [$company, $otherSite]))->assertNotFound();
-        $this->patch(route('administration.companies.sites.update', [$company, $otherSite]), [
+        $this->patch(route('companies.sites.update', [$company, $otherSite]), [
             'name' => 'Changed',
         ])->assertNotFound();
         $this->assertDatabaseHas('sites', [
@@ -119,11 +111,10 @@ class CompanySitesTest extends TestCase
         $this->get(route('profile.edit'))->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('settings/profile')->has('companyNavigation.companies', 0));
         $this->get(route('appearance.edit'))->assertOk();
-        $this->get(route('companies.index'))->assertInertia(fn (Assert $page) => $page->where('companies.total', 0));
+        $this->get(route('companies.index'))->assertInertia(fn (Assert $page) => $page->component('companies/empty'));
         $this->get(route('companies.show', $company))->assertForbidden();
         $this->get(route('companies.sites.show', [$company, $site]))->assertForbidden();
         $this->get(route('administration.index'))->assertForbidden();
-        $this->get(route('administration.companies.index'))->assertForbidden();
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,
             'impact_token' => str_repeat('0', 64),
@@ -158,7 +149,7 @@ class CompanySitesTest extends TestCase
         $this->delete(route('administration.companies.destroy', $company), [
             'confirmed' => true,
             'impact_token' => $token,
-        ])->assertRedirect(route('administration.companies.index'));
+        ])->assertRedirect(route('companies.index'));
 
         $this->assertModelMissing($company);
         $this->assertModelMissing($first);
@@ -174,17 +165,17 @@ class CompanySitesTest extends TestCase
         $second = $company->sites()->create(['name' => 'Roma']);
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
 
-        $token = $this->getJson(route('administration.companies.sites.deletion-impact', [$company, $second]))->assertOk()->json('impact_token');
-        $this->delete(route('administration.companies.sites.destroy', [$company, $second]), [
+        $token = $this->getJson(route('companies.sites.deletion-impact', [$company, $second]))->assertOk()->json('impact_token');
+        $this->delete(route('companies.sites.destroy', [$company, $second]), [
             'confirmed' => true,
             'impact_token' => $token,
-        ])->assertRedirect(route('administration.companies.show', $company));
+        ])->assertRedirect(route('companies.settings.show', $company));
 
         $this->assertModelMissing($second);
         $this->assertModelExists($first);
 
-        $token = $this->getJson(route('administration.companies.sites.deletion-impact', [$company, $first]))->assertOk()->json('impact_token');
-        $this->delete(route('administration.companies.sites.destroy', [$company, $first]), [
+        $token = $this->getJson(route('companies.sites.deletion-impact', [$company, $first]))->assertOk()->json('impact_token');
+        $this->delete(route('companies.sites.destroy', [$company, $first]), [
             'confirmed' => true,
             'impact_token' => $token,
         ])->assertSessionHasErrors('confirmed');

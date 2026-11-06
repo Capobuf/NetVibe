@@ -67,7 +67,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { index as companiesIndex } from '@/routes/companies';
 import { index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type {
@@ -767,7 +766,6 @@ export default function SubnetShow({
 
 SubnetShow.layout = ({ company, site, subnet }: Props) => ({
     breadcrumbs: [
-        { title: 'Aziende', href: companiesIndex() },
         {
             title: 'Subnet',
             href: index({ company: company.id, site: site.id }),

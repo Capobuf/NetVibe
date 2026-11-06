@@ -245,7 +245,14 @@ class DevicesTest extends TestCase
         $this->get(route('companies.sites.devices.index', [$beta, $betaSite]))->assertForbidden();
         $this->post(route('manufacturers.store'), ['name' => 'Unauthorized'])->assertForbidden();
         $this->get(route('manufacturers.index'))->assertForbidden();
-        $this->get(route('device-models.index'))->assertForbidden();
+        // The catalog is shared, but device usage only counts the user's companies.
+        $betaSite->devices()->create(['name' => 'Beta switch', 'manufacturer_id' => $manufacturer->id, 'device_model_id' => $model->id]);
+        $this->get(route('device-models.index', ['tab' => 'manufacturers', 'model' => $model->id]))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('devices/models')
+                ->where('tab', 'models')
+                ->where('models.0.devices_count', 1)
+                ->has('modelDevices', 1)->where('modelDevices.0.id', $device->id)
+                ->missing('manufacturers.0.devices_count'));
         $this->postJson(route('manufacturers.store'), ['name' => 'Unauthorized'])->assertForbidden();
         $this->post(route('model-types.store'), ['name' => 'Unauthorized'])->assertForbidden();
         $store = route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]);

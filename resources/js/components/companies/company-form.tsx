@@ -24,14 +24,23 @@ import {
     store,
     update,
 } from '@/routes/administration/companies';
-import type { Company, Site } from '@/types/company';
+import type { Company, CreatedCompany, Site } from '@/types/company';
 
 export default function CompanyForm({
     company,
+    open: controlledOpen,
+    onOpenChange,
+    onCreated,
 }: {
     company?: Company & { sites: Site[] };
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    // Creation from the workspace stays on the page and lets the caller enter the new company.
+    onCreated?: (company: CreatedCompany) => void;
 }) {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = onOpenChange ?? setInternalOpen;
     const [deleting, setDeleting] = useState(false);
     const id = useId();
 
@@ -43,18 +52,20 @@ export default function CompanyForm({
                 if (value) setDeleting(false);
             }}
         >
-            <DialogTrigger asChild>
-                {company ? (
-                    <IconButton label={`Modifica ${company.name}`}>
-                        <Pencil />
-                    </IconButton>
-                ) : (
-                    <Button>
-                        <Plus />
-                        Nuova azienda
-                    </Button>
-                )}
-            </DialogTrigger>
+            {controlledOpen === undefined ? (
+                <DialogTrigger asChild>
+                    {company ? (
+                        <IconButton label={`Modifica ${company.name}`}>
+                            <Pencil />
+                        </IconButton>
+                    ) : (
+                        <Button>
+                            <Plus />
+                            Nuova azienda
+                        </Button>
+                    )}
+                </DialogTrigger>
+            ) : null}
             <DialogContent className="max-h-[90dvh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -77,11 +88,18 @@ export default function CompanyForm({
                     <Form
                         {...(company ? update.form(company.id) : store.form())}
                         onSuccess={() => setOpen(false)}
+                        onFlash={(flash) => {
+                            if (onCreated && flash.createdCompany)
+                                onCreated(flash.createdCompany as CreatedCompany);
+                        }}
                         options={{ preserveScroll: true }}
                         className="flex flex-col gap-6"
                     >
                         {({ processing, errors }) => (
                             <FieldGroup>
+                                {onCreated && !company ? (
+                                    <input type="hidden" name="inline" value="1" />
+                                ) : null}
                                 <Field data-invalid={Boolean(errors.name)}>
                                     <FieldLabel htmlFor={id}>
                                         Nome azienda

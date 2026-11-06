@@ -49,7 +49,7 @@ class GuidedDeletionTest extends TestCase
         $token = $this->getJson($previewUrl)->assertOk()->json('impact_token');
 
         $this->delete($deleteUrl, ['confirmed' => true, 'impact_token' => $token])
-            ->assertRedirect(route('administration.companies.index'))->assertSessionHasNoErrors();
+            ->assertRedirect(route('companies.index'))->assertSessionHasNoErrors();
 
         foreach ([$company, $site, $vlan, $subnet, $ip, $range, $entry, $tag] as $deleted) {
             $this->assertModelMissing($deleted);

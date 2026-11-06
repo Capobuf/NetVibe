@@ -92,10 +92,13 @@ function SearchBox({
         if (term === '') return;
         const controller = new AbortController();
         const timer = setTimeout(() => {
-            fetch(suggestions.url({ company, site }, { query: { search: term } }), {
-                headers: { Accept: 'application/json' },
-                signal: controller.signal,
-            })
+            fetch(
+                suggestions.url({ company, site }, { query: { search: term } }),
+                {
+                    headers: { Accept: 'application/json' },
+                    signal: controller.signal,
+                },
+            )
                 .then(async (response) => {
                     if (!response.ok) throw new Error();
                     const data: Omit<Loaded, 'term'> = await response.json();
@@ -103,7 +106,12 @@ function SearchBox({
                 })
                 .catch(() => {
                     if (!controller.signal.aborted)
-                        setLoaded({ term, results: [], total: 0, failed: true });
+                        setLoaded({
+                            term,
+                            results: [],
+                            total: 0,
+                            failed: true,
+                        });
                 });
         }, 200);
         return () => {
@@ -119,7 +127,9 @@ function SearchBox({
         total > results.length ? [...results, { all: total }] : results;
 
     function showAll() {
-        router.get(index.url({ company, site }, { query: { ...view, search: term } }));
+        router.get(
+            index.url({ company, site }, { query: { ...view, search: term } }),
+        );
     }
 
     return (
@@ -141,7 +151,10 @@ function SearchBox({
                         value={null}
                         inputValue={text}
                         onInputValueChange={(value, { reason }) => {
-                            if (reason === 'input-change' || reason === 'input-clear')
+                            if (
+                                reason === 'input-change' ||
+                                reason === 'input-clear'
+                            )
                                 setText(value);
                         }}
                         open={open && term !== ''}
@@ -179,7 +192,9 @@ function SearchBox({
                             showTrigger={false}
                             aria-invalid={Boolean(errors.search)}
                             aria-describedby={
-                                errors.search ? 'global-search-error' : undefined
+                                errors.search
+                                    ? 'global-search-error'
+                                    : undefined
                             }
                         >
                             <InputGroupAddon align="inline-end">
@@ -189,7 +204,11 @@ function SearchBox({
                                     aria-label="Cerca nelle sedi dell’azienda"
                                     disabled={processing}
                                 >
-                                    {processing || loading ? <Spinner /> : <Search />}
+                                    {processing || loading ? (
+                                        <Spinner />
+                                    ) : (
+                                        <Search />
+                                    )}
                                 </InputGroupButton>
                             </InputGroupAddon>
                         </ComboboxInput>
@@ -220,7 +239,9 @@ function SearchBox({
                                             >
                                                 <ArrowRight />
                                                 Mostra tutti i{' '}
-                                                {option.all.toLocaleString('it-IT')}{' '}
+                                                {option.all.toLocaleString(
+                                                    'it-IT',
+                                                )}{' '}
                                                 risultati
                                             </ComboboxItem>
                                         </div>

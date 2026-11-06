@@ -21,7 +21,15 @@ import { index, suggestions } from '@/routes/companies/sites/search';
 
 type Row = {
     key: string;
-    kind: 'vlan' | 'subnet' | 'ip' | 'all' | 'device' | 'model' | 'rack' | 'cable';
+    kind:
+        | 'vlan'
+        | 'subnet'
+        | 'ip'
+        | 'all'
+        | 'device'
+        | 'model'
+        | 'rack'
+        | 'cable';
     label: string;
     detail: string | null;
     href: string;

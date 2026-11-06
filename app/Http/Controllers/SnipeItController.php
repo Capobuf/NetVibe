@@ -59,6 +59,11 @@ class SnipeItController extends Controller
         ]);
     }
 
+    public function mapping(Company $company): Response
+    {
+        return $this->edit($company)->with('section', 'fields');
+    }
+
     public function update(SnipeItRequest $request, ?Company $company = null): RedirectResponse
     {
         $data = $request->connectionData();
@@ -151,10 +156,7 @@ class SnipeItController extends Controller
             'field_mapping.name' => ['required', 'string', 'max:262'],
             'field_mapping.description' => ['present', 'nullable', 'string', 'max:262'],
         ]);
-        $this->locked($request, $company, function ($setting, $global) use ($data, $company) {
-            if ($company && $setting->use_global) {
-                throw ValidationException::withMessages(['connection' => 'Modifica i campi nella connessione globale.']);
-            }
+        $this->locked($request, $company, function ($setting, $global) use ($data) {
             $connection = $this->activeConnection($setting, $global);
             $available = array_column($this->availableFields($connection), 'value');
             foreach ($data['field_mapping'] as $key => $value) {
@@ -166,11 +168,19 @@ class SnipeItController extends Controller
                 $connection->update(['field_mapping' => $data['field_mapping']]);
                 SnipeItSync::where('connection_id', $connection->id)->increment('revision');
             }
+            // The mapping belongs to the connection: editing the global one from a company invalidates every page using it.
+            if ($setting->use_global && $setting !== $global) {
+                $global->revision++;
+                $global->save();
+            }
             $setting->revision++;
             $setting->save();
         });
 
-        return $this->saved($company, 'Campi salvati. Saranno utilizzati dalla prossima sincronizzazione.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Mappatura salvata. Sarà usata dalla prossima sincronizzazione.']);
+
+        return $company ? to_route('companies.settings.integrations.snipe-it.mapping', $company)
+            : to_route('administration.integrations.snipe-it.edit');
     }
 
     private function availableFields(SnipeItConnection $connection): array

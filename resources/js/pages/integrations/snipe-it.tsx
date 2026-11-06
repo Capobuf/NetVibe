@@ -116,6 +116,7 @@ type Props = {
     company: Company | null;
     settings: Settings;
     syncInterval: number;
+    section?: 'fields';
     affectedCompanies: Company[];
     sync: Sync | null;
 };
@@ -238,6 +239,7 @@ function SnipeItForm({
     company,
     settings,
     syncInterval,
+    section,
     affectedCompanies,
     sync,
     tab,
@@ -275,7 +277,6 @@ function SnipeItForm({
     const [confirm, setConfirm] = useState<'save' | 'remove' | null>(null);
     const [editConnection, setEditConnection] = useState(false);
     const [editCompany, setEditCompany] = useState(false);
-    const [showFields, setShowFields] = useState(false);
     const busy =
         form.processing ||
         test.processing ||
@@ -829,9 +830,7 @@ function SnipeItForm({
                             <SnipeItFields
                                 revision={settings.revision}
                                 globalRevision={settings.global_revision}
-                                inherited={false}
                                 disabled={busy || changed}
-                                active
                             />
                         ) : (
                             <form
@@ -863,6 +862,7 @@ function SnipeItForm({
     }
 
     const counts = sync?.counts;
+    const mapping = section === 'fields' && !!settings.connection;
 
     return (
         <>
@@ -886,9 +886,20 @@ function SnipeItForm({
                     />
                     <SnipeItSections
                         company={company.id}
-                        value="settings"
+                        value={mapping ? 'fields' : 'settings'}
                         pending={counts?.pending}
+                        connected={!!settings.connection}
                     />
+                    {mapping ? (
+                        <div className="max-w-3xl">
+                            <SnipeItFields
+                                company={company.id}
+                                revision={settings.revision}
+                                globalRevision={settings.global_revision}
+                                shared={settings.use_global}
+                            />
+                        </div>
+                    ) : (
                     <div className="flex max-w-3xl flex-col gap-4">
                         {errorAlert}
                         <Card className="gap-0 divide-y overflow-hidden py-0">
@@ -1094,44 +1105,9 @@ function SnipeItForm({
                                     </span>
                                 )}
                             </SettingRow>
-                            {settings.connection && !settings.use_global ? (
-                                <SettingRow
-                                    icon={SlidersHorizontal}
-                                    label="Mappatura campi"
-                                    action={
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            aria-expanded={showFields}
-                                            onClick={() =>
-                                                setShowFields(!showFields)
-                                            }
-                                        >
-                                            {showFields ? 'Chiudi' : 'Modifica'}
-                                        </Button>
-                                    }
-                                    editor={
-                                        showFields ? (
-                                            <SnipeItFields
-                                                company={company.id}
-                                                revision={settings.revision}
-                                                globalRevision={
-                                                    settings.global_revision
-                                                }
-                                                inherited={false}
-                                                disabled={busy || changed}
-                                                active
-                                            />
-                                        ) : null
-                                    }
-                                >
-                                    <span className="text-muted-foreground">
-                                        Server dedicato
-                                    </span>
-                                </SettingRow>
-                            ) : null}
                         </Card>
                     </div>
+                    )}
                 </IntegrationTabs>
             </div>
             {dialog}

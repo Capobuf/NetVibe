@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { Boxes, RefreshCw, Settings2 } from 'lucide-react';
+import { Boxes, RefreshCw, Settings2, SlidersHorizontal } from 'lucide-react';
 import {
     IntegrationHeader,
     intervalLabel,
@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/utils';
 import {
     edit,
+    mapping,
     records,
     sync as refresh,
 } from '@/routes/companies/settings/integrations/snipe-it';
@@ -106,10 +107,12 @@ export function SnipeItSections({
     company,
     value,
     pending,
+    connected,
 }: {
     company: number;
-    value: 'assets' | 'settings';
+    value: 'assets' | 'fields' | 'settings';
     pending?: number;
+    connected: boolean;
 }) {
     return (
         <SectionTabs
@@ -122,6 +125,13 @@ export function SnipeItSections({
                     icon: Boxes,
                     count: pending,
                     href: records(company),
+                },
+                {
+                    value: 'fields',
+                    label: 'Mappatura campi',
+                    icon: SlidersHorizontal,
+                    href: mapping(company),
+                    disabled: !connected,
                 },
                 {
                     value: 'settings',

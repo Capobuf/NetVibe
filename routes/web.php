@@ -95,6 +95,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
                 Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
                 Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+                Route::get('mapping', [SnipeItController::class, 'mapping'])->name('mapping');
                 Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
                 Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');
                 Route::post('companies', [SnipeItController::class, 'companies'])->middleware('throttle:10,1')->name('companies');

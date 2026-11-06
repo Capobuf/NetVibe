@@ -24,7 +24,7 @@ type Suggestion = {
     mac_address: string | null;
     assignment_label: string | null;
     site_id: number;
-    site: string;
+    site: string | null;
     subnet_id: number;
     subnet: string;
 };
@@ -57,6 +57,10 @@ export function GlobalSearch() {
             key={`${component}:${search}`}
             company={company}
             site={site}
+            companyName={
+                companyNavigation.companies.find(({ id }) => id === company)
+                    ?.name ?? ''
+            }
             search={search}
             view={
                 searching
@@ -74,11 +78,13 @@ export function GlobalSearch() {
 function SearchBox({
     company,
     site,
+    companyName,
     search,
     view,
 }: {
     company: number;
     site: number;
+    companyName: string;
     search: string;
     view: Record<string, string> | null;
 }) {
@@ -271,7 +277,7 @@ function SearchBox({
                                             </div>
                                             <div className="flex max-w-[45%] shrink-0 flex-col text-right text-xs text-muted-foreground">
                                                 <span className="truncate">
-                                                    {option.site}
+                                                    {option.site ?? companyName}
                                                 </span>
                                                 <span className="tabular-nums">
                                                     {option.subnet}

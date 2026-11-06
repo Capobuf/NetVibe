@@ -247,7 +247,8 @@ function SearchBox({
 }
 
 function SuggestionItem({ row }: { row: Row }) {
-    const Icon = row.kind in icons ? icons[row.kind as keyof typeof icons] : null;
+    const Icon =
+        row.kind in icons ? icons[row.kind as keyof typeof icons] : null;
 
     return (
         <ComboboxItem

@@ -61,9 +61,9 @@ export function AppSidebar() {
         (component === 'administration/hardware-editor' &&
             catalogModel !== undefined);
     const networkContext =
-        companyNavigation?.currentCompanyId && companyNavigation.currentSiteId
+        settingsCompany && companyNavigation?.currentSiteId
             ? {
-                  company: companyNavigation.currentCompanyId,
+                  company: settingsCompany,
                   site: companyNavigation.currentSiteId,
               }
             : null;

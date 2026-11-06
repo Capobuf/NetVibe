@@ -39,6 +39,17 @@ class UnifiSite extends Model
             'site' => $this->site ? [
                 ...$this->site->only('id', 'name'), 'company' => $this->site->company->only('id', 'name'),
             ] : null,
+            // The same UniFi site can be reachable through another connection that already feeds a NetVibe site.
+            'linked_via' => $this->site_id ? null : static::where('mapped_site_uuid', $this->external_site_id)->whereKeyNot($this->id)
+                ->whereNotNull('site_id')->with('site.company', 'unifiConnection')->first()?->linkedSummary(),
+        ];
+    }
+
+    private function linkedSummary(): array
+    {
+        return [
+            'connection' => $this->unifiConnection->name,
+            'site' => [...$this->site->only('id', 'name'), 'company' => $this->site->company->only('id', 'name')],
         ];
     }
 }

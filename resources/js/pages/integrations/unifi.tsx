@@ -1,16 +1,24 @@
 import { UnifiMark } from '@/components/unifi-mark';
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Cloud, Plus, Search, Server } from 'lucide-react';
+import { Head } from '@inertiajs/react';
+import { Cloud, Plus, Search, Server } from 'lucide-react';
 import { useState } from 'react';
-import { IntegrationTabs } from '@/components/integration-tabs';
-import { TabsContent } from '@/components/ui/tabs';
 import { index as administration } from '@/routes/administration';
+import {
+    IntegrationHeader,
+    type IntegrationState,
+} from '@/components/integration-header';
+import { IntegrationTabs } from '@/components/integration-tabs';
 import { index as unifiIndex } from '@/routes/administration/integrations/unifi';
 import { UnifiConnectionForm } from '@/components/unifi/connection-form';
 import { UnifiConnectionPanel } from '@/components/unifi/connection-panel';
 import type { UnifiCompany, UnifiConnection } from '@/components/unifi/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Empty,
     EmptyHeader,
@@ -38,6 +46,23 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
         connection?: UnifiConnection;
     } | null>(null);
     const [search, setSearch] = useState('');
+    const linkedSites = connections
+        .flatMap((connection) => connection.sites)
+        .filter((site) => site.site !== null).length;
+    const state: IntegrationState = !connections.length
+        ? 'unconfigured'
+        : connections.some(
+                (connection) =>
+                    connection.enabled &&
+                    connection.checked_at &&
+                    connection.check_status !== 'ok',
+            )
+          ? 'error'
+          : connections.every((connection) => !connection.enabled)
+            ? 'suspended'
+            : linkedSites
+              ? 'active'
+              : 'pending';
     const matching = connections.filter(
         (connection) =>
             !search.trim() ||
@@ -59,74 +84,63 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
         <>
             <Head title={`UniFi · ${company?.name ?? 'Integrazioni'}`} />
             <div className="flex max-w-6xl flex-col gap-6 p-4 md:p-6">
-                <header className="flex flex-col items-start gap-3">
-                    {!company ? (
-                        <Button
-                            asChild
-                            variant="ghost"
-                            size="sm"
-                            className="-ml-2"
-                        >
-                            <Link href={integrations()}>
-                                <ArrowLeft data-icon="inline-start" />
-                                Integrazioni
-                            </Link>
-                        </Button>
-                    ) : null}
-                    <h1 className="flex items-center gap-3 text-2xl font-medium tracking-tight">
-                        <UnifiMark className="size-6" />
-                        UniFi
+                {!company ? (
+                    <h1 className="text-2xl font-medium tracking-tight">
+                        Integrazioni
                     </h1>
-                </header>
+                ) : null}
                 <IntegrationTabs value="unifi" company={company}>
-                    <TabsContent
-                        value="unifi"
-                        className="flex min-w-0 flex-col gap-6"
-                    >
-                        {!company ? (
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <Cloud className="size-5" />
-                                            Cloud
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardFooter>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full justify-between"
-                                            onClick={() =>
-                                                setEditor({ mode: 'cloud' })
-                                            }
-                                        >
-                                            Collega Site Manager
-                                            <Plus data-icon="inline-end" />
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            <Server className="size-5" />
-                                            Diretta
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardFooter>
-                                        <Button
-                                            variant="outline"
-                                            className="w-full justify-between"
-                                            onClick={() =>
-                                                setEditor({ mode: 'direct' })
-                                            }
-                                        >
-                                            Collega UniFi Network
-                                            <Plus data-icon="inline-end" />
-                                        </Button>
-                                    </CardFooter>
-                                </Card>
-                            </div>
-                        ) : null}
+                    <div className="flex min-w-0 flex-col gap-6">
+                        <IntegrationHeader
+                            mark={<UnifiMark className="size-5" />}
+                            title="UniFi"
+                            state={state}
+                            details={
+                                state === 'active'
+                                    ? 'Sincronizzazione ogni ora'
+                                    : undefined
+                            }
+                            description={[
+                                connections.length === 1
+                                    ? '1 connessione'
+                                    : `${connections.length} connessioni`,
+                                linkedSites === 1
+                                    ? '1 sito collegato'
+                                    : `${linkedSites} siti collegati`,
+                            ].join(' · ')}
+                            actions={
+                                !company ? (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline">
+                                                <Plus data-icon="inline-start" />
+                                                Aggiungi connessione
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem
+                                                onSelect={() =>
+                                                    setEditor({ mode: 'cloud' })
+                                                }
+                                            >
+                                                <Cloud />
+                                                Site Manager (cloud)
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onSelect={() =>
+                                                    setEditor({
+                                                        mode: 'direct',
+                                                    })
+                                                }
+                                            >
+                                                <Server />
+                                                UniFi Network (diretta)
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                ) : null
+                            }
+                        />
                         {connections.length ? (
                             <>
                                 <InputGroup className="max-w-lg">
@@ -193,7 +207,7 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                                 ) : null}
                             </Empty>
                         ) : null}
-                    </TabsContent>
+                    </div>
                 </IntegrationTabs>
             </div>
             {editor ? (

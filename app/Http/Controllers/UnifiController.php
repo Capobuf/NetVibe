@@ -26,6 +26,9 @@ use Inertia\Response;
 
 class UnifiController extends Controller
 {
+    /** Errors that concern the API key or the transport, not a single console. */
+    private const CONNECTION_ERRORS = ['unauthorized', 'rate_limit', 'tls', 'redirect', 'unsafe_url'];
+
     public function index(Request $request, ?Company $company = null): Response
     {
         $company ? Gate::authorize('access-company', $company) : Gate::authorize('administer');
@@ -99,9 +102,10 @@ class UnifiController extends Controller
         return $this->inspect($request, $unifiConnection, $client, true);
     }
 
-    public function selectConsoles(Request $request, UnifiConnection $unifiConnection): RedirectResponse
+    public function selectConsoles(Request $request, UnifiConnection $unifiConnection, UnifiClient $client): RedirectResponse
     {
         $data = $request->validate(['selected_console_ids' => ['present', 'array'], 'selected_console_ids.*' => ['required', 'string', 'distinct', 'max:255']]);
+        $added = array_diff($data['selected_console_ids'], $unifiConnection->selected_console_ids ?? []);
         $this->locked($request, $unifiConnection, function (UnifiConnection $connection) use ($data) {
             if ($connection->mode !== 'cloud' || $connection->check_status !== 'ok') {
                 throw ValidationException::withMessages(['connection' => 'Verifica la connessione cloud prima di scegliere le console.']);
@@ -112,6 +116,12 @@ class UnifiController extends Controller
             $connection->selected_console_ids = $data['selected_console_ids'];
             $connection->unifiSites()->whereNotIn('console_id', $data['selected_console_ids'])->update(['available' => false]);
         });
+        if ($added) {
+            // A newly included console is useful only with its sites: read them right away.
+            $request->merge(['revision' => $unifiConnection->fresh()->revision]);
+
+            return $this->inspect($request, $unifiConnection->fresh(), $client, true);
+        }
 
         return $this->saved('Console selezionate.');
     }
@@ -184,6 +194,7 @@ class UnifiController extends Controller
             }, false);
             $hosts = null;
             $sources = [];
+            $consoleErrors = [];
             try {
                 if ($connection->mode === 'cloud') {
                     $hosts = $client->hosts($connection);
@@ -202,27 +213,37 @@ class UnifiController extends Controller
                 if ($discover || $connection->mode === 'direct') {
                     foreach ($consoles as $console) {
                         $consoleId = $connection->mode === 'cloud' ? $console['id'] : null;
-                        $info = $client->info($connection, $consoleId);
-                        if (! $discover) {
-                            continue;
-                        }
-                        foreach ($client->sites($connection, $consoleId) as $site) {
-                            $devices = $client->devices($connection, $site['id'], $consoleId);
-                            try {
-                                $networks = $client->networks($connection, $site['id'], $info['applicationVersion'], $consoleId);
-                                $networksStatus = 'ok';
-                            } catch (UnifiException $exception) {
-                                if ($exception->status !== 'unsupported') {
-                                    throw $exception;
-                                }
-                                $networks = null;
-                                $networksStatus = 'unsupported';
+                        $found = [];
+                        try {
+                            $info = $client->info($connection, $consoleId);
+                            if (! $discover) {
+                                continue;
                             }
-                            $sources[] = [
-                                'console_id' => $console['id'], 'console_name' => $console['name'], 'external_site_id' => $site['id'],
-                                'name' => $site['name'], 'version' => $info['applicationVersion'],
-                                'preview' => ['devices' => $devices, 'networks' => $networks, 'networks_status' => $networksStatus],
-                            ];
+                            foreach ($client->sites($connection, $consoleId) as $site) {
+                                $devices = $client->devices($connection, $site['id'], $consoleId);
+                                try {
+                                    $networks = $client->networks($connection, $site['id'], $info['applicationVersion'], $consoleId);
+                                    $networksStatus = 'ok';
+                                } catch (UnifiException $exception) {
+                                    if ($exception->status !== 'unsupported') {
+                                        throw $exception;
+                                    }
+                                    $networks = null;
+                                    $networksStatus = 'unsupported';
+                                }
+                                $found[] = [
+                                    'console_id' => $console['id'], 'console_name' => $console['name'], 'external_site_id' => $site['id'],
+                                    'name' => $site['name'], 'version' => $info['applicationVersion'],
+                                    'preview' => ['devices' => $devices, 'networks' => $networks, 'networks_status' => $networksStatus],
+                                ];
+                            }
+                            $sources = [...$sources, ...$found];
+                        } catch (UnifiException $exception) {
+                            // One unreadable cloud console must not suspend the whole connection and its other consoles.
+                            if ($connection->mode !== 'cloud' || in_array($exception->status, self::CONNECTION_ERRORS, true)) {
+                                throw $exception;
+                            }
+                            $consoleErrors[$console['id']] = $exception->status;
                         }
                     }
                 }
@@ -230,7 +251,7 @@ class UnifiController extends Controller
             } catch (UnifiException $exception) {
                 $status = $exception->status;
             }
-            $this->locked($request, $connection, function (UnifiConnection $current) use ($hosts, $sources, $status, $discover) {
+            $this->locked($request, $connection, function (UnifiConnection $current) use ($hosts, $sources, $status, $discover, $consoleErrors) {
                 $current->fill(['checked_at' => now(), 'check_status' => $status]);
                 if ($status !== 'ok') {
                     $current->unifiSites()->update(['available' => false]);
@@ -238,7 +259,11 @@ class UnifiController extends Controller
                     return;
                 }
                 if ($hosts !== null) {
-                    $current->hosts = $hosts;
+                    // Console read errors are kept per console until the next discovery.
+                    $previous = collect($current->hosts ?? [])->keyBy('id');
+                    $current->hosts = array_map(fn ($host) => [...$host,
+                        'status' => $discover ? ($consoleErrors[$host['id']] ?? null) : ($previous[$host['id']]['status'] ?? null),
+                    ], $hosts);
                     $current->unifiSites()->whereNotIn('console_id', array_column($hosts, 'id'))->update(['available' => false]);
                 }
                 if ($discover) {
@@ -255,7 +280,11 @@ class UnifiController extends Controller
             $lock->release();
         }
 
-        return $this->saved($status === 'ok' && $discover ? 'Discovery completata.' : UnifiException::messageFor($status), $status === 'ok' ? 'success' : 'error');
+        if ($status === 'ok' && $consoleErrors) {
+            return $this->saved('Siti aggiornati. Alcune console non sono accessibili.', 'warning');
+        }
+
+        return $this->saved($status === 'ok' && $discover ? 'Siti aggiornati.' : UnifiException::messageFor($status), $status === 'ok' ? 'success' : 'error');
     }
 
     private function locked(Request $request, UnifiConnection $connection, Closure $action, bool $save = true): mixed

@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['sync_id', 'external_id', 'snipe_it_model_id', 'device_id', 'ip_address_id', 'snapshot', 'state', 'present', 'needs_confirmation', 'problem'])]
 class SnipeItAsset extends Model
 {
-    public const VIEWS = ['devices', 'review', 'linked', 'ipam', 'no-ip', 'sites', 'excluded'];
+    // Views partition the assets: every asset belongs to exactly one of them.
+    public const VIEWS = ['pending', 'linked', 'ipam', 'excluded'];
 
     #[Scope]
     protected function forView(Builder $query, string $view): void
@@ -24,14 +25,17 @@ class SnipeItAsset extends Model
         $query->where('snipe_it_assets.state', '!=', 'excluded')
             ->where(fn ($q) => $q->where('snipe_it_assets.present', true)->orWhereNotNull('snipe_it_assets.device_id')->orWhereNotNull('snipe_it_assets.ip_address_id'));
         match ($view) {
-            'review' => $query->where(fn ($q) => $q->whereNotNull('snipe_it_assets.problem')->orWhere('snipe_it_assets.present', false)
-                ->orWhere(fn ($q) => $q->whereNotNull('snipe_it_assets.device_id')->whereHas('externalModel', fn ($q) => $q->whereNotNull('problem')))),
             'linked' => $query->whereNotNull('snipe_it_assets.device_id'),
             'ipam' => $query->whereNotNull('snipe_it_assets.ip_address_id')->whereNull('snipe_it_assets.device_id'),
-            'no-ip' => $query->where('snipe_it_assets.present', true)->whereNull('snipe_it_assets.snapshot->network->ip'),
-            'sites' => $query->where('snipe_it_assets.state', 'site')->where('snipe_it_assets.present', true),
-            default => null,
+            default => $query->whereNull('snipe_it_assets.ip_address_id')->whereNull('snipe_it_assets.device_id'),
         };
+    }
+
+    #[Scope]
+    protected function withProblem(Builder $query): void
+    {
+        $query->where(fn ($q) => $q->whereNotNull('snipe_it_assets.problem')->orWhere('snipe_it_assets.present', false)
+            ->orWhere(fn ($q) => $q->whereNotNull('snipe_it_assets.device_id')->whereHas('externalModel', fn ($q) => $q->whereNotNull('problem'))));
     }
 
     protected function casts(): array

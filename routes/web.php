@@ -3,6 +3,7 @@
 use App\Http\Controllers\CableLabelController;
 use App\Http\Controllers\CableLabelTemplateController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CompanyIntegrationController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DeviceInterfaceController;
@@ -82,7 +83,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');
+        Route::get('companies/{company}/settings/integrations', [CompanyIntegrationController::class, 'show'])->name('companies.settings.integrations.show');
         Route::get('companies/{company}/settings/integrations/unifi', [UnifiController::class, 'index'])->name('companies.settings.integrations.unifi.index');
+        Route::get('companies/{company}/settings/integrations/mikrotik', [CompanyIntegrationController::class, 'mikrotik'])->name('companies.settings.integrations.mikrotik');
         Route::get('companies/{company}/sites/{site}/deletion-impact', [SiteController::class, 'deletionImpact'])->name('companies.sites.deletion-impact');
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
@@ -92,6 +95,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
                 Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
                 Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
+                Route::get('mapping', [SnipeItController::class, 'mapping'])->name('mapping');
                 Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
                 Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');
                 Route::post('companies', [SnipeItController::class, 'companies'])->middleware('throttle:10,1')->name('companies');
@@ -100,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('options', [SnipeItSyncController::class, 'options'])->name('options');
                 Route::post('sync', [SnipeItSyncController::class, 'refresh'])->middleware('throttle:5,1')->name('sync');
                 Route::post('confirm', [SnipeItSyncController::class, 'confirm'])->name('confirm');
+                Route::post('bulk', [SnipeItSyncController::class, 'bulk'])->name('bulk');
                 Route::post('detach', [SnipeItSyncController::class, 'detach'])->name('detach');
             });
         });
@@ -136,7 +141,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::prefix('administration')->name('administration.')->middleware('can:administer')->group(function () {
-        Route::inertia('integrations', 'integrations/index')->name('integrations.index');
+        Route::redirect('integrations', '/administration/integrations/snipe-it')->name('integrations.index');
+        Route::get('integrations/mikrotik', [CompanyIntegrationController::class, 'mikrotik'])->name('integrations.mikrotik');
         Route::prefix('integrations/unifi')->name('integrations.unifi.')->group(function () {
             Route::get('/', [UnifiController::class, 'index'])->name('index');
             Route::post('/', [UnifiController::class, 'store'])->middleware('throttle:20,1')->name('store');
@@ -149,7 +155,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('{unifiConnection}/inventory/{unifiDevice}/resolve', [UnifiInventoryController::class, 'resolve'])->name('inventory.resolve');
             Route::post('{unifiConnection}/inventory/{unifiDevice}/adopt', [UnifiInventoryController::class, 'adopt'])->name('inventory.adopt');
             Route::post('{unifiConnection}/inventory/{unifiDevice}/port', [UnifiInventoryController::class, 'port'])->name('inventory.port');
-            Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->name('select-consoles');
+            Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->middleware('throttle:5,1')->name('select-consoles');
             Route::put('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'associate'])->name('associate');
             Route::delete('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'revoke'])->name('revoke');
         });
@@ -157,6 +163,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
             Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
             Route::delete('/', [SnipeItController::class, 'destroy'])->name('destroy');
+            Route::put('interval', [SnipeItController::class, 'interval'])->name('interval');
             Route::post('test', [SnipeItController::class, 'test'])->middleware('throttle:10,1')->name('test');
             Route::post('fields', [SnipeItController::class, 'fields'])->middleware('throttle:10,1')->name('fields');
             Route::put('fields', [SnipeItController::class, 'mapFields'])->middleware('throttle:10,1')->name('map-fields');

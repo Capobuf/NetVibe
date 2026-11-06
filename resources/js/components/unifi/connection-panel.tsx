@@ -1,6 +1,7 @@
 import { useForm } from '@inertiajs/react';
 import {
     Cloud,
+    MoreHorizontal,
     Pause,
     Pencil,
     Play,
@@ -13,16 +14,23 @@ import { useState } from 'react';
 import {
     destroy,
     discover,
-    selectConsoles,
     update,
     verify,
 } from '@/actions/App/Http/Controllers/UnifiController';
-import { SaveButton } from '@/components/save-button';
+import {
+    IntegrationStatus,
+    type IntegrationState,
+} from '@/components/integration-header';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Dialog,
     DialogContent,
@@ -32,13 +40,13 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-    FieldLegend,
-    FieldSet,
-} from '@/components/ui/field';
+    Item,
+    ItemActions,
+    ItemContent,
+    ItemDescription,
+    ItemMedia,
+    ItemTitle,
+} from '@/components/ui/item';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/utils';
 import { UnifiSiteList } from './site-list';
@@ -67,13 +75,13 @@ export function UnifiConnectionPanel({
     >(null);
     const [confirm, setConfirm] = useState<'suspend' | 'destroy' | null>(null);
     const savedConsoles = connection.selected_console_ids ?? [];
-    const status = !connection.enabled
-        ? 'Sospesa'
+    const state: IntegrationState = !connection.enabled
+        ? 'suspended'
         : connection.check_status === 'ok'
-          ? 'Verificata'
+          ? 'active'
           : connection.checked_at
-            ? 'Verifica non riuscita'
-            : 'Da verificare';
+            ? 'error'
+            : 'pending';
     const linked = connection.sites.filter((source) => source.site !== null);
 
     function run(action: 'verify' | 'discover' | 'toggle' | 'destroy') {
@@ -113,86 +121,122 @@ export function UnifiConnectionPanel({
             aria-labelledby={`unifi-connection-${connection.id}`}
         >
             <div className="flex flex-col gap-4">
-                <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex min-w-0 flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                            {connection.mode === 'cloud' ? (
-                                <Cloud className="size-5 text-muted-foreground" />
-                            ) : (
-                                <Server className="size-5 text-muted-foreground" />
-                            )}
+                <Item variant="muted">
+                    <ItemMedia variant="icon" className="size-10 bg-background">
+                        {connection.mode === 'cloud' ? <Cloud /> : <Server />}
+                    </ItemMedia>
+                    <ItemContent className="min-w-0">
+                        <ItemTitle className="text-base">
                             <h2
                                 id={`unifi-connection-${connection.id}`}
-                                className="text-lg font-medium break-words"
+                                className="break-words"
                             >
                                 {connection.name}
                             </h2>
-                            <Badge
-                                variant={
-                                    connection.enabled &&
-                                    connection.check_status === 'ok'
-                                        ? 'secondary'
-                                        : 'outline'
-                                }
-                            >
-                                {status}
-                            </Badge>
-                            <Badge variant="outline">
-                                {connection.mode === 'cloud'
-                                    ? 'Cloud'
-                                    : 'Diretta'}
-                            </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                            {connection.checked_at
-                                ? `Ultima verifica: ${formatDateTime(connection.checked_at)}`
-                                : 'Mai verificata'}
-                        </p>
-                        {!readonly && connection.mode === 'direct' ? (
-                            <p className="text-sm break-all text-muted-foreground">
-                                {connection.server_url}
-                            </p>
-                        ) : null}
-                    </div>
+                            <IntegrationStatus state={state} />
+                        </ItemTitle>
+                        <ItemDescription className="line-clamp-none break-all">
+                            {[
+                                connection.mode === 'cloud'
+                                    ? 'Site Manager (cloud)'
+                                    : 'UniFi Network (diretta)',
+                                !readonly && connection.mode === 'direct'
+                                    ? connection.server_url
+                                    : null,
+                                connection.checked_at
+                                    ? `verificata il ${formatDateTime(connection.checked_at)}`
+                                    : 'mai verificata',
+                            ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </ItemDescription>
+                    </ItemContent>
                     {!readonly ? (
-                        <div className="flex flex-wrap gap-2">
+                        <ItemActions className="flex-wrap">
                             <Button
                                 variant="outline"
-                                disabled={form.processing}
-                                onClick={onEdit}
-                            >
-                                <Pencil data-icon="inline-start" />
-                                Modifica
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                disabled={form.processing}
-                                onClick={() =>
-                                    connection.enabled
-                                        ? setConfirm('suspend')
-                                        : run('toggle')
+                                size="sm"
+                                disabled={
+                                    form.processing || !connection.enabled
                                 }
+                                onClick={() => run('verify')}
                             >
-                                {pending === 'toggle' ? (
+                                {pending === 'verify' ? (
                                     <Spinner />
-                                ) : connection.enabled ? (
-                                    <Pause data-icon="inline-start" />
                                 ) : (
-                                    <Play data-icon="inline-start" />
+                                    <ShieldCheck data-icon="inline-start" />
                                 )}
-                                {connection.enabled ? 'Sospendi' : 'Riattiva'}
+                                Verifica
                             </Button>
                             <Button
-                                variant="ghost"
-                                disabled={form.processing}
-                                onClick={() => setConfirm('destroy')}
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    form.processing ||
+                                    !connection.enabled ||
+                                    (connection.mode === 'cloud' &&
+                                        !savedConsoles.length)
+                                }
+                                onClick={() => run('discover')}
                             >
-                                <Trash2 data-icon="inline-start" />
-                                Rimuovi
+                                {pending === 'discover' ? (
+                                    <Spinner />
+                                ) : (
+                                    <RefreshCw data-icon="inline-start" />
+                                )}
+                                Aggiorna siti
                             </Button>
-                        </div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Altre azioni per ${connection.name}`}
+                                        disabled={form.processing}
+                                    >
+                                        {pending === 'toggle' ? (
+                                            <Spinner />
+                                        ) : (
+                                            <MoreHorizontal />
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuGroup>
+                                        <DropdownMenuItem onSelect={onEdit}>
+                                            <Pencil />
+                                            Modifica
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                connection.enabled
+                                                    ? setConfirm('suspend')
+                                                    : run('toggle')
+                                            }
+                                        >
+                                            {connection.enabled ? (
+                                                <Pause />
+                                            ) : (
+                                                <Play />
+                                            )}
+                                            {connection.enabled
+                                                ? 'Sospendi'
+                                                : 'Riattiva'}
+                                        </DropdownMenuItem>
+                                    </DropdownMenuGroup>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onSelect={() => setConfirm('destroy')}
+                                    >
+                                        <Trash2 />
+                                        Rimuovi
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </ItemActions>
                     ) : null}
-                </header>
+                </Item>
                 {connection.check_message &&
                 connection.check_status !== 'ok' ? (
                     <Alert variant="destructive" aria-live="polite">
@@ -209,49 +253,7 @@ export function UnifiConnectionPanel({
                         </AlertDescription>
                     </Alert>
                 ) : null}
-                {!readonly ? (
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={form.processing || !connection.enabled}
-                            onClick={() => run('verify')}
-                        >
-                            {pending === 'verify' ? (
-                                <Spinner />
-                            ) : (
-                                <ShieldCheck data-icon="inline-start" />
-                            )}
-                            Verifica connessione
-                        </Button>
-                        <Button
-                            variant="outline"
-                            disabled={
-                                form.processing ||
-                                !connection.enabled ||
-                                (connection.mode === 'cloud' &&
-                                    !savedConsoles.length)
-                            }
-                            onClick={() => run('discover')}
-                        >
-                            {pending === 'discover' ? (
-                                <Spinner />
-                            ) : (
-                                <RefreshCw data-icon="inline-start" />
-                            )}
-                            Aggiorna siti e anteprima
-                        </Button>
-                    </div>
-                ) : null}
             </div>
-            {!readonly &&
-            connection.mode === 'cloud' &&
-            (connection.hosts?.length ?? 0) > 0 ? (
-                <ConsoleSelection
-                    key={`${connection.id}:${savedConsoles.join(',')}`}
-                    connection={connection}
-                    disabled={!connection.enabled || form.processing}
-                />
-            ) : null}
             {!readonly &&
             connection.mode === 'cloud' &&
             connection.check_status === 'ok' &&
@@ -269,10 +271,12 @@ export function UnifiConnectionPanel({
                 />
             </div>
             <UnifiSiteList
+                key={`${connection.id}:${savedConsoles.join(',')}`}
                 connection={connection}
                 companies={companies}
                 search={search}
                 readonly={readonly}
+                disabled={!connection.enabled || form.processing}
             />
             <Dialog
                 open={confirm !== null}
@@ -342,151 +346,5 @@ export function UnifiConnectionPanel({
                 </DialogContent>
             </Dialog>
         </section>
-    );
-}
-
-function ConsoleSelection({
-    connection,
-    disabled,
-}: {
-    connection: UnifiConnection;
-    disabled: boolean;
-}) {
-    const form = useForm({
-        selected_console_ids: connection.selected_console_ids ?? [],
-        revision: connection.revision ?? '',
-    });
-    const [confirm, setConfirm] = useState(false);
-    const removed = connection.sites.filter(
-        (source) =>
-            source.site &&
-            (connection.selected_console_ids ?? []).includes(
-                source.console_id,
-            ) &&
-            !form.data.selected_console_ids.includes(source.console_id),
-    );
-    const changed =
-        JSON.stringify([...form.data.selected_console_ids].sort()) !==
-        JSON.stringify([...(connection.selected_console_ids ?? [])].sort());
-
-    function save() {
-        form.transform((data) => ({ ...data, revision: connection.revision }));
-        form.submit(selectConsoles(connection.id), {
-            preserveScroll: true,
-            onSuccess: () => setConfirm(false),
-        });
-    }
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Console da integrare</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-                <FieldSet disabled={disabled || form.processing}>
-                    <FieldLegend className="sr-only">
-                        Console accessibili
-                    </FieldLegend>
-                    <FieldGroup className="gap-3 sm:grid sm:grid-cols-2">
-                        {(connection.hosts ?? []).map((host) => (
-                            <Field
-                                key={host.id}
-                                orientation="horizontal"
-                                className="rounded-lg border p-3"
-                            >
-                                <Checkbox
-                                    id={`unifi-console-${connection.id}-${host.id}`}
-                                    checked={form.data.selected_console_ids.includes(
-                                        host.id,
-                                    )}
-                                    disabled={disabled || form.processing}
-                                    onCheckedChange={(checked) =>
-                                        form.setData(
-                                            'selected_console_ids',
-                                            checked === true
-                                                ? [
-                                                      ...form.data
-                                                          .selected_console_ids,
-                                                      host.id,
-                                                  ]
-                                                : form.data.selected_console_ids.filter(
-                                                      (id) => id !== host.id,
-                                                  ),
-                                        )
-                                    }
-                                />
-                                <FieldLabel
-                                    htmlFor={`unifi-console-${connection.id}-${host.id}`}
-                                    className="min-w-0 break-words"
-                                >
-                                    {host.name}
-                                </FieldLabel>
-                            </Field>
-                        ))}
-                    </FieldGroup>
-                </FieldSet>
-                <FieldError
-                    errors={Object.values(form.errors).map((message) => ({
-                        message,
-                    }))}
-                />
-                <SaveButton
-                    type="button"
-                    className="self-start"
-                    processing={form.processing}
-                    disabled={disabled || !changed}
-                    saved={!changed}
-                    onClick={() => (removed.length ? setConfirm(true) : save())}
-                >
-                    Salva console
-                </SaveButton>
-            </CardContent>
-            <Dialog
-                open={confirm}
-                onOpenChange={(open) => {
-                    if (!form.processing) setConfirm(open);
-                }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            Modificare le console selezionate?
-                        </DialogTitle>
-                        <DialogDescription>
-                            Le nuove acquisizioni dei siti delle console
-                            deselezionate verranno sospese.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
-                        {removed.map((source) => (
-                            <li key={source.id}>
-                                {source.console_name} · {source.name}
-                            </li>
-                        ))}
-                    </ul>
-                    <FieldError
-                        errors={Object.values(form.errors).map((message) => ({
-                            message,
-                        }))}
-                    />
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setConfirm(false)}
-                            disabled={form.processing}
-                        >
-                            Annulla
-                        </Button>
-                        <SaveButton
-                            type="button"
-                            processing={form.processing}
-                            onClick={save}
-                        >
-                            Conferma
-                        </SaveButton>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </Card>
     );
 }

@@ -16,6 +16,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -48,17 +49,19 @@ class SnipeItController extends Controller
                     'confirmed' => $connection && $link->connection_id === $connection->id && $link->confirmed_at !== null,
                 ] : null,
             ],
+            'syncInterval' => $global->sync_interval,
             'affectedCompanies' => $affected,
             'sync' => $sync ? [
                 ...$sync->only('id', 'activated_at', 'synced_at', 'error'),
                 'active' => $sync->isActive(),
-                'ipam' => $sync->assets()->forView('ipam')->count(),
-                'linked' => $sync->assets()->forView('linked')->count(),
-                'review' => $sync->assets()->forView('review')->count(),
-                'without_ip' => $sync->assets()->forView('no-ip')->count(),
-                'excluded' => $sync->assets()->forView('excluded')->count(),
+                'counts' => $sync->counts(),
             ] : null,
         ]);
+    }
+
+    public function mapping(Company $company): Response
+    {
+        return $this->edit($company)->with('section', 'fields');
     }
 
     public function update(SnipeItRequest $request, ?Company $company = null): RedirectResponse
@@ -103,6 +106,15 @@ class SnipeItController extends Controller
         return $this->saved($company, 'Connessione salvata.');
     }
 
+    public function interval(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['sync_interval' => ['required', 'integer', Rule::in(SnipeItSetting::SYNC_INTERVALS)]]);
+        SnipeItSetting::whereKey('global')->update($data);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Frequenza di sincronizzazione salvata.']);
+
+        return back();
+    }
+
     public function destroy(Request $request, ?Company $company = null): RedirectResponse
     {
         $request->validate(['confirm_change' => ['accepted']]);
@@ -144,10 +156,7 @@ class SnipeItController extends Controller
             'field_mapping.name' => ['required', 'string', 'max:262'],
             'field_mapping.description' => ['present', 'nullable', 'string', 'max:262'],
         ]);
-        $this->locked($request, $company, function ($setting, $global) use ($data, $company) {
-            if ($company && $setting->use_global) {
-                throw ValidationException::withMessages(['connection' => 'Modifica i campi nella connessione globale.']);
-            }
+        $this->locked($request, $company, function ($setting, $global) use ($data) {
             $connection = $this->activeConnection($setting, $global);
             $available = array_column($this->availableFields($connection), 'value');
             foreach ($data['field_mapping'] as $key => $value) {
@@ -159,11 +168,19 @@ class SnipeItController extends Controller
                 $connection->update(['field_mapping' => $data['field_mapping']]);
                 SnipeItSync::where('connection_id', $connection->id)->increment('revision');
             }
+            // The mapping belongs to the connection: editing the global one from a company invalidates every page using it.
+            if ($setting->use_global && $setting !== $global) {
+                $global->revision++;
+                $global->save();
+            }
             $setting->revision++;
             $setting->save();
         });
 
-        return $this->saved($company, 'Campi salvati. Saranno utilizzati dalla prossima sincronizzazione.');
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Mappatura salvata. Sarà usata dalla prossima sincronizzazione.']);
+
+        return $company ? to_route('companies.settings.integrations.snipe-it.mapping', $company)
+            : to_route('administration.integrations.snipe-it.edit');
     }
 
     private function availableFields(SnipeItConnection $connection): array

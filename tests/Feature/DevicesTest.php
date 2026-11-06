@@ -384,6 +384,38 @@ class DevicesTest extends TestCase
         $this->assertModelExists($model);
     }
 
+    public function test_free_ports_of_used_models_can_be_removed_while_documented_ports_are_kept(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $manufacturer = Manufacturer::create(['name' => 'Vendor']);
+        $model = $manufacturer->models()->create(['name' => 'Switch']);
+        $panel = $this->panel();
+        $panel['faces']['front']['image'] = $panel['faces']['rear']['image'] = null;
+        $panel['faces']['front']['ports'][] = [...$panel['faces']['front']['ports'][0], 'id' => str_repeat('d', 32), 'label' => '2', 'x' => 90];
+        $url = route('manufacturers.models.panel.update', [$manufacturer, $model]);
+        $this->postJson($url, ['document' => json_encode($panel), 'revision' => 0])->assertOk();
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $this->post(route('companies.sites.devices.store', [$company, $site]), ['name' => 'SW-01', 'manufacturer_id' => $manufacturer->id, 'device_model_id' => $model->id])->assertSessionHasNoErrors();
+        $device = $site->devices()->sole();
+        $documented = $device->interfaces()->where('connector_id', str_repeat('a', 32))->sole();
+        $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'))->ipAddresses()
+            ->create(['address' => ip2long('10.0.0.1'), 'device_id' => $device->id, 'device_interface_id' => $documented->id]);
+
+        $empty = $panel;
+        $empty['faces']['front']['ports'] = [];
+        $message = $this->postJson($url, ['document' => json_encode($empty), 'revision' => 1])
+            ->assertUnprocessable()->json('errors.document.0');
+        $this->assertStringContainsString('«1» · SW-01 (Alfa): IP', $message);
+        $this->assertStringNotContainsString('«2»', $message);
+        $this->assertSame(2, $device->interfaces()->count());
+
+        $withoutFree = $panel;
+        $withoutFree['faces']['front']['ports'] = [$panel['faces']['front']['ports'][0]];
+        $this->postJson($url, ['document' => json_encode($withoutFree), 'revision' => 1])->assertOk();
+        $this->assertSame([$documented->id], $device->interfaces()->pluck('id')->all());
+    }
+
     public function test_model_deletion_requires_current_global_impact_and_removes_only_its_devices(): void
     {
         Storage::fake('local');

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PanelRequest;
 use App\Models\CableEnd;
+use App\Models\Device;
 use App\Models\DeviceInterface;
 use App\Models\DeviceModel;
 use App\Models\Manufacturer;
@@ -14,6 +15,7 @@ use App\Support\UnifiInventory;
 use App\Support\UnifiPortMap;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -90,16 +92,10 @@ class ModelPanelController extends Controller
                 }
                 $panel = $data['panel'];
                 $ports = collect([...$panel['faces']['front']['ports'], ...$panel['faces']['rear']['ports']])->keyBy('id');
-                $cabled = CableEnd::query()->whereIn('device_id', $model->devices()->select('id'))->pluck('connector_id')->all();
-                $bound = DeviceInterface::query()->whereHas('device', fn ($q) => $q->where('device_model_id', $model->id))
-                    ->whereNotNull('connector_id')->pluck('connector_id')->all();
-                foreach ($model->connectors() as $old) {
-                    if (in_array($old['id'], $cabled, true) && (! $ports->has($old['id']) || $ports[$old['id']]['type'] !== $old['type'])) {
-                        throw ValidationException::withMessages(['document' => 'La porta «'.($old['label'] ?: $old['id']).'» è usata da un cavo. Scollegalo esplicitamente prima di eliminare la porta o cambiarne il connettore.']);
-                    }
-                    if (in_array($old['id'], $bound, true) && (! $ports->has($old['id']) || $ports[$old['id']]['type'] !== $old['type'])) {
-                        throw ValidationException::withMessages(['document' => 'La porta «'.($old['label'] ?: $old['id']).'» è associata a interfacce di dispositivi. Conservane ID e tipologia: puoi modificarne la geometria.']);
-                    }
+                $changed = collect($model->connectors())
+                    ->filter(fn ($old) => ! $ports->has($old['id']) || $ports[$old['id']]['type'] !== $old['type'])->keyBy('id');
+                if ($changed->isNotEmpty()) {
+                    $this->releaseChangedPorts($model, $changed, $ports);
                 }
                 $assets = [];
                 foreach (['front', 'rear'] as $side) {
@@ -130,5 +126,59 @@ class ModelPanelController extends Controller
         Storage::disk('local')->delete($result['previous']);
 
         return response()->json(['revision' => $result['revision']]);
+    }
+
+    /**
+     * Removed or retyped ports are free unless a device documents something on them.
+     * Auto-created empty interfaces do not count; integration links re-attach by port name after saving.
+     *
+     * @param  Collection<string, array>  $changed
+     * @param  Collection<string, array>  $ports
+     */
+    private function releaseChangedPorts(DeviceModel $model, Collection $changed, Collection $ports): void
+    {
+        $deviceIds = $model->devices()->select('id');
+        $connectorIds = $changed->keys()->all();
+        $cables = CableEnd::query()->whereIn('device_id', $deviceIds)->whereIn('connector_id', $connectorIds)
+            ->lockForUpdate()->get(['device_id', 'connector_id']);
+        $interfaces = DeviceInterface::query()->whereIn('device_id', $deviceIds)->whereIn('connector_id', $connectorIds)
+            ->withCount('ipAddresses')->orderBy('id')->lockForUpdate()->get();
+
+        $uses = [];
+        foreach ($cables as $end) {
+            $uses[$end->connector_id][$end->device_id][] = 'cavo';
+        }
+        foreach ($interfaces as $interface) {
+            foreach (['IP' => $interface->ip_addresses_count > 0, 'MAC' => $interface->mac_address !== null,
+                'nome interfaccia' => $interface->name !== null] as $label => $used) {
+                if ($used) {
+                    $uses[$interface->connector_id][$interface->device_id][] = $label;
+                }
+            }
+        }
+        if ($uses !== []) {
+            $devices = Device::query()->with('site.company:id,name')->whereKey(collect($uses)->flatMap(fn ($byDevice) => array_keys($byDevice))->unique()->all())
+                ->get(['id', 'name', 'site_id'])->keyBy('id');
+            $lines = [];
+            foreach ($uses as $connectorId => $byDevice) {
+                $port = $changed[$connectorId];
+                foreach ($byDevice as $deviceId => $labels) {
+                    $device = $devices[$deviceId];
+                    $place = implode(' · ', array_filter([$device->site->company->name, $device->site->name]));
+                    $lines[] = '«'.($port['label'] ?: $port['id']).'» · '.$device->name.' ('.$place.'): '.implode(', ', $labels);
+                }
+            }
+            $shown = array_slice($lines, 0, 5);
+            $more = count($lines) - count($shown);
+            throw ValidationException::withMessages(['document' => 'Porte in uso: '.implode('; ', $shown).($more > 0 ? '; e altre '.$more : '')
+                .'. Liberale prima di eliminarle o cambiarne il connettore.']);
+        }
+
+        // Empty placeholders would otherwise point at ports that no longer exist or no longer carry an interface.
+        $orphaned = $changed->keys()->filter(fn ($id) => ! $ports->has($id) || ! in_array($ports[$id]['type'], ['rj45', 'sfp', 'qsfp'], true));
+        $removed = $interfaces->whereIn('connector_id', $orphaned->all())->modelKeys();
+        // The source FK cascades: detach observations first so they re-attach to the new port instead of disappearing.
+        MikrotikSource::query()->whereIn('device_interface_id', $removed)->update(['device_interface_id' => null, 'interface_from_model' => false]);
+        DeviceInterface::query()->whereKey($removed)->delete();
     }
 }

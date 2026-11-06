@@ -164,7 +164,8 @@ class ModelPanelController extends Controller
                 $port = $changed[$connectorId];
                 foreach ($byDevice as $deviceId => $labels) {
                     $device = $devices[$deviceId];
-                    $lines[] = '«'.($port['label'] ?: $port['id']).'» · '.$device->name.' ('.$device->site->company->name.' · '.$device->site->name.'): '.implode(', ', $labels);
+                    $place = implode(' · ', array_filter([$device->site->company->name, $device->site->name]));
+                    $lines[] = '«'.($port['label'] ?: $port['id']).'» · '.$device->name.' ('.$place.'): '.implode(', ', $labels);
                 }
             }
             $shown = array_slice($lines, 0, 5);

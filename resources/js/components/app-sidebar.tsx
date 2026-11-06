@@ -51,6 +51,11 @@ export function AppSidebar() {
         component,
     } = usePage();
     const inAdministration = navigationArea === 'administration';
+    // The company list is "Tutte le aziende": the remembered company is not selected there.
+    const settingsCompany =
+        component === 'companies/index'
+            ? null
+            : (companyNavigation?.currentCompanyId ?? null);
     const catalogActive =
         component === 'devices/models' ||
         (component === 'administration/hardware-editor' &&
@@ -198,20 +203,18 @@ export function AppSidebar() {
 
             <SidebarFooter>
                 {/* Company settings exist only in the context of a selected company. */}
-                {!inAdministration && companyNavigation?.currentCompanyId ? (
+                {!inAdministration && settingsCompany ? (
                     <NavMain
                         items={[
                             {
                                 title: 'Impostazioni',
-                                href: companySettings(
-                                    companyNavigation.currentCompanyId,
-                                ),
+                                href: companySettings(settingsCompany),
                                 icon: Settings2,
                             },
                         ]}
                     />
                 ) : null}
-                {inAdministration || companyNavigation?.currentCompanyId ? (
+                {inAdministration || settingsCompany ? (
                     <SidebarSeparator />
                 ) : null}
                 {inAdministration ? (

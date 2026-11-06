@@ -438,7 +438,8 @@ class SnipeItSyncTest extends TestCase
                 $this->assertSame($model->id, $row['model_local']['id']);
                 $this->assertFalse($row['model_linked']);
                 $this->assertSame('pending', $row['state']);
-                $this->assertSame('Possibile dispositivo esistente: verifica la corrispondenza.', $row['problem']);
+                // Candidates are shown in the row itself and are no longer reported as a problem.
+                $this->assertNull($row['problem']);
             }
         }
         $this->assertLessThanOrEqual($queryCounts[0] + 2, $queryCounts[1]);

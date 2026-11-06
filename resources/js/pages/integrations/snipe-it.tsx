@@ -895,8 +895,8 @@ function SnipeItForm({
                                                     className="size-3.5 shrink-0 text-muted-foreground"
                                                 />
                                                 <span className="sr-only">
-                                                    (apre Snipe-IT in una
-                                                    nuova scheda)
+                                                    (apre Snipe-IT in una nuova
+                                                    scheda)
                                                 </span>
                                             </a>
                                             <Badge variant="outline">

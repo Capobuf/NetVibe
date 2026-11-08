@@ -60,7 +60,9 @@ export function UnifiConnectionForm({
                     <SheetTitle>
                         {connection
                             ? `Modifica ${connection.name}`
-                            : `Nuovo ${unifiAccess[mode]}`}
+                            : mode === 'cloud'
+                              ? `Configura ${unifiAccess.cloud}`
+                              : `Nuovo ${unifiAccess.direct}`}
                     </SheetTitle>
                     <SheetDescription className="flex items-center gap-2">
                         {mode === 'cloud' ? (
@@ -91,23 +93,25 @@ export function UnifiConnectionForm({
                 >
                     <FieldSet disabled={form.processing} className="px-4">
                         <FieldGroup>
+                            {mode === 'direct' ? (
                             <Field data-invalid={!!form.errors.name}>
-                                <FieldLabel htmlFor="unifi-name">
-                                    Nome
-                                </FieldLabel>
-                                <Input
-                                    id="unifi-name"
-                                    value={form.data.name}
-                                    onChange={(event) =>
-                                        form.setData('name', event.target.value)
-                                    }
-                                    required
-                                    maxLength={255}
-                                    autoComplete="off"
-                                    aria-invalid={!!form.errors.name}
-                                />
-                                <FieldError>{form.errors.name}</FieldError>
-                            </Field>
+                                    <FieldLabel htmlFor="unifi-name">
+                                        Nome
+                                    </FieldLabel>
+                                    <Input
+                                        id="unifi-name"
+                                        value={form.data.name}
+                                        onChange={(event) =>
+                                            form.setData('name', event.target.value)
+                                        }
+                                        required
+                                        maxLength={255}
+                                        autoComplete="off"
+                                        aria-invalid={!!form.errors.name}
+                                    />
+                                    <FieldError>{form.errors.name}</FieldError>
+                                </Field>
+                            ) : null}
                             {mode === 'direct' ? (
                                 <Field data-invalid={!!form.errors.server_url}>
                                     <FieldLabel htmlFor="unifi-url">

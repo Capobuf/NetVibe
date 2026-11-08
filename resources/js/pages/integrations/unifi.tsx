@@ -103,7 +103,10 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                 .includes(query),
     );
     const addLabel = company ? 'Aggiungi UniFi Host' : 'Aggiungi Cloud Connector';
-    const add = auth.user.is_superadmin ? (
+    // A single Cloud Connector serves the whole installation.
+    const add =
+        auth.user.is_superadmin &&
+        (company || !connections.some((connection) => connection.mode === 'cloud')) ? (
         <Button variant="outline" onClick={() => setEditor({ mode })}>
             <Plus data-icon="inline-start" />
             {addLabel}

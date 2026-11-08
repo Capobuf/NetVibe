@@ -61,7 +61,11 @@ class UnifiController extends Controller
         if (empty($data['api_key'])) {
             throw ValidationException::withMessages(['api_key' => 'Inserisci la API key.']);
         }
-        UnifiConnection::create([...$data, 'revision' => (string) Str::uuid(), 'hosts' => [], 'selected_console_ids' => []]);
+        try {
+            UnifiConnection::create([...$data, 'revision' => (string) Str::uuid(), 'hosts' => [], 'selected_console_ids' => []]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['mode' => 'Il Cloud Connector UniFi è già configurato.']);
+        }
 
         return $this->saved('Connessione salvata.');
     }

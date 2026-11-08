@@ -36,9 +36,14 @@ export type UnifiSite = {
     site: { id: number; name: string | null; company: Company } | null;
     linked_via: {
         connection: string;
+        mode: UnifiMode;
         site: { id: number; name: string | null; company: Company };
     } | null;
+    linked_elsewhere: boolean;
     confirmed_at: string | null;
+    last_access: UnifiMode | null;
+    sync_status: string | null;
+    last_synced_at: string | null;
     inventory?: {
         activated_at: string | null;
         last_synced_at: string | null;
@@ -47,10 +52,18 @@ export type UnifiSite = {
     } | null;
 };
 
+export type UnifiMode = 'cloud' | 'direct';
+
+export const unifiAccess: Record<UnifiMode, string> = {
+    cloud: 'UniFi Cloud Connector',
+    direct: 'UniFi Host',
+};
+
 export type UnifiConnection = {
     id: number;
+    company_id: number | null;
     name: string;
-    mode: 'cloud' | 'direct';
+    mode: UnifiMode;
     server_url?: string | null;
     has_key?: boolean;
     allow_unverified_certificate?: boolean;

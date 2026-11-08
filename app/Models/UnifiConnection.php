@@ -6,9 +6,10 @@ use App\Exceptions\UnifiException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'mode', 'server_url', 'api_key', 'allow_unverified_certificate', 'enabled', 'revision', 'hosts', 'selected_console_ids', 'checked_at', 'check_status', 'discovered_at'])]
+#[Fillable(['company_id', 'name', 'mode', 'server_url', 'api_key', 'allow_unverified_certificate', 'enabled', 'revision', 'hosts', 'selected_console_ids', 'checked_at', 'check_status', 'discovered_at'])]
 #[Hidden(['api_key'])]
 class UnifiConnection extends Model
 {
@@ -21,17 +22,22 @@ class UnifiConnection extends Model
         ];
     }
 
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
     public function unifiSites(): HasMany
     {
         return $this->hasMany(UnifiSite::class);
     }
 
-    public function summary(bool $administration): array
+    public function summary(bool $administration, ?int $companyId = null): array
     {
         $summary = [
-            ...$this->only('id', 'name', 'mode', 'enabled', 'checked_at', 'check_status', 'discovered_at'),
+            ...$this->only('id', 'company_id', 'name', 'mode', 'enabled', 'checked_at', 'check_status', 'discovered_at'),
             'check_message' => $this->check_status ? UnifiException::messageFor($this->check_status) : null,
-            'sites' => $this->unifiSites->map(fn (UnifiSite $site) => $site->summary())->all(),
+            'sites' => $this->unifiSites->map(fn (UnifiSite $site) => $site->summary($companyId))->all(),
         ];
         if ($administration) {
             $summary += [

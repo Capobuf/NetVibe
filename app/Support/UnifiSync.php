@@ -33,47 +33,31 @@ class UnifiSync
                 throw ValidationException::withMessages(['connection' => 'Collega prima una sede disponibile.']);
             }
             $client = app(UnifiClient::class);
-            $snapshots = $references = [];
+            $snapshots = $accessed = [];
             $status = 'ok';
             try {
                 foreach ($sites as $site) {
-                    $console = $connection->mode === 'cloud' ? $site->console_id : null;
-                    $devices = [];
-                    $ignored = $site->unifiDevices()->where('status', 'ignored')->pluck('external_id')->all();
-                    foreach ($client->devices($connection, $site->external_site_id, $console) as $device) {
-                        if (in_array($device['state'], ['PENDING_ADOPTION', 'ADOPTING'], true)) {
-                            continue;
-                        }
-                        $devices[] = in_array($device['id'], $ignored, true) ? $device
-                            : $client->device($connection, $site->external_site_id, $device['id'], $console);
-                    }
-                    try {
-                        $networks = $client->networkDetails($connection, $site->external_site_id, $site->version, $console);
-                    } catch (UnifiException $exception) {
-                        if ($exception->status !== 'unsupported') {
-                            throw $exception;
-                        }
-                        $networks = null;
-                    }
-                    $clients = $client->clients($connection, $site->external_site_id, $console);
-                    $references[$console ?? ''] ??= array_column($client->sites($connection, $console), 'reference', 'id');
-                    $reference = $references[$console ?? ''][$site->external_site_id] ?? null;
-                    $reservations = null;
-                    try {
-                        $reservations = $reference ? $client->reservations($connection, $reference, $console) : null;
-                    } catch (UnifiException $exception) {
-                        // A console without access to the client configuration keeps its last reservations as not updated.
-                        if (! in_array($exception->status, ['not_found', 'unauthorized', 'forbidden'], true)) {
-                            throw $exception;
+                    $site->setRelation('unifiConnection', $connection);
+                    // The direct host is preferred; another access to the same UniFi site is used only when it fails.
+                    $accesses = collect([$site])->merge($site->alternatives())
+                        ->sortBy(fn (UnifiSite $access) => $access->unifiConnection->mode === 'direct' ? 0 : 1)->values();
+                    foreach ($accesses as $index => $access) {
+                        try {
+                            $snapshots[$site->id] = $this->read($client, $site, $access);
+                            $accessed[$site->id] = $access->unifiConnection->mode;
+                            break;
+                        } catch (UnifiException $exception) {
+                            if ($index === $accesses->count() - 1) {
+                                throw $exception;
+                            }
                         }
                     }
-                    $snapshots[$site->id] = compact('devices', 'networks', 'clients', 'reservations');
                 }
             } catch (UnifiException $exception) {
                 $status = $exception->status;
             }
             try {
-                DB::transaction(function () use ($connection, $sites, $snapshots, $status) {
+                DB::transaction(function () use ($connection, $sites, $snapshots, $accessed, $status) {
                     $current = UnifiConnection::lockForUpdate()->findOrFail($connection->id);
                     if ($current->revision !== $connection->revision || ! $current->enabled) {
                         throw ValidationException::withMessages(['connection' => 'La connessione è cambiata durante la lettura. Ricarica la pagina.']);
@@ -91,6 +75,7 @@ class UnifiSync
                             app(UnifiInventory::class)->capture($site, $snapshots[$site->id]['devices']);
                             app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices'], $snapshots[$site->id]['reservations']);
                             $site->last_synced_at = now();
+                            $site->last_access = $accessed[$site->id];
                         }
                         $site->sync_status = $status;
                         $site->save();
@@ -113,5 +98,42 @@ class UnifiSync
         } finally {
             $lock->release();
         }
+    }
+
+    /** Reads one UniFi site through the given access; the acquired data always belongs to the linked site. */
+    private function read(UnifiClient $client, UnifiSite $site, UnifiSite $access): array
+    {
+        $connection = $access->unifiConnection;
+        $console = $connection->mode === 'cloud' ? $access->console_id : null;
+        $devices = [];
+        $ignored = $site->unifiDevices()->where('status', 'ignored')->pluck('external_id')->all();
+        foreach ($client->devices($connection, $access->external_site_id, $console) as $device) {
+            if (in_array($device['state'], ['PENDING_ADOPTION', 'ADOPTING'], true)) {
+                continue;
+            }
+            $devices[] = in_array($device['id'], $ignored, true) ? $device
+                : $client->device($connection, $access->external_site_id, $device['id'], $console);
+        }
+        try {
+            $networks = $client->networkDetails($connection, $access->external_site_id, $access->version, $console);
+        } catch (UnifiException $exception) {
+            if ($exception->status !== 'unsupported') {
+                throw $exception;
+            }
+            $networks = null;
+        }
+        $clients = $client->clients($connection, $access->external_site_id, $console);
+        $reference = array_column($client->sites($connection, $console), 'reference', 'id')[$access->external_site_id] ?? null;
+        $reservations = null;
+        try {
+            $reservations = $reference ? $client->reservations($connection, $reference, $console) : null;
+        } catch (UnifiException $exception) {
+            // A console without access to the client configuration keeps its last reservations as not updated.
+            if (! in_array($exception->status, ['not_found', 'unauthorized', 'forbidden'], true)) {
+                throw $exception;
+            }
+        }
+
+        return compact('devices', 'networks', 'clients', 'reservations');
     }
 }

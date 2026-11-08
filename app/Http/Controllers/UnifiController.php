@@ -32,19 +32,26 @@ class UnifiController extends Controller
     public function index(Request $request, ?Company $company = null): Response
     {
         $company ? Gate::authorize('access-company', $company) : Gate::authorize('administer');
-        $query = UnifiConnection::query()->orderBy('name');
-        $sites = fn ($query) => $query->with(['site.company', 'unifiDevices.device', 'unifiConnection'])->orderBy('console_name')->orderBy('name')
-            ->when($company, fn ($query) => $query->whereHas('site', fn ($query) => $query->where('company_id', $company->id)));
-        $query->with(['unifiSites' => $sites]);
-        if ($company) {
-            $query->whereHas('unifiSites.site', fn ($query) => $query->where('company_id', $company->id));
-        }
+        $administer = $request->user()->can('administer');
+        // Cloud Connectors see every customer's consoles: a company shows only its own hosts and the sites linked to it.
+        $query = UnifiConnection::query()->orderBy('name')->with(['unifiSites' => fn ($query) => $query
+            ->with(['site.company', 'unifiDevices.device', 'unifiConnection'])->orderBy('console_name')->orderBy('name')
+            ->when($company, fn ($query) => $query->where(fn ($query) => $query
+                ->whereHas('site', fn ($query) => $query->where('company_id', $company->id))
+                ->orWhereHas('unifiConnection', fn ($query) => $query->where('company_id', $company->id))))]);
+        $company
+            ? $query->where(fn ($query) => $query->where('company_id', $company->id)
+                ->orWhereHas('unifiSites.site', fn ($query) => $query->where('company_id', $company->id)))
+            : $query->whereNull('company_id');
+        $companies = Company::query()->with(['sites' => fn ($query) => $query->orderBy('name')])->orderBy('name')
+            ->when($company, fn ($query) => $query->whereKey($company->id));
 
         return Inertia::render('integrations/unifi', [
             'company' => $company?->only('id', 'name', 'observation_retention_days'),
-            'connections' => $query->get()->map(fn (UnifiConnection $connection) => $connection->summary($company === null)),
-            'companies' => $company ? [] : Company::query()->with(['sites' => fn ($query) => $query->orderBy('name')])->orderBy('name')->get()
-                ->map(fn (Company $company) => [...$company->only('id', 'name'), 'sites' => $company->sites->map->only('id', 'name')]),
+            'connections' => $query->get()->map(fn (UnifiConnection $connection) => $connection->summary(
+                $administer && $connection->company_id === $company?->id, $company?->id)),
+            'companies' => $administer ? $companies->get()
+                ->map(fn (Company $company) => [...$company->only('id', 'name'), 'sites' => $company->sites->map->only('id', 'name')]) : [],
         ]);
     }
 
@@ -54,7 +61,11 @@ class UnifiController extends Controller
         if (empty($data['api_key'])) {
             throw ValidationException::withMessages(['api_key' => 'Inserisci la API key.']);
         }
-        UnifiConnection::create([...$data, 'revision' => (string) Str::uuid(), 'hosts' => [], 'selected_console_ids' => []]);
+        try {
+            UnifiConnection::create([...$data, 'revision' => (string) Str::uuid(), 'hosts' => [], 'selected_console_ids' => []]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['mode' => 'Il Cloud Connector UniFi è già configurato.']);
+        }
 
         return $this->saved('Connessione salvata.');
     }
@@ -63,7 +74,7 @@ class UnifiController extends Controller
     {
         $data = $request->connectionData();
         $this->locked($request, $unifiConnection, function (UnifiConnection $connection) use ($data) {
-            if ($connection->mode !== $data['mode'] || $connection->server_url !== $data['server_url']) {
+            if ($connection->mode !== $data['mode'] || $connection->server_url !== $data['server_url'] || $connection->company_id !== $data['company_id']) {
                 throw ValidationException::withMessages(['server_url' => 'Crea una nuova connessione per cambiare destinazione o metodo di accesso.']);
             }
             $keyChanged = ! empty($data['api_key']) && $data['api_key'] !== $connection->api_key;
@@ -87,7 +98,15 @@ class UnifiController extends Controller
     public function destroy(Request $request, UnifiConnection $unifiConnection): RedirectResponse
     {
         $request->validate(['confirmed' => ['accepted']]);
-        $this->locked($request, $unifiConnection, fn (UnifiConnection $connection) => $connection->delete());
+        $this->locked($request, $unifiConnection, function (UnifiConnection $connection) {
+            // Linked sites move to another access of the same UniFi site, keeping their data, before the connection goes.
+            foreach ($connection->unifiSites()->whereNotNull('site_id')->with('site')->lockForUpdate()->get() as $source) {
+                if ($target = $source->alternatives()->first()) {
+                    $source->transferTo($target);
+                }
+            }
+            $connection->delete();
+        });
 
         return $this->saved('Connessione rimossa.');
     }
@@ -136,6 +155,9 @@ class UnifiController extends Controller
                     throw ValidationException::withMessages(['connection' => 'Completa una discovery prima di collegare il sito.']);
                 }
                 $site = Site::query()->lockForUpdate()->findOrFail($data['site_id']);
+                if ($connection->company_id !== null && $site->company_id !== $connection->company_id) {
+                    throw ValidationException::withMessages(['site_id' => 'Scegli una sede dell’azienda di questo host.']);
+                }
                 // A removed local site must not reserve an external identity indefinitely.
                 UnifiSite::where('mapped_site_uuid', $source->external_site_id)->whereNull('site_id')
                     ->update(['mapped_site_uuid' => null, 'confirmed_at' => null]);
@@ -274,6 +296,9 @@ class UnifiController extends Controller
                         ], [...$source, 'discovered_at' => now(), 'available' => true]);
                     }
                     $current->discovered_at = now();
+                    if ($current->mode === 'direct') {
+                        $this->preferDirect($current);
+                    }
                 }
             });
         } finally {
@@ -307,10 +332,22 @@ class UnifiController extends Controller
         }, 3);
     }
 
+    /** A host of the company takes over its sites from the Cloud Connector, with the data acquired so far. */
+    private function preferDirect(UnifiConnection $connection): void
+    {
+        foreach ($connection->unifiSites()->whereNull('site_id')->where('available', true)->get() as $direct) {
+            $owner = UnifiSite::where('mapped_site_uuid', $direct->external_site_id)->whereKeyNot($direct->id)
+                ->with('site', 'unifiConnection')->lockForUpdate()->first();
+            if ($owner?->unifiConnection->mode === 'cloud' && $owner->site?->company_id === $connection->company_id) {
+                $owner->transferTo($direct);
+            }
+        }
+    }
+
     private function saved(string $message, string $type = 'success'): RedirectResponse
     {
         Inertia::flash('toast', ['type' => $type, 'message' => $message]);
 
-        return to_route('administration.integrations.unifi.index');
+        return back();
     }
 }

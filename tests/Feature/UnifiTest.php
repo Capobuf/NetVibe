@@ -142,6 +142,54 @@ class UnifiTest extends TestCase
         $this->assertSame([$siteId, 'console-a', true], [$site->external_site_id, $site->console_id, $site->available]);
     }
 
+    public function test_company_host_takes_over_cloud_site_with_its_data_and_falls_back_to_cloud_when_unreachable(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $alfa = Company::create(['name' => 'Alfa']);
+        $site = $alfa->sites()->create(['name' => 'Sede Alfa']);
+        $other = Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Sede Beta']);
+        $cloud = $this->connection();
+        $cloud->update(['mode' => 'cloud', 'server_url' => 'https://api.ui.com', 'hosts' => [['id' => 'console-a', 'name' => 'Console']], 'selected_console_ids' => ['console-a']]);
+        $owner = $this->source($cloud, ['console_id' => 'console-a', 'site_id' => $site->id, 'confirmed_at' => now(),
+            'mapped_site_uuid' => null, 'inventory_activated_at' => now(), 'sync_status' => 'ok']);
+        $owner->update(['mapped_site_uuid' => $owner->external_site_id]);
+        $device = $owner->unifiDevices()->create(['external_id' => (string) Str::uuid(), 'status' => 'pending',
+            'observed' => ['name' => 'Switch'], 'present' => true, 'synced_at' => now()]);
+        $host = $this->connection();
+        $host->update(['company_id' => $alfa->id]);
+
+        $direct = Mockery::on(fn (UnifiConnection $connection) => $connection->mode === 'direct');
+        $viaCloud = Mockery::on(fn (UnifiConnection $connection) => $connection->mode === 'cloud');
+        $client = $this->mock(UnifiClient::class);
+        $client->shouldReceive('info')->andReturn(['applicationVersion' => '11.0.97']);
+        $client->shouldReceive('sites')->andReturn([['id' => $owner->external_site_id, 'name' => 'Default', 'reference' => null]]);
+        $client->shouldReceive('networks')->andReturn([]);
+        $client->shouldReceive('devices')->with($direct, Mockery::any(), null)->once()->andReturn([]);
+
+        $this->post($this->url('discover', $host), ['revision' => $host->revision])->assertSessionHasNoErrors();
+        $taken = $host->unifiSites()->sole();
+        $this->assertSame([$site->id, $taken->external_site_id], [$taken->site_id, $taken->mapped_site_uuid]);
+        $this->assertNull($owner->fresh()->site_id);
+        $this->assertSame($taken->id, $device->fresh()->unifi_site_id);
+
+        // The host is now unreachable: the read goes through the Cloud Connector and lands on the same site.
+        $client->shouldReceive('devices')->with($direct, Mockery::any(), null)->andThrow(new UnifiException('network'));
+        $client->shouldReceive('devices')->with($viaCloud, Mockery::any(), 'console-a')->once()->andReturn([]);
+        $client->shouldReceive('networkDetails')->andReturn([]);
+        $client->shouldReceive('clients')->andReturn([]);
+        app(UnifiSync::class)->refresh($host->fresh());
+        $this->assertSame(['ok', 'cloud', $site->id], [$taken->fresh()->sync_status, $taken->fresh()->last_access, $taken->fresh()->site_id]);
+        $this->assertNull($owner->fresh()->site_id);
+
+        $this->put($this->url('associate', $host->fresh(), $taken), [
+            'revision' => $host->fresh()->revision, 'site_id' => $other->id, 'confirmed' => true,
+        ])->assertSessionHasErrors('site_id');
+        $this->post(route('administration.integrations.unifi.store'), [
+            'mode' => 'cloud', 'api_key' => 'second-key', 'allow_unverified_certificate' => false, 'enabled' => true,
+        ])->assertSessionHasErrors('mode');
+        $this->assertSame(1, UnifiConnection::where('mode', 'cloud')->count());
+    }
+
     private function connection(): UnifiConnection
     {
         return UnifiConnection::create([

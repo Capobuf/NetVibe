@@ -23,20 +23,24 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import type { UnifiConnection } from './types';
+import { unifiAccess, type UnifiConnection, type UnifiMode } from './types';
 
 export function UnifiConnectionForm({
     connection,
     mode,
+    companyId,
     onClose,
 }: {
     connection?: UnifiConnection;
-    mode: 'cloud' | 'direct';
+    mode: UnifiMode;
+    companyId: number | null;
     onClose: () => void;
 }) {
     const form = useForm({
         name: connection?.name ?? '',
         mode,
+        company_id:
+            connection?.company_id ?? (mode === 'direct' ? companyId : null),
         server_url: connection?.server_url ?? '',
         api_key: '',
         allow_unverified_certificate:
@@ -56,8 +60,10 @@ export function UnifiConnectionForm({
                 <SheetHeader>
                     <SheetTitle>
                         {connection
-                            ? 'Modifica connessione'
-                            : 'Nuova connessione UniFi'}
+                            ? `Modifica ${connection.name}`
+                            : mode === 'cloud'
+                              ? `Configura ${unifiAccess.cloud}`
+                              : `Nuovo ${unifiAccess.direct}`}
                     </SheetTitle>
                     <SheetDescription className="flex items-center gap-2">
                         {mode === 'cloud' ? (
@@ -66,8 +72,8 @@ export function UnifiConnectionForm({
                             <Server className="size-4" />
                         )}
                         {mode === 'cloud'
-                            ? 'Cloud · Site Manager'
-                            : 'Diretta · UniFi Network'}
+                            ? 'Accesso a tutte le console dell’account tramite UniFi Site Manager'
+                            : 'Accesso diretto a una console UniFi Network raggiungibile da NetVibe'}
                     </SheetDescription>
                 </SheetHeader>
                 <form
@@ -88,27 +94,32 @@ export function UnifiConnectionForm({
                 >
                     <FieldSet disabled={form.processing} className="px-4">
                         <FieldGroup>
-                            <Field data-invalid={!!form.errors.name}>
-                                <FieldLabel htmlFor="unifi-name">
-                                    Nome connessione
-                                </FieldLabel>
-                                <Input
-                                    id="unifi-name"
-                                    value={form.data.name}
-                                    onChange={(event) =>
-                                        form.setData('name', event.target.value)
-                                    }
-                                    required
-                                    maxLength={255}
-                                    autoComplete="off"
-                                    aria-invalid={!!form.errors.name}
-                                />
-                                <FieldError>{form.errors.name}</FieldError>
-                            </Field>
+                            {mode === 'direct' ? (
+                                <Field data-invalid={!!form.errors.name}>
+                                    <FieldLabel htmlFor="unifi-name">
+                                        Nome
+                                    </FieldLabel>
+                                    <Input
+                                        id="unifi-name"
+                                        value={form.data.name}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'name',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                        maxLength={255}
+                                        autoComplete="off"
+                                        aria-invalid={!!form.errors.name}
+                                    />
+                                    <FieldError>{form.errors.name}</FieldError>
+                                </Field>
+                            ) : null}
                             {mode === 'direct' ? (
                                 <Field data-invalid={!!form.errors.server_url}>
                                     <FieldLabel htmlFor="unifi-url">
-                                        URL HTTPS
+                                        Indirizzo dell’host (HTTPS)
                                     </FieldLabel>
                                     <Input
                                         id="unifi-url"
@@ -122,6 +133,7 @@ export function UnifiConnectionForm({
                                         }
                                         required
                                         readOnly={!!connection}
+                                        placeholder="https://192.168.1.1"
                                         maxLength={2048}
                                         autoComplete="off"
                                         aria-invalid={!!form.errors.server_url}
@@ -214,7 +226,7 @@ export function UnifiConnectionForm({
                             Annulla
                         </Button>
                         <SaveButton processing={form.processing}>
-                            Salva connessione
+                            Salva
                         </SaveButton>
                     </SheetFooter>
                 </form>

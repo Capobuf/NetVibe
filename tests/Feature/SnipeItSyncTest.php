@@ -482,11 +482,13 @@ class SnipeItSyncTest extends TestCase
         $this->server([$this->asset(1, ['custom_fields' => $fields])]);
         $this->post($this->url('sync'))->assertSessionHasNoErrors();
         $this->post($this->url('sync'))->assertSessionHasNoErrors();
-        $this->assertDatabaseCount('ip_addresses', 3);
+        $this->assertDatabaseCount('ip_addresses', 2);
         $this->assertSame($device->id, $existing->fresh()->device_id);
         $this->assertSame('keep-hostname', $existing->fresh()->hostname);
         $this->assertSame('Keep notes', $existing->fresh()->description);
-        $this->assertModelExists($record);
+        // The previous address was justified only by this asset, so it is released.
+        $this->assertModelMissing($record);
+        $this->assertModelExists($otherIp);
         $this->assertDatabaseMissing('ip_addresses', ['address' => ip2long('10.0.0.20')]);
         $this->get(route('companies.sites.devices.show', [$this->company, $this->site, $device]))
             ->assertOk()->assertInertia(fn (Assert $page) => $page

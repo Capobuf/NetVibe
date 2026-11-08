@@ -94,7 +94,7 @@ class SnipeItAsset extends Model
 
         // Same site scope as the sync: client assets cover the company, linked devices only their own site.
         return static::whereIn('removed_address', $addresses)->whereNull('ip_address_id')->where('present', true)->where('state', '!=', 'excluded')
-            ->whereHas('sync', fn ($q) => $q->where('company_id', $subnet->site()->value('company_id')))
+            ->whereHas('sync', fn ($q) => $q->where('company_id', Site::whereKey($subnet->site_id)->value('company_id')))
             ->where(fn ($q) => $q->whereNull('device_id')->orWhereHas('device', fn ($q) => $q->where('site_id', $subnet->site_id)))
             ->with('sync.connection')->get()->keyBy('removed_address');
     }

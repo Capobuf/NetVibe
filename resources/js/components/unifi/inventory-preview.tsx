@@ -6,7 +6,7 @@ import {
     refresh,
     resolve,
 } from '@/actions/App/Http/Controllers/UnifiInventoryController';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -131,7 +131,7 @@ export function UnifiInventoryPreview({
                                             : ''}
                                     </p>
                                 </header>
-                                <DeviceTable
+                                <DataTable
                                     name="unifi-inventory"
                                     variant="list"
                                     searchLabel="Cerca apparati UniFi"

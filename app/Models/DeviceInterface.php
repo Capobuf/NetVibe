@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MacAddress;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -25,6 +27,11 @@ class DeviceInterface extends Model
     public function getMikrotikAttribute(): ?array
     {
         return $this->mikrotikSource?->interfaceDetails();
+    }
+
+    protected function macAddress(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => MacAddress::normalize($value));
     }
 
     /** @return BelongsTo<Device, $this> */

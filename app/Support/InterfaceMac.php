@@ -11,13 +11,15 @@ class InterfaceMac
     // All callers hold the company lock, including association and interface writers.
     public static function synchronize(DeviceInterface $interface, ?string $mac, ?IpAddress $source, ?string $confirmation, ?string $mikrotikMode = null): ?string
     {
+        // The bulk IP update below bypasses the model mutator.
+        $mac = MacAddress::normalize($mac);
         $ips = $interface->ipAddresses()->orderBy('id')->lockForUpdate()->get();
         $sameInterface = $source?->exists && $source->device_interface_id === $interface->id;
         // An empty side inherits on association; an explicit edit can also clear a shared MAC.
         if ($source && (! $sameInterface || $source->mac_address === null)) {
             $mac ??= $interface->mac_address;
         }
-        $different = fn (?string $value) => strcasecmp(str_replace('-', ':', $value ?? ''), str_replace('-', ':', $mac ?? '')) !== 0;
+        $different = fn (?string $value) => $value !== $mac;
         $affected = $ips->filter(fn ($ip) => $ip->id !== $source?->id && $different($ip->mac_address));
         $conflict = $interface->mac_address && $different($interface->mac_address);
         if ($conflict || $affected->isNotEmpty() || $confirmation) {

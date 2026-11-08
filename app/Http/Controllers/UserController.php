@@ -25,6 +25,7 @@ class UserController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'sort' => ['nullable', 'in:name,email,is_superadmin,companies_count'],
             'direction' => ['sometimes', 'in:asc,desc'],
+            'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
         ]);
         $search = $options['search'] ?? '';
         $sort = $options['sort'] ?? null;
@@ -44,7 +45,7 @@ class UserController extends Controller
                         ->orWhereRaw("email LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereHas('companies', fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern]));
                 }))
-                ->orderBy($sort ?? 'name', $direction)->orderBy('id')->paginate(20)->withQueryString(),
+                ->orderBy($sort ?? 'name', $direction)->orderBy('id')->paginate((int) ($options['per_page'] ?? 25))->withQueryString(),
             'query' => compact('search', 'sort', 'direction'),
             'superadminCount' => User::query()->where('is_superadmin', true)->count(),
         ]);

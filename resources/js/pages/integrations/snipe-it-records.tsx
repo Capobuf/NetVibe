@@ -57,7 +57,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     Empty,
-    EmptyDescription,
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
@@ -615,7 +614,7 @@ function Records({
         create: 'Verranno creati come dispositivi in NetVibe con nome, seriale e modello di Snipe-IT.',
         link: 'Nome, seriale e modello dei dispositivi NetVibe saranno aggiornati con i dati di Snipe-IT.',
         exclude:
-            'Non compariranno più tra gli asset da decidere. Puoi riammetterli in qualsiasi momento.',
+            'Non compariranno più tra gli asset da decidere.',
         restore: 'Torneranno tra gli asset da decidere.',
     };
     const selectedNames = (pendingBulk === 'link' ? linkable : selectedRows)
@@ -1013,15 +1012,6 @@ function Records({
                                                                       ? 'Nessun asset da decidere'
                                                                       : 'Nessun asset in questa vista'}
                                                         </EmptyTitle>
-                                                        {search ||
-                                                        filters.category ||
-                                                        problemOnly ? (
-                                                            <EmptyDescription>
-                                                                Modifica la
-                                                                ricerca o i
-                                                                filtri.
-                                                            </EmptyDescription>
-                                                        ) : null}
                                                     </EmptyHeader>
                                                 </Empty>
                                             </TableCell>

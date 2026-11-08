@@ -15,7 +15,6 @@ class UnifiIpamController extends Controller
 {
     public function update(Request $request, Company $company, Site $site, int $observation): RedirectResponse
     {
-        abort_unless($site->company_id === $company->id, 404);
         $data = $request->validate(['decision' => ['required', 'in:update,keep']]);
         DB::transaction(function () use ($site, $observation, $data) {
             $site = Site::query()->lockForUpdate()->findOrFail($site->id);

@@ -56,7 +56,7 @@ export function TableColumns<Id extends string>({
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Colonne della tabella</DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="sr-only">
                         Scegli quali mostrare. Trascina la maniglia o usa le
                         frecce per cambiarne l’ordine.
                     </DialogDescription>

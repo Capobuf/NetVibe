@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from '@/components/devices/catalog-form';
 import { CatalogBulkDelete } from '@/components/devices/catalog-bulk-delete';
 import { ManufacturerTable } from '@/components/devices/manufacturer-table';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { ModelSheet, type ModelDevice } from '@/components/devices/model-sheet';
 import { PanelViewer } from '@/components/devices/panel-viewer';
 import { Button } from '@/components/ui/button';
@@ -175,7 +175,7 @@ export default function Models({
                         ) : null
                     }
                 />
-                <DeviceTable
+                <DataTable
                     name="device-models"
                     variant="list"
                     searchLabel="Cerca modelli"
@@ -437,7 +437,7 @@ export default function Models({
 
 function TypeTable({ types }: { types: ModelType[] }) {
     return (
-        <DeviceTable
+        <DataTable
             name="model-types"
             variant="list"
             searchLabel="Cerca tipi"

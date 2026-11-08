@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, Copy, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
+import { postJson } from '@/lib/http';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -53,28 +54,21 @@ export function MikrotikSetup({
         try {
             let setup = current;
             if (!setup) {
-                const token = document.cookie
-                    .split('; ')
-                    .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
-                    ?.slice('XSRF-TOKEN='.length);
-                const response = await fetch(setupCommand.url(route), {
-                    method: 'POST',
-                    headers: {
-                        Accept: 'application/json',
-                        'Content-Type': 'application/json',
-                        'X-XSRF-TOKEN': decodeURIComponent(token ?? ''),
-                    },
-                    body: JSON.stringify({ port }),
-                });
-                const result = await response.json().catch(() => null);
-                if (!response.ok || !result) {
+                const response = await postJson<Setup>(
+                    setupCommand.url(route),
+                    { port },
+                );
+                if (!response.ok || !response.data) {
+                    const errors = response.ok
+                        ? undefined
+                        : response.data?.errors;
                     throw new Error(
-                        result?.errors?.port?.[0] ??
-                            result?.errors?.setup?.[0] ??
+                        errors?.port?.[0] ??
+                            errors?.setup?.[0] ??
                             'Impossibile preparare il comando. Riprova.',
                     );
                 }
-                setup = result as Setup;
+                setup = response.data;
                 setGenerated(setup);
                 onApply(setup.username, setup.password);
             }

@@ -2,6 +2,7 @@ import {
     UnifiObservationIndicator,
     type UnifiObservation,
 } from '@/components/networks/unifi-observation';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { formatDateTime } from '@/lib/utils';
 import {
     NetworkExclusionAction,
@@ -78,7 +79,7 @@ function SubnetList({
     vlans,
     unifiNetworks = [],
 }: Props) {
-    const { auth, companyNavigation } = usePage().props;
+    const { auth } = usePage().props;
     const [filter, setFilter] = useState('all');
     const [visibility, setVisibility] = useState('active');
     const isExcluded = (subnet: Subnet) =>
@@ -102,10 +103,7 @@ function SubnetList({
             { id: 'excluded_at', label: 'Data esclusione', visible: false },
         ]);
     const visibleColumns = columns.filter((column) => column.visible);
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const formContext = {
         companyId: company.id,
         siteId: site.id,

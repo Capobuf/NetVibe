@@ -1,35 +1,10 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowRight, MapPin, Search } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowRight, MapPin } from 'lucide-react';
 import SiteForm from '@/components/companies/site-form';
+import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
-import { TableColumns } from '@/components/table-columns';
-import { TableSortHead } from '@/components/table-sort-head';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from '@/components/ui/input-group';
-import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import { useTablePreferences } from '@/hooks/use-table-preferences';
-import { sortTableRows, type TableSort } from '@/lib/table-sort';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { show as companyShow } from '@/routes/companies';
 import { show as siteShow } from '@/routes/companies/sites';
 import { show as settingsShow } from '@/routes/companies/settings';
@@ -42,23 +17,6 @@ export default function CompanyShow({
     company: Company;
     sites: Site[];
 }) {
-    const [search, setSearch] = useState('');
-    const [sort, setSort] = useState<TableSort<'name'>>(null);
-    const { columns, setColumns, separators, setSeparators } =
-        useTablePreferences<'name'>('sites', [
-            { id: 'name', label: 'Nome sede', visible: true },
-        ]);
-    const visibleColumns = columns.filter((column) => column.visible);
-    const rows = sortTableRows(
-        sites.filter((site) =>
-            (site.name ?? '')
-                .toLocaleLowerCase()
-                .includes(search.trim().toLocaleLowerCase()),
-        ),
-        sort,
-        (site, column) => site[column],
-    );
-
     return (
         <>
             <Head
@@ -88,157 +46,56 @@ export default function CompanyShow({
                                 sites={sites}
                             />
                         </header>
-                        <Card className="gap-0 overflow-hidden py-0">
-                            <CardHeader className="gap-3 py-4">
-                                <Label
-                                    htmlFor="site-search"
-                                    className="sr-only"
+                        <DataTable
+                            name="sites"
+                            variant="list"
+                            searchLabel="Cerca sedi"
+                            rows={sites}
+                            columns={[
+                                { id: 'name', label: 'Nome sede', visible: true },
+                            ]}
+                            value={(site, column) => site[column]}
+                            render={(site) => (
+                                <Link
+                                    href={siteShow({
+                                        company: company.id,
+                                        site: site.id,
+                                    })}
+                                    className="flex items-center gap-3 rounded-sm transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                                 >
-                                    Cerca sedi
-                                </Label>
-                                <InputGroup className="max-w-sm">
-                                    <InputGroupInput
-                                        id="site-search"
-                                        type="search"
-                                        placeholder="Cerca sedi…"
-                                        value={search}
-                                        onChange={(event) =>
-                                            setSearch(event.target.value)
-                                        }
+                                    <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                                    {site.name}
+                                </Link>
+                            )}
+                            actions={(site) => (
+                                <>
+                                    <SiteForm
+                                        company={company}
+                                        sites={sites}
+                                        site={site}
                                     />
-                                    <InputGroupAddon>
-                                        <Search aria-hidden="true" />
-                                    </InputGroupAddon>
-                                </InputGroup>
-                                <p
-                                    role="status"
-                                    className="text-sm text-muted-foreground tabular-nums"
-                                >
-                                    {rows.length} di {sites.length} sedi
-                                </p>
-                            </CardHeader>
-                            <CardContent className="px-0">
-                                <Table
-                                    aria-label="Sedi dell’azienda"
-                                    data-separators={separators}
-                                    className="data-[separators=true]:[&_tr>:not(:last-child)]:border-r"
-                                >
-                                    <TableHeader>
-                                        <TableRow>
-                                            {visibleColumns.map((column) => (
-                                                <TableSortHead
-                                                    key={column.id}
-                                                    column={column}
-                                                    sort={sort}
-                                                    onSort={setSort}
-                                                />
-                                            ))}
-                                            <TableHead className="w-24 text-right">
-                                                <span className="sr-only">
-                                                    Azioni
-                                                </span>
-                                                <TableColumns
-                                                    columns={columns}
-                                                    onChange={setColumns}
-                                                    separators={separators}
-                                                    onSeparatorsChange={
-                                                        setSeparators
-                                                    }
-                                                />
-                                            </TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {rows.map((site) => (
-                                            <TableRow key={site.id}>
-                                                {visibleColumns.map(
-                                                    (column) => (
-                                                        <TableCell
-                                                            key={column.id}
-                                                        >
-                                                            <Link
-                                                                href={siteShow({
-                                                                    company:
-                                                                        company.id,
-                                                                    site: site.id,
-                                                                })}
-                                                                className="flex items-center gap-3 rounded-sm font-medium transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                                            >
-                                                                <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                                                                <span className="max-w-lg break-words whitespace-normal">
-                                                                    {
-                                                                        site[
-                                                                            column
-                                                                                .id
-                                                                        ]
-                                                                    }
-                                                                </span>
-                                                            </Link>
-                                                        </TableCell>
-                                                    ),
-                                                )}
-                                                <TableCell>
-                                                    <div className="flex justify-end gap-2">
-                                                        <SiteForm
-                                                            company={company}
-                                                            sites={sites}
-                                                            site={site}
-                                                        />
-                                                        <IconButton
-                                                            label={
-                                                                'Apri subnet di ' +
-                                                                site.name
-                                                            }
-                                                            asChild
-                                                        >
-                                                            <Link
-                                                                href={siteShow({
-                                                                    company:
-                                                                        company.id,
-                                                                    site: site.id,
-                                                                })}
-                                                            >
-                                                                <ArrowRight />
-                                                            </Link>
-                                                        </IconButton>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                        {rows.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={
-                                                        visibleColumns.length +
-                                                        1
-                                                    }
-                                                >
-                                                    <Empty>
-                                                        <EmptyHeader>
-                                                            <EmptyTitle>
-                                                                Nessuna sede
-                                                                trovata
-                                                            </EmptyTitle>
-                                                        </EmptyHeader>
-                                                    </Empty>
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : null}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
+                                    <IconButton
+                                        label={'Apri subnet di ' + site.name}
+                                        asChild
+                                    >
+                                        <Link
+                                            href={siteShow({
+                                                company: company.id,
+                                                site: site.id,
+                                            })}
+                                        >
+                                            <ArrowRight />
+                                        </Link>
+                                    </IconButton>
+                                </>
+                            )}
+                            empty="Nessuna sede"
+                        />
                     </section>
                 ) : (
                     <Card>
                         <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
-                            <div className="flex flex-col gap-2">
-                                <CardTitle>Organizzazione</CardTitle>
-                                <CardDescription>
-                                    Puoi lavorare direttamente sull’azienda.
-                                    Aggiungi altre sedi quando necessario.
-                                </CardDescription>
-                            </div>
+                            <CardTitle>Organizzazione</CardTitle>
                             <SiteForm
                                 company={company}
                                 sites={sites}

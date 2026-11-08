@@ -1,4 +1,4 @@
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -90,7 +90,7 @@ export function UnifiSitePreview({
                                 forceMount
                                 className="min-w-0 data-[state=inactive]:hidden"
                             >
-                                <DeviceTable
+                                <DataTable
                                     name="unifi-preview-devices"
                                     variant="list"
                                     rows={source.preview.devices}
@@ -146,7 +146,7 @@ export function UnifiSitePreview({
                                         </AlertDescription>
                                     </Alert>
                                 ) : (
-                                    <DeviceTable
+                                    <DataTable
                                         name="unifi-preview-networks"
                                         variant="list"
                                         rows={source.preview.networks ?? []}

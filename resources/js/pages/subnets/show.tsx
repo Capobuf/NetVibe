@@ -7,6 +7,7 @@ import {
     UnifiObservationIndicator,
     type UnifiObservation,
 } from '@/components/networks/unifi-observation';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { NetworkExclusionAction } from '@/components/networks/network-exclusion';
 import { show as vlanShow } from '@/routes/companies/sites/vlans';
 import {
@@ -14,7 +15,6 @@ import {
     EmptyHeader,
     EmptyMedia,
     EmptyTitle,
-    EmptyDescription,
 } from '@/components/ui/empty';
 import {
     MikrotikIndicator,
@@ -133,7 +133,7 @@ export default function SubnetShow({
     mikrotikSources,
     unifiObservations = [],
 }: Props) {
-    const { auth, companyNavigation, errors } = usePage().props;
+    const { auth, errors } = usePage().props;
     const [selectedIp, setSelectedIp] = useState<IpRow | null>(
         initialIpAddress,
     );
@@ -190,10 +190,7 @@ export default function SubnetShow({
     }
     const visibleColumns = columns.filter((column) => column.visible);
     const route = { company: company.id, site: site.id, subnet: subnet.id };
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const formContext = {
         companyId: company.id,
         siteId: site.id,
@@ -665,13 +662,6 @@ export default function SubnetShow({
                                                               ? 'Nessun IP documentato o rilevato'
                                                               : 'Nessun IP in questa pagina'}
                                                     </EmptyTitle>
-                                                    <EmptyDescription>
-                                                        {query.search
-                                                            ? 'Prova un altro termine o azzera la ricerca.'
-                                                            : query.hide_free
-                                                              ? 'Usa l’occhio per mostrare tutti gli IP.'
-                                                              : 'Torna alla pagina precedente.'}
-                                                    </EmptyDescription>
                                                 </EmptyHeader>
                                             </Empty>
                                         </TableCell>

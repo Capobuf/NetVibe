@@ -10,7 +10,7 @@ import { ArrowLeft, Cable, RefreshCw } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import { MikrotikSourcesLoader } from '@/components/devices/mikrotik-sources-loader';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import {
     SourceDetails,
     sourceLabel,
@@ -501,7 +501,7 @@ function SourceTable({
                     ))}
                 </ToggleGroup>
             ) : null}
-            <DeviceTable
+            <DataTable
                 name={name}
                 variant="list"
                 rows={

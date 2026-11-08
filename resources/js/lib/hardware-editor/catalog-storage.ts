@@ -1,5 +1,6 @@
 import { blankDocument, type PanelDocument } from './document';
 import { validateDraft, type Assets } from './storage';
+import { postJson } from '@/lib/http';
 import { update } from '@/routes/manufacturers/models/panel';
 import type { DeviceModel, Manufacturer } from '@/types/device';
 
@@ -53,28 +54,15 @@ export async function saveModel(
                 `${side}.${assets[picture.assetId].type.split('/')[1]}`,
             );
     }
-    const token = window.document.cookie
-        .split('; ')
-        .find((c) => c.startsWith('XSRF-TOKEN='))
-        ?.slice('XSRF-TOKEN='.length);
-    const response = await fetch(
+    const response = await postJson<{ revision: number }>(
         update.url({ manufacturer: model.manufacturer_id, model: model.id }),
-        {
-            method: 'POST',
-            headers: {
-                Accept: 'application/json',
-                'X-XSRF-TOKEN': decodeURIComponent(token ?? ''),
-            },
-            body,
-        },
+        body,
     );
-    if (!response.ok) {
-        const result = await response.json().catch(() => null);
+    if (!response.ok || !response.data)
         throw new Error(
-            result?.errors
-                ? Object.values(result.errors).flat().join(' ')
+            !response.ok && response.data?.errors
+                ? Object.values(response.data.errors).flat().join(' ')
                 : 'Salvataggio non riuscito. Verifica la sessione e riprova.',
         );
-    }
-    return (await response.json()).revision;
+    return response.data.revision;
 }

@@ -21,7 +21,7 @@ class SubnetAddressTable
                 $query->where(function ($query) use ($pattern, $sourceMatches) {
                     $query->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("hostname LIKE ? ESCAPE '!'", [$pattern])
-                        ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [$pattern])
+                        ->orWhereRaw("mac_address LIKE ? ESCAPE '!'", [str_replace('-', ':', $pattern)])
                         ->orWhereRaw("description LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereIn('address', $sourceMatches)

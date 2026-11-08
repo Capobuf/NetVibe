@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import InputError from '@/components/input-error';
 import { IconButton } from '@/components/icon-button';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -426,7 +426,7 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                                 </Card>
                                             ))}
                                         </div>
-                                        <DeviceTable
+                                        <DataTable
                                             name="mikrotik-coverage"
                                             rows={report.coverage.map(
                                                 (menu, id) => ({

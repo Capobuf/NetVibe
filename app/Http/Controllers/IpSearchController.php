@@ -29,6 +29,7 @@ class IpSearchController extends Controller
             'direction' => ['sometimes', 'in:asc,desc'],
             'group' => ['sometimes', 'in:none,site'],
             'page' => ['sometimes', 'integer', 'min:1', 'max:2147483647'],
+            'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
             'tab' => ['sometimes', 'in:ip,devices,models,racks,cables'],
         ]);
         $search = $options['search'] ?? '';
@@ -38,7 +39,7 @@ class IpSearchController extends Controller
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');
         $results = $this->matches($company, $search)
             ->when($group === 'site', fn ($query) => $query->orderBy('site', $sort === 'site' ? $direction : 'asc')->orderBy('site_id'))
-            ->orderBy($columns[$sort ?? 'ip'], $direction)->orderBy('subnet_id')->orderBy('address')->paginate(20)->withQueryString();
+            ->orderBy($columns[$sort ?? 'ip'], $direction)->orderBy('subnet_id')->orderBy('address')->paginate((int) ($options['per_page'] ?? 25))->withQueryString();
         $records = IpAddress::whereIn('id', collect($results->items())->pluck('id')->filter())
             ->with(['device:id,name', 'deviceInterface:id,device_id,name,kind,connector_id,mac_address'])->get()->keyBy('id');
         $sources = UnifiObservation::whereIn('site_id', collect($results->items())->pluck('site_id'))
@@ -152,7 +153,7 @@ class IpSearchController extends Controller
             ->where(function ($query) use ($pattern, $observations) {
                 $query->whereRaw("INET_NTOA(ip_addresses.address) LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereRaw("ip_addresses.hostname LIKE ? ESCAPE '!'", [$pattern])
-                    ->orWhereRaw("ip_addresses.mac_address LIKE ? ESCAPE '!'", [$pattern])
+                    ->orWhereRaw("ip_addresses.mac_address LIKE ? ESCAPE '!'", [str_replace('-', ':', $pattern)])
                     ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereExists((clone $observations)->selectRaw('1')
                         ->whereColumn('unifi_observations.address', 'ip_addresses.address')->whereColumn('subnets.id', 'ip_addresses.subnet_id')->toBase())

@@ -7,7 +7,6 @@ import { DeviceAssociation } from '@/components/devices/device-association';
 import type { DeviceInterface } from '@/types/device';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    ArrowLeft,
     ArrowRight,
     Building2,
     ChevronDown,
@@ -17,7 +16,7 @@ import {
     Search,
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { type TableColumn } from '@/components/table-columns';
 import TextLink from '@/components/text-link';
@@ -26,7 +25,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cableTypes } from '@/lib/rack-cabling';
 import { TableColumns } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -145,8 +145,9 @@ export default function SearchIndex({
         total: number;
         current_page: number;
         last_page: number;
-        prev_page_url: string | null;
-        next_page_url: string | null;
+        per_page: number;
+        from: number | null;
+        to: number | null;
     };
     query: {
         search: string;
@@ -165,6 +166,14 @@ export default function SearchIndex({
             { id: 'subnet', label: 'Subnet', visible: true },
         ]);
     const route = { company: company.id, site: site.id };
+    const visit = (
+        changes: Partial<typeof query> & { page?: number; per_page?: number },
+    ) =>
+        router.get(
+            index.url(route),
+            { ...query, per_page: results.per_page, page: 1, ...changes },
+            { preserveState: true, preserveScroll: true },
+        );
     const visibleColumns = columns.filter((column) => column.visible);
     const viewKey = JSON.stringify([
         company.id,
@@ -404,25 +413,14 @@ export default function SearchIndex({
                                                                     : null
                                                             }
                                                             onSort={(sort) =>
-                                                                router.get(
-                                                                    index(
-                                                                        route,
-                                                                        {
-                                                                            query: {
-                                                                                search: query.search,
-                                                                                group: query.group,
-                                                                                sort: sort?.column,
-                                                                                direction:
-                                                                                    sort?.direction,
-                                                                            },
-                                                                        },
-                                                                    ),
-                                                                    {},
-                                                                    {
-                                                                        preserveState: true,
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
+                                                                visit({
+                                                                    sort:
+                                                                        sort?.column ??
+                                                                        null,
+                                                                    direction:
+                                                                        sort?.direction ??
+                                                                        'asc',
+                                                                })
                                                             }
                                                         />
                                                     ),
@@ -458,22 +456,9 @@ export default function SearchIndex({
                                                                         onValueChange={(
                                                                             group,
                                                                         ) =>
-                                                                            router.get(
-                                                                                index(
-                                                                                    route,
-                                                                                    {
-                                                                                        query: {
-                                                                                            ...query,
-                                                                                            group,
-                                                                                        },
-                                                                                    },
-                                                                                ),
-                                                                                {},
-                                                                                {
-                                                                                    preserveState: true,
-                                                                                    preserveScroll: true,
-                                                                                },
-                                                                            )
+                                                                            visit({
+                                                                                group: group as typeof query.group,
+                                                                            })
                                                                         }
                                                                     >
                                                                         {Object.entries(
@@ -771,65 +756,18 @@ export default function SearchIndex({
                                         </TableBody>
                                     </Table>
                                 </CardContent>
-                                {results.last_page > 1 ||
-                                results.current_page > 1 ? (
-                                    <CardFooter className="justify-end border-t py-4">
-                                        <nav
-                                            aria-label="Pagine dei risultati"
-                                            className="flex items-center gap-3 text-sm text-muted-foreground tabular-nums"
-                                        >
-                                            {results.prev_page_url ? (
-                                                <IconButton
-                                                    label="Pagina precedente"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={
-                                                            results.prev_page_url
-                                                        }
-                                                        preserveState
-                                                        preserveScroll
-                                                    >
-                                                        <ArrowLeft />
-                                                    </Link>
-                                                </IconButton>
-                                            ) : (
-                                                <IconButton
-                                                    label="Pagina precedente"
-                                                    disabled
-                                                >
-                                                    <ArrowLeft />
-                                                </IconButton>
-                                            )}
-                                            <span>
-                                                {results.current_page} /{' '}
-                                                {results.last_page}
-                                            </span>
-                                            {results.next_page_url ? (
-                                                <IconButton
-                                                    label="Pagina successiva"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={
-                                                            results.next_page_url
-                                                        }
-                                                        preserveState
-                                                        preserveScroll
-                                                    >
-                                                        <ArrowRight />
-                                                    </Link>
-                                                </IconButton>
-                                            ) : (
-                                                <IconButton
-                                                    label="Pagina successiva"
-                                                    disabled
-                                                >
-                                                    <ArrowRight />
-                                                </IconButton>
-                                            )}
-                                        </nav>
-                                    </CardFooter>
+                                {results.total > 25 ||
+                                results.last_page > 1 ? (
+                                    <TablePagination
+                                        summary={`${results.from ?? 0}–${results.to ?? 0} di ${results.total.toLocaleString('it-IT')} indirizzi`}
+                                        page={results.current_page}
+                                        pageCount={results.last_page}
+                                        pageSize={results.per_page}
+                                        onPageChange={(page) => visit({ page })}
+                                        onPageSizeChange={(per_page) =>
+                                            visit({ per_page })
+                                        }
+                                    />
                                 ) : null}
                             </Card>
                         </TabsContent>
@@ -869,7 +807,7 @@ function ResultTable<
     value: (row: Row, column: Column) => string | number | null;
 }) {
     return (
-        <DeviceTable
+        <DataTable
             name={name}
             variant="list"
             searchLabel="Cerca nei risultati"

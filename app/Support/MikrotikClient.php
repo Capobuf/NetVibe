@@ -7,9 +7,7 @@ use App\Models\MikrotikConnection;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
-use Psr\Http\Message\ResponseInterface;
 
 class MikrotikClient
 {
@@ -56,30 +54,8 @@ class MikrotikClient
 
     public static function normalizeUrl(string $url): string
     {
-        if (! str_contains($url, '://')) {
-            $url = 'https://'.$url;
-        }
-        $parts = parse_url($url);
-        if ($parts === false || ($parts['scheme'] ?? null) !== 'https' || empty($parts['host'])
-            || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
-            || ! in_array($parts['path'] ?? '', ['', '/'], true) || preg_match('/[\s\\\\%]/', $url)) {
-            throw new MikrotikException('unsafe_url');
-        }
-        $host = strtolower(rtrim($parts['host'], '.'));
-        $ip = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4);
-        if (! filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)
-            || $host === 'localhost' || str_ends_with($host, '.localhost')
-            || $host === 'metadata.google.internal' || preg_match('/\A0x[0-9a-f]+\z/i', $host)
-            || ($ip && ! self::allowedAddress($host))
-            || (! $ip && preg_match('/\A[0-9.]+\z/', $host))) {
-            throw new MikrotikException('unsafe_url');
-        }
-        $port = $parts['port'] ?? 443;
-        if ($port < 1 || $port > 65535) {
-            throw new MikrotikException('unsafe_url');
-        }
-
-        return 'https://'.$host.($port === 443 ? '' : ':'.$port);
+        return SafeHttp::normalizeUrl(str_contains($url, '://') ? $url : 'https://'.$url)
+            ?? throw new MikrotikException('unsafe_url');
     }
 
     public function inspect(#[\SensitiveParameter] MikrotikConnection $connection, bool $analyze): array
@@ -116,7 +92,7 @@ class MikrotikClient
             throw new MikrotikException('network');
         }
         foreach ($addresses as $address) {
-            if (! self::allowedAddress($address)) {
+            if (! SafeHttp::allowedAddress($address)) {
                 $this->log('Indirizzo IPv4 non consentito: '.$address);
                 throw new MikrotikException('unsafe_url');
             }
@@ -202,62 +178,37 @@ class MikrotikClient
             throw new MikrotikException('rate_limit');
         }
         RateLimiter::hit('mikrotik:'.$url, 60);
-        $host = parse_url($url, PHP_URL_HOST);
         $port = parse_url($url, PHP_URL_PORT) ?? 443;
         $trace = fopen('php://memory', 'w+');
         $handlerError = null;
         $retryAnonymous = $retryHandshake = false;
-        // Pin validated DNS results for both TLS attempts.
-        $curlOptions = [CURLOPT_RESOLVE => ["{$host}:{$port}:{$address}"]];
-        if ($this->anonymousTls) {
-            $curlOptions[CURLOPT_SSL_CIPHER_LIST] = 'ADH-AES256-SHA256:ADH-AES128-SHA256:@SECLEVEL=0';
-        }
         $this->log('GET '.$url.'/rest/'.$path.'?'.http_build_query(['.proplist' => $properties]));
         $this->log('Destinazione: '.$address.':'.$port.'; verifica certificato: '.($connection->allow_unverified_certificate ? 'disabilitata' : 'abilitata'));
         try {
             $attempted = true;
-            $response = Http::withBasicAuth($connection->username, $connection->password)->acceptJson()->withUserAgent('NetVibe')
-                ->connectTimeout(min(3, $remaining))->timeout(min(8, $remaining))->withoutRedirecting()
+            // Validated DNS results stay pinned for both TLS attempts.
+            $response = SafeHttp::request($url, $address, $limit, MikrotikException::class)
+                ->withBasicAuth($connection->username, $connection->password)
+                ->connectTimeout(min(3, $remaining))->timeout(min(8, $remaining))
                 ->withOptions([
-                    'verify' => ! $connection->allow_unverified_certificate, 'proxy' => '', 'force_ip_resolve' => 'v4',
+                    'verify' => ! $connection->allow_unverified_certificate,
                     'debug' => $trace,
                     'on_stats' => function (TransferStats $stats) use (&$handlerError): void {
                         $handlerError = $stats->getHandlerErrorData();
                     },
-                    'curl' => $curlOptions,
                     ...($this->anonymousTls ? [
+                        'curl' => [CURLOPT_SSL_CIPHER_LIST => 'ADH-AES256-SHA256:ADH-AES128-SHA256:@SECLEVEL=0'],
                         'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
                         'crypto_method_max' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
                     ] : []),
-                    'on_headers' => function (ResponseInterface $response) use ($limit): void {
-                        if ((int) $response->getHeaderLine('Content-Length') > $limit) {
-                            throw new MikrotikException('limit');
-                        }
-                    },
-                    'progress' => function ($total, $downloaded) use ($limit): void {
-                        if ($downloaded > $limit) {
-                            throw new MikrotikException('limit');
-                        }
-                    },
                 ])->get($url.'/rest/'.$path, ['.proplist' => $properties]);
         } catch (ConnectionException|GuzzleException $exception) {
-            if ($handlerError instanceof MikrotikException) {
-                throw $handlerError;
-            }
-            for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
-                if ($cause instanceof MikrotikException) {
-                    throw $cause;
-                }
-            }
+            SafeHttp::rethrowOwn($exception, $handlerError, MikrotikException::class);
             $retryAnonymous = $handlerError === 35 && $connection->allow_unverified_certificate && ! $this->anonymousTls;
             // RouterOS occasionally aborts a single handshake (e.g. "bad record mac"); one retry avoids failing the whole sync.
             $retryHandshake = $handlerError === 35 && ! $retryAnonymous && $handshakeRetry;
             if (! $retryAnonymous && ! $retryHandshake) {
-                throw new MikrotikException(match ($handlerError) {
-                    28 => 'timeout',
-                    35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91, 98 => 'tls',
-                    default => 'network',
-                });
+                throw new MikrotikException(SafeHttp::transportStatus($handlerError));
             }
         } finally {
             rewind($trace);
@@ -294,16 +245,7 @@ class MikrotikClient
         if (strlen($body) > $limit) {
             throw new MikrotikException('limit');
         }
-        $status = match (true) {
-            $response->status() === 401 => 'unauthorized',
-            $response->status() === 403 => 'forbidden',
-            $response->status() === 404 => 'not_found',
-            $response->status() === 429 => 'rate_limit',
-            $response->redirect() => 'redirect',
-            ! $response->successful() => 'http_error',
-            default => null,
-        };
-        if ($status) {
+        if ($status = SafeHttp::failure($response)) {
             throw new MikrotikException($status);
         }
         $data = json_decode($body, true, 32);
@@ -344,21 +286,5 @@ class MikrotikClient
         }
 
         return $data;
-    }
-
-    private static function allowedAddress(string $address): bool
-    {
-        if (! filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || $address === '168.63.129.16') {
-            return false;
-        }
-        $ip = ip2long($address);
-        foreach (['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] as $cidr) {
-            $range = Ipv4Cidr::parse($cidr);
-            if ($ip >= $range['network_address'] && $ip <= $range['broadcast_address']) {
-                return true;
-            }
-        }
-
-        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false && $ip < ip2long('224.0.0.0');
     }
 }

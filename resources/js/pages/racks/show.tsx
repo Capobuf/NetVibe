@@ -1,5 +1,8 @@
+import { ZoomControls } from '@/components/zoom-controls';
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { SaveButton } from '@/components/save-button';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import {
     ArrowLeft,
@@ -7,7 +10,6 @@ import {
     ArrowUp,
     Archive,
     Maximize,
-    Minus,
     Plus,
     Search,
     Server,
@@ -170,12 +172,8 @@ function RackEditor({
     topologyNotice,
     selectedCable: linkedCableId,
 }: Props) {
-    const { companyNavigation } = usePage().props;
     const route = { company: company.id, site: site.id, rack: rack.id };
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
     const { data, setData, errors } = form;
     const processing = form.processing;
@@ -224,10 +222,9 @@ function RackEditor({
     const [error, setError] = useState('');
     const [imageError, setImageError] = useState('');
     const [fieldRevision, setFieldRevision] = useState(0);
-    const [leave, setLeave] = useState<(() => void) | null>(null);
+    const { leave, setLeave, allowLeave } = useLeaveGuard(isDirty);
     const [discard, setDiscard] = useState(false);
     const [printingDocument, setPrintingDocument] = useState(false);
-    const allowLeave = useRef(false);
     const selected = data.items.find((item) => item.key === selectedKey);
     const selectedDevice = devices.find(
         (device) => device.id === selected?.device_id,
@@ -274,50 +271,6 @@ function RackEditor({
         Object.values(errors).join(' ') ||
         imageError ||
         topologyNotice;
-
-    useEffect(() => {
-        const stop = router.on('before', (event) => {
-            if (!isDirty || allowLeave.current) return;
-            event.preventDefault();
-            const visit = event.detail.visit;
-            setLeave(() => () => {
-                allowLeave.current = true;
-                setLeave(null);
-                router.visit(visit.url, {
-                    ...visit,
-                    preserveState: false,
-                    onFinish: () => {
-                        allowLeave.current = false;
-                    },
-                });
-            });
-        });
-        const unload = (event: BeforeUnloadEvent) => {
-            if (isDirty && !allowLeave.current) {
-                event.preventDefault();
-                event.returnValue = '';
-            }
-        };
-        const currentUrl = window.location.href;
-        const currentState = window.history.state;
-        const pop = (event: PopStateEvent) => {
-            if (!isDirty || allowLeave.current) return;
-            event.stopImmediatePropagation();
-            window.history.pushState(currentState, '', currentUrl);
-            setLeave(() => () => {
-                allowLeave.current = true;
-                setLeave(null);
-                window.history.back();
-            });
-        };
-        window.addEventListener('beforeunload', unload);
-        window.addEventListener('popstate', pop, true);
-        return () => {
-            stop();
-            window.removeEventListener('beforeunload', unload);
-            window.removeEventListener('popstate', pop, true);
-        };
-    }, [isDirty]);
 
     function select(key: string | null) {
         if (cableDraft) return;
@@ -824,29 +777,12 @@ function RackEditor({
                                 >
                                     <Hand />
                                 </IconButton>
-                                <IconButton
-                                    label="Riduci zoom"
-                                    onClick={() =>
-                                        canvas.current?.zoom(1 / 1.25)
-                                    }
-                                >
-                                    <Minus />
-                                </IconButton>
-                                <span className="w-12 text-center text-xs text-muted-foreground tabular-nums">
-                                    {Math.round(zoom * 100)}%
-                                </span>
-                                <IconButton
-                                    label="Aumenta zoom"
-                                    onClick={() => canvas.current?.zoom(1.25)}
-                                >
-                                    <Plus />
-                                </IconButton>
-                                <IconButton
-                                    label="Adatta rack"
-                                    onClick={() => canvas.current?.fit()}
-                                >
-                                    <Maximize />
-                                </IconButton>
+                                <ZoomControls
+                                    zoom={zoom}
+                                    onZoom={(factor) => canvas.current?.zoom(factor)}
+                                    onFit={() => canvas.current?.fit()}
+                                    fitLabel="Adatta rack"
+                                />
                             </div>
                         </div>
                         <ContextMenu>
@@ -1783,8 +1719,7 @@ function RackEditor({
                         <p className="text-sm">
                             {endLabel(disconnecting.a, devices)} ↔{' '}
                             {endLabel(disconnecting.b, devices)}. Il
-                            collegamento verrà eliminato con Salva; dispositivi,
-                            porte e IP saranno conservati.
+                            collegamento verrà eliminato con Salva.
                         </p>
                     )}
                     <DialogFooter>

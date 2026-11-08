@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from 'react';
-import { Search } from 'lucide-react';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
 import { TableSearch } from '@/components/table-search';
@@ -9,11 +8,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useTablePagination } from '@/hooks/use-table-pagination';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
-import {
-    InputGroup,
-    InputGroupAddon,
-    InputGroupInput,
-} from '@/components/ui/input-group';
 import {
     Table,
     TableBody,
@@ -25,7 +19,7 @@ import {
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
-export function DeviceTable<
+export function DataTable<
     Row extends { id: number | string },
     Column extends string,
 >({
@@ -112,26 +106,12 @@ export function DeviceTable<
     return (
         <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-                {isList ? (
-                    <TableSearch
-                        value={search}
-                        onChange={changeSearch}
-                        total={total}
-                        label={searchLabel}
-                    />
-                ) : (
-                    <InputGroup className="max-w-sm">
-                        <InputGroupAddon>
-                            <Search />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                            aria-label="Cerca nell’elenco"
-                            placeholder="Cerca nell’elenco…"
-                            value={search}
-                            onChange={(e) => changeSearch(e.target.value)}
-                        />
-                    </InputGroup>
-                )}
+                <TableSearch
+                    value={search}
+                    onChange={changeSearch}
+                    total={total}
+                    label={searchLabel}
+                />
                 {filters}
                 {bulkActions && selected.length > 0 ? (
                     <div className="flex flex-wrap items-center gap-2">

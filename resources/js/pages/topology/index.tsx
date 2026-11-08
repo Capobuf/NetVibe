@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -8,16 +8,15 @@ import {
     Clock3,
     LayoutGrid,
     GitFork,
-    Maximize,
-    Minus,
     Monitor,
-    Plus,
     RefreshCw,
     Search,
     Server,
     Workflow,
     X,
 } from 'lucide-react';
+import { ZoomControls } from '@/components/zoom-controls';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { IconButton } from '@/components/icon-button';
 import {
     Tooltip,
@@ -100,7 +99,7 @@ export default function TopologyIndex(props: Props) {
     return <TopologyView key={props.site.id} {...props} />;
 }
 function TopologyView({ company, site, topology, racks }: Props) {
-    const { auth, companyNavigation } = usePage().props;
+    const { auth } = usePage().props;
     const route = { company: company.id, site: site.id };
     const [search, setSearch] = useState('');
     const [rack, setRack] = useState('all');
@@ -119,68 +118,64 @@ function TopologyView({ company, site, topology, racks }: Props) {
     const diagram = useRef<HTMLElement>(null);
     const popupTitleId = useId();
     const byId = new Map(topology.nodes.map((node) => [node.id, node]));
-    // Stable filter results preserve the canvas layout caches during zoom and selection.
-    const { nodes, edges, visibleRacks } = useMemo(() => {
-        const matchingRack = new Set(
-            topology.nodes
-                .filter(
-                    (node) =>
-                        rack === 'all' ||
-                        (rack === 'none'
-                            ? node.device_id && !node.rack
-                            : node.rack?.id === Number(rack)),
-                )
-                .map((node) => node.id),
-        );
-        const matchingEdges = topology.edges.filter(
-            (edge) =>
-                (kind === 'all' || edge.kind === kind) &&
-                (matchingRack.has(edge.source) || matchingRack.has(edge.target)),
-        );
-        const visibleIds = new Set([
-            ...matchingRack,
-            ...matchingEdges.flatMap((edge) => [edge.source, edge.target]),
-        ]);
-        const term = search.trim().toLocaleLowerCase();
-        const searchIds = new Set(
-            topology.nodes
-                .filter(
-                    (node) =>
-                        visibleIds.has(node.id) &&
-                        [
-                            node.label,
-                            node.model,
-                            node.identity,
-                            node.mac,
-                            node.rack?.name,
-                        ]
-                            .join(' ')
-                            .toLocaleLowerCase()
-                            .includes(term),
-                )
-                .map((node) => node.id),
-        );
-        const edges = term
-            ? matchingEdges.filter(
-                  (edge) =>
-                      searchIds.has(edge.source) || searchIds.has(edge.target),
-              )
-            : matchingEdges;
-        const shown = term
-            ? new Set([
-                  ...searchIds,
-                  ...edges.flatMap((edge) => [edge.source, edge.target]),
-              ])
-            : visibleIds;
-        const nodes = topology.nodes.filter((node) => shown.has(node.id));
-        const visibleRacks = racks.filter(
-            (item) =>
-                (rack === 'all' && !term) ||
-                String(item.id) === rack ||
-                nodes.some((node) => node.rack?.id === item.id),
-        );
-        return { nodes, edges, visibleRacks };
-    }, [topology.nodes, topology.edges, racks, rack, kind, search]);
+    const matchingRack = new Set(
+        topology.nodes
+            .filter(
+                (node) =>
+                    rack === 'all' ||
+                    (rack === 'none'
+                        ? node.device_id && !node.rack
+                        : node.rack?.id === Number(rack)),
+            )
+            .map((node) => node.id),
+    );
+    const matchingEdges = topology.edges.filter(
+        (edge) =>
+            (kind === 'all' || edge.kind === kind) &&
+            (matchingRack.has(edge.source) || matchingRack.has(edge.target)),
+    );
+    const visibleIds = new Set([
+        ...matchingRack,
+        ...matchingEdges.flatMap((edge) => [edge.source, edge.target]),
+    ]);
+    const term = search.trim().toLocaleLowerCase();
+    const searchIds = new Set(
+        topology.nodes
+            .filter(
+                (node) =>
+                    visibleIds.has(node.id) &&
+                    [
+                        node.label,
+                        node.model,
+                        node.identity,
+                        node.mac,
+                        node.rack?.name,
+                    ]
+                        .join(' ')
+                        .toLocaleLowerCase()
+                        .includes(term),
+            )
+            .map((node) => node.id),
+    );
+    const edges = term
+        ? matchingEdges.filter(
+              (edge) =>
+                  searchIds.has(edge.source) || searchIds.has(edge.target),
+          )
+        : matchingEdges;
+    const shown = term
+        ? new Set([
+              ...searchIds,
+              ...edges.flatMap((edge) => [edge.source, edge.target]),
+          ])
+        : visibleIds;
+    const nodes = topology.nodes.filter((node) => shown.has(node.id));
+    const visibleRacks = racks.filter(
+        (item) =>
+            (rack === 'all' && !term) ||
+            String(item.id) === rack ||
+            nodes.some((node) => node.rack?.id === item.id),
+    );
     const selectedNode =
         selection?.kind === 'node'
             ? nodes.find((node) => node.id === selection.id)
@@ -207,10 +202,7 @@ function TopologyView({ company, site, topology, racks }: Props) {
     const stale =
         topology.integrations.some((source) => source.stale) ||
         edges.some((edge) => edge.stale);
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const edgeLabel = (edge: TopologyEdge) =>
         `${byId.get(edge.source)?.label ?? 'Dispositivo'} ↔ ${byId.get(edge.target)?.label ?? 'Neighbor'}`;
     function select(next: TopologySelection) {
@@ -482,32 +474,12 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                 >
                                     <LayoutGrid />
                                 </IconButton>
-                                <IconButton
-                                    label="Riduci zoom"
-                                    variant="ghost"
-                                    onClick={() =>
-                                        canvas.current?.zoom(1 / 1.25)
-                                    }
-                                >
-                                    <Minus />
-                                </IconButton>
-                                <span className="hidden w-12 text-center text-xs text-muted-foreground tabular-nums sm:block">
-                                    {Math.round(zoom * 100)}%
-                                </span>
-                                <IconButton
-                                    label="Aumenta zoom"
-                                    variant="ghost"
-                                    onClick={() => canvas.current?.zoom(1.25)}
-                                >
-                                    <Plus />
-                                </IconButton>
-                                <IconButton
-                                    label="Adatta diagramma"
-                                    variant="ghost"
-                                    onClick={() => canvas.current?.fit()}
-                                >
-                                    <Maximize />
-                                </IconButton>
+                                <ZoomControls
+                                    zoom={zoom}
+                                    onZoom={(factor) => canvas.current?.zoom(factor)}
+                                    onFit={() => canvas.current?.fit()}
+                                    fitLabel="Adatta diagramma"
+                                />
                             </div>
                         </div>
                         <div className="h-[72vh] min-h-[32rem] pb-16">

@@ -2,6 +2,8 @@ import { createInertiaApp } from '@inertiajs/react';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
+// Registers the unsaved-changes history guard before Inertia's own popstate listener.
+import '@/hooks/use-leave-guard';
 import AppLayout from '@/layouts/app-layout';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import AuthLayout from '@/layouts/auth-layout';

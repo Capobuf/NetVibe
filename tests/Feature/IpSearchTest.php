@@ -58,7 +58,7 @@ class IpSearchTest extends TestCase
         $this->get($search.'?search=aa:bb:cc')->assertInertia(fn (Assert $page) => $page
             ->where('results.total', 1)->where('results.data.0.id', $ip->id));
         $this->get($search.'?search=foreign')->assertInertia(fn (Assert $page) => $page->where('results.total', 0));
-        $this->get($search.'?search=10.0.0.&sort=ip&direction=desc')->assertInertia(fn (Assert $page) => $page
+        $this->get($search.'?search=10.0.0.&sort=ip&direction=desc&per_page=10')->assertInertia(fn (Assert $page) => $page
             ->where('results.total', 22)->where('results.data.0.ip', '10.0.0.200')
             ->where('results.data.2.ip', '10.0.0.20')
             ->where('results.next_page_url', fn (string $url) => str_starts_with($url, $search.'?')
@@ -66,7 +66,7 @@ class IpSearchTest extends TestCase
                 && str_contains($url, 'direction=desc') && str_contains($url, 'page=2')));
         $this->get($search)->assertInertia(fn (Assert $page) => $page->where('results.total', 0));
         $this->get($search.'?search=%25')->assertInertia(fn (Assert $page) => $page->where('results.total', 0));
-        $this->get($search.'?search=10.0.0.&group=site&sort=ip&direction=desc&page=2')->assertInertia(fn (Assert $page) => $page
+        $this->get($search.'?search=10.0.0.&group=site&sort=ip&direction=desc&per_page=10&page=3')->assertInertia(fn (Assert $page) => $page
             ->where('query.group', 'site')->where('results.total', 22)->has('results.data', 2)
             ->where('results.data.0.site_id', $site->id)->where('results.data.0.ip', '10.0.0.1')
             ->where('results.data.1.id', $secondIp->id)

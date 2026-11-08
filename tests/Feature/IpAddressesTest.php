@@ -236,7 +236,7 @@ class IpAddressesTest extends TestCase
         $subnet = $site->subnets()->create(Ipv4Cidr::parse('192.168.1.0/24'));
 
         $this->post(route('companies.sites.subnets.ip-addresses.store', [$company, $site, $subnet]), [
-            'ip' => '192.168.1.10', 'mac_address' => 'aa-bb-cc-dd-ee-ff',
+            'ip' => '192.168.1.10', 'hostname' => 'node', 'mac_address' => 'aa-bb-cc-dd-ee-ff',
         ])->assertSessionHasNoErrors();
         $this->assertSame('AA:BB:CC:DD:EE:FF', $subnet->ipAddresses()->sole()->mac_address);
 

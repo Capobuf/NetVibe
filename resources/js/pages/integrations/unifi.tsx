@@ -275,7 +275,7 @@ function AccessRow({
                         </ItemTitle>
                         <ItemDescription className="line-clamp-none">
                             {[
-                                unifiAccess[connection.mode],
+                                connection.mode === 'direct' ? unifiAccess.direct : null,
                                 consoles !== undefined &&
                                 connection.mode === "cloud"
                                     ? `${consoles} di ${connection.hosts?.length ?? 0} console integrate`

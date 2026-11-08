@@ -1,6 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import type { PropsWithChildren } from 'react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
+import { ObservationRetention } from '@/components/observation-retention';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { UnifiMark } from '@/components/unifi-mark';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -44,6 +45,7 @@ export function IntegrationTabs({
             className="min-w-0 gap-6"
             onValueChange={(next) => router.visit(href(next as IntegrationTab))}
         >
+            <div className="flex flex-wrap items-center justify-between gap-3">
             <TabsList aria-label="Integrazioni">
                 {auth.user.is_superadmin ? (
                     <TabsTrigger value="snipe-it">
@@ -60,6 +62,10 @@ export function IntegrationTabs({
                     MikroTik
                 </TabsTrigger>
             </TabsList>
+            {company && auth.user.is_superadmin && company.observation_retention_days ? (
+                <ObservationRetention company={company.id} days={company.observation_retention_days} />
+            ) : null}
+            </div>
             {children}
         </Tabs>
     );

@@ -66,7 +66,8 @@ class SubnetAddressTable
         $populatedCount = $populated?->count() ?? 0;
 
         if ($hideFree) {
-            $observed = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
+            // Free means proposable: only occupying evidence keeps an undocumented address visible.
+            $observed = UnifiIpam::addressSources($subnet->site_id, true)->whereBetween('address', [$first, $last])
                 ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                     ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)))
                 ->distinct()->pluck('address');

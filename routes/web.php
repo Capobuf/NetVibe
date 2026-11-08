@@ -90,6 +90,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('companies.sites', SiteController::class)->only(['store', 'update', 'destroy']);
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
             Route::resource('users', CompanyUserController::class)->only(['index', 'store', 'destroy']);
+            Route::put('integrations/retention', [CompanyIntegrationController::class, 'retention'])->name('integrations.retention.update');
             Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
                 Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
                 Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');

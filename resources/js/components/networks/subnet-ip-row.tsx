@@ -66,6 +66,20 @@ export function SubnetIpRow({
           ? 'Non aggiornato'
           : null;
     const canOpen = ipAddress.id !== null || canEdit;
+    // Distinct facts from different sources stay visible side by side; only the warning is shared.
+    const macs = [
+        ...new Set(
+            [
+                ...current.map((source) => source.data.mac),
+                ...unifi
+                    .filter((observation) => observation.state !== 'missing')
+                    .map((observation) => observation.data.mac),
+            ]
+                .filter((mac): mac is string => Boolean(mac))
+                .map((mac) => mac.toUpperCase()),
+        ),
+    ];
+    const macConflict = macs.length > 1 ? macs : undefined;
 
     return (
         <TableRow
@@ -128,12 +142,17 @@ export function SubnetIpRow({
                                 aria-label={`Fonti per ${ipAddress.ip}`}
                             >
                                 <SnipeItIp source={ipAddress.snipe_it} avatar />
-                                <MikrotikIndicator sources={sources} avatar />
+                                <MikrotikIndicator
+                                    sources={sources}
+                                    avatar
+                                    macConflict={macConflict}
+                                />
                                 <UnifiObservationIndicator
                                     observations={unifi}
                                     company={company}
                                     site={site}
                                     avatar
+                                    macConflict={macConflict}
                                 />
                             </AvatarGroup>
                             {sourceNotice ? (

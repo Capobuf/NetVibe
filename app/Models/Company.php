@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name'])]
+#[Fillable(['name', 'observation_retention_days'])]
 class Company extends Model
 {
     /** @return BelongsToMany<User, $this> */

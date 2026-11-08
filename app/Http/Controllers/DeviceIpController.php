@@ -6,10 +6,10 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceInterface;
 use App\Models\IpAddress;
-use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Support\DeviceAssignment;
 use App\Support\InterfaceMac;
+use App\Support\IpamEvidence;
 use App\Support\MikrotikIpam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +34,7 @@ class DeviceIpController extends Controller
                 $assignment['mac_address'] = InterfaceMac::synchronize($interface, $ip->mac_address, $ip, $data['mac_confirmation_token'] ?? null, $data['mikrotik_edit_mode'] ?? null);
             }
             MikrotikIpam::manualChange($ip, $assignment, $data['mikrotik_edit_mode'] ?? null);
+            $ip->auto_managed = false;
             $ip->fill($assignment)->save();
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'IP collegato.']);
@@ -44,17 +45,14 @@ class DeviceIpController extends Controller
     public function destroy(Request $request, Company $company, Site $site, Device $device, IpAddress $ipAddress): RedirectResponse
     {
         $request->validate(['confirmed' => ['accepted']]);
-        $excluded = DB::transaction(function () use ($company, $device, $ipAddress) {
+        $message = DB::transaction(function () use ($company, $device, $ipAddress) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $device->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
-            $excluded = $record->subnet->isExcluded($record->address)
-                || MikrotikSource::blocking($record->subnet->site_id)->where('address', $record->address)->exists();
             $record->delete();
 
-            return $excluded;
+            return IpamEvidence::releaseMessage($record->subnet, $record->address);
         }, 3);
-        Inertia::flash('toast', ['type' => 'success', 'message' => $excluded
-            ? 'Documentazione rimossa. L’indirizzo resta escluso dai suggerimenti.' : 'IP liberato e documentazione rimossa.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return back();
     }

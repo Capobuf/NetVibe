@@ -55,6 +55,9 @@ export type MikrotikSource = {
     site_id: number;
     stale: boolean;
     seen_at: string;
+    present_at?: string | null;
+    presence?: 'online' | null;
+    read_at?: string | null;
     ip: string | null;
     problem: string | null;
     import_note?: string | null;
@@ -91,6 +94,20 @@ export type MikrotikSource = {
     };
 };
 
+const statusLabels: Record<string, string> = {
+    bound: 'Lease attiva',
+    waiting: 'In attesa',
+    offered: 'Offerta',
+    busy: 'Occupato',
+    reachable: 'Raggiungibile',
+    stale: 'Stale',
+    delay: 'Delay',
+    probe: 'Probe',
+    permanent: 'Statico',
+    failed: 'Non risolto',
+    incomplete: 'Incompleto',
+};
+
 export function sourceIsDynamic(source: MikrotikSource) {
     return [true, 'true', 'yes', 1, '1'].includes(source.data.dynamic ?? false);
 }
@@ -105,7 +122,9 @@ export function sourceLabel(source: MikrotikSource) {
         if (source.data.menu === '/interface/bridge/host')
             return 'Osservazione MAC';
         if (source.data.menu === '/ip/neighbor') return 'Neighbor';
-        return 'Osservazione DHCP';
+        return 'fixed' in source.data
+            ? 'Lease DHCP dinamica'
+            : 'Lease DHCP attiva';
     }
     if (source.kind === 'context') {
         const menus: Record<string, string> = {
@@ -141,6 +160,9 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                     <CardHeader className="gap-3 px-5">
                         <CardTitle>{sourceLabel(source)}</CardTitle>
                         <div className="flex flex-wrap gap-2">
+                            {source.presence === 'online' ? (
+                                <Badge variant="secondary">Online</Badge>
+                            ) : null}
                             {sourceIsDynamic(source) ? (
                                 <Badge variant="secondary">Dinamico</Badge>
                             ) : null}
@@ -185,6 +207,10 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                             {Object.entries({
                                 IPv4: source.ip,
                                 MAC: source.data.mac ?? source.data.mac_address,
+                                Stato: source.data.status
+                                    ? (statusLabels[source.data.status] ??
+                                      source.data.status)
+                                    : null,
                             })
                                 .filter(([, value]) => value)
                                 .map(([label, value]) => (
@@ -234,14 +260,30 @@ export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
                                     )}
                                 </dd>
                             </div>
+                            {source.present_at ? (
+                                <div>
+                                    <dt className="mb-1 text-muted-foreground">
+                                        Ultimo avvistamento
+                                    </dt>
+                                    <dd>
+                                        <time dateTime={source.present_at}>
+                                            {formatDateTime(source.present_at)}
+                                        </time>
+                                    </dd>
+                                </div>
+                            ) : null}
                             <div>
                                 <dt className="mb-1 text-muted-foreground">
-                                    Ultima lettura
+                                    Ultima lettura riuscita
                                 </dt>
                                 <dd>
-                                    <time dateTime={source.seen_at}>
-                                        {formatDateTime(source.seen_at)}
-                                    </time>
+                                    {source.read_at ? (
+                                        <time dateTime={source.read_at}>
+                                            {formatDateTime(source.read_at)}
+                                        </time>
+                                    ) : (
+                                        '—'
+                                    )}
                                 </dd>
                             </div>
                         </dl>
@@ -352,18 +394,32 @@ export function MikrotikSourcesDialog({
     );
 }
 
+export function MacConflictAlert({ macs }: { macs?: string[] }) {
+    if (!macs?.length) return null;
+    return (
+        <Alert>
+            <TriangleAlert />
+            <AlertDescription>
+                <p>MAC differenti tra le fonti: {macs.join(', ')}</p>
+            </AlertDescription>
+        </Alert>
+    );
+}
+
 export function MikrotikIndicator({
     sources,
     mac,
     field = 'ip',
     children,
     avatar = false,
+    macConflict,
 }: {
     sources: MikrotikSource[];
     mac?: string | null;
     field?: 'ip' | 'mac' | 'hostname';
     children?: ReactNode;
     avatar?: boolean;
+    macConflict?: string[];
 }) {
     const [open, setOpen] = useState(false);
     const relevant =
@@ -378,6 +434,7 @@ export function MikrotikIndicator({
         current.map((source) => source.data.mac?.toUpperCase()).filter(Boolean),
     );
     const mismatch =
+        Boolean(macConflict?.length) ||
         current.some((source) => source.problem) ||
         (field === 'mac' &&
             (macs.size > 1 ||
@@ -454,6 +511,7 @@ export function MikrotikIndicator({
                             <dd className="tabular-nums">{mac}</dd>
                         </dl>
                     ) : null}
+                    <MacConflictAlert macs={macConflict} />
                     <SourceDetails sources={relevant} />
                 </div>
             </SheetContent>

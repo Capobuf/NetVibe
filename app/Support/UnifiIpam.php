@@ -50,11 +50,15 @@ class UnifiIpam
     public function capture(UnifiSite $source, ?array $networks, array $clients, array $devices = []): void
     {
         $site = Site::query()->lockForUpdate()->findOrFail($source->site_id);
+        $cutoff = IpamEvidence::cutoff($site->id);
         $seen = [];
         foreach ($networks ?? [] as $network) {
             foreach ($this->networkRows($network) as $key => $data) {
                 $observation = $this->record($source, 'network', $key, $data);
                 $observation->address = $data['host_ip'] && $data['enabled'] !== false ? ip2long($data['host_ip']) : null;
+                if ($observation->address !== null) {
+                    $observation->present_at = now();
+                }
                 if ($source->inventory_activated_at) {
                     $this->associateNetwork($site, $observation);
                 }
@@ -73,14 +77,22 @@ class UnifiIpam
                 }
                 $data = ['name' => $item['name'] ?? null, 'hostname_observed' => $item['name'] ?? null,
                     'mac' => MikrotikSnapshot::mac($kind === 'device' ? ($item['mac_address'] ?? null) : ($item['macAddress'] ?? null)),
-                    'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip];
+                    'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip,
+                    ...($kind === 'device' ? ['state' => $item['state'] ?? null] : [])];
                 $observation = $this->record($source, $kind, $item['id'], $data);
                 $observation->address = ip2long($ip);
+                // Listed clients are connected; an adopted device is present only when UniFi reports it online.
+                if ($kind === 'client' || ($data['state'] ?? null) === 'ONLINE') {
+                    $observation->present_at = now();
+                }
                 // A changed observed address must never move an existing documented assignment.
-                $subnet = $site->subnets()->visible()->where('network_address', '<=', $observation->address)
-                    ->where('broadcast_address', '>=', $observation->address)->first();
+                $subnet = IpamEvidence::subnetFor($site->id, $observation->address);
+                $ip = $subnet?->ipAddresses()->where('address', $observation->address)->first();
+                if ($subnet && ! $ip && $source->inventory_activated_at && $data['mac'] !== null && $observation->present_at?->gte($cutoff)) {
+                    [$ip] = IpamEvidence::document($subnet, $observation->address);
+                }
                 $observation->subnet_id = $subnet?->id;
-                $observation->ip_address_id = $subnet?->ipAddresses()->where('address', $observation->address)->value('id');
+                $observation->ip_address_id = $ip?->id;
                 $observation->save();
                 $seen[] = $observation->id;
             }
@@ -91,6 +103,9 @@ class UnifiIpam
             UnifiObservation::where('unifi_site_id', $source->id)->where('kind', 'network')->update(['state' => 'unknown']);
         }
         self::recognizeExpected($source);
+        if ($source->inventory_activated_at) {
+            IpamEvidence::expire($site->id);
+        }
     }
 
     public function activate(UnifiSite $source): void
@@ -256,14 +271,11 @@ class UnifiIpam
                 ->whereNotNull('device_id')->where('present', true)
                 ->whereHas('device', fn ($query) => $query->where('site_id', $site->id))
                 ->where('external_id', $data['device_id'])->get() : collect();
-            $ip = $subnet->ipAddresses()->create(['address' => $source->address,
-                'device_id' => $devices->count() === 1 ? $devices->first()->device_id : null,
-                'description' => $data['name'] ? 'Indirizzo configurato · '.$data['name'] : 'Indirizzo configurato UniFi']);
+            // The source is the record's justification: no description is invented for it.
+            [$ip] = IpamEvidence::document($subnet, $source->address, $devices->count() === 1 ? $devices->first()->device_id : null);
         }
-        $source->ip_address_id = $ip?->id;
-        if ($ip) {
-            $source->anchor = [...$source->anchor, 'ip_address_id' => $ip->id];
-        }
+        $source->ip_address_id = $ip->id;
+        $source->anchor = [...$source->anchor, 'ip_address_id' => $ip->id];
     }
 
     public static function networkChange(Subnet|Vlan $record, array $next, ?string $mode): void

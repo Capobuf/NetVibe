@@ -48,6 +48,6 @@ class IpAddress extends Model
 
     protected function casts(): array
     {
-        return ['address' => 'integer', 'mikrotik_expected' => 'array', 'mikrotik_matched_at' => 'datetime'];
+        return ['address' => 'integer', 'auto_managed' => 'boolean', 'mikrotik_expected' => 'array', 'mikrotik_matched_at' => 'datetime'];
     }
 }

@@ -13,7 +13,7 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 
-    --animate-led-glow: led-glow 2.4s ease-in-out infinite;
+    --animate-led-breathe: led-breathe 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
@@ -288,18 +288,16 @@
     transform: none;
 }
 
-/* Presence LED: a slow breathing glow in the LED's own colour. */
-@keyframes led-glow {
+/* Presence LED: only the soft halo breathes, through opacity and scale. */
+@keyframes led-breathe {
     0%,
     100% {
-        box-shadow: 0 0 4px 1px currentColor;
-        opacity: 0.8;
+        opacity: 0.2;
+        transform: scale(0.9);
     }
     50% {
-        box-shadow:
-            0 0 10px 3px currentColor,
-            0 0 18px 6px color-mix(in oklab, currentColor 45%, transparent);
-        opacity: 1;
+        opacity: 0.55;
+        transform: scale(1.6);
     }
 }
 

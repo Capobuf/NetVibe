@@ -332,10 +332,11 @@ class MikrotikSync
         }
         if ($source->kind === 'observation' && $source->address !== null && in_array($data['menu'], ['/ip/arp', '/ip/dhcp-server/lease', '/ip/neighbor'], true)) {
             // Temporary evidence never moves a record: it follows the address and needs a MAC and a recent presence.
+            // A dynamic DHCP lease alone only links to a record documented by other evidence.
             $subnet = IpamEvidence::subnetFor($site->id, $source->address);
             $ip = $subnet?->ipAddresses()->where('address', $source->address)->first();
             $new = false;
-            if ($subnet && ! $ip && ! empty($data['mac']) && $source->present_at?->gte($this->cutoff)) {
+            if ($subnet && ! $ip && $data['menu'] !== '/ip/dhcp-server/lease' && ! empty($data['mac']) && $source->present_at?->gte($this->cutoff)) {
                 [$ip, $new] = IpamEvidence::document($subnet, $source->address);
             }
             $source->subnet_id = $ip ? $subnet->id : null;

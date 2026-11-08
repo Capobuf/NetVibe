@@ -6,6 +6,7 @@ import {
     Pencil,
     Play,
     RefreshCw,
+    Search,
     Server,
     ShieldCheck,
     Trash2,
@@ -40,32 +41,39 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
-    Item,
-    ItemActions,
-    ItemContent,
-    ItemDescription,
-    ItemMedia,
-    ItemTitle,
-} from '@/components/ui/item';
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime } from '@/lib/utils';
 import { UnifiSiteList } from './site-list';
 import { UnifiInventoryPreview } from './inventory-preview';
-import type { UnifiCompany, UnifiConnection } from './types';
+import { unifiAccess, type UnifiCompany, type UnifiConnection } from './types';
 
+export function connectionState(connection: UnifiConnection): IntegrationState {
+    return !connection.enabled
+        ? 'suspended'
+        : connection.check_status === 'ok'
+          ? 'active'
+          : connection.checked_at
+            ? 'error'
+            : 'pending';
+}
+
+/** Content of the access dialog: connection status and actions, then UniFi sites mapped to NetVibe sites. */
 export function UnifiConnectionPanel({
     connection,
     companies,
-    search,
     readonly,
     onEdit,
 }: {
     connection: UnifiConnection;
     companies: UnifiCompany[];
-    search: string;
     readonly: boolean;
     onEdit: () => void;
 }) {
+    const [search, setSearch] = useState('');
     const form = useForm({
         revision: connection.revision ?? '',
         confirmed: true,
@@ -75,13 +83,7 @@ export function UnifiConnectionPanel({
     >(null);
     const [confirm, setConfirm] = useState<'suspend' | 'destroy' | null>(null);
     const savedConsoles = connection.selected_console_ids ?? [];
-    const state: IntegrationState = !connection.enabled
-        ? 'suspended'
-        : connection.check_status === 'ok'
-          ? 'active'
-          : connection.checked_at
-            ? 'error'
-            : 'pending';
+    const state = connectionState(connection);
     const linked = connection.sites.filter((source) => source.site !== null);
 
     function run(action: 'verify' | 'discover' | 'toggle' | 'destroy') {
@@ -91,6 +93,7 @@ export function UnifiConnectionPanel({
                 ? {
                       name: connection.name,
                       mode: connection.mode,
+                      company_id: connection.company_id,
                       server_url: connection.server_url ?? '',
                       api_key: '',
                       allow_unverified_certificate:
@@ -121,38 +124,35 @@ export function UnifiConnectionPanel({
             aria-labelledby={`unifi-connection-${connection.id}`}
         >
             <div className="flex flex-col gap-4">
-                <Item variant="muted">
-                    <ItemMedia variant="icon" className="size-10 bg-background">
-                        {connection.mode === 'cloud' ? <Cloud /> : <Server />}
-                    </ItemMedia>
-                    <ItemContent className="min-w-0">
-                        <ItemTitle className="text-base">
-                            <h2
-                                id={`unifi-connection-${connection.id}`}
-                                className="break-words"
-                            >
+                <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted">
+                            {connection.mode === 'cloud' ? <Cloud /> : <Server />}
+                        </span>
+                        <div className="flex min-w-0 flex-col gap-1">
+                            <DialogTitle className="flex flex-wrap items-center gap-2 break-words">
                                 {connection.name}
-                            </h2>
-                            <IntegrationStatus state={state} />
-                        </ItemTitle>
-                        <ItemDescription className="line-clamp-none break-all">
-                            {[
-                                connection.mode === 'cloud'
-                                    ? 'Site Manager (cloud)'
-                                    : 'UniFi Network (diretta)',
-                                !readonly && connection.mode === 'direct'
-                                    ? connection.server_url
-                                    : null,
-                                connection.checked_at
-                                    ? `verificata il ${formatDateTime(connection.checked_at)}`
-                                    : 'mai verificata',
-                            ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                        </ItemDescription>
-                    </ItemContent>
+                                <IntegrationStatus state={state} />
+                            </DialogTitle>
+                            <DialogDescription className="break-all">
+                                {[
+                                    connection.mode === 'cloud'
+                                        ? `${unifiAccess.cloud} · tutte le console dell’account UniFi`
+                                        : `${unifiAccess.direct} · accesso diretto alla console`,
+                                    !readonly && connection.mode === 'direct'
+                                        ? connection.server_url
+                                        : null,
+                                    connection.checked_at
+                                        ? `verificato il ${formatDateTime(connection.checked_at)}`
+                                        : 'mai verificato',
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                            </DialogDescription>
+                        </div>
+                    </div>
                     {!readonly ? (
-                        <ItemActions className="flex-wrap">
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pr-8">
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -234,9 +234,9 @@ export function UnifiConnectionPanel({
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                        </ItemActions>
+                        </div>
                     ) : null}
-                </Item>
+                </DialogHeader>
                 {connection.check_message &&
                 connection.check_status !== 'ok' ? (
                     <Alert variant="destructive" aria-live="polite">
@@ -264,11 +264,26 @@ export function UnifiConnectionPanel({
                     </AlertDescription>
                 </Alert>
             ) : null}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
                 <UnifiInventoryPreview
                     connection={connection}
                     readonly={readonly}
                 />
+                {connection.sites.length > 5 ||
+                (connection.hosts?.length ?? 0) > 5 ? (
+                    <InputGroup className="max-w-xs">
+                        <InputGroupAddon>
+                            <Search />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                            type="search"
+                            aria-label="Cerca console, siti o sedi"
+                            placeholder="Cerca console, siti o sedi…"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                        />
+                    </InputGroup>
+                ) : null}
             </div>
             <UnifiSiteList
                 key={`${connection.id}:${savedConsoles.join(',')}`}
@@ -293,7 +308,7 @@ export function UnifiConnectionPanel({
                         </DialogTitle>
                         <DialogDescription>
                             {confirm === 'destroy'
-                                ? 'Le associazioni e le anteprime di questa connessione saranno rimosse. I dati documentati saranno conservati.'
+                                ? 'I siti raggiungibili anche da un altro accesso UniFi passeranno a quell’accesso con i dati acquisiti. Per gli altri, collegamenti e anteprime saranno rimossi; i dati documentati saranno conservati.'
                                 : 'Le nuove acquisizioni saranno sospese per tutti i siti collegati. I dati già acquisiti resteranno consultabili.'}
                         </DialogDescription>
                     </DialogHeader>

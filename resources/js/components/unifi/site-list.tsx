@@ -54,7 +54,12 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { UnifiSitePreview } from './site-preview';
-import type { UnifiCompany, UnifiConnection, UnifiSite } from './types';
+import {
+    unifiAccess,
+    type UnifiCompany,
+    type UnifiConnection,
+    type UnifiSite,
+} from './types';
 
 type Destination = { id: number; name: string };
 
@@ -127,10 +132,17 @@ export function UnifiSiteList({
             id: source.console_id,
             name: source.console_name,
         })),
-    ].filter(
-        (item, index, all) =>
-            all.findIndex((other) => other.id === item.id) === index,
-    );
+    ]
+        .filter(
+            (item, index, all) =>
+                all.findIndex((other) => other.id === item.id) === index,
+        )
+        // Integrated consoles first: the others are only candidates to include.
+        .sort(
+            (a, b) =>
+                Number(selectable && !saved.includes(a.id)) -
+                Number(selectable && !saved.includes(b.id)),
+        );
     const disabled = busy || consoleForm.processing;
 
     function saveConsoles(ids: string[]) {
@@ -167,7 +179,7 @@ export function UnifiSiteList({
         <Card className="gap-0 overflow-hidden py-0">
             <CardHeader className="py-4">
                 <CardTitle>
-                    {selectable ? 'Console da integrare' : 'Siti UniFi'}
+                    {selectable ? 'Console e siti UniFi' : 'Siti UniFi'}
                 </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-0 px-0">
@@ -183,7 +195,7 @@ export function UnifiSiteList({
                         <TableHeader className="bg-muted/50">
                             <TableRow>
                                 <TableHead scope="col" className="w-1/2">
-                                    UniFi
+                                    Sito UniFi
                                 </TableHead>
                                 <TableHead scope="col" className="w-10">
                                     <span className="sr-only">
@@ -191,7 +203,7 @@ export function UnifiSiteList({
                                     </span>
                                 </TableHead>
                                 <TableHead scope="col" className="w-1/2">
-                                    NetVibe
+                                    Sede NetVibe
                                 </TableHead>
                                 <TableHead scope="col" className="w-12">
                                     <span className="sr-only">Azioni</span>
@@ -427,7 +439,20 @@ function SiteRow({
         ? [site.company.name, site.name].filter(Boolean).join(' · ')
         : null;
     const linked = !!site && !dimmed;
-    const editable = !readonly && !via;
+    const editable = !readonly && !via && !source.linked_elsewhere;
+    // How the last read reached this UniFi site: the host, or the Cloud Connector standing in for it.
+    const fallback =
+        source.last_access === 'cloud' && connection.mode === 'direct';
+    const access =
+        source.site && source.last_access
+            ? source.last_access === connection.mode
+                ? source.last_access === 'direct'
+                    ? 'Letto in diretto'
+                    : 'Letto via cloud'
+                : source.last_access === 'cloud'
+                  ? 'Host non raggiungibile · letto via cloud'
+                  : 'Letto tramite UniFi Host'
+            : null;
     const busy = form.processing || disabled;
 
     function link(siteId: number) {
@@ -584,7 +609,18 @@ function SiteRow({
                         <span className="font-medium break-words">{label}</span>
                         {via ? (
                             <Badge variant="secondary">
-                                tramite {via.connection}
+                                tramite {unifiAccess[via.mode]} ·{' '}
+                                {via.connection}
+                            </Badge>
+                        ) : access ? (
+                            <Badge
+                                variant="outline"
+                                className={cn(
+                                    fallback &&
+                                        'text-amber-700 dark:text-amber-500',
+                                )}
+                            >
+                                {access}
                             </Badge>
                         ) : null}
                         {editable && !source.confirmed_at ? (
@@ -600,7 +636,11 @@ function SiteRow({
                         ) : null}
                     </div>
                 ) : (
-                    <span className="text-muted-foreground">Non collegato</span>
+                    <span className="text-muted-foreground">
+                        {source.linked_elsewhere
+                            ? 'Collegato in un’altra azienda'
+                            : 'Non collegato'}
+                    </span>
                 )}
             </TableCell>
             <TableCell className="text-right">

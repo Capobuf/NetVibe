@@ -13,6 +13,7 @@ use App\Models\Subnet;
 use App\Models\UnifiObservation;
 use App\Support\DeviceAssignment;
 use App\Support\InterfaceMac;
+use App\Support\IpamEvidence;
 use App\Support\Ipv4Ranges;
 use App\Support\MikrotikIpam;
 use App\Support\UnifiIpam;
@@ -40,19 +41,15 @@ class IpAddressController extends Controller
         $request->validate(['confirmed' => ['accepted']], [
             'confirmed.accepted' => 'Conferma esplicitamente la liberazione dell’IP e la cancellazione dei suoi dati.',
         ]);
-        $excluded = DB::transaction(function () use ($company, $subnet, $ipAddress) {
+        $message = DB::transaction(function () use ($company, $subnet, $ipAddress) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $subnet->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
-            $excluded = $subnet->isExcluded($record->address)
-                || MikrotikSource::blocking($subnet->site_id)->where('address', $record->address)->exists()
-                || UnifiObservation::blocking($subnet->site_id)->where('address', $record->address)->exists();
             $record->delete();
 
-            return $excluded;
+            return IpamEvidence::releaseMessage($subnet, $record->address);
         }, 3);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => $excluded
-            ? 'Documentazione rimossa. L’indirizzo resta escluso dai suggerimenti.' : 'IP liberato e documentazione rimossa.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 
         return back();
     }
@@ -84,6 +81,8 @@ class IpAddressController extends Controller
                 MikrotikIpam::manualChange($record, ['address' => $address, 'mac_address' => $data['mac_address'] ?? null, ...$assignment], $data['mikrotik_edit_mode'] ?? null);
                 UnifiIpam::manualChange($record, ['address' => $address, 'mac_address' => $data['mac_address'] ?? null], $data['mikrotik_edit_mode'] ?? null);
                 $record->address = $address;
+                // Any save by the technician makes the record documentation that never expires automatically.
+                $record->auto_managed = false;
                 $mac = $data['mac_address'] ?? null;
                 if ($assignment['device_interface_id']) {
                     $interface = DeviceInterface::query()->lockForUpdate()->findOrFail($assignment['device_interface_id']);

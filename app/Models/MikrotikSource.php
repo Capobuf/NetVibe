@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\IpamEvidence;
 use App\Support\MikrotikPortMap;
 use App\Support\MikrotikSnapshot;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -10,12 +11,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['generation', 'kind', 'source_key', 'state', 'data', 'anchor', 'seen_at', 'problem', 'address', 'vlan_id', 'subnet_id', 'ip_address_id', 'linked', 'confirmed', 'edit_mode', 'expected', 'matched_at'])]
+#[Fillable(['generation', 'kind', 'source_key', 'state', 'data', 'anchor', 'seen_at', 'present_at', 'problem', 'address', 'vlan_id', 'subnet_id', 'ip_address_id', 'linked', 'confirmed', 'edit_mode', 'expected', 'matched_at'])]
 class MikrotikSource extends Model
 {
     protected function casts(): array
     {
-        return ['interface_from_model' => 'boolean', 'excluded_at' => 'datetime', 'data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
+        return ['interface_from_model' => 'boolean', 'excluded_at' => 'datetime', 'data' => 'array', 'expected' => 'array', 'matched_at' => 'datetime', 'anchor' => 'array', 'seen_at' => 'datetime', 'present_at' => 'datetime', 'address' => 'integer', 'linked' => 'boolean', 'confirmed' => 'boolean'];
     }
 
     public function device(): BelongsTo
@@ -23,10 +24,22 @@ class MikrotikSource extends Model
         return $this->belongsTo(Device::class);
     }
 
+    /**
+     * Configured addresses occupy while present; temporary observations until the retention period
+     * after their last presence. Rows of an unreadable source keep occupying until a valid read.
+     */
     public static function blocking(int $siteId): Builder
     {
-        return static::query()->where('site_id', $siteId)->where('state', '!=', 'missing')->whereNotNull('address')
-            ->withoutUnresolvedArp();
+        return static::query()->where('site_id', $siteId)->whereNotNull('address')->withoutUnresolvedArp()
+            ->where(fn ($query) => $query->where('present_at', '>=', IpamEvidence::cutoff($siteId))
+                ->orWhere(fn ($query) => $query->where('state', '!=', 'missing')
+                    // A disabled reservation or address is configuration that assigns nothing.
+                    ->where(fn ($query) => $query->whereIn('kind', ['address', 'lease'])
+                        ->where(fn ($query) => $query->whereNull('data->disabled')->orWhereNotIn('data->disabled', ['true', 'yes']))
+                        ->orWhereNotExists(fn ($connection) => $connection->selectRaw('1')->from('mikrotik_connections')
+                            ->whereColumn('mikrotik_connections.device_id', 'mikrotik_sources.device_id')
+                            ->whereColumn('mikrotik_connections.source_generation', 'mikrotik_sources.generation')
+                            ->whereNotNull('mikrotik_connections.activated_at')->where('mikrotik_connections.sync_status', 'ok')))));
     }
 
     #[Scope]
@@ -42,9 +55,11 @@ class MikrotikSource extends Model
     public function display(): array
     {
         $connection = $this->device->mikrotikConnection;
+        $stale = $this->state === 'unknown' || ! $connection?->activated_at
+            || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok';
 
         return [
-            ...$this->only('id', 'kind', 'state', 'data', 'seen_at', 'problem', 'vlan_id', 'subnet_id', 'ip_address_id', 'edit_mode', 'matched_at'),
+            ...$this->only('id', 'kind', 'state', 'data', 'seen_at', 'present_at', 'problem', 'vlan_id', 'subnet_id', 'ip_address_id', 'edit_mode', 'matched_at'),
             'problem' => $this->displayProblem(),
             'import_note' => $this->importNote(),
             'can_associate' => $this->state === 'current' && ($this->problem === 'VLAN riportata da un’altra sorgente: conferma che il contesto L2 sia lo stesso.'
@@ -53,8 +68,17 @@ class MikrotikSource extends Model
             'device_id' => $this->device_id,
             'site_id' => $this->site_id,
             'ip' => $this->address === null ? null : long2ip($this->address),
-            'stale' => $this->state === 'unknown' || ! $connection?->activated_at
-                || $connection->source_generation !== $this->generation || $connection->sync_status !== 'ok',
+            'stale' => $stale,
+            // A reachable ARP entry or a live neighbor proves presence and a failed resolution its absence;
+            // stale ARP entries and DHCP states stay neutral.
+            'presence' => $stale || $this->state !== 'current' ? null : match (true) {
+                ($this->data['menu'] ?? null) === '/ip/neighbor' => 'online',
+                ($this->data['menu'] ?? null) !== '/ip/arp' => null,
+                ($this->data['status'] ?? null) === 'reachable' => 'online',
+                ($this->data['status'] ?? null) === 'failed' => 'offline',
+                default => null,
+            },
+            'read_at' => $connection?->synced_at,
         ];
     }
 

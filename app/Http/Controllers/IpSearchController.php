@@ -156,6 +156,10 @@ class IpSearchController extends Controller
                     ->orWhereRaw(DeviceAssignment::labelSql()." LIKE ? ESCAPE '!'", [$pattern])
                     ->orWhereExists((clone $observations)->selectRaw('1')
                         ->whereColumn('unifi_observations.address', 'ip_addresses.address')->whereColumn('subnets.id', 'ip_addresses.subnet_id')->toBase())
+                    // Automatically documented addresses are found by their MikroTik evidence, as in the subnet table.
+                    ->orWhereExists(fn ($query) => $query->selectRaw('1')->from('mikrotik_sources')
+                        ->whereColumn('mikrotik_sources.site_id', 'subnets.site_id')->whereColumn('mikrotik_sources.address', 'ip_addresses.address')
+                        ->whereRaw("CAST(mikrotik_sources.data AS CHAR) LIKE ? ESCAPE '!'", [$pattern]))
                     ->orWhereHas('snipeItAsset', fn ($query) => $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.name')) LIKE ? ESCAPE '!'", [$pattern])
                         ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(snapshot, '$.network.mac')) LIKE ? ESCAPE '!'", [$pattern]));
             });

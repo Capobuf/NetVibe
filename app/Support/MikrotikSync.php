@@ -10,12 +10,15 @@ use App\Models\MikrotikConnection;
 use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\Subnet;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class MikrotikSync
 {
+    private ?CarbonInterface $cutoff = null;
+
     public function refresh(MikrotikConnection $connection): void
     {
         $lock = Cache::lock('mikrotik-device:'.$connection->device_id, 90);
@@ -68,6 +71,8 @@ class MikrotikSync
                     $device->mikrotikSources()->where('generation', $current->source_generation)->where('state', 'current')->update(['state' => 'unknown']);
                 }
                 if ($status === 'ok') {
+                    // Occupation rules read the source health from the database: a recovered source must count as readable.
+                    $current->save();
                     $counts = $this->apply($site, $device, $current, $objects);
                     $current->fill(['synced_at' => $attempted, 'sync_identity' => $identity, 'sync_summary' => $counts]);
                 }
@@ -84,6 +89,7 @@ class MikrotikSync
     private function apply(Site $site, Device $device, MikrotikConnection $connection, array $objects): array
     {
         $exclusions = new NetworkExclusions($site->id);
+        $this->cutoff = IpamEvidence::cutoff($site->id);
         $previous = $device->mikrotikSources()->where('generation', $connection->source_generation)->lockForUpdate()->get()->keyBy(fn ($source) => $source->kind.':'.$source->source_key);
         $sources = [];
         $created = $associated = $updated = 0;
@@ -107,7 +113,11 @@ class MikrotikSync
                     $object['data']['lldp_seen_at'] = $source->data['lldp_seen_at'] ?? null;
                 }
             }
+            $present = $this->presence($object, $source);
             $source->fill([...$object, 'generation' => $connection->source_generation, 'state' => 'current', 'seen_at' => now()]);
+            if ($present) {
+                $source->present_at = now();
+            }
             $plannedIp = $source->ip_address_id ? IpAddress::find($source->ip_address_id) : null;
             $expectedAddress = $plannedIp?->mikrotik_edit_mode === 'planned'
                 && in_array($source->id, $plannedIp->mikrotik_expected['source_ids'] ?? [], true)
@@ -138,9 +148,31 @@ class MikrotikSync
             ->whereNotIn('id', array_map(fn ($source) => $source->id, $sources))->update(['state' => 'missing']);
         $associated += $this->associateInterfaces($device, $sources);
         MikrotikIpam::recognizeExpected($site->id, $device->id);
+        IpamEvidence::populate($site->id);
+        IpamEvidence::expire($site->id);
 
         return ['created' => $created, 'associated' => $associated, 'updated' => $updated, 'read' => count($sources),
             'problems' => count(array_filter($sources, fn ($source) => $source->displayProblem() !== null && ! $exclusions->target($source)))];
+    }
+
+    /**
+     * Last reliable presence, kept apart from the read time: a configured address is present on the
+     * router that answered, a lease only while bound, and an ARP entry only when reachable or when it
+     * first appears. A lingering stale entry must not extend the retention period.
+     */
+    private function presence(array $object, MikrotikSource $previous): bool
+    {
+        $data = $object['data'];
+        $status = $data['status'] ?? null;
+
+        return match (true) {
+            $object['kind'] === 'address' => $data['active'] === true,
+            $data['menu'] === '/ip/dhcp-server/lease' => $status === 'bound',
+            $data['menu'] === '/ip/arp' => $data['mac'] !== null && ! in_array($status, ['failed', 'incomplete'], true)
+                && ($status === 'reachable' || ! $previous->exists || $previous->state !== 'current'),
+            $data['menu'] === '/ip/neighbor' => $object['address'] !== null,
+            default => false,
+        };
     }
 
     // The caller holds the device lock in the model-save transaction.
@@ -283,28 +315,41 @@ class MikrotikSync
                 return [0, 0];
             }
             $ip = $subnet->ipAddresses()->where('address', $source->address)->lockForUpdate()->first();
-            if ($source->linked && (! $ip || $ip->id !== $source->ip_address_id)) {
+            // A record moved by the technician keeps its link; an explicitly deleted one is documented again.
+            if ($source->linked && $source->ip_address_id !== null && $ip?->id !== $source->ip_address_id) {
                 $source->problem = 'Il record IP documentato è stato modificato o rimosso.';
 
                 return [0, 0];
             }
             $source->subnet_id = $subnet->id;
-            $new = false;
-            if (! $ip && $source->kind === 'address') {
-                $ip = $subnet->ipAddresses()->create(['address' => $source->address, 'device_id' => $device->id]);
-                $new = true;
+            [$ip, $new] = IpamEvidence::document($subnet, $source->address, $source->kind === 'address' ? $device->id : null);
+            if ($source->kind === 'address' && $ip->device_id !== $device->id) {
+                $source->problem = 'Dispositivo documentato diverso dal MikroTik che configura questo indirizzo.';
             }
-            // DHCP comments and observed hostnames never satisfy I4 by being copied into manual fields.
-            if ($ip) {
-                if ($source->kind === 'address' && $ip->device_id !== $device->id) {
-                    $source->problem = 'Dispositivo documentato diverso dal MikroTik che configura questo indirizzo.';
-                }
-                $source->ip_address_id = $ip->id;
-                $linked = ! $source->linked;
-                $source->linked = true;
+            $source->ip_address_id = $ip->id;
+            $linked = ! $source->linked;
+            $source->linked = true;
 
-                return [(int) $new, (int) $linked];
+            return [(int) $new, (int) $linked];
+        }
+        if ($source->kind === 'observation' && $source->address !== null && in_array($data['menu'], ['/ip/arp', '/ip/dhcp-server/lease', '/ip/neighbor'], true)) {
+            // Temporary evidence never moves a record: it follows the address and needs a MAC and a recent presence.
+            // A dynamic DHCP lease alone only links to a record documented by other evidence.
+            $subnet = IpamEvidence::subnetFor($site->id, $source->address);
+            // The router's own network for this address must resolve to the same documented subnet.
+            $ambiguous = collect($sources)->contains(fn ($network) => $network->kind === 'subnet' && $network->data['active']
+                && $network->data['network_address'] <= $source->address && $network->data['broadcast_address'] >= $source->address
+                && ($network->problem || $network->subnet_id !== $subnet?->id));
+            $subnet = $ambiguous ? null : $subnet;
+            $ip = $subnet?->ipAddresses()->where('address', $source->address)->first();
+            $new = false;
+            if ($subnet && ! $ip && $data['menu'] !== '/ip/dhcp-server/lease' && ! empty($data['mac']) && $source->present_at?->gte($this->cutoff)) {
+                [$ip, $new] = IpamEvidence::document($subnet, $source->address);
             }
+            $source->subnet_id = $ip ? $subnet->id : null;
+            $source->ip_address_id = $ip?->id;
+
+            return [(int) $new, 0];
         }
 
         return [0, 0];

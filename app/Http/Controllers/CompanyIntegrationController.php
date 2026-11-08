@@ -26,7 +26,7 @@ class CompanyIntegrationController extends Controller
         $devices = Device::query()->when($company, fn ($query) => $query->whereHas('site', fn ($query) => $query->where('company_id', $company->id)));
 
         return Inertia::render('integrations/mikrotik', [
-            'company' => $company?->only('id', 'name'),
+            'company' => $company?->only('id', 'name', 'observation_retention_days'),
             'gateways' => (clone $devices)->whereHas('mikrotikConnection')->with('site.company', 'mikrotikConnection')->orderBy('name')->get()
                 ->map(fn (Device $device) => [
                     ...$this->device($device),
@@ -41,6 +41,17 @@ class CompanyIntegrationController extends Controller
                 ->whereHas('manufacturer', fn ($query) => $query->where('name', 'MikroTik'))->with('site.company')->orderBy('name')->get()
                 ->map(fn (Device $device) => $this->device($device))->sortBy('company.name')->values(),
         ]);
+    }
+
+    /** Retention of temporary observations, independent from the sync frequency. */
+    public function retention(Request $request, Company $company): RedirectResponse
+    {
+        $company->update($request->validate(['observation_retention_days' => ['required', 'integer', 'between:1,365']], [
+            'observation_retention_days.*' => 'Inserisci un numero di giorni da 1 a 365.',
+        ]));
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Periodo di liberazione degli IP rilevati aggiornato.']);
+
+        return back();
     }
 
     private function device(Device $device): array

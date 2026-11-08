@@ -2,8 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Models\IpAddress;
+use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\Tag;
+use App\Models\UnifiObservation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,11 +17,16 @@ class IpAddressRequest extends FormRequest
     {
         $site = $this->route('site');
         abort_unless($site instanceof Site, 404);
+        $ip = $this->route('ipAddress');
+        // A record documented from an integration is justified by its source; manual creation keeps the I4 minimum.
+        $sourced = $ip instanceof IpAddress && (MikrotikSource::where('ip_address_id', $ip->id)->exists()
+            || UnifiObservation::where('ip_address_id', $ip->id)->exists());
+        $minimum = fn (string $others) => $sourced ? [] : ['required_without_all:'.$others];
 
         return [
             'ip' => ['required', 'string', 'ipv4'],
-            'description' => ['nullable', 'required_without_all:hostname,device_id', 'string', 'max:2000'],
-            'hostname' => ['nullable', 'required_without_all:description,device_id', 'string', 'max:255'],
+            'description' => ['nullable', ...$minimum('hostname,device_id'), 'string', 'max:2000'],
+            'hostname' => ['nullable', ...$minimum('description,device_id'), 'string', 'max:255'],
             'device_id' => ['nullable', 'integer', Rule::exists('devices', 'id')->where('site_id', $site->id)],
             'device_interface_id' => ['nullable', 'integer', Rule::exists('device_interfaces', 'id')->where('device_id', $this->input('device_id'))],
             'mac_address' => ['nullable', 'string', 'mac_address'],

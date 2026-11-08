@@ -8,6 +8,7 @@ import { useForm, usePage } from '@inertiajs/react';
 import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { update } from '@/actions/App/Http/Controllers/UnifiIpamController';
+import { MacConflictAlert } from '@/components/networks/mikrotik-source';
 import { UnifiMark } from '@/components/unifi-mark';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -24,9 +25,12 @@ import { formatDateTime } from '@/lib/utils';
 
 export type UnifiObservation = {
     id: number;
-    kind: 'network' | 'client' | 'device';
+    kind: 'network' | 'client' | 'device' | 'reservation';
     state: 'current' | 'missing';
     seen_at: string;
+    present_at?: string | null;
+    presence?: 'online' | 'offline' | null;
+    read_at?: string | null;
     source: string;
     ip: string | null;
     stale: boolean;
@@ -61,6 +65,9 @@ export type UnifiObservation = {
         mac?: string | null;
         hostname_observed?: string | null;
         type?: string | null;
+        state?: string | null;
+        dns?: string | null;
+        alias?: string | null;
     };
 };
 
@@ -72,6 +79,7 @@ export function UnifiObservationIndicator({
     children,
     avatar = false,
     showIndicator = true,
+    macConflict,
 }: {
     observations: UnifiObservation[];
     company: number;
@@ -80,23 +88,23 @@ export function UnifiObservationIndicator({
     children?: ReactNode;
     avatar?: boolean;
     showIndicator?: boolean;
+    macConflict?: string[];
 }) {
     if (!observations.length) return null;
+    const warning =
+        Boolean(macConflict?.length) ||
+        observations.some((observation) => observation.problem);
     return (
         <Sheet>
             <SheetTrigger asChild>
                 {avatar ? (
                     <SourceAvatar
                         label={
-                            observations.some(
-                                (observation) => observation.problem,
-                            )
+                            warning
                                 ? 'UniFi: differenze da verificare'
                                 : 'Apri le osservazioni UniFi'
                         }
-                        warning={observations.some(
-                            (observation) => observation.problem,
-                        )}
+                        warning={warning}
                     >
                         <UnifiMark />
                     </SourceAvatar>
@@ -141,6 +149,7 @@ export function UnifiObservationIndicator({
                             <dd className="break-words">{documented}</dd>
                         </dl>
                     ) : null}
+                    <MacConflictAlert macs={macConflict} />
                     {observations.map((observation, index) => (
                         <div
                             key={observation.id}
@@ -159,6 +168,11 @@ export function UnifiObservationIndicator({
         </Sheet>
     );
 }
+
+const deviceStates: Record<string, string> = {
+    ONLINE: 'Online',
+    OFFLINE: 'Offline',
+};
 
 function ObservationDetails({
     observation,
@@ -183,7 +197,13 @@ function ObservationDetails({
         ['IPv4', observation.ip],
         ['MAC', data.mac],
         ['Nome', data.hostname_observed],
-        ['Tipo', data.type],
+        ['Alias', data.alias],
+        ['Nome DNS', data.dns],
+        ['Tipo', observation.kind === 'reservation' ? null : data.type],
+        [
+            'Stato',
+            data.state ? (deviceStates[data.state] ?? data.state) : null,
+        ],
         ['Gestione', data.management],
         ['VLAN', data.default ? 'Rete predefinita' : data.tag],
         ['Subnet', data.cidr],
@@ -203,7 +223,20 @@ function ObservationDetails({
         <section className="flex flex-col gap-3 text-sm">
             <header className="flex flex-wrap items-center gap-2">
                 <h3 className="font-medium break-words">{title}</h3>
-                {observation.state === 'missing' ? (
+                {observation.kind === 'reservation' ? (
+                    <Badge variant="secondary">Prenotazione IP fissa</Badge>
+                ) : null}
+                {observation.presence === 'online' ? (
+                    <Badge variant="secondary">
+                        {observation.kind === 'client' ? 'Connesso' : 'Online'}
+                    </Badge>
+                ) : observation.presence === 'offline' ? (
+                    <Badge variant="outline">
+                        {observation.kind === 'client'
+                            ? 'Non rilevato'
+                            : 'Offline'}
+                    </Badge>
+                ) : observation.state === 'missing' ? (
                     <Badge variant="outline">Non osservato</Badge>
                 ) : observation.stale ? (
                     <Badge variant="outline">Non aggiornato</Badge>
@@ -225,8 +258,22 @@ function ObservationDetails({
                     ))}
                 <dt className="text-muted-foreground">Fonte</dt>
                 <dd className="break-words">{observation.source}</dd>
-                <dt className="text-muted-foreground">Ultima lettura</dt>
-                <dd>{formatDateTime(observation.seen_at)}</dd>
+                {observation.present_at ? (
+                    <>
+                        <dt className="text-muted-foreground">
+                            Ultimo avvistamento
+                        </dt>
+                        <dd>{formatDateTime(observation.present_at)}</dd>
+                    </>
+                ) : null}
+                <dt className="text-muted-foreground">
+                    Ultima lettura riuscita
+                </dt>
+                <dd>
+                    {observation.read_at
+                        ? formatDateTime(observation.read_at)
+                        : '—'}
+                </dd>
             </dl>
             {differs ? (
                 <dl className="grid grid-cols-2 gap-2 rounded-lg border p-3">

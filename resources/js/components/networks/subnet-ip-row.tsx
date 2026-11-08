@@ -6,6 +6,10 @@ import {
     MikrotikValue,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
+import {
+    PresenceLed,
+    type Presence,
+} from '@/components/networks/presence-led';
 import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import { TagBadge } from '@/components/networks/tag-badge';
 import {
@@ -38,6 +42,7 @@ export type IpColumn = TableColumn<
 export type IpRow = Omit<IpAddress, 'id'> & {
     id: number | null;
     excluded: boolean;
+    presence?: Presence | null;
 };
 
 export function SubnetIpRow({
@@ -66,6 +71,20 @@ export function SubnetIpRow({
           ? 'Non aggiornato'
           : null;
     const canOpen = ipAddress.id !== null || canEdit;
+    // Distinct facts from different sources stay visible side by side; only the warning is shared.
+    const macs = [
+        ...new Set(
+            [
+                ...current.map((source) => source.data.mac),
+                ...unifi
+                    .filter((observation) => observation.state !== 'missing')
+                    .map((observation) => observation.data.mac),
+            ]
+                .filter((mac): mac is string => Boolean(mac))
+                .map((mac) => mac.toUpperCase()),
+        ),
+    ];
+    const macConflict = macs.length > 1 ? macs : undefined;
 
     return (
         <TableRow
@@ -112,7 +131,13 @@ export function SubnetIpRow({
                     : undefined
             }
         >
-            <TableCell />
+            <TableCell>
+                {ipAddress.presence ? (
+                    <div className="flex justify-center">
+                        <PresenceLed presence={ipAddress.presence} />
+                    </div>
+                ) : null}
+            </TableCell>
             {visibleColumns.map((column) => (
                 <TableCell
                     key={column.id}
@@ -128,12 +153,17 @@ export function SubnetIpRow({
                                 aria-label={`Fonti per ${ipAddress.ip}`}
                             >
                                 <SnipeItIp source={ipAddress.snipe_it} avatar />
-                                <MikrotikIndicator sources={sources} avatar />
+                                <MikrotikIndicator
+                                    sources={sources}
+                                    avatar
+                                    macConflict={macConflict}
+                                />
                                 <UnifiObservationIndicator
                                     observations={unifi}
                                     company={company}
                                     site={site}
                                     avatar
+                                    macConflict={macConflict}
                                 />
                             </AvatarGroup>
                             {sourceNotice ? (

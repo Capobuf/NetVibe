@@ -77,7 +77,40 @@ class UnifiClient
         return array_map(fn (array $site) => [
             'id' => $this->uuid($site['id'] ?? null),
             'name' => $this->text($site['name'] ?? null),
+            // The controller site name used by the Network application endpoints.
+            'reference' => is_string($site['internalReference'] ?? null) && preg_match('/\A[a-z0-9_-]{1,64}\z/i', $site['internalReference'])
+                ? $site['internalReference'] : null,
         ], $this->pages($connection, '/sites', $consoleId));
+    }
+
+    /**
+     * Fixed-IP reservations, including offline clients. The official integration API does not list
+     * them, so this reads the Network application's client configuration with the same API key (GET only).
+     */
+    public function reservations(#[\SensitiveParameter] UnifiConnection $connection, string $reference, ?string $consoleId = null): array
+    {
+        $page = $this->read($connection, '/api/s/'.$reference.'/rest/user', $consoleId);
+        if (($page['meta']['rc'] ?? null) !== 'ok') {
+            throw new UnifiException('format');
+        }
+        $reservations = [];
+        foreach ($this->rows($page) as $user) {
+            if (($user['use_fixedip'] ?? false) !== true) {
+                continue;
+            }
+            $id = $user['_id'] ?? null;
+            $mac = MikrotikSnapshot::mac(is_string($user['mac'] ?? null) ? $user['mac'] : null);
+            $ip = filter_var($user['fixed_ip'] ?? null, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ?: null;
+            if (! is_string($id) || ! preg_match('/\A[0-9a-f]{24}\z/', $id) || $mac === null || $ip === null) {
+                continue;
+            }
+            $optional = fn (string $field) => is_string($user[$field] ?? null) && $user[$field] !== '' && mb_strlen($user[$field]) <= 255 ? $user[$field] : null;
+            $reservations[] = ['id' => $id, 'mac' => $mac, 'ip' => $ip, 'name' => $optional('name'),
+                'hostname' => $optional('hostname'), 'dns' => ($user['local_dns_record_enabled'] ?? false) === true ? $optional('local_dns_record') : null,
+                'last_seen' => is_int($user['last_seen'] ?? null) && $user['last_seen'] > 0 ? $user['last_seen'] : null];
+        }
+
+        return $reservations;
     }
 
     public function devices(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
@@ -256,9 +289,11 @@ class UnifiClient
         if (! $connection->enabled) {
             throw new UnifiException('suspended');
         }
-        if (! preg_match('~\A(?:/v1/hosts|/info|/sites(?:/[a-f0-9-]{36}/(?:devices|networks|clients)(?:/[a-f0-9-]{36})?)?)\z~i', $path)) {
+        $application = (bool) preg_match('~\A/api/s/[a-z0-9_-]{1,64}/rest/user\z~i', $path);
+        if (! $application && ! preg_match('~\A(?:/v1/hosts|/info|/sites(?:/[a-f0-9-]{36}/(?:devices|networks|clients)(?:/[a-f0-9-]{36})?)?)\z~i', $path)) {
             throw new UnifiException('unsafe_url');
         }
+        $prefix = $application ? '/proxy/network' : '/proxy/network/integration/v1';
         $cloud = $connection->mode === 'cloud';
         $base = $cloud ? 'https://api.ui.com' : self::normalizeUrl($connection->server_url);
         $rateKey = 'unifi:'.$base;
@@ -270,9 +305,9 @@ class UnifiClient
                     throw new UnifiException('forbidden');
                 }
                 $rateKey .= ':'.$consoleId;
-                $path = '/v1/connector/consoles/'.rawurlencode($consoleId).'/proxy/network/integration/v1'.$path;
+                $path = '/v1/connector/consoles/'.rawurlencode($consoleId).$prefix.$path;
             } else {
-                $path = '/proxy/network/integration/v1'.$path;
+                $path = $prefix.$path;
             }
         }
         $cooldownKey = 'unifi-retry:'.$connection->id.':'.($consoleId ?? ($cloud ? 'hosts' : 'direct'));

@@ -11,6 +11,7 @@ use App\Models\UnifiDevice;
 use App\Models\UnifiObservation;
 use App\Models\UnifiSite;
 use App\Models\Vlan;
+use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -47,14 +48,18 @@ class UnifiIpam
     }
 
     // The sync owns the transaction and locks the mapped site before publishing a complete snapshot.
-    public function capture(UnifiSite $source, ?array $networks, array $clients, array $devices = []): void
+    public function capture(UnifiSite $source, ?array $networks, array $clients, array $devices = [], ?array $reservations = null): void
     {
         $site = Site::query()->lockForUpdate()->findOrFail($source->site_id);
+        $cutoff = IpamEvidence::cutoff($site->id);
         $seen = [];
         foreach ($networks ?? [] as $network) {
             foreach ($this->networkRows($network) as $key => $data) {
                 $observation = $this->record($source, 'network', $key, $data);
                 $observation->address = $data['host_ip'] && $data['enabled'] !== false ? ip2long($data['host_ip']) : null;
+                if ($observation->address !== null) {
+                    $observation->present_at = now();
+                }
                 if ($source->inventory_activated_at) {
                     $this->associateNetwork($site, $observation);
                 }
@@ -62,35 +67,61 @@ class UnifiIpam
                 $seen[] = $observation->id;
             }
         }
-        foreach (['client' => $clients, 'device' => $devices] as $kind => $items) {
+        foreach (['client' => $clients, 'device' => $devices, 'reservation' => $reservations ?? []] as $kind => $items) {
             foreach ($items as $item) {
                 if ($kind === 'client' && ! in_array($item['type'] ?? null, ['WIRED', 'WIRELESS'], true)) {
                     continue;
                 }
-                $ip = $kind === 'device' ? ($item['ip_address'] ?? null) : ($item['ipAddress'] ?? null);
+                $ip = match ($kind) {
+                    'device' => $item['ip_address'] ?? null, 'reservation' => $item['ip'], default => $item['ipAddress'] ?? null,
+                };
                 if (! is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false || empty($item['id'])) {
                     continue;
                 }
-                $data = ['name' => $item['name'] ?? null, 'hostname_observed' => $item['name'] ?? null,
-                    'mac' => MikrotikSnapshot::mac($kind === 'device' ? ($item['mac_address'] ?? null) : ($item['macAddress'] ?? null)),
-                    'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip];
+                $data = $kind === 'reservation'
+                    ? ['name' => $item['name'], 'hostname_observed' => $item['hostname'] ?? $item['name'], 'mac' => $item['mac'],
+                        'type' => 'RESERVATION', 'ip' => $ip, 'dns' => $item['dns'],
+                        // An alias given in UniFi documents the client better than its reported hostname.
+                        'alias' => $item['hostname'] !== null && $item['name'] !== $item['hostname'] ? $item['name'] : null]
+                    : ['name' => $item['name'] ?? null, 'hostname_observed' => $item['name'] ?? null,
+                        'mac' => MikrotikSnapshot::mac($kind === 'device' ? ($item['mac_address'] ?? null) : ($item['macAddress'] ?? null)),
+                        'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip,
+                        ...($kind === 'device' ? ['state' => $item['state'] ?? null] : [])];
                 $observation = $this->record($source, $kind, $item['id'], $data);
                 $observation->address = ip2long($ip);
+                // Listed clients are connected, an adopted device is present only when online, and a
+                // reservation carries the controller's own last sighting of its client.
+                $present = match ($kind) {
+                    'client' => now(),
+                    'device' => ($data['state'] ?? null) === 'ONLINE' ? now() : null,
+                    default => $item['last_seen'] ? Carbon::createFromTimestamp(min($item['last_seen'], now()->timestamp)) : null,
+                };
+                if ($present && (! $observation->present_at || $present->gt($observation->present_at))) {
+                    $observation->present_at = $present;
+                }
                 // A changed observed address must never move an existing documented assignment.
-                $subnet = $site->subnets()->visible()->where('network_address', '<=', $observation->address)
-                    ->where('broadcast_address', '>=', $observation->address)->first();
+                $subnet = IpamEvidence::subnetFor($site->id, $observation->address);
+                $ip = $subnet?->ipAddresses()->where('address', $observation->address)->first();
+                if ($subnet && ! $ip && $source->inventory_activated_at && $data['mac'] !== null
+                    && ($kind === 'reservation' || $observation->present_at?->gte($cutoff))) {
+                    [$ip] = IpamEvidence::document($subnet, $observation->address);
+                }
                 $observation->subnet_id = $subnet?->id;
-                $observation->ip_address_id = $subnet?->ipAddresses()->where('address', $observation->address)->value('id');
+                $observation->ip_address_id = $ip?->id;
                 $observation->save();
                 $seen[] = $observation->id;
             }
         }
+        // Collections that could not be read keep their last rows as not updated instead of missing.
+        $unread = array_keys(array_filter(['network' => $networks === null, 'reservation' => $reservations === null]));
         UnifiObservation::where('unifi_site_id', $source->id)->whereNotIn('id', $seen)
-            ->when($networks === null, fn ($query) => $query->where('kind', '!=', 'network'))->update(['state' => 'missing']);
-        if ($networks === null) {
-            UnifiObservation::where('unifi_site_id', $source->id)->where('kind', 'network')->update(['state' => 'unknown']);
-        }
+            ->whereNotIn('kind', $unread)->update(['state' => 'missing']);
+        UnifiObservation::where('unifi_site_id', $source->id)->whereIn('kind', $unread)->where('state', 'current')->update(['state' => 'unknown']);
         self::recognizeExpected($source);
+        if ($source->inventory_activated_at) {
+            IpamEvidence::populate($site->id);
+            IpamEvidence::expire($site->id);
+        }
     }
 
     public function activate(UnifiSite $source): void
@@ -256,14 +287,11 @@ class UnifiIpam
                 ->whereNotNull('device_id')->where('present', true)
                 ->whereHas('device', fn ($query) => $query->where('site_id', $site->id))
                 ->where('external_id', $data['device_id'])->get() : collect();
-            $ip = $subnet->ipAddresses()->create(['address' => $source->address,
-                'device_id' => $devices->count() === 1 ? $devices->first()->device_id : null,
-                'description' => $data['name'] ? 'Indirizzo configurato · '.$data['name'] : 'Indirizzo configurato UniFi']);
+            // The source is the record's justification: no description is invented for it.
+            [$ip] = IpamEvidence::document($subnet, $source->address, $devices->count() === 1 ? $devices->first()->device_id : null);
         }
-        $source->ip_address_id = $ip?->id;
-        if ($ip) {
-            $source->anchor = [...$source->anchor, 'ip_address_id' => $ip->id];
-        }
+        $source->ip_address_id = $ip->id;
+        $source->anchor = [...$source->anchor, 'ip_address_id' => $ip->id];
     }
 
     public static function networkChange(Subnet|Vlan $record, array $next, ?string $mode): void

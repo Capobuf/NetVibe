@@ -41,7 +41,7 @@ class UnifiController extends Controller
         }
 
         return Inertia::render('integrations/unifi', [
-            'company' => $company?->only('id', 'name'),
+            'company' => $company?->only('id', 'name', 'observation_retention_days'),
             'connections' => $query->get()->map(fn (UnifiConnection $connection) => $connection->summary($company === null)),
             'companies' => $company ? [] : Company::query()->with(['sites' => fn ($query) => $query->orderBy('name')])->orderBy('name')->get()
                 ->map(fn (Company $company) => [...$company->only('id', 'name'), 'sites' => $company->sites->map->only('id', 'name')]),

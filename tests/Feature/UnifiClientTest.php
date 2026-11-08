@@ -35,8 +35,8 @@ class UnifiClientTest extends TestCase
         $sites = $this->client()->sites($connection, 'console:123');
 
         $this->assertSame([
-            ['id' => '00000000-0000-0000-0000-000000000001', 'name' => 'Site A'],
-            ['id' => '00000000-0000-0000-0000-000000000002', 'name' => 'Site B'],
+            ['id' => '00000000-0000-0000-0000-000000000001', 'name' => 'Site A', 'reference' => null],
+            ['id' => '00000000-0000-0000-0000-000000000002', 'name' => 'Site B', 'reference' => null],
         ], $sites);
         Http::assertSentCount(2);
         Http::assertSent(fn (Request $request) => $request->method() === 'GET' && $request->hasHeader('X-API-Key', 'synthetic-api-key'));
@@ -168,6 +168,25 @@ class UnifiClientTest extends TestCase
         $this->assertSame('10.1.84', $this->client()->info($connection)['applicationVersion']);
         Http::assertSentCount(2);
         RateLimiter::clear('unifi-retry:42901:direct');
+    }
+
+    public function test_reservations_are_read_only_from_the_network_application_with_the_same_key(): void
+    {
+        Http::preventStrayRequests();
+        Http::fake(['https://unifi.example.test:8443/proxy/network/api/s/default/rest/user' => Http::response(['meta' => ['rc' => 'ok'], 'data' => [
+            ['_id' => str_repeat('a', 24), 'mac' => '02:00:00:00:00:51', 'use_fixedip' => true, 'fixed_ip' => '192.0.2.5',
+                'name' => 'PRINT-1', 'hostname' => 'XeroxC7025', 'local_dns_record_enabled' => true, 'local_dns_record' => 'print1.example.test', 'last_seen' => 1794053193],
+            ['_id' => str_repeat('b', 24), 'mac' => '02:00:00:00:00:52', 'use_fixedip' => false, 'fixed_ip' => '192.0.2.6'],
+            ['_id' => str_repeat('c', 24), 'mac' => '02:00:00:00:00:53', 'use_fixedip' => true, 'fixed_ip' => 'invalid'],
+        ]])]);
+
+        $this->assertSame([['id' => str_repeat('a', 24), 'mac' => '02:00:00:00:00:51', 'ip' => '192.0.2.5', 'name' => 'PRINT-1',
+            'hostname' => 'XeroxC7025', 'dns' => 'print1.example.test', 'last_seen' => 1794053193]],
+            $this->client()->reservations($this->connection(), 'default'));
+        Http::assertSent(fn (Request $request) => $request->method() === 'GET' && $request->hasHeader('X-API-Key', 'synthetic-api-key'));
+        Http::assertSentCount(1);
+        $this->expectException(UnifiException::class);
+        $this->client()->reservations($this->connection(), '../integration');
     }
 
     private function connection(): UnifiConnection

@@ -66,7 +66,8 @@ class SubnetAddressTable
         $populatedCount = $populated?->count() ?? 0;
 
         if ($hideFree) {
-            $observed = UnifiIpam::addressSources($subnet->site_id)->whereBetween('address', [$first, $last])
+            // Free means proposable: only occupying evidence keeps an undocumented address visible.
+            $observed = UnifiIpam::addressSources($subnet->site_id, true)->whereBetween('address', [$first, $last])
                 ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
                     ->whereRaw("INET_NTOA(address) LIKE ? ESCAPE '!'", [$pattern])->orWhereIn('address', $sourceMatches)))
                 ->distinct()->pluck('address');
@@ -175,7 +176,8 @@ class SubnetAddressTable
         $records = $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['snipeItAsset.sync.connection', 'status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
             ->whereIn('address', $addresses)->get()->keyBy('address');
         $excludedRanges = $subnet->excludedRanges;
-        $rows = array_map(function ($address) use ($records, $excludedRanges) {
+        $presence = IpamEvidence::presence($subnet->site_id, $addresses);
+        $rows = array_map(function ($address) use ($records, $excludedRanges, $presence) {
             $record = $records->get($address);
 
             return [
@@ -192,6 +194,7 @@ class SubnetAddressTable
                 'description' => $record?->description,
                 'status' => $record?->status?->only('id', 'name'),
                 'tags' => $record?->tags->map->only('id', 'name', 'color')->all() ?? [],
+                'presence' => $presence[$address] ?? null,
                 'excluded' => $excludedRanges->contains(fn ($range) => $range->start_address <= $address && $range->end_address >= $address),
             ];
         }, $addresses);

@@ -13,6 +13,8 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 
+    --animate-led-breathe: led-breathe 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
     --radius-sm: calc(var(--radius) - 4px);
@@ -284,6 +286,19 @@
     padding: 0.25rem 0 0;
     border: 0;
     transform: none;
+}
+
+/* Presence LED: the halo is always lit and only widens slightly as it breathes. */
+@keyframes led-breathe {
+    0%,
+    100% {
+        opacity: 0.45;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.3);
+    }
 }
 
 @keyframes sidebar-submenu-open {

@@ -5,8 +5,8 @@ namespace App\Http\Requests;
 use App\Models\IpAddress;
 use App\Models\MikrotikSource;
 use App\Models\Site;
-use App\Models\UnifiObservation;
 use App\Models\Tag;
+use App\Models\UnifiObservation;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 

@@ -262,7 +262,13 @@ export default function SubnetShow({
                 page: 1,
                 ...options,
             },
-            { preserveState: true, preserveScroll: true, replace: true },
+            {
+                // Observations and form data cover the whole subnet, so paging, sorting and searching reuse them.
+                only: ['ipAddresses', 'query'],
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            },
         );
     }
 

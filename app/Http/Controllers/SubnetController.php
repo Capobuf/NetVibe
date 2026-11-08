@@ -100,13 +100,14 @@ class SubnetController extends Controller
                     'start_ip' => long2ip($range->start_address),
                     'end_ip' => long2ip($range->end_address),
                 ]),
-            'mikrotikSources' => MikrotikIpam::forSubnet($subnet),
-            'unifiObservations' => UnifiIpam::forSubnet($subnet),
-            'firstProposableIp' => $subnet->firstProposableIp(),
+            // Closures keep table navigation (partial reloads of ipAddresses/query) from rebuilding whole-subnet data.
+            'mikrotikSources' => fn () => MikrotikIpam::forSubnet($subnet),
+            'unifiObservations' => fn () => UnifiIpam::forSubnet($subnet),
+            'firstProposableIp' => fn () => $subnet->firstProposableIp(),
             'query' => [...compact('search', 'sort', 'direction'), 'hide_free' => (int) $hideFree],
-            'addressCounts' => $subnet->addressCounts(),
+            'addressCounts' => fn () => $subnet->addressCounts(),
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
-            'devices' => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id'])
+            'devices' => fn () => $site->devices()->with(['interfaces', 'model:id,panel'])->orderBy('name')->get(['id', 'name', 'device_model_id'])
                 ->each(function ($device) {
                     if ($device->model?->panel) {
                         // IP assignment only uses connector IDs and labels, not the panel drawing.

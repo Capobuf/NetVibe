@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { useForm } from "@inertiajs/react";
 import {
     Cloud,
     MoreHorizontal,
@@ -10,20 +10,20 @@ import {
     Server,
     ShieldCheck,
     Trash2,
-} from 'lucide-react';
-import { useState } from 'react';
+} from "lucide-react";
+import { useState } from "react";
 import {
     destroy,
     discover,
     update,
     verify,
-} from '@/actions/App/Http/Controllers/UnifiController';
+} from "@/actions/App/Http/Controllers/UnifiController";
 import {
     IntegrationStatus,
     type IntegrationState,
-} from '@/components/integration-header';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+} from "@/components/integration-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -31,7 +31,7 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
     Dialog,
     DialogContent,
@@ -39,26 +39,26 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
-} from '@/components/ui/input-group';
-import { Spinner } from '@/components/ui/spinner';
-import { formatDateTime } from '@/lib/utils';
-import { UnifiSiteList } from './site-list';
-import { UnifiInventoryPreview } from './inventory-preview';
-import { unifiAccess, type UnifiCompany, type UnifiConnection } from './types';
+} from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
+import { formatDateTime } from "@/lib/utils";
+import { UnifiSiteList } from "./site-list";
+import { UnifiInventoryPreview } from "./inventory-preview";
+import { unifiAccess, type UnifiCompany, type UnifiConnection } from "./types";
 
 export function connectionState(connection: UnifiConnection): IntegrationState {
     return !connection.enabled
-        ? 'suspended'
-        : connection.check_status === 'ok'
-          ? 'active'
+        ? "suspended"
+        : connection.check_status === "ok"
+          ? "active"
           : connection.checked_at
-            ? 'error'
-            : 'pending';
+            ? "error"
+            : "pending";
 }
 
 /** Content of the access dialog: connection status and actions, then UniFi sites mapped to NetVibe sites. */
@@ -73,29 +73,29 @@ export function UnifiConnectionPanel({
     readonly: boolean;
     onEdit: () => void;
 }) {
-    const [search, setSearch] = useState('');
+    const [search, setSearch] = useState("");
     const form = useForm({
-        revision: connection.revision ?? '',
+        revision: connection.revision ?? "",
         confirmed: true,
     });
     const [pending, setPending] = useState<
-        'verify' | 'discover' | 'toggle' | 'destroy' | null
+        "verify" | "discover" | "toggle" | "destroy" | null
     >(null);
-    const [confirm, setConfirm] = useState<'suspend' | 'destroy' | null>(null);
+    const [confirm, setConfirm] = useState<"suspend" | "destroy" | null>(null);
     const savedConsoles = connection.selected_console_ids ?? [];
     const state = connectionState(connection);
     const linked = connection.sites.filter((source) => source.site !== null);
 
-    function run(action: 'verify' | 'discover' | 'toggle' | 'destroy') {
+    function run(action: "verify" | "discover" | "toggle" | "destroy") {
         setPending(action);
         form.transform(() =>
-            action === 'toggle'
+            action === "toggle"
                 ? {
                       name: connection.name,
                       mode: connection.mode,
                       company_id: connection.company_id,
-                      server_url: connection.server_url ?? '',
-                      api_key: '',
+                      server_url: connection.server_url ?? "",
+                      api_key: "",
                       allow_unverified_certificate:
                           connection.allow_unverified_certificate ?? false,
                       enabled: !connection.enabled,
@@ -104,11 +104,11 @@ export function UnifiConnectionPanel({
                 : { revision: connection.revision, confirmed: true },
         );
         const route =
-            action === 'verify'
+            action === "verify"
                 ? verify(connection.id)
-                : action === 'discover'
+                : action === "discover"
                   ? discover(connection.id)
-                  : action === 'toggle'
+                  : action === "toggle"
                     ? update(connection.id)
                     : destroy(connection.id);
         form.submit(route, {
@@ -127,7 +127,11 @@ export function UnifiConnectionPanel({
                 <DialogHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
                         <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted">
-                            {connection.mode === 'cloud' ? <Cloud /> : <Server />}
+                            {connection.mode === "cloud" ? (
+                                <Cloud />
+                            ) : (
+                                <Server />
+                            )}
                         </span>
                         <div className="flex min-w-0 flex-col gap-1">
                             <DialogTitle className="flex flex-wrap items-center gap-2 break-words">
@@ -136,18 +140,18 @@ export function UnifiConnectionPanel({
                             </DialogTitle>
                             <DialogDescription className="break-all">
                                 {[
-                                    connection.mode === 'cloud'
+                                    connection.mode === "cloud"
                                         ? `${unifiAccess.cloud} · tutte le console dell’account UniFi`
                                         : `${unifiAccess.direct} · accesso diretto alla console`,
-                                    !readonly && connection.mode === 'direct'
+                                    !readonly && connection.mode === "direct"
                                         ? connection.server_url
                                         : null,
                                     connection.checked_at
                                         ? `verificato il ${formatDateTime(connection.checked_at)}`
-                                        : 'mai verificato',
+                                        : "mai verificato",
                                 ]
                                     .filter(Boolean)
-                                    .join(' · ')}
+                                    .join(" · ")}
                             </DialogDescription>
                         </div>
                     </div>
@@ -159,9 +163,9 @@ export function UnifiConnectionPanel({
                                 disabled={
                                     form.processing || !connection.enabled
                                 }
-                                onClick={() => run('verify')}
+                                onClick={() => run("verify")}
                             >
-                                {pending === 'verify' ? (
+                                {pending === "verify" ? (
                                     <Spinner />
                                 ) : (
                                     <ShieldCheck data-icon="inline-start" />
@@ -174,12 +178,12 @@ export function UnifiConnectionPanel({
                                 disabled={
                                     form.processing ||
                                     !connection.enabled ||
-                                    (connection.mode === 'cloud' &&
+                                    (connection.mode === "cloud" &&
                                         !savedConsoles.length)
                                 }
-                                onClick={() => run('discover')}
+                                onClick={() => run("discover")}
                             >
-                                {pending === 'discover' ? (
+                                {pending === "discover" ? (
                                     <Spinner />
                                 ) : (
                                     <RefreshCw data-icon="inline-start" />
@@ -194,7 +198,7 @@ export function UnifiConnectionPanel({
                                         aria-label={`Altre azioni per ${connection.name}`}
                                         disabled={form.processing}
                                     >
-                                        {pending === 'toggle' ? (
+                                        {pending === "toggle" ? (
                                             <Spinner />
                                         ) : (
                                             <MoreHorizontal />
@@ -210,8 +214,8 @@ export function UnifiConnectionPanel({
                                         <DropdownMenuItem
                                             onSelect={() =>
                                                 connection.enabled
-                                                    ? setConfirm('suspend')
-                                                    : run('toggle')
+                                                    ? setConfirm("suspend")
+                                                    : run("toggle")
                                             }
                                         >
                                             {connection.enabled ? (
@@ -220,14 +224,14 @@ export function UnifiConnectionPanel({
                                                 <Play />
                                             )}
                                             {connection.enabled
-                                                ? 'Sospendi'
-                                                : 'Riattiva'}
+                                                ? "Sospendi"
+                                                : "Riattiva"}
                                         </DropdownMenuItem>
                                     </DropdownMenuGroup>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         variant="destructive"
-                                        onSelect={() => setConfirm('destroy')}
+                                        onSelect={() => setConfirm("destroy")}
                                     >
                                         <Trash2 />
                                         Rimuovi
@@ -238,7 +242,7 @@ export function UnifiConnectionPanel({
                     ) : null}
                 </DialogHeader>
                 {connection.check_message &&
-                connection.check_status !== 'ok' ? (
+                connection.check_status !== "ok" ? (
                     <Alert variant="destructive" aria-live="polite">
                         <AlertTitle>Verifica non riuscita</AlertTitle>
                         <AlertDescription>
@@ -249,14 +253,14 @@ export function UnifiConnectionPanel({
                 {form.hasErrors && !confirm ? (
                     <Alert variant="destructive">
                         <AlertDescription>
-                            {Object.values(form.errors).join(' ')}
+                            {Object.values(form.errors).join(" ")}
                         </AlertDescription>
                     </Alert>
                 ) : null}
             </div>
             {!readonly &&
-            connection.mode === 'cloud' &&
-            connection.check_status === 'ok' &&
+            connection.mode === "cloud" &&
+            connection.check_status === "ok" &&
             !connection.hosts?.length ? (
                 <Alert>
                     <AlertDescription>
@@ -286,7 +290,7 @@ export function UnifiConnectionPanel({
                 ) : null}
             </div>
             <UnifiSiteList
-                key={`${connection.id}:${savedConsoles.join(',')}`}
+                key={`${connection.id}:${savedConsoles.join(",")}`}
                 connection={connection}
                 companies={companies}
                 search={search}
@@ -302,14 +306,14 @@ export function UnifiConnectionPanel({
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {confirm === 'destroy'
-                                ? 'Rimuovere la connessione?'
-                                : 'Sospendere la connessione?'}
+                            {confirm === "destroy"
+                                ? "Rimuovere la connessione?"
+                                : "Sospendere la connessione?"}
                         </DialogTitle>
                         <DialogDescription>
-                            {confirm === 'destroy'
-                                ? 'I siti raggiungibili anche da un altro accesso UniFi passeranno a quell’accesso con i dati acquisiti. Per gli altri, collegamenti e anteprime saranno rimossi; i dati documentati saranno conservati.'
-                                : 'Le nuove acquisizioni saranno sospese per tutti i siti collegati. I dati già acquisiti resteranno consultabili.'}
+                            {confirm === "destroy"
+                                ? "I siti raggiungibili anche da un altro accesso UniFi passeranno a quell’accesso con i dati acquisiti. Per gli altri, collegamenti e anteprime saranno rimossi; i dati documentati saranno conservati."
+                                : "Le nuove acquisizioni saranno sospese per tutti i siti collegati. I dati già acquisiti resteranno consultabili."}
                         </DialogDescription>
                     </DialogHeader>
                     <p className="font-medium">{connection.name}</p>
@@ -317,13 +321,13 @@ export function UnifiConnectionPanel({
                         <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
                             {linked.map((source) => (
                                 <li key={source.id}>
-                                    {source.name} ·{' '}
+                                    {source.name} ·{" "}
                                     {[
                                         source.site?.company.name,
                                         source.site?.name,
                                     ]
                                         .filter(Boolean)
-                                        .join(' · ')}
+                                        .join(" · ")}
                                 </li>
                             ))}
                         </ul>
@@ -331,7 +335,7 @@ export function UnifiConnectionPanel({
                     {form.hasErrors ? (
                         <Alert variant="destructive">
                             <AlertDescription>
-                                {Object.values(form.errors).join(' ')}
+                                {Object.values(form.errors).join(" ")}
                             </AlertDescription>
                         </Alert>
                     ) : null}
@@ -348,14 +352,14 @@ export function UnifiConnectionPanel({
                             disabled={form.processing}
                             onClick={() =>
                                 run(
-                                    confirm === 'destroy'
-                                        ? 'destroy'
-                                        : 'toggle',
+                                    confirm === "destroy"
+                                        ? "destroy"
+                                        : "toggle",
                                 )
                             }
                         >
                             {form.processing ? <Spinner /> : null}
-                            {confirm === 'destroy' ? 'Rimuovi' : 'Sospendi'}
+                            {confirm === "destroy" ? "Rimuovi" : "Sospendi"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

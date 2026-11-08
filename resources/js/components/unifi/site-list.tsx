@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm } from "@inertiajs/react";
 import {
     AlertTriangle,
     ArrowRight,
@@ -7,28 +7,28 @@ import {
     Pencil,
     Server,
     Unlink,
-} from 'lucide-react';
-import { Fragment, useState } from 'react';
-import { CatalogCombobox } from '@/components/devices/catalog-combobox';
-import { store as storeCompany } from '@/routes/administration/companies';
-import type { CreatedCompany } from '@/types/company';
+} from "lucide-react";
+import { Fragment, useState } from "react";
+import { CatalogCombobox } from "@/components/devices/catalog-combobox";
+import { store as storeCompany } from "@/routes/administration/companies";
+import type { CreatedCompany } from "@/types/company";
 import {
     associate,
     revoke,
     selectConsoles,
-} from '@/actions/App/Http/Controllers/UnifiController';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+} from "@/actions/App/Http/Controllers/UnifiController";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
     Dialog,
     DialogContent,
@@ -36,14 +36,14 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
     Empty,
     EmptyDescription,
     EmptyHeader,
     EmptyTitle,
-} from '@/components/ui/empty';
-import { Spinner } from '@/components/ui/spinner';
+} from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import {
     Table,
     TableBody,
@@ -51,15 +51,15 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from '@/components/ui/table';
-import { cn } from '@/lib/utils';
-import { UnifiSitePreview } from './site-preview';
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import { UnifiSitePreview } from "./site-preview";
 import {
     unifiAccess,
     type UnifiCompany,
     type UnifiConnection,
     type UnifiSite,
-} from './types';
+} from "./types";
 
 type Destination = { id: number; name: string };
 
@@ -88,12 +88,12 @@ export function UnifiSiteList({
     const preview = connection.sites.find((source) => source.id === previewId);
     const selectable =
         !readonly &&
-        connection.mode === 'cloud' &&
+        connection.mode === "cloud" &&
         (connection.hosts?.length ?? 0) > 0;
     const saved = connection.selected_console_ids ?? [];
     const consoleForm = useForm({
         selected_console_ids: saved,
-        revision: connection.revision ?? '',
+        revision: connection.revision ?? "",
     });
     const removed = pendingConsoles
         ? connection.sites.filter(
@@ -116,7 +116,7 @@ export function UnifiSiteList({
             source.site?.company.name,
             source.site?.name,
         ]
-            .join(' ')
+            .join(" ")
             .toLocaleLowerCase()
             .includes(query),
     );
@@ -179,14 +179,14 @@ export function UnifiSiteList({
         <Card className="gap-0 overflow-hidden py-0">
             <CardHeader className="py-4">
                 <CardTitle>
-                    {selectable ? 'Console e siti UniFi' : 'Siti UniFi'}
+                    {selectable ? "Console e siti UniFi" : "Siti UniFi"}
                 </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-0 px-0">
                 {consoleForm.hasErrors && !pendingConsoles ? (
                     <Alert variant="destructive" className="mx-4 mb-4 w-auto">
                         <AlertDescription>
-                            {Object.values(consoleForm.errors).join(' ')}
+                            {Object.values(consoleForm.errors).join(" ")}
                         </AlertDescription>
                     </Alert>
                 ) : null}
@@ -269,8 +269,8 @@ export function UnifiSiteList({
                                                         >
                                                             <AlertTriangle />
                                                             {failure.status ===
-                                                            'forbidden'
-                                                                ? 'Non accessibile con questa chiave API'
+                                                            "forbidden"
+                                                                ? "Non accessibile con questa chiave API"
                                                                 : failure.message}
                                                         </Badge>
                                                     ) : null}
@@ -282,7 +282,7 @@ export function UnifiSiteList({
                                         </TableRow>
                                         {sites.map((source) => (
                                             <SiteRow
-                                                key={`${source.id}:${source.site?.id ?? ''}:${source.confirmed_at ?? ''}`}
+                                                key={`${source.id}:${source.site?.id ?? ""}:${source.confirmed_at ?? ""}`}
                                                 source={source}
                                                 connection={connection}
                                                 destinations={destinations}
@@ -314,7 +314,7 @@ export function UnifiSiteList({
                                                             Lettura dei siti…
                                                         </span>
                                                     ) : (
-                                                        'Nessun sito letto'
+                                                        "Nessun sito letto"
                                                     )}
                                                 </TableCell>
                                             </TableRow>
@@ -329,10 +329,10 @@ export function UnifiSiteList({
                         <EmptyHeader>
                             <EmptyTitle>
                                 {search
-                                    ? 'Nessun sito corrisponde alla ricerca'
+                                    ? "Nessun sito corrisponde alla ricerca"
                                     : connection.discovered_at
-                                      ? 'Nessun sito disponibile'
-                                      : 'Dati non ancora acquisiti'}
+                                      ? "Nessun sito disponibile"
+                                      : "Dati non ancora acquisiti"}
                             </EmptyTitle>
                             {!search && !connection.discovered_at ? (
                                 <EmptyDescription>
@@ -348,7 +348,7 @@ export function UnifiSiteList({
                 <UnifiSitePreview
                     source={preview}
                     current={
-                        connection.enabled && connection.check_status === 'ok'
+                        connection.enabled && connection.check_status === "ok"
                     }
                     onClose={() => setPreviewId(null)}
                 />
@@ -371,17 +371,17 @@ export function UnifiSiteList({
                     <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto text-sm">
                         {removed.map((source) => (
                             <li key={source.id}>
-                                {source.console_name} · {source.name} →{' '}
+                                {source.console_name} · {source.name} →{" "}
                                 {[source.site?.company.name, source.site?.name]
                                     .filter(Boolean)
-                                    .join(' · ')}
+                                    .join(" · ")}
                             </li>
                         ))}
                     </ul>
                     {consoleForm.hasErrors ? (
                         <Alert variant="destructive">
                             <AlertDescription>
-                                {Object.values(consoleForm.errors).join(' ')}
+                                {Object.values(consoleForm.errors).join(" ")}
                             </AlertDescription>
                         </Alert>
                     ) : null}
@@ -427,31 +427,31 @@ function SiteRow({
 }) {
     const [editing, setEditing] = useState(false);
     const [target, setTarget] = useState<Destination | null>(null);
-    const [confirm, setConfirm] = useState<'change' | 'revoke' | null>(null);
+    const [confirm, setConfirm] = useState<"change" | "revoke" | null>(null);
     const form = useForm({
         site_id: 0,
-        revision: connection.revision ?? '',
+        revision: connection.revision ?? "",
         confirmed: true,
     });
     const via = source.linked_via;
     const site = source.site ?? via?.site ?? null;
     const label = site
-        ? [site.company.name, site.name].filter(Boolean).join(' · ')
+        ? [site.company.name, site.name].filter(Boolean).join(" · ")
         : null;
     const linked = !!site && !dimmed;
     const editable = !readonly && !via && !source.linked_elsewhere;
     // How the last read reached this UniFi site: the host, or the Cloud Connector standing in for it.
     const fallback =
-        source.last_access === 'cloud' && connection.mode === 'direct';
+        source.last_access === "cloud" && connection.mode === "direct";
     const access =
         source.site && source.last_access
             ? source.last_access === connection.mode
-                ? source.last_access === 'direct'
-                    ? 'Letto in diretto'
-                    : 'Letto via cloud'
-                : source.last_access === 'cloud'
-                  ? 'Host non raggiungibile · letto via cloud'
-                  : 'Letto tramite UniFi Host'
+                ? source.last_access === "direct"
+                    ? "Letto in diretto"
+                    : "Letto via cloud"
+                : source.last_access === "cloud"
+                  ? "Host non raggiungibile · letto via cloud"
+                  : "Letto tramite UniFi Host"
             : null;
     const busy = form.processing || disabled;
 
@@ -487,7 +487,7 @@ function SiteRow({
         if (!source.site) link(next.id);
         else {
             setTarget(next);
-            setConfirm('change');
+            setConfirm("change");
         }
     }
 
@@ -499,7 +499,7 @@ function SiteRow({
             value=""
             onChange={choose}
             placeholder={
-                source.site ? 'Scegli la nuova sede…' : 'Collega a una sede…'
+                source.site ? "Scegli la nuova sede…" : "Collega a una sede…"
             }
             createLabel="Aggiungi azienda"
             required
@@ -513,7 +513,7 @@ function SiteRow({
                         { name, inline: true },
                         {
                             preserveScroll: true,
-                            errorBag: 'newCompany',
+                            errorBag: "newCompany",
                             onFlash: (flash) => {
                                 if (flash.createdCompany) {
                                     const company =
@@ -530,14 +530,14 @@ function SiteRow({
                                 if (!source.site) link(created.id);
                                 else {
                                     setTarget(created);
-                                    setConfirm('change');
+                                    setConfirm("change");
                                 }
                             },
                             onError: (errors) =>
                                 reject(
                                     new Error(
                                         Object.values(errors)[0] ??
-                                            'Impossibile creare l’azienda.',
+                                            "Impossibile creare l’azienda.",
                                     ),
                                 ),
                             onFinish: () => resolve(),
@@ -549,7 +549,7 @@ function SiteRow({
     );
 
     return (
-        <TableRow className={cn(dimmed && 'opacity-60')}>
+        <TableRow className={cn(dimmed && "opacity-60")}>
             <TableCell className="pl-10 whitespace-normal">
                 <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -565,25 +565,25 @@ function SiteRow({
                             source.version ? `Network ${source.version}` : null,
                             source.preview
                                 ? `${source.preview.devices.length} dispositivi`
-                                : 'Dati non ancora acquisiti',
+                                : "Dati non ancora acquisiti",
                             source.preview
                                 ? source.preview.networks === null
-                                    ? 'reti non supportate'
+                                    ? "reti non supportate"
                                     : `${source.preview.networks.length} reti`
                                 : null,
                         ]
                             .filter(Boolean)
-                            .join(' · ')}
+                            .join(" · ")}
                     </span>
                 </div>
             </TableCell>
             <TableCell>
                 <ArrowRight
                     className={cn(
-                        'size-4',
-                        linked ? 'text-primary' : 'text-muted-foreground/40',
+                        "size-4",
+                        linked ? "text-primary" : "text-muted-foreground/40",
                     )}
-                    aria-label={linked ? 'Collegato' : 'Non collegato'}
+                    aria-label={linked ? "Collegato" : "Non collegato"}
                 />
             </TableCell>
             <TableCell className="whitespace-normal">
@@ -609,7 +609,7 @@ function SiteRow({
                         <span className="font-medium break-words">{label}</span>
                         {via ? (
                             <Badge variant="secondary">
-                                tramite {unifiAccess[via.mode]} ·{' '}
+                                tramite {unifiAccess[via.mode]} ·{" "}
                                 {via.connection}
                             </Badge>
                         ) : access ? (
@@ -617,7 +617,7 @@ function SiteRow({
                                 variant="outline"
                                 className={cn(
                                     fallback &&
-                                        'text-amber-700 dark:text-amber-500',
+                                        "text-amber-700 dark:text-amber-500",
                                 )}
                             >
                                 {access}
@@ -638,8 +638,8 @@ function SiteRow({
                 ) : (
                     <span className="text-muted-foreground">
                         {source.linked_elsewhere
-                            ? 'Collegato in un’altra azienda'
-                            : 'Non collegato'}
+                            ? "Collegato in un’altra azienda"
+                            : "Non collegato"}
                     </span>
                 )}
             </TableCell>
@@ -676,7 +676,7 @@ function SiteRow({
                                 <DropdownMenuItem
                                     variant="destructive"
                                     disabled={form.processing}
-                                    onSelect={() => setConfirm('revoke')}
+                                    onSelect={() => setConfirm("revoke")}
                                 >
                                     <Unlink />
                                     Scollega
@@ -697,20 +697,20 @@ function SiteRow({
                     <DialogContent className="text-left">
                         <DialogHeader>
                             <DialogTitle>
-                                {confirm === 'revoke'
-                                    ? 'Scollegare il sito?'
-                                    : 'Cambiare la sede collegata?'}
+                                {confirm === "revoke"
+                                    ? "Scollegare il sito?"
+                                    : "Cambiare la sede collegata?"}
                             </DialogTitle>
                             <DialogDescription>
-                                {confirm === 'revoke'
-                                    ? 'Le nuove acquisizioni per questa sede verranno sospese. I dati documentati saranno conservati.'
-                                    : 'Le nuove acquisizioni andranno alla nuova sede. I dati documentati nella sede precedente saranno conservati.'}
+                                {confirm === "revoke"
+                                    ? "Le nuove acquisizioni per questa sede verranno sospese. I dati documentati saranno conservati."
+                                    : "Le nuove acquisizioni andranno alla nuova sede. I dati documentati nella sede precedente saranno conservati."}
                             </DialogDescription>
                         </DialogHeader>
                         <p className="text-sm">
                             {source.console_name} · {source.name}
                             <ArrowRight className="mx-2 inline size-4 text-muted-foreground" />
-                            {confirm === 'revoke' ? (
+                            {confirm === "revoke" ? (
                                 <span className="text-muted-foreground line-through">
                                     {label}
                                 </span>
@@ -723,7 +723,7 @@ function SiteRow({
                         {form.hasErrors ? (
                             <Alert variant="destructive">
                                 <AlertDescription>
-                                    {Object.values(form.errors).join(' ')}
+                                    {Object.values(form.errors).join(" ")}
                                 </AlertDescription>
                             </Alert>
                         ) : null}
@@ -737,21 +737,21 @@ function SiteRow({
                             </Button>
                             <Button
                                 variant={
-                                    confirm === 'revoke'
-                                        ? 'destructive'
-                                        : 'default'
+                                    confirm === "revoke"
+                                        ? "destructive"
+                                        : "default"
                                 }
                                 disabled={form.processing}
                                 onClick={() =>
-                                    confirm === 'revoke'
+                                    confirm === "revoke"
                                         ? unlink()
                                         : link(target!.id)
                                 }
                             >
                                 {form.processing ? <Spinner /> : null}
-                                {confirm === 'revoke'
-                                    ? 'Scollega'
-                                    : 'Cambia sede'}
+                                {confirm === "revoke"
+                                    ? "Scollega"
+                                    : "Cambia sede"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

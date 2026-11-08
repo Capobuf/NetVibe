@@ -24,7 +24,7 @@ class UnifiIpamTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_network_import_reuses_site_documentation_and_connected_clients_remain_observations(): void
+    public function test_network_import_reuses_site_documentation_and_documents_connected_clients(): void
     {
         Http::preventStrayRequests();
         $source = $this->source();
@@ -43,12 +43,15 @@ class UnifiIpamTest extends TestCase
 
         $this->assertDatabaseCount('subnets', 1);
         $this->assertDatabaseCount('vlans', 2);
-        $this->assertDatabaseCount('ip_addresses', 1);
+        $this->assertDatabaseCount('ip_addresses', 2);
         $this->assertDatabaseCount('devices', 0);
+        $client = $subnet->ipAddresses()->where('address', ip2long('192.0.2.2'))->sole();
+        $this->assertSame(['Telefono Wi-Fi', '02:11:22:33:44:55', true, null], [$client->hostname, $client->mac_address, $client->auto_managed, $client->device_id]);
+        $this->assertSame('Gateway MikroTik', $subnet->ipAddresses()->where('address', ip2long('192.0.2.1'))->value('description'));
         $this->assertSame('Manuale', $vlan->fresh()->name);
         $this->assertSame('Rete manuale', $subnet->fresh()->name);
         $this->assertSame('192.0.2.3', $subnet->firstProposableIp());
-        $this->assertSame(['documented' => 1, 'excluded' => 0, 'external' => 1, 'proposable' => 4], $subnet->addressCounts());
+        $this->assertSame(['documented' => 2, 'excluded' => 0, 'external' => 0, 'proposable' => 4], $subnet->addressCounts());
         $this->assertSame($subnet->id, UnifiObservation::where('kind', 'network')->whereNotNull('subnet_id')->sole()->subnet_id);
 
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));
@@ -58,11 +61,12 @@ class UnifiIpamTest extends TestCase
         $this->get(route('companies.sites.subnets.show', [$site->company_id, $site, $subnet, 'search' => 'Telefono', 'hide_free' => 1]))
             ->assertOk()->assertInertia(fn (Assert $page) => $page->has('ipAddresses.data', 1)->where('ipAddresses.data.0.ip', '192.0.2.2'));
         $this->get(route('companies.sites.search.index', [$site->company_id, $site, 'search' => 'Telefono']))
-            ->assertOk()->assertInertia(fn (Assert $page) => $page->has('results.data', 1)->where('results.data.0.id', null)
+            ->assertOk()->assertInertia(fn (Assert $page) => $page->has('results.data', 1)->where('results.data.0.id', $client->id)
             ->where('results.data.0.ip', '192.0.2.2')->has('results.data.0.unifi_observations', 1));
 
+        // An unreachable controller never frees what it last reported.
         $source->update(['sync_status' => 'unreachable']);
-        $this->assertSame('192.0.2.2', $subnet->firstProposableIp());
+        $this->assertSame('192.0.2.3', $subnet->firstProposableIp());
         $this->assertTrue(UnifiIpam::forSubnet($subnet)->firstWhere('kind', 'client')['stale']);
         $this->get(route('companies.sites.subnets.show', [$site->company_id, $site, $subnet, 'search' => 'Telefono', 'hide_free' => 1]))
             ->assertOk()->assertInertia(fn (Assert $page) => $page->has('ipAddresses.data', 1));
@@ -84,7 +88,9 @@ class UnifiIpamTest extends TestCase
         $this->assertDatabaseCount('vlans', 0);
         $configured = $source->site->subnets()->sole()->ipAddresses()->sole();
         $this->assertNull($configured->device_id);
-        $this->assertSame('Indirizzo configurato · Default', $configured->description);
+        // The source justifies the record: no description is invented for it.
+        $this->assertNull($configured->description);
+        $this->assertTrue($configured->auto_managed);
         $this->assertSame(ip2long('198.51.100.1'), $configured->address);
         $network['ipv4Configuration']['hostIpAddress'] = '203.0.113.1';
         DB::transaction(fn () => (new UnifiIpam)->capture($source, [$network], []));
@@ -161,6 +167,30 @@ class UnifiIpamTest extends TestCase
         $this->assertSame('Manuale', $ip->fresh()->hostname);
         $this->assertSame('02:11:22:33:44:66', $ip->fresh()->mac_address);
         Http::assertNothingSent();
+    }
+
+    public function test_fixed_ip_reservations_document_offline_clients_until_they_are_removed(): void
+    {
+        Http::preventStrayRequests();
+        $source = $this->source();
+        $subnet = $source->site->subnets()->create(Ipv4Cidr::parse('192.0.2.0/29'));
+        $reservation = ['id' => str_repeat('a', 24), 'mac' => '02:00:00:00:00:51', 'ip' => '192.0.2.5', 'name' => 'PRINT-1',
+            'hostname' => 'XeroxC7025', 'dns' => 'print1.example.test', 'last_seen' => now()->subDays(40)->timestamp];
+        $capture = fn (?array $reservations) => DB::transaction(fn () => (new UnifiIpam)->capture($source, null, [], [], $reservations));
+        $capture([$reservation]);
+
+        $ip = $subnet->ipAddresses()->sole();
+        $this->assertSame(['192.0.2.5', 'XeroxC7025', 'PRINT-1', '02:00:00:00:00:51', true],
+            [long2ip($ip->address), $ip->hostname, $ip->description, $ip->mac_address, $ip->auto_managed]);
+        $this->assertSame(now()->subDays(40)->timestamp, UnifiObservation::sole()->present_at->timestamp);
+        $this->assertSame('192.0.2.1', $subnet->firstProposableIp());
+        // An unreadable reservation list keeps the last data instead of reporting the reservation as removed.
+        $capture(null);
+        $this->assertSame('unknown', UnifiObservation::sole()->state);
+        $this->assertTrue($ip->exists());
+        $capture([]);
+        $this->assertSame('missing', UnifiObservation::sole()->state);
+        $this->assertDatabaseCount('ip_addresses', 0);
     }
 
     private function source(): UnifiSite

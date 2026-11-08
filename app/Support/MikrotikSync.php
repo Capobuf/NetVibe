@@ -71,6 +71,8 @@ class MikrotikSync
                     $device->mikrotikSources()->where('generation', $current->source_generation)->where('state', 'current')->update(['state' => 'unknown']);
                 }
                 if ($status === 'ok') {
+                    // Occupation rules read the source health from the database: a recovered source must count as readable.
+                    $current->save();
                     $counts = $this->apply($site, $device, $current, $objects);
                     $current->fill(['synced_at' => $attempted, 'sync_identity' => $identity, 'sync_summary' => $counts]);
                 }
@@ -334,6 +336,11 @@ class MikrotikSync
             // Temporary evidence never moves a record: it follows the address and needs a MAC and a recent presence.
             // A dynamic DHCP lease alone only links to a record documented by other evidence.
             $subnet = IpamEvidence::subnetFor($site->id, $source->address);
+            // The router's own network for this address must resolve to the same documented subnet.
+            $ambiguous = collect($sources)->contains(fn ($network) => $network->kind === 'subnet' && $network->data['active']
+                && $network->data['network_address'] <= $source->address && $network->data['broadcast_address'] >= $source->address
+                && ($network->problem || $network->subnet_id !== $subnet?->id));
+            $subnet = $ambiguous ? null : $subnet;
             $ip = $subnet?->ipAddresses()->where('address', $source->address)->first();
             $new = false;
             if ($subnet && ! $ip && $data['menu'] !== '/ip/dhcp-server/lease' && ! empty($data['mac']) && $source->present_at?->gte($this->cutoff)) {

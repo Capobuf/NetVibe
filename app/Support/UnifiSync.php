@@ -86,6 +86,8 @@ class UnifiSync
                         if ($status === 'ok') {
                             Company::whereHas('sites', fn ($query) => $query->whereKey($site->site_id))->lockForUpdate()->firstOrFail();
                             Site::whereKey($site->site_id)->lockForUpdate()->firstOrFail();
+                            // Occupation rules read the source health from the database: a recovered site must count as readable.
+                            $site->update(['sync_status' => 'ok']);
                             app(UnifiInventory::class)->capture($site, $snapshots[$site->id]['devices']);
                             app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices'], $snapshots[$site->id]['reservations']);
                             $site->last_synced_at = now();

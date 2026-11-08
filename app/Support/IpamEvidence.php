@@ -59,9 +59,10 @@ class IpamEvidence
             return;
         }
         $addresses = $ips->pluck('address')->all();
-        $mikrotik = MikrotikSource::where('site_id', $siteId)->where('state', 'current')->whereNull('excluded_at')
+        // Sources with an open problem (for example a second router claiming the address) are not facts to copy.
+        $mikrotik = MikrotikSource::where('site_id', $siteId)->where('state', 'current')->whereNull('excluded_at')->whereNull('problem')
             ->whereIn('address', $addresses)->withoutUnresolvedArp()->get()->groupBy('address');
-        $unifi = UnifiObservation::forSite($siteId)->where('state', 'current')->where('kind', '!=', 'network')
+        $unifi = UnifiObservation::forSite($siteId)->where('state', 'current')->where('kind', '!=', 'network')->whereNull('problem')
             ->whereIn('address', $addresses)->get()->groupBy('address');
         // Only a stable UniFi device reference already mapped to a device of this site assigns it.
         $devices = UnifiDevice::whereNotNull('device_id')->where('present', true)

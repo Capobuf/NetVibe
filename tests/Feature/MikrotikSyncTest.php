@@ -38,7 +38,7 @@ class MikrotikSyncTest extends TestCase
         $this->device->mikrotikConnection()->sole()->update(['check_status' => 'ok', 'checked_at' => now()]);
     }
 
-    public function test_activation_imports_only_explicit_data_and_refresh_preserves_manual_records(): void
+    public function test_activation_documents_configured_and_observed_addresses_and_refresh_preserves_manual_records(): void
     {
         $tables = $this->tables();
         $tables['system/resource'][0]['board-name'] = 'CCR2004-1G-12S+2XS';
@@ -53,11 +53,17 @@ class MikrotikSyncTest extends TestCase
         $subnet = $this->device->site->subnets()->sole();
         $this->assertSame('192.0.2.0/29', $subnet->cidr);
         $this->assertDatabaseCount('vlans', 2);
-        $this->assertDatabaseCount('ip_addresses', 1);
-        $this->assertSame($this->device->id, $subnet->ipAddresses()->sole()->device_id);
+        // Router address, static lease and ARP entry each become one automatic record filled from its source.
+        $this->assertSame(['192.0.2.1', '192.0.2.2', '192.0.2.3'], $subnet->ipAddresses()->orderBy('address')->get()->map(fn ($ip) => long2ip($ip->address))->all());
+        $this->assertSame(3, $subnet->ipAddresses()->where('auto_managed', true)->count());
+        $router = $subnet->ipAddresses()->where('address', ip2long('192.0.2.1'))->sole();
+        $this->assertSame([$this->device->id, 'Source address comment'], [$router->device_id, $router->description]);
+        $lease = $subnet->ipAddresses()->where('address', ip2long('192.0.2.3'))->sole();
+        $this->assertSame(['02:00:00:00:00:03', 'Source lease comment', null], [$lease->mac_address, $lease->description, $lease->device_id]);
+        $this->assertSame('02:00:00:00:00:02', $subnet->ipAddresses()->where('address', ip2long('192.0.2.2'))->value('mac_address'));
         $this->assertSame('192.0.2.4', $subnet->firstProposableIp());
-        $this->assertSame(['documented' => 1, 'excluded' => 0, 'external' => 2, 'proposable' => 3], $subnet->addressCounts());
-        $this->assertDatabaseHas('mikrotik_sources', ['kind' => 'lease', 'address' => ip2long('192.0.2.3'), 'ip_address_id' => null]);
+        $this->assertSame(['documented' => 3, 'excluded' => 0, 'external' => 0, 'proposable' => 3], $subnet->addressCounts());
+        $this->assertDatabaseHas('mikrotik_sources', ['kind' => 'lease', 'address' => ip2long('192.0.2.3'), 'ip_address_id' => $lease->id]);
         $subnet->update(['name' => 'Manual name', 'description' => 'Manual notes']);
         $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.5'), 'hostname' => 'manual-host']);
         $tables['interface'][1]['name'] = 'renamed-vlan';
@@ -68,7 +74,7 @@ class MikrotikSyncTest extends TestCase
         $this->fake($tables);
         $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
         $this->assertDatabaseCount('subnets', 1);
-        $this->assertDatabaseCount('ip_addresses', 3);
+        $this->assertDatabaseCount('ip_addresses', 5);
         $this->assertSame('Manual notes', $subnet->fresh()->description);
         $this->assertSame(0, MikrotikSource::where('kind', 'subnet')->whereNotNull('problem')->count());
         $this->assertNull(MikrotikSource::where('kind', 'lease')->sole()->problem);
@@ -76,7 +82,7 @@ class MikrotikSyncTest extends TestCase
         Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
     }
 
-    public function test_unresolved_arp_without_a_mac_is_hidden_from_ipam_and_does_not_block_suggestions(): void
+    public function test_unresolved_arp_entries_neither_document_nor_block_addresses(): void
     {
         $tables = $this->tables();
         $tables['ip/arp'] = [
@@ -90,7 +96,7 @@ class MikrotikSyncTest extends TestCase
         $subnet = $this->device->site->subnets()->sole();
 
         $this->assertSame('192.0.2.2', $subnet->firstProposableIp());
-        $this->assertSame(['documented' => 1, 'excluded' => 0, 'external' => 3, 'proposable' => 2], $subnet->addressCounts());
+        $this->assertSame(['documented' => 2, 'excluded' => 0, 'external' => 0, 'proposable' => 4], $subnet->addressCounts());
         $this->assertSame(4, MikrotikSource::where('kind', 'observation')->count());
         $this->get(route('companies.sites.subnets.show', [$this->device->site->company_id, $this->device->site_id, $subnet]))
             ->assertInertia(fn (Assert $page) => $page->component('subnets/show')
@@ -101,8 +107,9 @@ class MikrotikSyncTest extends TestCase
         $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.2')]);
         $this->assertSame('192.0.2.4', $subnet->firstProposableIp());
         $subnet->excludedRanges()->create(['start_address' => ip2long('192.0.2.4'), 'end_address' => ip2long('192.0.2.4')]);
-        $this->assertNull($subnet->firstProposableIp());
-        $this->assertSame(['documented' => 2, 'excluded' => 1, 'external' => 3, 'proposable' => 0], $subnet->addressCounts());
+        // A failed resolution, even with a MAC, and an entry without a MAC prove no presence.
+        $this->assertSame('192.0.2.5', $subnet->firstProposableIp());
+        $this->assertSame(['documented' => 3, 'excluded' => 1, 'external' => 0, 'proposable' => 2], $subnet->addressCounts());
     }
 
     public function test_incomplete_reads_preserve_observations_until_a_complete_read_reports_absence(): void
@@ -127,8 +134,56 @@ class MikrotikSyncTest extends TestCase
         $this->travel(61)->seconds();
         $this->fake($tables);
         $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
+        // Disappearing from ARP after one read keeps the automatic record until the retention expires.
+        $this->assertSame('192.0.2.4', $subnet->firstProposableIp());
+        $this->assertDatabaseCount('ip_addresses', 3);
+    }
+
+    public function test_automatic_records_expire_after_the_company_retention_only_after_a_complete_read(): void
+    {
+        $tables = $this->tables();
+        // A lingering stale entry proves presence only when it first appears.
+        $tables['ip/arp'] = [
+            ['.id' => '*1', 'address' => '192.0.2.2', 'mac-address' => '02:00:00:00:00:02', 'interface' => 'vlan10', 'status' => 'stale'],
+            ['.id' => '*2', 'address' => '192.0.2.4', 'mac-address' => '02:00:00:00:00:04', 'interface' => 'vlan10', 'status' => 'stale'],
+        ];
+        $this->fake($tables);
+        $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
+        $company = $this->device->site->company;
+        $this->put(route('companies.settings.integrations.retention.update', $company), ['observation_retention_days' => 0])
+            ->assertSessionHasErrors('observation_retention_days');
+        $this->put(route('companies.settings.integrations.retention.update', $company), ['observation_retention_days' => 10])->assertSessionHasNoErrors();
+        $subnet = $this->device->site->subnets()->sole();
+        $enriched = $subnet->ipAddresses()->where('address', ip2long('192.0.2.4'))->sole();
+        $this->patch(route('companies.sites.subnets.ip-addresses.update', [$company, $this->device->site, $subnet, $enriched]),
+            ['ip' => '192.0.2.4', 'mac_address' => '02:00:00:00:00:04', 'new_tags' => [['name' => 'Kept', 'color' => 'blue']]])
+            ->assertSessionHasNoErrors();
+        $sync = function (int $days, ?string $failedMenu = null) use ($tables) {
+            $this->travel($days)->days();
+            $this->travel(61)->seconds();
+            $this->fake($tables, $failedMenu);
+            $response = $this->post($this->url('sync'), $this->operation());
+            if ($failedMenu === null) {
+                $response->assertSessionHasNoErrors();
+            }
+        };
+
+        $sync(9);
+        $this->assertSame('192.0.2.5', $subnet->firstProposableIp());
+        $sync(2, 'ip/arp');
+        $this->assertSame('192.0.2.5', $subnet->firstProposableIp());
+        $sync(0);
+        $this->assertFalse($subnet->ipAddresses()->where('address', ip2long('192.0.2.2'))->exists());
         $this->assertSame('192.0.2.2', $subnet->firstProposableIp());
-        $this->assertDatabaseCount('ip_addresses', 1);
+        $sync(1);
+        $this->assertFalse($subnet->ipAddresses()->where('address', ip2long('192.0.2.2'))->exists());
+        $this->assertSame(['Kept'], $enriched->fresh()->tags->pluck('name')->all());
+        // Configured addresses and static reservations stay occupied however long their client is absent.
+        $this->assertSame(['192.0.2.1', '192.0.2.3', '192.0.2.4'], $subnet->ipAddresses()->orderBy('address')->get()->map(fn ($ip) => long2ip($ip->address))->all());
+        $this->delete(route('companies.sites.subnets.ip-addresses.destroy', [$company, $this->device->site, $subnet, $subnet->ipAddresses()->where('address', ip2long('192.0.2.3'))->sole()]), ['confirmed' => true])
+            ->assertSessionHas('inertia.flash_data.toast.message', fn ($message) => str_contains($message, 'prossima sincronizzazione'));
+        $sync(0);
+        $this->assertTrue($subnet->ipAddresses()->where('address', ip2long('192.0.2.3'))->exists());
     }
 
     public function test_endpoint_change_suspends_sync_and_keeps_historical_source_and_ipam(): void
@@ -138,7 +193,7 @@ class MikrotikSyncTest extends TestCase
         $this->put($this->url('update'), [...$this->operation(), 'server_url' => 'https://10.2.0.2', 'username' => 'reader', 'password' => 'new-synthetic-secret', 'allow_unverified_certificate' => false])->assertSessionHasNoErrors();
         $this->assertNull($this->device->mikrotikConnection()->sole()->activated_at);
         $this->assertDatabaseHas('mikrotik_sources', ['kind' => 'observation', 'state' => 'unknown']);
-        $this->assertDatabaseCount('ip_addresses', 1);
+        $this->assertDatabaseCount('ip_addresses', 3);
         $this->post($this->url('sync'), $this->operation())->assertSessionHasErrors('connection');
         Http::assertNotSent(fn (Request $request) => str_starts_with($request->url(), 'https://10.2.0.2'));
         $this->delete($this->url('destroy'), $this->operation())->assertSessionHasNoErrors();
@@ -160,7 +215,7 @@ class MikrotikSyncTest extends TestCase
         $this->post($this->url('associate'), [...$this->operation(), 'source_id' => $source->id])->assertSessionHasNoErrors();
         $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
         $this->assertDatabaseCount('subnets', 1);
-        $this->assertSame($first->id, $first->site->subnets()->sole()->ipAddresses()->sole()->device_id);
+        $this->assertSame($first->id, $first->site->subnets()->sole()->ipAddresses()->where('address', ip2long('192.0.2.1'))->sole()->device_id);
         $this->assertSame(2, MikrotikSource::where('kind', 'subnet')->whereNotNull('subnet_id')->count());
     }
 
@@ -183,13 +238,13 @@ class MikrotikSyncTest extends TestCase
             ->get(route('companies.sites.subnets.show', [$this->device->site->company, $this->device->site, $subnet]))->assertForbidden();
     }
 
-    public function test_planned_mac_is_kept_and_recognized_without_copying_observed_identity(): void
+    public function test_planned_mac_on_a_documented_lease_is_kept_and_recognized(): void
     {
         $tables = $this->tables();
         $this->fake($tables);
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
         $subnet = Subnet::sole();
-        $ip = $subnet->ipAddresses()->create(['address' => ip2long('192.0.2.3'), 'description' => 'Manual client', 'mac_address' => '02:00:00:00:00:03']);
+        $ip = $subnet->ipAddresses()->where('address', ip2long('192.0.2.3'))->sole();
         $url = route('companies.sites.subnets.ip-addresses.update', [$this->device->site->company, $this->device->site, $subnet, $ip]);
         $data = ['ip' => '192.0.2.3', 'description' => 'Manual client', 'mac_address' => '02:00:00:00:00:33'];
         $this->patch($url, $data)->assertSessionHasErrors('mikrotik_edit_mode');
@@ -198,7 +253,8 @@ class MikrotikSyncTest extends TestCase
         $this->fake($tables);
         $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
         $this->assertNotNull($ip->fresh()->mikrotik_matched_at);
-        $this->assertSame('Manual client', $ip->fresh()->description);
+        // The technician's save ends automatic management: later reads never rewrite the record.
+        $this->assertSame(['Manual client', '02:00:00:00:00:33', false], [$ip->fresh()->description, $ip->fresh()->mac_address, $ip->fresh()->auto_managed]);
         $this->assertNull($ip->fresh()->device_id);
     }
 
@@ -231,7 +287,8 @@ class MikrotikSyncTest extends TestCase
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
 
         $this->assertDatabaseCount('subnets', 1);
-        $this->assertDatabaseCount('ip_addresses', 1);
+        // Router address and ARP entry only: disabled configuration and a dynamic lease alone document nothing.
+        $this->assertDatabaseCount('ip_addresses', 2);
         $this->assertSame(0, $this->device->mikrotikConnection()->sole()->sync_summary['problems']);
         $skipped = $this->device->mikrotikSources()->whereIn('kind', ['subnet', 'address', 'lease'])->whereNotNull('problem')->get();
         $this->assertCount(5, $skipped);
@@ -267,7 +324,7 @@ class MikrotikSyncTest extends TestCase
 
         $source = $this->device->mikrotikSources()->where('kind', 'lease')->sole();
         $this->assertNull($source->data['server']);
-        $this->assertNull($source->ip_address_id);
+        $this->assertSame($scenario === 'unique', $source->ip_address_id !== null);
         if ($scenario === 'unique') {
             $this->assertNull($source->problem);
             $this->assertSame($this->device->site->subnets()->sole()->id, $source->subnet_id);
@@ -277,7 +334,8 @@ class MikrotikSyncTest extends TestCase
             $this->assertNull($source->data['network_key']);
             $this->assertStringContainsString($scenario === 'missing' ? 'nessuna subnet' : 'più subnet', $source->problem);
         }
-        $this->assertDatabaseCount('ip_addresses', 1);
+        // An ARP entry inside an ambiguous router network is not attributed to the documented subnet.
+        $this->assertDatabaseCount('ip_addresses', ['unique' => 3, 'missing' => 2, 'ambiguous' => 1][$scenario]);
         Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
     }
 
@@ -351,7 +409,7 @@ class MikrotikSyncTest extends TestCase
         $source->save();
     }
 
-    public function test_observed_values_are_searchable_and_sorted_across_pages_without_documenting_them(): void
+    public function test_observed_values_are_searchable_and_sorted_across_pages_without_documenting_dynamic_leases(): void
     {
         $tables = $this->tables();
         $tables['ip/address'][0]['address'] = '192.0.2.1/26';
@@ -359,7 +417,7 @@ class MikrotikSyncTest extends TestCase
         $tables['ip/dhcp-server/lease'] = array_map(fn ($last) => [
             '.id' => '*'.dechex($last), 'address' => '192.0.2.'.$last,
             'mac-address' => sprintf('02:00:00:00:00:%02X', $last),
-            'host-name' => sprintf('host-%03d', $last), 'dynamic' => 'true',
+            'host-name' => sprintf('host-%03d', $last), 'dynamic' => 'true', 'status' => 'bound',
         ], range(2, 56));
         $this->fake($tables);
         $this->post($this->url('activate'), $this->operation())->assertSessionHasNoErrors();
@@ -378,7 +436,8 @@ class MikrotikSyncTest extends TestCase
         $this->get($url.'?search=host&sort=mac_address&direction=desc')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 55)->where('ipAddresses.data.0.mac_address', '02:00:00:00:00:FF')
             ->where('ipAddresses.data.1.ip', '192.0.2.56'));
-        $this->assertDatabaseCount('ip_addresses', 2);
+        // Router address, the ARP entry .2 and the manual record: the 54 lease-only addresses stay source signals.
+        $this->assertDatabaseCount('ip_addresses', 3);
     }
 
     public function test_hiding_free_ips_keeps_documented_and_external_addresses_without_duplicates(): void
@@ -397,13 +456,13 @@ class MikrotikSyncTest extends TestCase
             ->where('ipAddresses.data.2.ip', '192.0.2.3')
             ->where('ipAddresses.data.3.ip', '192.0.2.5'));
         $this->get($url.'?hide_free=1&sort=description&direction=desc')->assertInertia(fn (Assert $page) => $page
-            ->where('ipAddresses.total', 4)->where('ipAddresses.data.0.ip', '192.0.2.5')
-            ->where('ipAddresses.data.1.ip', '192.0.2.1'));
+            ->where('ipAddresses.total', 4)->where('ipAddresses.data.0.ip', '192.0.2.3')
+            ->where('ipAddresses.data.1.ip', '192.0.2.1')->where('ipAddresses.data.2.ip', '192.0.2.5'));
         $this->get($url.'?hide_free=1&search=192.0.2.4')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 0)->has('ipAddresses.data', 0));
         $this->get($url.'?hide_free=0&search=192.0.2.4')->assertInertia(fn (Assert $page) => $page
             ->where('ipAddresses.total', 1)->where('ipAddresses.data.0.ip', '192.0.2.4'));
-        $this->assertDatabaseCount('ip_addresses', 2);
+        $this->assertDatabaseCount('ip_addresses', 4);
     }
 
     public function test_exclusions_preserve_documentation_and_survive_sync_until_explicitly_reincluded(): void
@@ -428,7 +487,7 @@ class MikrotikSyncTest extends TestCase
         $this->post($this->url('sync'), $this->operation())->assertSessionHasNoErrors();
 
         $this->assertDatabaseCount('subnets', 1);
-        $this->assertDatabaseCount('ip_addresses', 2);
+        $this->assertDatabaseCount('ip_addresses', 4);
         $this->assertSame('Manual notes', $manual->fresh()->description);
         $this->assertSame($vlan->id, $subnet->fresh()->vlan_id);
         $this->assertSame('192.0.2.4', $subnet->firstProposableIp());

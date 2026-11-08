@@ -2,6 +2,12 @@ import type { PendingVisit } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
+// Window listeners run in registration order, so Inertia's popstate handler would run before a
+// page's guard. app.tsx imports this module before Inertia starts, putting this listener first.
+let guardHistory: ((event: PopStateEvent) => void) | null = null;
+if (typeof window !== 'undefined')
+    window.addEventListener('popstate', (event) => guardHistory?.(event));
+
 // Holds Inertia visits, history navigation and page unloads while there are unsaved changes.
 export function useLeaveGuard(
     blocked: boolean,
@@ -59,11 +65,11 @@ export function useLeaveGuard(
             block(() => window.history.back());
         };
         window.addEventListener('beforeunload', unload);
-        window.addEventListener('popstate', pop, true);
+        guardHistory = pop;
         return () => {
             stop();
             window.removeEventListener('beforeunload', unload);
-            window.removeEventListener('popstate', pop, true);
+            if (guardHistory === pop) guardHistory = null;
         };
     }, [blocked]);
 

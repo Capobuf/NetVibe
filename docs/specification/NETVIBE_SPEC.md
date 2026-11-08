@@ -132,7 +132,7 @@ Le integrazioni rendono l’IPAM più aderente alla rete senza richiedere al tec
 - Se la sede parte vuota, i dati supportati dalle API (per esempio VLAN, subnet, IP configurati e osservazioni di rete) alimentano automaticamente la vista ordinaria, senza un’importazione manuale iniziale per ciascun record.
 - Se esistono dati manuali, la prima acquisizione tenta corrispondenze non ambigue nel corretto contesto di sede (per esempio VLAN per ID e subnet per CIDR IPv4 normalizzato). Per le associazioni realmente ambigue serve una scelta puntuale, senza sovrascritture o duplicazioni arbitrarie.
 - Le successive acquisizioni aggiornano le informazioni provenienti dalle fonti. Non è previsto un processo ricorrente in cui l’utente debba «approvare» ogni aggiornamento tecnico.
-- Ogni IPv4 attribuibile senza ambiguità a una subnet della sede (configurazione IP, prenotazione o lease DHCP, ARP con MAC, neighbor, client e prenotazioni UniFi) compare come unico IP documentato; le osservazioni temporanee non diventano prenotazioni permanenti né dispositivi inventariati e restano occupate finché presenti o entro il periodo di conservazione.
+- Ogni IPv4 attribuibile senza ambiguità a una subnet della sede (configurazione IP, prenotazione DHCP, ARP con MAC, neighbor, client e prenotazioni UniFi) compare come unico IP documentato; un indirizzo visto solo da una lease DHCP dinamica resta una segnalazione nelle fonti; le osservazioni temporanee non diventano prenotazioni permanenti né dispositivi inventariati e restano occupate finché presenti o entro il periodo di conservazione.
 
 
 ### Significato e provenienza dei dati

@@ -47,15 +47,15 @@ class MikrotikAnalysis
         $findings = [];
         $bridges = $tables['interface/bridge'] ?? null;
         if ($bridges !== null) {
-            $enabled = count(array_filter($bridges, fn ($row) => self::flag($row['vlan-filtering'] ?? null) === true));
-            $disabled = count(array_filter($bridges, fn ($row) => self::flag($row['vlan-filtering'] ?? null) === false));
+            $enabled = count(array_filter($bridges, fn ($row) => MikrotikSnapshot::flag($row['vlan-filtering'] ?? null) === true));
+            $disabled = count(array_filter($bridges, fn ($row) => MikrotikSnapshot::flag($row['vlan-filtering'] ?? null) === false));
             $unknown = count($bridges) - $enabled - $disabled;
             $findings[] = ['label' => 'Bridge nel dispositivo', 'value' => count($bridges), 'detail' => "VLAN filtering: {$enabled} attivi, {$disabled} disattivi, {$unknown} non determinabili."];
         }
         $leases = $tables['ip/dhcp-server/lease'] ?? null;
         if ($leases !== null) {
-            $static = count(array_filter($leases, fn ($row) => self::flag($row['dynamic'] ?? null) === false));
-            $dynamic = count(array_filter($leases, fn ($row) => self::flag($row['dynamic'] ?? null) === true));
+            $static = count(array_filter($leases, fn ($row) => MikrotikSnapshot::flag($row['dynamic'] ?? null) === false));
+            $dynamic = count(array_filter($leases, fn ($row) => MikrotikSnapshot::flag($row['dynamic'] ?? null) === true));
             $unknown = count($leases) - $static - $dynamic;
             $findings[] = ['label' => 'Lease DHCP', 'value' => count($leases), 'detail' => "{$static} statiche, {$dynamic} dinamiche, {$unknown} non classificabili."];
         }
@@ -70,7 +70,7 @@ class MikrotikAnalysis
             $findings[] = ['label' => 'Interfacce VLAN L3', 'value' => count($vlans), 'detail' => 'Conteggio distinto dalle appartenenze VLAN L2.'];
         }
         if (isset($tables['interface/bridge/vlan'])) {
-            $dynamic = count(array_filter($tables['interface/bridge/vlan'], fn ($row) => self::flag($row['dynamic'] ?? null) === true));
+            $dynamic = count(array_filter($tables['interface/bridge/vlan'], fn ($row) => MikrotikSnapshot::flag($row['dynamic'] ?? null) === true));
             $findings[] = ['label' => 'Righe di appartenenza VLAN L2', 'value' => count($tables['interface/bridge/vlan']), 'detail' => "{$dynamic} righe dinamiche; le righe possono contenere più VLAN."];
         }
         if ($bridges !== null && $vlans !== null && isset($tables['interface/bridge/vlan'])) {
@@ -87,15 +87,6 @@ class MikrotikAnalysis
         $findings[] = ['label' => 'Switch chip e VLAN hardware', 'value' => null, 'detail' => 'Non supportati. Le VLAN vengono lette dalle interfacce VLAN e dalle tabelle dei bridge.'];
 
         return $findings;
-    }
-
-    private static function flag(mixed $value): ?bool
-    {
-        return match ($value) {
-            true, 'true', 'yes' => true,
-            false, 'false', 'no' => false,
-            default => null,
-        };
     }
 
     private static function vlanCollisions(array $tables): ?int

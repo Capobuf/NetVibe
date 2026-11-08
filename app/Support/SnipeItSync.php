@@ -438,12 +438,12 @@ class SnipeItSync
             return;
         }
         $names = array_filter([$previous['name'] ?? $previous['asset_tag'] ?? null, $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'] ?? null]);
-        $macs = array_map('strtoupper', array_filter([$previous['network']['mac'] ?? null, $asset->snapshot['network']['mac'] ?? null]));
+        $macs = array_map(MacAddress::normalize(...), array_filter([$previous['network']['mac'] ?? null, $asset->snapshot['network']['mac'] ?? null]));
         $onlySnipeIt = ! $record->auto_managed && $record->ip_status_id === null && $record->device_interface_id === null
             && $record->mikrotik_edit_mode === null && blank($record->description) && ! $record->tags()->exists()
             && ($record->device_id === null || $record->device_id === $asset->device_id)
             && (blank($record->hostname) || in_array($record->hostname, $names, true))
-            && (blank($record->mac_address) || in_array(strtoupper(str_replace('-', ':', $record->mac_address)), $macs, true))
+            && (blank($record->mac_address) || in_array($record->mac_address, $macs, true))
             && ! UnifiIpam::addressSources($record->subnet->site_id, true)->where('address', $record->address)->exists();
         if ($onlySnipeIt) {
             $record->delete();
@@ -454,7 +454,7 @@ class SnipeItSync
     {
         $network = $asset->snapshot['network'] ?? [];
         $ip = $network['ip'] ?? null;
-        $mac = $network['mac'] ?? null;
+        $mac = MacAddress::normalize($network['mac'] ?? null);
         if ($ip === null) {
             return null;
         }
@@ -496,7 +496,7 @@ class SnipeItSync
         }
         $sources = MikrotikSource::blocking($subnet->site_id)->where('address', $address)->get();
         $sourceConflict = $sources->contains(fn ($source) => ($source->kind === 'address' && $source->device_id !== $device?->id)
-            || ($mac !== null && ! empty($source->data['mac']) && strtoupper(str_replace('-', ':', $source->data['mac'])) !== $mac));
+            || ($mac !== null && ! empty($source->data['mac']) && MacAddress::normalize($source->data['mac']) !== $mac));
         $unifiConflict = $this->unifiConflict($subnet->site_id, $address, $mac, $device);
         if (! $device) {
             // Document the client independently; source discrepancies never assign a technical device.
@@ -507,7 +507,7 @@ class SnipeItSync
             ]));
             $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
             $values = ['hostname' => $name, 'mac_address' => $mac];
-            $old = ['hostname' => $previous['name'] ?? $previous['asset_tag'] ?? null, 'mac_address' => $previous['network']['mac'] ?? null];
+            $old = ['hostname' => $previous['name'] ?? $previous['asset_tag'] ?? null, 'mac_address' => MacAddress::normalize($previous['network']['mac'] ?? null)];
             foreach ($values as $field => $value) {
                 if ($value === null) {
                     continue;
@@ -531,7 +531,7 @@ class SnipeItSync
         if ($record?->device_id && $record->device_id !== $device->id) {
             return "IP {$ip}: già associato a un altro dispositivo in NetVibe.";
         }
-        if ($mac !== null && $record?->mac_address && strtoupper(str_replace('-', ':', $record->mac_address)) !== $mac) {
+        if ($mac !== null && $record?->mac_address && $record->mac_address !== $mac) {
             return "IP {$ip}: il MAC documentato in NetVibe è diverso da Snipe-IT.";
         }
         if ($sourceConflict) {
@@ -566,7 +566,7 @@ class SnipeItSync
         return UnifiObservation::forSite($siteId)->where('address', $address)->whereIn('kind', ['client', 'device'])
             ->where('state', 'current')->with('unifiSite.unifiConnection')->get()->reject->stale()
             ->contains(function ($observation) use ($mac, $device) {
-                if ($mac !== null && ! empty($observation->data['mac']) && strtoupper(str_replace('-', ':', $observation->data['mac'])) !== $mac) {
+                if ($mac !== null && ! empty($observation->data['mac']) && MacAddress::normalize($observation->data['mac']) !== $mac) {
                     return true;
                 }
                 $mapped = $observation->kind === 'device' ? UnifiDevice::where('unifi_site_id', $observation->unifi_site_id)

@@ -1,24 +1,16 @@
-import { Form, Head, Link, router, usePage } from '@inertiajs/react';
-import {
-    ArrowLeft,
-    ArrowRight,
-    Search,
-    ShieldCheck,
-    Trash2,
-    Users,
-    X,
-} from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { ShieldCheck, Trash2, Users } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { IconButton } from '@/components/icon-button';
-import InputError from '@/components/input-error';
 import { TableColumns } from '@/components/table-columns';
+import { TablePagination } from '@/components/table-pagination';
+import { TableSearch } from '@/components/table-search';
 import { TableSortHead } from '@/components/table-sort-head';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
     CardContent,
-    CardFooter,
     CardHeader,
 } from '@/components/ui/card';
 import {
@@ -34,8 +26,6 @@ import {
     EmptyMedia,
     EmptyTitle,
 } from '@/components/ui/empty';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -72,8 +62,9 @@ type Props = {
         total: number;
         current_page: number;
         last_page: number;
-        prev_page_url: string | null;
-        next_page_url: string | null;
+        per_page: number;
+        from: number | null;
+        to: number | null;
     };
     query: {
         search: string;
@@ -89,7 +80,8 @@ export default function UserIndex({
     query,
     superadminCount,
 }: Props) {
-    const { auth } = usePage().props;
+    const { auth, errors } = usePage().props;
+    const [search, setSearch] = useState(query.search);
     const Title = company ? 'h2' : 'h1';
     const [deleting, setDeleting] = useState<ManagedUser | null>(null);
     const deleteOpener = useRef<HTMLButtonElement | null>(null);
@@ -104,10 +96,22 @@ export default function UserIndex({
     const sort: TableSort<UserColumn> = query.sort
         ? { column: query.sort, direction: query.direction }
         : null;
-    const indexRoute = (nextQuery: Record<string, string | null>) =>
-        company
-            ? companyIndex(company.id, { query: nextQuery })
-            : index({ query: nextQuery });
+
+    function updateTable(
+        options: Partial<Props['query']> & { page?: number; per_page?: number },
+    ) {
+        router.get(
+            company ? companyIndex.url(company.id) : index.url(),
+            {
+                ...query,
+                search,
+                per_page: users.per_page,
+                page: 1,
+                ...options,
+            },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    }
 
     return (
         <>
@@ -128,81 +132,17 @@ export default function UserIndex({
                 </header>
                 <Card className="gap-0 overflow-hidden py-0">
                     <CardHeader className="py-4">
-                        <Form
-                            {...(company
-                                ? companyIndex.form(company.id)
-                                : index.form())}
-                            options={{
-                                preserveState: true,
-                                preserveScroll: true,
+                        <TableSearch
+                            value={search}
+                            maxLength={255}
+                            error={errors.search}
+                            total={users.total}
+                            label="Cerca nome, email o azienda"
+                            onChange={(value) => {
+                                setSearch(value);
+                                updateTable({ search: value });
                             }}
-                            className="w-full max-w-md"
-                        >
-                            {({ errors, processing }) => (
-                                <>
-                                    <Label
-                                        htmlFor="user-search"
-                                        className="sr-only"
-                                    >
-                                        Cerca per nome, email o azienda
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            key={query.search}
-                                            id="user-search"
-                                            name="search"
-                                            type="search"
-                                            placeholder="Cerca nome, email o azienda…"
-                                            defaultValue={query.search}
-                                            maxLength={255}
-                                            aria-invalid={Boolean(
-                                                errors.search,
-                                            )}
-                                            aria-describedby="user-search-error"
-                                        />
-                                        <input
-                                            type="hidden"
-                                            name="sort"
-                                            value={query.sort ?? ''}
-                                        />
-                                        <input
-                                            type="hidden"
-                                            name="direction"
-                                            value={query.direction}
-                                        />
-                                        <IconButton
-                                            label="Cerca utenti"
-                                            type="submit"
-                                            disabled={processing}
-                                        >
-                                            <Search />
-                                        </IconButton>
-                                        {query.search ? (
-                                            <IconButton
-                                                label="Azzera ricerca"
-                                                asChild
-                                            >
-                                                <Link
-                                                    href={indexRoute({
-                                                        sort: query.sort,
-                                                        direction:
-                                                            query.direction,
-                                                    })}
-                                                    preserveState
-                                                    preserveScroll
-                                                >
-                                                    <X />
-                                                </Link>
-                                            </IconButton>
-                                        ) : null}
-                                    </div>
-                                    <InputError
-                                        id="user-search-error"
-                                        message={errors.search}
-                                    />
-                                </>
-                            )}
-                        </Form>
+                        />
                     </CardHeader>
                     <CardContent className="px-0">
                         <Table
@@ -218,21 +158,12 @@ export default function UserIndex({
                                             column={column}
                                             sort={sort}
                                             onSort={(next) =>
-                                                router.visit(
-                                                    indexRoute({
-                                                        search: query.search,
-                                                        sort:
-                                                            next?.column ??
-                                                            null,
-                                                        direction:
-                                                            next?.direction ??
-                                                            'asc',
-                                                    }),
-                                                    {
-                                                        preserveState: true,
-                                                        preserveScroll: true,
-                                                    },
-                                                )
+                                                updateTable({
+                                                    sort: next?.column ?? null,
+                                                    direction:
+                                                        next?.direction ??
+                                                        'asc',
+                                                })
                                             }
                                         />
                                     ))}
@@ -356,64 +287,18 @@ export default function UserIndex({
                             </TableBody>
                         </Table>
                     </CardContent>
-                    <CardFooter className="flex-wrap justify-between gap-3 border-t py-4 text-sm text-muted-foreground tabular-nums">
-                        <p>
-                            {users.total}{' '}
-                            {users.total === 1 ? 'utente' : 'utenti'}
-                        </p>
-                        {users.last_page > 1 || users.current_page > 1 ? (
-                            <nav
-                                aria-label="Pagine degli utenti"
-                                className="flex items-center gap-3"
-                            >
-                                {users.prev_page_url ? (
-                                    <IconButton
-                                        label="Pagina precedente"
-                                        asChild
-                                    >
-                                        <Link
-                                            href={users.prev_page_url}
-                                            preserveState
-                                            preserveScroll
-                                        >
-                                            <ArrowLeft />
-                                        </Link>
-                                    </IconButton>
-                                ) : (
-                                    <IconButton
-                                        label="Pagina precedente"
-                                        disabled
-                                    >
-                                        <ArrowLeft />
-                                    </IconButton>
-                                )}
-                                <span>
-                                    {users.current_page} / {users.last_page}
-                                </span>
-                                {users.next_page_url ? (
-                                    <IconButton
-                                        label="Pagina successiva"
-                                        asChild
-                                    >
-                                        <Link
-                                            href={users.next_page_url}
-                                            preserveState
-                                            preserveScroll
-                                        >
-                                            <ArrowRight />
-                                        </Link>
-                                    </IconButton>
-                                ) : (
-                                    <IconButton
-                                        label="Pagina successiva"
-                                        disabled
-                                    >
-                                        <ArrowRight />
-                                    </IconButton>
-                                )}
-                            </nav>
-                        ) : null}
-                    </CardFooter>
+                    {users.total > 25 || users.last_page > 1 ? (
+                        <TablePagination
+                            summary={`${users.from ?? 0}–${users.to ?? 0} di ${users.total} utenti`}
+                            page={users.current_page}
+                            pageCount={users.last_page}
+                            pageSize={users.per_page}
+                            onPageChange={(page) => updateTable({ page })}
+                            onPageSizeChange={(per_page) =>
+                                updateTable({ per_page })
+                            }
+                        />
+                    ) : null}
                 </Card>
             </div>
             <Dialog

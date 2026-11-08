@@ -1,19 +1,18 @@
+import { ZoomControls } from '@/components/zoom-controls';
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { SaveButton } from '@/components/save-button';
 import { CatalogForm } from '@/components/devices/catalog-form';
 import type { CatalogModel } from '@/lib/hardware-editor/catalog-storage';
 import { index as modelIndex } from '@/routes/device-models';
 import { update as updateModel } from '@/routes/manufacturers/models';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     Crop,
     X,
     Check,
-    Maximize,
-    Minus,
     PanelsTopLeft,
     PanelRight,
-    Plus,
     Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -60,35 +59,28 @@ import {
     type Point,
 } from '@/lib/hardware-editor/document';
 import { cn } from '@/lib/utils';
-import { index as administration } from '@/routes/administration';
 
 export default function HardwareEditor({
     catalogModel,
 }: {
-    catalogModel?: CatalogModel;
+    catalogModel: CatalogModel;
 }) {
-    const { auth } = usePage().props;
-    const e = useEditor(auth.user.id, catalogModel);
-    const renameUrl = catalogModel
-        ? updateModel.form({
-              manufacturer: catalogModel.manufacturer_id,
-              model: catalogModel.id,
-          }).action
-        : null;
+    const e = useEditor(catalogModel);
+    const renameUrl = updateModel.form({
+        manufacturer: catalogModel.manufacturer_id,
+        model: catalogModel.id,
+    }).action;
     const mikrotik =
-        catalogModel?.manufacturer.name.trim().toLowerCase() === 'mikrotik';
+        catalogModel.manufacturer.name.trim().toLowerCase() === 'mikrotik';
     const unifi =
-        catalogModel?.manufacturer.name.trim().toLowerCase() === 'ubiquiti';
+        catalogModel.manufacturer.name.trim().toLowerCase() === 'ubiquiti';
     const currentDocument = useRef(e.doc);
     currentDocument.current = e.doc;
     // Return to the page that opened the editor; only same-origin paths are accepted.
-    const from = catalogModel
-        ? new URLSearchParams(window.location.search).get('from')
-        : null;
+    const from = new URLSearchParams(window.location.search).get('from');
     const returnTo = from && /^\/(?![/\\])/.test(from) ? from : null;
-    const exitRoute = catalogModel
-        ? (returnTo ?? modelIndex({ query: { model: catalogModel.id } }))
-        : administration();
+    const exitRoute =
+        returnTo ?? modelIndex({ query: { model: catalogModel.id } });
     const canvas = useRef<CanvasApi>(null);
     const context = useRef<HTMLDivElement>(null);
     const file = useRef<HTMLInputElement>(null);
@@ -98,7 +90,6 @@ export default function HardwareEditor({
     const [inspectorTab, setInspectorTab] = useState('properties');
     const [layers, setLayers] = useState(false);
     const [zoom, setZoom] = useState(1);
-    const [fitKey, setFitKey] = useState(0);
     const [block, setBlock] = useState<BlockOptions | null>(null);
     const hasReferenceImage = !!e.doc.faces[e.face].image;
     const blockPreview = useMemo(
@@ -126,8 +117,20 @@ export default function HardwareEditor({
     });
     const [endNumbering, setEndNumbering] = useState(false);
     const [shortcuts, setShortcuts] = useState(false);
-    const [leave, setLeave] = useState<(() => void) | null>(null);
-    const allowLeave = useRef(false);
+    const { leave, setLeave, allowLeave } = useLeaveGuard(
+        !e.initialLoading && !!(e.dirty || e.session || e.crop || block),
+        {
+            // Renaming preserves the editor's unsaved panel and stays on this page.
+            ignore: (visit) =>
+                visit.method === 'post' &&
+                visit.preserveState === true &&
+                visit.url.href ===
+                    new URL(renameUrl, window.location.origin).href,
+            onBlocked: () => {
+                if (e.session) setEndNumbering(true);
+            },
+        },
+    );
     const preview =
         numberMode === 'quick'
             ? numberingLabels(e.selected, numberOptions)
@@ -288,74 +291,6 @@ export default function HardwareEditor({
         );
         setContextPoint(canvas.current?.center() ?? { x: 0, y: 0 });
     }
-    useEffect(() => {
-        const stop = router.on('before', (event) => {
-            const visit = event.detail.visit;
-            // Renaming preserves the editor's unsaved panel and stays on this page.
-            const renamingModel =
-                renameUrl &&
-                visit.method === 'post' &&
-                visit.preserveState === true &&
-                visit.url.href ===
-                    new URL(renameUrl, window.location.origin).href;
-            if (
-                renamingModel ||
-                allowLeave.current ||
-                (!e.dirty && !e.session && !e.crop && !block) ||
-                e.initialLoading
-            )
-                return;
-            event.preventDefault();
-            setLeave(() => () => {
-                allowLeave.current = true;
-                setLeave(null);
-                router.visit(visit.url, {
-                    ...visit,
-                    // A confirmed discard must remount the editor even on an Inertia reload.
-                    preserveState: false,
-                    onFinish: () => {
-                        allowLeave.current = false;
-                    },
-                });
-            });
-            if (e.session) setEndNumbering(true);
-        });
-        const unload = (event: BeforeUnloadEvent) => {
-            if (
-                !allowLeave.current &&
-                (e.dirty || e.session || e.crop || block)
-            ) {
-                event.preventDefault();
-                event.returnValue = '';
-            }
-        };
-        // Inertia's cancellable before event does not cover browser history traversal.
-        const currentUrl = window.location.href;
-        const currentState = window.history.state;
-        const pop = (event: PopStateEvent) => {
-            if (
-                allowLeave.current ||
-                e.initialLoading ||
-                (!e.dirty && !e.session && !e.crop && !block)
-            )
-                return;
-            event.stopImmediatePropagation();
-            window.history.pushState(currentState, '', currentUrl);
-            if (e.session) setEndNumbering(true);
-            setLeave(() => () => {
-                allowLeave.current = true;
-                setLeave(null);
-                window.history.back();
-            });
-        };
-        window.addEventListener('popstate', pop, true);
-        window.addEventListener('beforeunload', unload);
-        return () => {
-            stop();
-            window.removeEventListener('beforeunload', unload);
-            window.removeEventListener('popstate', pop, true);
-        };
-    }, [e.dirty, e.session, e.crop, e.initialLoading, block, renameUrl]);
     useEffect(() => {
         const key = (event: KeyboardEvent) => {
             if (
@@ -524,7 +459,6 @@ export default function HardwareEditor({
             <EditorInspector
                 key={`${e.selection.kind}-${e.selected.map((p) => p.id).join(',')}`}
                 editor={e}
-                showPanelName={!catalogModel}
                 onImage={image}
                 onClose={() => setInspector(false)}
             />
@@ -540,19 +474,13 @@ export default function HardwareEditor({
 
     return (
         <>
-            <Head title={`Editor · ${catalogModel?.name ?? e.doc.name}`} />
+            <Head title={`Editor · ${catalogModel.name}`} />
             <ErrorNotification error={e.error} />
             <div className="flex h-[calc(100dvh-5rem)] min-h-150 min-w-0 flex-col overflow-hidden">
                 <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                         <IconButton
-                            label={
-                                returnTo
-                                    ? 'Indietro'
-                                    : catalogModel
-                                      ? 'Catalogo'
-                                      : 'Amministrazione'
-                            }
+                            label={returnTo ? 'Indietro' : 'Catalogo'}
                             variant="ghost"
                             asChild
                         >
@@ -563,30 +491,24 @@ export default function HardwareEditor({
                         <div className="min-w-0 space-y-1">
                             <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                 <PanelsTopLeft className="size-3.5" />
-                                {catalogModel
-                                    ? 'Editor modello'
-                                    : 'Editor prototipo'}
+                                Editor modello
                             </p>
                             <div className="flex min-w-0 items-center gap-2">
                                 <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-                                    {catalogModel?.name ?? e.doc.name}
+                                    {catalogModel.name}
                                 </h1>
-                                {catalogModel && renameUrl && (
-                                    <CatalogForm
-                                        title="Rinomina modello"
-                                        item={catalogModel}
-                                        action={{
-                                            action: renameUrl,
-                                            method: 'post',
-                                        }}
-                                    />
-                                )}
+                                <CatalogForm
+                                    title="Rinomina modello"
+                                    item={catalogModel}
+                                    action={{
+                                        action: renameUrl,
+                                        method: 'post',
+                                    }}
+                                />
                             </div>
-                            {catalogModel && (
-                                <p className="truncate text-sm text-muted-foreground">
-                                    {catalogModel.manufacturer.name}
-                                </p>
-                            )}
+                            <p className="truncate text-sm text-muted-foreground">
+                                {catalogModel.manufacturer.name}
+                            </p>
                         </div>
                     </div>
                     <SaveButton
@@ -731,7 +653,6 @@ export default function HardwareEditor({
                                         blockPreview={blockPreview}
                                         blockOptions={block}
                                         onChangeBlock={setBlock}
-                                        fitKey={fitKey}
                                         api={canvas}
                                         onZoom={setZoom}
                                         onEditLabel={label}
@@ -757,32 +678,13 @@ export default function HardwareEditor({
                         )}
                         <div className="flex items-center justify-end border-t bg-background px-3 py-2">
                             <div className="flex items-center gap-1">
-                                <IconButton
-                                    label="Riduci zoom"
-                                    variant="ghost"
-                                    onClick={() =>
-                                        canvas.current?.zoom(1 / 1.2)
-                                    }
-                                >
-                                    <Minus />
-                                </IconButton>
-                                <span className="min-w-12 text-center text-xs tabular-nums">
-                                    {Math.round(zoom * 100)}%
-                                </span>
-                                <IconButton
-                                    label="Aumenta zoom"
-                                    variant="ghost"
-                                    onClick={() => canvas.current?.zoom(1.2)}
-                                >
-                                    <Plus />
-                                </IconButton>
-                                <IconButton
-                                    label="Adatta alla vista"
-                                    variant="ghost"
-                                    onClick={fit}
-                                >
-                                    <Maximize />
-                                </IconButton>
+                                <ZoomControls
+                                    zoom={zoom}
+                                    step={1.2}
+                                    onZoom={(factor) => canvas.current?.zoom(factor)}
+                                    onFit={fit}
+                                    fitLabel="Adatta alla vista"
+                                />
                             </div>
                         </div>
                     </div>
@@ -835,15 +737,11 @@ export default function HardwareEditor({
                                         value="ports"
                                         className="min-h-0"
                                     >
-                                        {catalogModel && (
-                                            <IntegrationPortsPanel
-                                                editor={e}
-                                                model={catalogModel}
-                                                vendor={
-                                                    unifi ? 'unifi' : 'mikrotik'
-                                                }
-                                            />
-                                        )}
+                                        <IntegrationPortsPanel
+                                            editor={e}
+                                            model={catalogModel}
+                                            vendor={unifi ? 'unifi' : 'mikrotik'}
+                                        />
                                     </TabsContent>
                                 </Tabs>
                             ) : (
@@ -854,9 +752,7 @@ export default function HardwareEditor({
                 </div>
                 <footer className="flex items-center justify-between gap-3 border-t px-4 py-1.5 text-xs text-muted-foreground">
                     <span>
-                        {catalogModel
-                            ? `${catalogModel.manufacturer.name} · ${catalogModel.name}`
-                            : 'Disegno salvato in questo browser'}
+                        {`${catalogModel.manufacturer.name} · ${catalogModel.name}`}
                     </span>
                     <Button
                         variant="ghost"

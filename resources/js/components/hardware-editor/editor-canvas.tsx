@@ -98,7 +98,6 @@ export function EditorCanvas({
     blockPreview,
     blockOptions,
     onChangeBlock,
-    fitKey,
     onContext,
     onEditLabel,
     onImageSelect,
@@ -112,7 +111,6 @@ export function EditorCanvas({
     blockPreview?: Port[];
     blockOptions: BlockOptions | null;
     onChangeBlock: (options: BlockOptions) => void;
-    fitKey: number;
     onContext: (point: Point, selection: Selection) => void;
     onEditLabel: () => void;
     onImageSelect: () => void;
@@ -258,7 +256,7 @@ export function EditorCanvas({
     }, []);
     useEffect(() => {
         if (hasSize) fit();
-    }, [hasSize, fitKey, e.loading]);
+    }, [hasSize, e.loading]);
     useEffect(() => {
         onZoom(view.zoom);
     }, [view.zoom, onZoom]);

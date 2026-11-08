@@ -11,7 +11,6 @@
     "require": {
         "php": "~8.5.12",
         "inertiajs/inertia-laravel": "^3.0",
-        "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
@@ -66,7 +65,8 @@
             "npm run build",
             "npm run types:check",
             "node --test tests/Frontend/*.test.ts",
-            "@php artisan test tests/Feature/DatabaseIsolationTest.php tests/Feature/UnifiTest.php tests/Feature/UnifiClientTest.php tests/Feature/UnifiInventoryTest.php tests/Feature/UnifiIpamTest.php tests/Feature/CableLabelTemplatesTest.php tests/Feature/TopologyTest.php tests/Feature/MikrotikTest.php tests/Feature/MikrotikSyncTest.php tests/Feature/MikrotikSourceDisplayTest.php tests/Unit/MikrotikAnalysisTest.php tests/Feature/SnipeItTest.php tests/Feature/SnipeItSyncTest.php tests/Feature/RackCablingTest.php tests/Feature/RacksTest.php tests/Feature/RackDocumentsTest.php tests/Feature/HardwareEditorTest.php tests/Feature/DevicesTest.php tests/Feature/DeviceSourcesLoadingTest.php tests/Feature/CatalogBulkDeletionTest.php tests/Feature/NavigationTest.php tests/Feature/Auth/AuthenticationTest.php tests/Feature/Auth/RegistrationTest.php tests/Feature/Auth/PasswordResetTest.php tests/Feature/Auth/PasswordConfirmationTest.php tests/Feature/DashboardTest.php tests/Feature/ExampleTest.php tests/Feature/SuperadminCommandTest.php tests/Feature/CompanySitesTest.php tests/Feature/UserManagementTest.php tests/Feature/SmtpSettingsTest.php tests/Feature/GuidedDeletionTest.php tests/Feature/SiteNetworksTest.php tests/Feature/IpAddressesTest.php tests/Feature/IpSearchTest.php tests/Feature/ExcludedRangesTest.php tests/Feature/SubnetSummaryTest.php tests/Unit/Ipv4CidrTest.php tests/Unit/Ipv4RangesTest.php tests/Unit/Ipv4SearchTest.php"
+            "@php artisan test tests/Feature/DatabaseIsolationTest.php",
+            "@php artisan test"
         ],
         "types:check": [
             "phpstan analyse"

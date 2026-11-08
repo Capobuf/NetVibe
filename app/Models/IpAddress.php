@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MacAddress;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -44,6 +46,11 @@ class IpAddress extends Model
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class)->orderBy('name');
+    }
+
+    protected function macAddress(): Attribute
+    {
+        return Attribute::set(fn (?string $value) => MacAddress::normalize($value));
     }
 
     protected function casts(): array

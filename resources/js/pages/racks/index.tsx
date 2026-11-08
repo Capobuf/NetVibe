@@ -1,6 +1,7 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Pencil, Printer } from 'lucide-react';
-import { DeviceTable } from '@/components/devices/device-table';
+import { useSiteContext } from '@/hooks/use-site-context';
+import { DataTable } from '@/components/data-table';
 import { RackForm, RackDelete } from '@/components/racks/rack-form';
 import { RackThumbnail } from '@/components/racks/rack-thumbnail';
 import { IconButton } from '@/components/icon-button';
@@ -12,12 +13,8 @@ import type { Rack } from '@/types/rack';
 
 type Props = { company: Company; site: Site; racks: Rack[] };
 export default function Racks({ company, site, racks }: Props) {
-    const { companyNavigation } = usePage().props;
     const route = { company: company.id, site: site.id };
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const value = (
         rack: Rack,
         column: 'name' | 'floor' | 'height_u' | 'numbering' | 'devices_count',
@@ -52,7 +49,7 @@ export default function Racks({ company, site, racks }: Props) {
                         <RackForm {...route} />
                     </div>
                 </header>
-                <DeviceTable
+                <DataTable
                     name="racks"
                     rows={racks}
                     columns={[

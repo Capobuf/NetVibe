@@ -9,6 +9,7 @@ import {
     ComboboxItem,
     ComboboxList,
 } from '@/components/ui/combobox';
+import { postJson } from '@/lib/http';
 import InputError from '@/components/input-error';
 
 type CatalogItem = { id: number; name: string };
@@ -18,26 +19,13 @@ export async function createCatalogItem(
     url: string,
     name: string,
 ): Promise<CatalogItem> {
-    const token = document.cookie
-        .split('; ')
-        .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
-        ?.slice('XSRF-TOKEN='.length);
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': decodeURIComponent(token ?? ''),
-        },
-        body: JSON.stringify({ name }),
-    });
-    const result = await response.json().catch(() => null);
+    const response = await postJson<CatalogItem>(url, { name });
     if (!response.ok)
         throw new Error(
-            result?.errors?.name?.[0] ??
+            response.data?.errors?.name?.[0] ??
                 'Impossibile aggiungere la voce. Riprova.',
         );
-    return result as CatalogItem;
+    return response.data as CatalogItem;
 }
 
 export function CatalogCombobox({

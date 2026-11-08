@@ -2,6 +2,7 @@ import {
     NetworkExclusionAction,
     NetworkVisibilityFilter,
 } from '@/components/networks/network-exclusion';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowRight,
@@ -75,7 +76,7 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
                 isCollapsed: collapsed[vlan.id] ?? subnets.length === 0,
             };
         });
-    const { auth, companyNavigation } = usePage().props;
+    const { auth } = usePage().props;
     const [search, setSearch] = useState('');
     const [sort, setSort] = useState<TableSort<VlanColumn>>(null);
     const { columns, setColumns, separators, setSeparators } =
@@ -116,10 +117,7 @@ function VlanList({ company, site, vlans: allVlans }: Props) {
         setPage,
         setPageSize,
     } = useTablePagination(rows, JSON.stringify([search, sort, visibility]));
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const formContext = { companyId: company.id, siteId: site.id, context };
 
     function toggleVlan(id: number, isCollapsed: boolean) {

@@ -2,15 +2,12 @@
 
 namespace App\Support;
 
-use App\Exceptions\MikrotikException;
 use App\Exceptions\UnifiException;
 use App\Models\UnifiConnection;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
-use Psr\Http\Message\ResponseInterface;
 
 class UnifiClient
 {
@@ -20,11 +17,8 @@ class UnifiClient
 
     public static function normalizeUrl(string $url): string
     {
-        try {
-            return MikrotikClient::normalizeUrl($url);
-        } catch (MikrotikException) {
-            throw new UnifiException('unsafe_url');
-        }
+        return SafeHttp::normalizeUrl(str_contains($url, '://') ? $url : 'https://'.$url)
+            ?? throw new UnifiException('unsafe_url');
     }
 
     public function hosts(#[\SensitiveParameter] UnifiConnection $connection): array
@@ -168,7 +162,7 @@ class UnifiClient
         foreach ($features as $feature) {
             $this->text($feature, 80);
         }
-        $mac = strtoupper(str_replace('-', ':', $this->text($device['macAddress'] ?? null, 17)));
+        $mac = MacAddress::normalize($this->text($device['macAddress'] ?? null, 17));
         if (! preg_match('/\A(?:[0-9A-F]{2}:){5}[0-9A-F]{2}\z/', $mac)) {
             throw new UnifiException('format');
         }
@@ -324,14 +318,12 @@ class UnifiClient
             throw new UnifiException('limit');
         }
         $host = parse_url($base, PHP_URL_HOST);
-        $port = parse_url($base, PHP_URL_PORT) ?? 443;
         $addresses = $this->resolve($host);
         if ($addresses === []) {
             throw new UnifiException('network');
         }
         foreach ($addresses as $address) {
-            self::normalizeUrl('https://'.$address);
-            if ($cloud && ! filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE)) {
+            if (! SafeHttp::allowedAddress($address) || ($cloud && ! filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE))) {
                 throw new UnifiException('unsafe_url');
             }
         }
@@ -344,40 +336,18 @@ class UnifiClient
         }
         $handlerError = null;
         try {
-            $response = Http::withHeaders(['X-API-Key' => $connection->api_key])->acceptJson()->withUserAgent('NetVibe')
-                ->connectTimeout(min(3, $remaining))->timeout(min(25, $remaining))->withoutRedirecting()
+            $response = SafeHttp::request($base, $addresses[0], $limit, UnifiException::class)
+                ->withHeaders(['X-API-Key' => $connection->api_key])
+                ->connectTimeout(min(3, $remaining))->timeout(min(25, $remaining))
                 ->withOptions([
                     'verify' => $cloud || ! $connection->allow_unverified_certificate,
-                    'proxy' => '', 'force_ip_resolve' => 'v4',
-                    'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$addresses[0]}"]],
                     'on_stats' => function (TransferStats $stats) use (&$handlerError): void {
                         $handlerError = $stats->getHandlerErrorData();
                     },
-                    'on_headers' => function (ResponseInterface $response) use ($limit): void {
-                        if ((int) $response->getHeaderLine('Content-Length') > $limit) {
-                            throw new UnifiException('limit');
-                        }
-                    },
-                    'progress' => function ($total, $downloaded) use ($limit): void {
-                        if ($downloaded > $limit) {
-                            throw new UnifiException('limit');
-                        }
-                    },
                 ])->get($base.$path, $query);
         } catch (ConnectionException|GuzzleException $exception) {
-            if ($handlerError instanceof UnifiException) {
-                throw $handlerError;
-            }
-            for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
-                if ($cause instanceof UnifiException) {
-                    throw $cause;
-                }
-            }
-            throw new UnifiException(match ($handlerError) {
-                28 => 'timeout',
-                35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91, 98 => 'tls',
-                default => 'network',
-            });
+            SafeHttp::rethrowOwn($exception, $handlerError, UnifiException::class);
+            throw new UnifiException(SafeHttp::transportStatus($handlerError));
         }
         $body = $response->body();
         $this->budget -= strlen($body);
@@ -398,16 +368,7 @@ class UnifiClient
             // Keep a server-requested pause across requests and cron runs; never sleep inside an HTTP request.
             RateLimiter::hit($cooldownKey, $seconds);
         }
-        $status = match (true) {
-            $response->status() === 401 => 'unauthorized',
-            $response->status() === 403 => 'forbidden',
-            $response->status() === 404 => 'not_found',
-            $response->status() === 429 => 'rate_limit',
-            in_array($response->status(), [408, 504], true) => 'timeout',
-            $response->redirect() => 'redirect',
-            ! $response->successful() => 'http_error',
-            default => null,
-        };
+        $status = SafeHttp::failure($response, SafeHttp::STATUSES + [408 => 'timeout', 504 => 'timeout']);
         if ($status !== null) {
             throw new UnifiException($status);
         }

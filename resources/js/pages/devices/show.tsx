@@ -7,12 +7,13 @@ import {
     UnifiPortDetails,
     UnifiPortInfo,
 } from '@/components/devices/unifi-device';
+import { useSiteContext } from '@/hooks/use-site-context';
 import type { UnifiDeviceDetail } from '@/components/unifi/types';
 import { DeviceForm } from '@/components/devices/device-form';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
 import { type SnipeDevice } from '@/components/devices/snipe-it-device';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import {
     PanelViewer,
     type PortAnchor,
@@ -108,7 +109,7 @@ export default function DeviceShow({
     initialInterfaceId,
 }: Props) {
     const page = usePage();
-    const { auth, companyNavigation } = page.props;
+    const { auth } = page.props;
     const [tab, setTab] = useState(initialTab);
     const [releasingIp, setReleasingIp] = useState<{
         id: number;
@@ -220,10 +221,7 @@ export default function DeviceShow({
               (observed) => observed.device_interface_id === selected.id,
           )
         : null;
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const interfaceValue = (id: number | null) =>
         id
             ? interfaceName(
@@ -428,7 +426,7 @@ export default function DeviceShow({
                         </div>
                     </div>
                     <TabsContent value="interfaces" className="pt-4">
-                        <DeviceTable
+                        <DataTable
                             name="device-interfaces"
                             defaultSort={{ column: 'name', direction: 'asc' }}
                             rows={interfaceRows}
@@ -511,7 +509,7 @@ export default function DeviceShow({
                         />
                     </TabsContent>
                     <TabsContent value="ips" className="pt-4">
-                        <DeviceTable
+                        <DataTable
                             name="device-ips"
                             rows={ips}
                             columns={[

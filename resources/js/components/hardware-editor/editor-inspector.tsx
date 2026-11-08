@@ -76,12 +76,10 @@ export const alignmentActions = [
 ];
 export function EditorInspector({
     editor: e,
-    showPanelName,
     onImage,
     onClose,
 }: {
     editor: Editor;
-    showPanelName: boolean;
     onImage: () => void;
     onClose: () => void;
 }) {
@@ -544,27 +542,6 @@ export function EditorInspector({
                 ) : (
                     <>
                         <FieldGroup>
-                            {showPanelName && (
-                                <Field className="gap-1.5">
-                                    <FieldLabel htmlFor="panel-name">
-                                        Nome pannello
-                                    </FieldLabel>
-                                    <Input
-                                        id="panel-name"
-                                        key={e.doc.name}
-                                        defaultValue={e.doc.name}
-                                        maxLength={100}
-                                        onBlur={(event) => {
-                                            const name =
-                                                event.target.value.trim();
-                                            if (name)
-                                                e.commit({ ...e.doc, name });
-                                            else
-                                                event.target.value = e.doc.name;
-                                        }}
-                                    />
-                                </Field>
-                            )}
                             <div className="grid grid-cols-2 gap-3">
                                 <NumberField
                                     label="Larghezza"

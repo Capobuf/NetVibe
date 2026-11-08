@@ -6,38 +6,14 @@ use App\Exceptions\SnipeItException;
 use App\Models\SnipeItConnection;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
-use Psr\Http\Message\ResponseInterface;
 
 class SnipeItClient
 {
     public static function normalizeUrl(string $url): string
     {
-        $parts = parse_url($url);
-        if ($parts === false || ($parts['scheme'] ?? null) !== 'https' || empty($parts['host'])
-            || isset($parts['user']) || isset($parts['pass'])
-            || isset($parts['fragment']) || isset($parts['query'])
-            || ! preg_match('/\A[a-zA-Z0-9.-]+\z/', $parts['host'])
-            || preg_match('/[\s\\\\%]/', $url)) {
-            throw new SnipeItException('unsafe_url');
-        }
-        $host = strtolower(rtrim($parts['host'], '.'));
-        if (preg_match('/\A0x[0-9a-f]+\z/i', $host) || $host === 'localhost' || str_ends_with($host, '.localhost') || $host === 'metadata.google.internal'
-            || (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && ! self::allowedAddress($host))
-            || (preg_match('/\A[0-9.]+\z/', $host) && ! filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4))) {
-            throw new SnipeItException('unsafe_url');
-        }
-        $path = rtrim($parts['path'] ?? '', '/');
-        if (preg_match('~/api(?:/|$)~i', $path) || preg_match('~(?:^|/)\.{1,2}(?:/|$)~', $path)) {
-            throw new SnipeItException('unsafe_url');
-        }
-        $port = $parts['port'] ?? 443;
-        if ($port < 1 || $port > 65535) {
-            throw new SnipeItException('unsafe_url');
-        }
-
-        return 'https://'.$host.($port === 443 ? '' : ':'.$port).$path;
+        // Installations may live under a path; it must not point into the API itself.
+        return SafeHttp::normalizeUrl($url, allowPath: true) ?? throw new SnipeItException('unsafe_url');
     }
 
     public function verify(string $url, #[\SensitiveParameter] string $token): array
@@ -140,8 +116,7 @@ class SnipeItClient
                     'notes' => self::mappedValue($row, $mapping['description']),
                     'network' => [
                         'ip' => self::mappedValue($row, $mapping['ip']),
-                        'mac' => ($mac = self::mappedValue($row, $mapping['mac'])) !== null
-                            ? strtoupper(str_replace('-', ':', $mac)) : null,
+                        'mac' => MacAddress::normalize(self::mappedValue($row, $mapping['mac'])),
                     ],
                 ];
                 if ($assets[$row['id']]['model_id'] && ! isset($models[$modelId])) {
@@ -235,7 +210,7 @@ class SnipeItClient
             throw new SnipeItException('network');
         }
         foreach ($addresses as $address) {
-            if (! self::allowedAddress($address)) {
+            if (! SafeHttp::allowedAddress($address)) {
                 throw new SnipeItException('unsafe_url');
             }
         }
@@ -243,47 +218,23 @@ class SnipeItClient
         if ($remaining <= 0) {
             throw new SnipeItException('network');
         }
-        $port = parse_url($url, PHP_URL_PORT) ?? 443;
         if (RateLimiter::tooManyAttempts('snipe-it:'.$url, 100)) {
             throw new SnipeItException('rate_limit');
         }
         RateLimiter::hit('snipe-it:'.$url, 60);
         try {
-            $response = Http::withToken($token)->acceptJson()->asJson()->withUserAgent('NetVibe')
-                ->connectTimeout(min(3, $remaining))->timeout(min(10, $remaining))->withoutRedirecting()
-                ->withOptions([
-                    'verify' => true, 'proxy' => '', 'force_ip_resolve' => 'v4',
-                    // Pin the validated address so DNS cannot redirect credentials to a forbidden destination.
-                    'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$addresses[0]}"]],
-                    'on_headers' => function (ResponseInterface $response): void {
-                        if ((int) $response->getHeaderLine('Content-Length') > 2_000_000) {
-                            throw new SnipeItException('limit');
-                        }
-                    },
-                    'progress' => function ($total, $downloaded): void {
-                        if ($downloaded > 2_000_000) {
-                            throw new SnipeItException('limit');
-                        }
-                    },
-                ])->get($url.'/api/v1/'.$endpoint, $query);
+            $response = SafeHttp::request($url, $addresses[0], 2_000_000, SnipeItException::class)
+                ->withToken($token)->asJson()
+                ->connectTimeout(min(3, $remaining))->timeout(min(10, $remaining))
+                ->withOptions(['verify' => true])
+                ->get($url.'/api/v1/'.$endpoint, $query);
         } catch (ConnectionException|GuzzleException $exception) {
             // Upstream exceptions and bodies can contain credentials; return only controlled messages.
-            for ($cause = $exception; $cause !== null; $cause = $cause->getPrevious()) {
-                if ($cause instanceof SnipeItException) {
-                    throw new SnipeItException($cause->status);
-                }
-            }
+            SafeHttp::rethrowOwn($exception, null, SnipeItException::class);
             throw new SnipeItException('network');
         }
-        $status = match (true) {
-            $response->status() === 401 => 'unauthorized',
-            $response->status() === 403 => 'forbidden',
-            $response->status() === 429 => 'rate_limit',
-            $response->redirect() => 'redirect',
-            ! $response->successful() => 'http_error',
-            default => null,
-        };
-        if ($status) {
+        // Snipe-IT has no dedicated 404 status: it is reported as a generic HTTP error.
+        if ($status = SafeHttp::failure($response, [401 => 'unauthorized', 403 => 'forbidden', 429 => 'rate_limit'])) {
             throw new SnipeItException($status);
         }
         $body = $response->body();
@@ -302,23 +253,5 @@ class SnipeItClient
         }
 
         return $data;
-    }
-
-    private static function allowedAddress(string $address): bool
-    {
-        if (! filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return false;
-        }
-        // Private installations are supported; loopback, link-local, shared and reserved networks are not.
-        $ip = ip2long($address);
-        foreach (['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] as $cidr) {
-            $range = Ipv4Cidr::parse($cidr);
-            if ($ip >= $range['network_address'] && $ip <= $range['broadcast_address']) {
-                return true;
-            }
-        }
-
-        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false
-            && $ip < ip2long('224.0.0.0');
     }
 }

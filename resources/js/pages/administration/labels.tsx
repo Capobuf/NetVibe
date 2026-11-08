@@ -1,6 +1,7 @@
+import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { SaveButton } from '@/components/save-button';
-import { Head, router, useForm } from '@inertiajs/react';
-import { useEffect, useRef, useState } from 'react';
+import { Head, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 import { Copy, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import {
     CompositionPicker,
@@ -84,37 +85,9 @@ export default function Labels({
         'name' | 'width' | 'cable_type'
     > | null>(null);
     const [editingSample, setEditingSample] = useState(false);
-    const [leave, setLeave] = useState<(() => void) | null>(null);
-    const allowLeave = useRef(false);
-    useEffect(() => {
-        const unload = (event: BeforeUnloadEvent) => {
-            if (form.isDirty) event.preventDefault();
-        };
-        const stop = router.on('before', (event) => {
-            if (
-                !form.isDirty ||
-                allowLeave.current ||
-                event.detail.visit.method !== 'get'
-            )
-                return;
-            event.preventDefault();
-            const visit = event.detail.visit;
-            setLeave(() => () => {
-                allowLeave.current = true;
-                router.visit(visit.url, {
-                    ...visit,
-                    onFinish: () => {
-                        allowLeave.current = false;
-                    },
-                });
-            });
-        });
-        window.addEventListener('beforeunload', unload);
-        return () => {
-            stop();
-            window.removeEventListener('beforeunload', unload);
-        };
-    }, [form.isDirty]);
+    const { leave, setLeave } = useLeaveGuard(form.isDirty, {
+        ignore: (visit) => visit.method !== 'get',
+    });
     function load(next: LabelTemplate) {
         form.setDefaults(next.id ? next : { ...next, name: '' });
         form.setData(next);
@@ -721,8 +694,7 @@ export default function Labels({
                     <DialogHeader>
                         <DialogTitle>Eliminare «{form.data.name}»?</DialogTitle>
                         <DialogDescription>
-                            Il profilo sarà rimosso dal catalogo di stampa. I
-                            cavi rimangono invariati.
+                            Il profilo sarà rimosso dal catalogo di stampa.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

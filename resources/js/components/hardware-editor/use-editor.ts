@@ -29,12 +29,7 @@ import {
     type Port,
     type Point,
 } from '@/lib/hardware-editor/document';
-import {
-    decodeImage,
-    loadDraft,
-    saveDraft,
-    type Assets,
-} from '@/lib/hardware-editor/storage';
+import { decodeImage, type Assets } from '@/lib/hardware-editor/storage';
 
 type History = {
     past: PanelDocument[];
@@ -46,8 +41,8 @@ export type Selection = {
     kind: 'ports' | 'shell' | 'image' | 'canvas';
     ids: string[];
 };
-export function useEditor(userId: number, catalogModel?: CatalogModel) {
-    const revision = useRef(catalogModel?.panel_revision ?? 0);
+export function useEditor(catalogModel: CatalogModel) {
+    const revision = useRef(catalogModel.panel_revision);
     const [history, setHistory] = useState<History>(() => ({
         past: [],
         current: blankDocument(),
@@ -103,7 +98,7 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
             : null;
 
     useEffect(() => {
-        revision.current = catalogModel?.panel_revision ?? 0;
+        revision.current = catalogModel.panel_revision;
         setLoading(true);
         setLoadFailed(false);
         reportError(null);
@@ -112,9 +107,7 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         let cancelled = false;
         async function restore() {
             try {
-                const draft = catalogModel
-                    ? await loadModel(catalogModel)
-                    : await loadDraft(userId);
+                const draft = await loadModel(catalogModel);
                 const decoded: Record<string, HTMLImageElement> = {};
                 if (draft)
                     for (const [id, blob] of Object.entries(draft.assets))
@@ -143,7 +136,7 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         return () => {
             cancelled = true;
         };
-    }, [userId, catalogModel?.id]);
+    }, [catalogModel.id]);
 
     function reportError(message: string | null) {
         setError(message === null ? null : { message });
@@ -211,29 +204,20 @@ export function useEditor(userId: number, catalogModel?: CatalogModel) {
         savingRef.current = true;
         setSaving(true);
         try {
-            if (catalogModel)
-                revision.current = await saveModel(
-                    catalogModel,
-                    revision.current,
-                    document,
-                    assets,
-                );
-            else await saveDraft(userId, document, assets);
+            revision.current = await saveModel(
+                catalogModel,
+                revision.current,
+                document,
+                assets,
+            );
             setSaved(document);
             reportError(null);
-            toast.success(
-                catalogModel
-                    ? 'Pannello del modello salvato'
-                    : 'Disegno salvato in questo browser',
-            );
+            toast.success('Pannello del modello salvato');
             return true;
         } catch (e) {
-            const message =
-                e instanceof Error
-                    ? e.message
-                    : 'Spazio del browser non disponibile.';
+            const message = e instanceof Error ? `${e.message} ` : '';
             reportError(
-                `Salvataggio fallito. ${message} Riprova senza chiudere l’editor.`,
+                `Salvataggio fallito. ${message}Riprova senza chiudere l’editor.`,
             );
             return false;
         } finally {

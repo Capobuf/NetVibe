@@ -29,6 +29,7 @@ use App\Http\Controllers\SubnetSummaryEntryController;
 use App\Http\Controllers\TopologyController;
 use App\Http\Controllers\UnifiController;
 use App\Http\Controllers\UnifiInventoryController;
+use App\Http\Controllers\UnifiIpamController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VlanController;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +80,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::get('sources/{source}/exclusion', [NetworkExclusionController::class, 'sourcePreview'])->name('sources.exclusion.preview');
                 Route::put('sources/{source}/exclusion', [NetworkExclusionController::class, 'source'])->name('sources.exclusion.update');
             });
+        Route::put('companies/{company}/sites/{site}/unifi/observations/{observation}', [UnifiIpamController::class, 'update'])
+            ->whereNumber('observation')->name('companies.sites.unifi.observations.update');
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/snipe-it/assets/{asset}/restore-ip', [SnipeItSyncController::class, 'restoreIp'])
             ->whereNumber('asset')->name('companies.snipe-it.restore-ip');
@@ -177,7 +180,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('labels', [CableLabelTemplateController::class, 'store'])->name('labels.store');
         Route::put('labels/{template}', [CableLabelTemplateController::class, 'update'])->name('labels.update');
         Route::delete('labels/{template}', [CableLabelTemplateController::class, 'destroy'])->name('labels.destroy');
-        Route::inertia('prototypes/hardware-editor', 'administration/hardware-editor')->name('hardware-editor');
         Route::resource('users', UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('email', [SmtpSettingController::class, 'edit'])->name('email.edit');
         Route::put('email', [SmtpSettingController::class, 'update'])->name('email.update');
@@ -192,4 +194,3 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 require __DIR__.'/settings.php';
-require __DIR__.'/unifi-ipam.php';

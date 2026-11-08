@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import { ArrowRight } from 'lucide-react';
 import { CatalogForm } from '@/components/devices/catalog-form';
 import { CatalogBulkDelete } from '@/components/devices/catalog-bulk-delete';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import TextLink from '@/components/text-link';
 import { update, destroy, bulkDestroy } from '@/routes/manufacturers';
@@ -15,7 +15,7 @@ export function ManufacturerTable({
     manufacturers: Manufacturer[];
 }) {
     return (
-        <DeviceTable
+        <DataTable
             name="manufacturers"
             variant="list"
             searchLabel="Cerca produttori"

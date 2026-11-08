@@ -611,7 +611,7 @@ function SnipeItForm({
                     id="external-company"
                     placeholder="Cerca azienda…"
                     aria-invalid={!!association.errors.external_company_id}
-                    aria-describedby="company-error company-suggestion"
+                    aria-describedby="company-error"
                 />
                 <ComboboxContent>
                     <ComboboxEmpty>Nessuna azienda trovata</ComboboxEmpty>
@@ -624,13 +624,6 @@ function SnipeItForm({
                     </ComboboxList>
                 </ComboboxContent>
             </Combobox>
-            {options.suggested_id &&
-            !confirmed &&
-            selected?.id === options.suggested_id ? (
-                <FieldDescription id="company-suggestion">
-                    Stesso nome dell’azienda NetVibe.
-                </FieldDescription>
-            ) : null}
             <FieldError id="company-error">
                 {association.errors.external_company_id}
             </FieldError>
@@ -672,8 +665,8 @@ function SnipeItForm({
                     </DialogTitle>
                     <DialogDescription>
                         {company
-                            ? 'Il server dedicato verrà rimosso. L’associazione con l’azienda Snipe-IT dovrà essere riconfermata; i dati applicativi saranno conservati.'
-                            : 'Le aziende che usano la connessione globale dovranno riconfermare l’associazione. I dati applicativi saranno conservati.'}
+                            ? 'Il server dedicato verrà rimosso. L’associazione con l’azienda Snipe-IT dovrà essere riconfermata.'
+                            : 'Le aziende che usano la connessione globale dovranno riconfermare l’associazione.'}
                     </DialogDescription>
                 </DialogHeader>
                 {!company ? (

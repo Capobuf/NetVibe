@@ -1,5 +1,5 @@
 import { Plus, Printer } from 'lucide-react';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ export function RackCableTable({
                     Nuovo
                 </Button>
             </div>
-            <DeviceTable
+            <DataTable
                 name="rack-cables"
                 rows={cables}
                 rowOpensDialog={false}

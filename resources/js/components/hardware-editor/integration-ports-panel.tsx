@@ -3,6 +3,7 @@ import {
     mikrotikPorts,
     unifiPorts,
 } from '@/actions/App/Http/Controllers/ModelPanelController';
+import { postJson } from '@/lib/http';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,33 +71,20 @@ export function IntegrationPortsPanel({
         const timer = window.setTimeout(async () => {
             setError('');
             try {
-                const token = document.cookie
-                    .split('; ')
-                    .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
-                    ?.slice('XSRF-TOKEN='.length);
-                const response = await fetch(
+                const response = await postJson<Mapping>(
                     endpoint.url({
                         manufacturer: model.manufacturer_id,
                         model: model.id,
                     }),
-                    {
-                        method: 'POST',
-                        headers: {
-                            Accept: 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-XSRF-TOKEN': decodeURIComponent(token ?? ''),
-                        },
-                        body: payload,
-                        signal: controller.signal,
-                    },
+                    payload,
+                    controller.signal,
                 );
-                if (!response.ok)
+                if (!response.ok || !response.data)
                     throw new Error(
                         `Impossibile caricare le porte ${vendorName}. Riprova.`,
                     );
-                const mapping: Mapping = await response.json();
                 if (!controller.signal.aborted)
-                    setResult({ payload, data: mapping });
+                    setResult({ payload, data: response.data });
             } catch (error) {
                 if (!controller.signal.aborted)
                     setError(

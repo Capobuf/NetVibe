@@ -1,6 +1,7 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowRight, Filter } from 'lucide-react';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { UnifiMark } from '@/components/unifi-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import { unifiState } from '@/components/unifi/types';
@@ -9,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceImage } from '@/components/devices/device-image';
-import { DeviceTable } from '@/components/devices/device-table';
+import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
@@ -61,7 +62,6 @@ function DeviceList({
     snipePending,
     view,
 }: Props) {
-    const { companyNavigation } = usePage().props;
     const [manufacturer, setManufacturer] = useState('all');
     const [type, setType] = useState('all');
     const activeFilters =
@@ -87,10 +87,7 @@ function DeviceList({
         ).values(),
     ).sort((a, b) => a.name.localeCompare(b.name));
     const route = { company: company.id, site: site.id };
-    const context =
-        (companyNavigation?.sites.length ?? 0) > 1
-            ? `${company.name} · ${site.name}`
-            : company.name;
+    const context = useSiteContext(company, site);
     const viewDevices =
         view === 'all'
             ? devices
@@ -186,7 +183,7 @@ function DeviceList({
                         <TabsTrigger value="all">Tutti</TabsTrigger>
                     </TabsList>
                     <TabsContent value={view} forceMount>
-                        <DeviceTable
+                        <DataTable
                             name="devices"
                             variant="list"
                             searchLabel="Cerca dispositivi"

@@ -53,8 +53,8 @@ class IpSearchTest extends TestCase
             ->where('results.data.0.id', $ip->id)->where('results.data.0.site_id', $site->id)
             ->where('results.data.1.id', $secondIp->id)->where('results.data.1.site_id', $secondSite->id)
             ->where('results.data.1.hostname', null)->where('results.data.1.mac_address', null));
-        $this->get($search.'?search=node')->assertInertia(fn (Assert $page) => $page
-            ->where('results.total', 21)->has('results.data', 20));
+        $this->get($search.'?search=node&per_page=10')->assertInertia(fn (Assert $page) => $page
+            ->where('results.total', 21)->has('results.data', 10));
         $this->get($search.'?search=aa:bb:cc')->assertInertia(fn (Assert $page) => $page
             ->where('results.total', 1)->where('results.data.0.id', $ip->id));
         $this->get($search.'?search=foreign')->assertInertia(fn (Assert $page) => $page->where('results.total', 0));

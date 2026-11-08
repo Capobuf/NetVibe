@@ -325,13 +325,8 @@ class UnifiIpam
             if (! array_key_exists($field, $next)) {
                 continue;
             }
-            $old = $ip->getOriginal($field);
-            $value = $next[$field];
-            if ($field === 'mac_address') {
-                $old = MikrotikSnapshot::mac($old);
-                $value = MikrotikSnapshot::mac($value);
-            }
-            if ($old != $value) {
+            $value = $field === 'mac_address' ? MacAddress::normalize($next[$field]) : $next[$field];
+            if ($ip->getOriginal($field) != $value) {
                 $changes[$field === 'mac_address' ? 'mac' : 'address'] = $value;
             }
         }

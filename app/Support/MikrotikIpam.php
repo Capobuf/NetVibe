@@ -58,14 +58,9 @@ class MikrotikIpam
             if (! array_key_exists($field, $next)) {
                 continue;
             }
-            $old = $ip->getOriginal($field);
-            $value = $next[$field];
-            if ($field === 'mac_address') {
-                $old = strtoupper(str_replace('-', ':', $old ?? ''));
-                $value = strtoupper(str_replace('-', ':', $value ?? ''));
-            }
-            if ($old != $value) {
-                $changes[$field] = $next[$field];
+            $value = $field === 'mac_address' ? MacAddress::normalize($next[$field]) : $next[$field];
+            if ($ip->getOriginal($field) != $value) {
+                $changes[$field] = $value;
             }
         }
         if (! $changes) {
@@ -106,8 +101,8 @@ class MikrotikIpam
                         'device_id' => $source->kind === 'address' ? $source->device_id : null,
                     };
                     if ($field === 'mac_address') {
-                        $value = strtoupper(str_replace('-', ':', $value ?? ''));
-                        $actual = strtoupper(str_replace('-', ':', $actual ?? ''));
+                        // Expectations saved before MAC normalization may hold another format.
+                        $value = MacAddress::normalize($value);
                     }
                     if ($actual != $value) {
                         return false;

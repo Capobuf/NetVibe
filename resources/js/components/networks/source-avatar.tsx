@@ -14,6 +14,7 @@ export function SourceAvatar({
     warning = false,
     children,
     onClick,
+    className,
     ...props
 }: React.ComponentProps<typeof Button> & {
     label: string;
@@ -38,6 +39,7 @@ export function SourceAvatar({
                         className={cn(
                             'size-8 rounded-full p-0 hover:brightness-110',
                             warning && 'outline-2 outline-destructive',
+                            className,
                         )}
                         aria-label={label}
                         onClick={(event) => {

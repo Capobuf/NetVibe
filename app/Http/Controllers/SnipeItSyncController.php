@@ -98,7 +98,7 @@ class SnipeItSyncController extends Controller
 
             return [
                 'id' => $row->id, 'snapshot' => $row->snapshot, 'problem' => $problem,
-                'state' => $row->device_id ? 'linked' : ($row->state === 'excluded' ? 'excluded' : ($row->ip_address_id ? 'ipam' : 'pending')),
+                'state' => $row->device_id ? 'linked' : ($row->state === 'excluded' ? 'excluded' : ($row->ip_address_id || $row->removed_address !== null ? 'ipam' : 'pending')),
                 'detached' => $row->state === 'detached',
                 'url' => $server ? $server.'/hardware/'.$row->external_id : null,
                 'local' => $row->device ? $this->deviceOption($row->device) : null,
@@ -247,6 +247,16 @@ class SnipeItSyncController extends Controller
         $data = $request->validate(['asset_id' => ['required', 'integer'], 'confirmed' => ['accepted'], 'exclude' => ['required', 'boolean']]);
         $this->synchronizer->detach($company, $data['asset_id'], $data['exclude']);
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo scollegato da Snipe-IT.']);
+
+        return back();
+    }
+
+    public function restoreIp(Company $company, int $asset): RedirectResponse
+    {
+        $restored = $this->synchronizer->restoreIp($company, $asset);
+        Inertia::flash('toast', $restored->ip_address_id
+            ? ['type' => 'success', 'message' => 'Documentazione ripristinata.']
+            : ['type' => 'warning', 'message' => 'Rimozione annullata, IP non documentato. '.($restored->problem ?? 'Verifica l’asset in Snipe-IT.')]);
 
         return back();
     }

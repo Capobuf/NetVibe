@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\ExcludedRange;
 use App\Models\IpStatus;
 use App\Models\Site;
+use App\Models\SnipeItAsset;
 use App\Models\Subnet;
 use App\Support\DeletionImpact;
 use App\Support\DeviceAssignment;
@@ -121,7 +122,7 @@ class SubnetController extends Controller
             'initialIpAddress' => $selected ? [
                 ...$selected->only('id', 'hostname', 'mac_address', 'description', 'assignment_label', 'mikrotik_edit_mode', 'mikrotik_matched_at'),
                 'ip' => long2ip($selected->address),
-                'snipe_it' => $selected->snipeItAsset?->ipamData(),
+                'snipe_it' => ($selected->snipeItAsset ?? SnipeItAsset::removedIn($subnet, [$selected->address])->first())?->ipamData(),
                 'device_id' => $selected->device_id, 'device_interface_id' => $selected->device_interface_id,
                 'device' => $selected->device, 'device_interface' => $selected->deviceInterface,
                 'status' => $selected->status?->only('id', 'name'),

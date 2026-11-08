@@ -247,6 +247,7 @@ export default function IpAddressForm({
                     </dl>
                     <SnipeItIp
                         source={ipAddress.snipe_it}
+                        company={companyId}
                         mikrotikSources={sources}
                     />
                     <Separator />

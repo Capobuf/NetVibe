@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\SnipeItAsset;
 use App\Models\Subnet;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -175,9 +176,10 @@ class SubnetAddressTable
 
         $records = $subnet->ipAddresses()->select('ip_addresses.*')->selectRaw(DeviceAssignment::labelSql().' as assignment_label')->with(['snipeItAsset.sync.connection', 'status:id,name', 'tags:id,name,color', 'device:id,name', 'deviceInterface:id,name,kind,connector_id,mac_address'])
             ->whereIn('address', $addresses)->get()->keyBy('address');
+        $removed = SnipeItAsset::removedIn($subnet, $addresses);
         $excludedRanges = $subnet->excludedRanges;
         $presence = IpamEvidence::presence($subnet->site_id, $addresses);
-        $rows = array_map(function ($address) use ($records, $excludedRanges, $presence) {
+        $rows = array_map(function ($address) use ($records, $excludedRanges, $presence, $removed) {
             $record = $records->get($address);
 
             return [
@@ -188,7 +190,7 @@ class SubnetAddressTable
                 'ip' => long2ip($address),
                 'device_id' => $record?->device_id, 'device_interface_id' => $record?->device_interface_id,
                 'device' => $record?->device, 'device_interface' => $record?->deviceInterface,
-                'snipe_it' => $record?->snipeItAsset?->ipamData(),
+                'snipe_it' => ($record?->snipeItAsset ?? $removed->get($address))?->ipamData(),
                 'hostname' => $record?->hostname,
                 'mac_address' => $record?->mac_address,
                 'description' => $record?->description,

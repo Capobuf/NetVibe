@@ -6,6 +6,7 @@ use App\Exceptions\SnipeItException;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
+use App\Models\IpAddress;
 use App\Models\Manufacturer;
 use App\Models\MikrotikSource;
 use App\Models\ModelType;
@@ -15,6 +16,8 @@ use App\Models\SnipeItModel;
 use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync as Sync;
 use App\Models\Subnet;
+use App\Models\UnifiDevice;
+use App\Models\UnifiObservation;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
@@ -81,6 +84,10 @@ class SnipeItSync
                     ])->save();
                     $asset->setRelation('sync', $sync);
                     $assets[] = [$asset, $previous];
+                }
+                // Release obsolete links first, so assets that swap addresses never block each other.
+                foreach ($assets as [$asset, $previous]) {
+                    $this->releaseNetwork($asset, $previous);
                 }
                 // Read all network claims before assigning any IP, regardless of API order.
                 foreach ($assets as [$asset, $previous]) {
@@ -165,6 +172,27 @@ class SnipeItSync
             }
             $asset->update(['device_id' => null, 'state' => $exclude ? 'excluded' : 'detached', 'needs_confirmation' => true, 'problem' => null]);
             $asset->sync()->increment('revision');
+        }, 3);
+    }
+
+    /** Undoes a manual removal of the asset IP documentation and reconciles the current address; Snipe-IT is not modified. */
+    public function restoreIp(Company $company, int $assetId): SnipeItAsset
+    {
+        return DB::transaction(function () use ($company, $assetId) {
+            SnipeItSetting::whereKey('global')->lockForUpdate()->firstOrFail();
+            $asset = SnipeItAsset::whereHas('sync', fn ($q) => $q->where('company_id', $company->id))
+                ->with('sync.company', 'sync.connection', 'externalModel')->lockForUpdate()->findOrFail($assetId);
+            $this->ensureActive($asset->sync);
+            if ($asset->removed_address === null) {
+                $this->invalid('La documentazione è già stata ripristinata. Ricarica la pagina.');
+            }
+            DeviceModel::whereKey($asset->externalModel?->device_model_id)->lockForUpdate()->get();
+            Company::whereKey($company->id)->lockForUpdate()->firstOrFail();
+            $asset->update(['removed_address' => null]);
+            $this->applyAsset($asset, previous: $asset->snapshot);
+            Sync::where('connection_id', $asset->sync->connection_id)->increment('revision');
+
+            return $asset;
         }, 3);
     }
 
@@ -386,6 +414,42 @@ class SnipeItSync
         }
     }
 
+    /**
+     * Drops the link to an address the asset no longer declares. The old record is deleted only when this
+     * asset alone justified it; data of technicians or other sources keeps it documented without the link.
+     */
+    private function releaseNetwork(SnipeItAsset $asset, array $previous): void
+    {
+        if ($asset->state === 'excluded') {
+            return;
+        }
+        $ip = $asset->snapshot['network']['ip'] ?? null;
+        $address = is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) ? ip2long($ip) : null;
+        if ($asset->removed_address !== null && $asset->removed_address !== $address) {
+            // The manual removal concerned only the previous address: a real change is documented again.
+            $asset->removed_address = null;
+        }
+        $record = $asset->ip_address_id ? IpAddress::with('subnet')->lockForUpdate()->find($asset->ip_address_id) : null;
+        if ($record && $record->address !== $address) {
+            $asset->ip_address_id = null;
+        }
+        $asset->save();
+        if (! $record || $asset->ip_address_id) {
+            return;
+        }
+        $names = array_filter([$previous['name'] ?? $previous['asset_tag'] ?? null, $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'] ?? null]);
+        $macs = array_map('strtoupper', array_filter([$previous['network']['mac'] ?? null, $asset->snapshot['network']['mac'] ?? null]));
+        $onlySnipeIt = ! $record->auto_managed && $record->ip_status_id === null && $record->device_interface_id === null
+            && $record->mikrotik_edit_mode === null && blank($record->description) && ! $record->tags()->exists()
+            && ($record->device_id === null || $record->device_id === $asset->device_id)
+            && (blank($record->hostname) || in_array($record->hostname, $names, true))
+            && (blank($record->mac_address) || in_array(strtoupper(str_replace('-', ':', $record->mac_address)), $macs, true))
+            && ! UnifiIpam::addressSources($record->subnet->site_id, true)->where('address', $record->address)->exists();
+        if ($onlySnipeIt) {
+            $record->delete();
+        }
+    }
+
     private function applyNetwork(SnipeItAsset $asset, ?Device $device = null, array $previous = []): ?string
     {
         $network = $asset->snapshot['network'] ?? [];
@@ -400,6 +464,10 @@ class SnipeItSync
             return 'IP o MAC non valido. Verifica i campi selezionati e i valori in Snipe-IT.';
         }
         $address = ip2long($ip);
+        if ($asset->removed_address === $address) {
+            // The technician removed this documentation: it stays visible as Snipe-IT evidence only.
+            return null;
+        }
         $subnets = Subnet::whereIn('site_id', $asset->sync->company->sites()->select('id'))
             ->when($device, fn ($query) => $query->where('site_id', $device->site_id))->visible()
             ->where('network_address', '<=', $address)->where('broadcast_address', '>=', $address)->get();
@@ -429,10 +497,14 @@ class SnipeItSync
         $sources = MikrotikSource::blocking($subnet->site_id)->where('address', $address)->get();
         $sourceConflict = $sources->contains(fn ($source) => ($source->kind === 'address' && $source->device_id !== $device?->id)
             || ($mac !== null && ! empty($source->data['mac']) && strtoupper(str_replace('-', ':', $source->data['mac'])) !== $mac));
+        $unifiConflict = $this->unifiConflict($subnet->site_id, $address, $mac, $device);
         if (! $device) {
             // Document the client independently; source discrepancies never assign a technical device.
             $record ??= $subnet->ipAddresses()->make(['address' => $address]);
-            $problems = $sourceConflict ? ["IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT."] : [];
+            $problems = array_keys(array_filter([
+                "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT." => $sourceConflict,
+                "IP {$ip}: i dati UniFi sono in conflitto con Snipe-IT." => $unifiConflict,
+            ]));
             $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
             $values = ['hostname' => $name, 'mac_address' => $mac];
             $old = ['hostname' => $previous['name'] ?? $previous['asset_tag'] ?? null, 'mac_address' => $previous['network']['mac'] ?? null];
@@ -465,6 +537,9 @@ class SnipeItSync
         if ($sourceConflict) {
             return "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT.";
         }
+        if ($unifiConflict) {
+            return "IP {$ip}: i dati UniFi sono in conflitto con Snipe-IT.";
+        }
         try {
             // A shared interface MAC may require confirmation; roll back all its changes in that case.
             DB::transaction(function () use ($asset, $device, $subnet, $record, $address, $mac) {
@@ -483,6 +558,22 @@ class SnipeItSync
         }
 
         return $subnet->isExcluded($address) ? "IP {$ip} documentato in un intervallo escluso dai suggerimenti." : null;
+    }
+
+    /** Only current clients and devices of readable UniFi sites are comparable facts: a different MAC or mapped device. */
+    private function unifiConflict(int $siteId, int $address, ?string $mac, ?Device $device): bool
+    {
+        return UnifiObservation::forSite($siteId)->where('address', $address)->whereIn('kind', ['client', 'device'])
+            ->where('state', 'current')->with('unifiSite.unifiConnection')->get()->reject->stale()
+            ->contains(function ($observation) use ($mac, $device) {
+                if ($mac !== null && ! empty($observation->data['mac']) && strtoupper(str_replace('-', ':', $observation->data['mac'])) !== $mac) {
+                    return true;
+                }
+                $mapped = $observation->kind === 'device' ? UnifiDevice::where('unifi_site_id', $observation->unifi_site_id)
+                    ->where('external_id', $observation->source_key)->where('present', true)->value('device_id') : null;
+
+                return $mapped !== null && $mapped !== $device?->id;
+            });
     }
 
     private function invalid(string $message): never

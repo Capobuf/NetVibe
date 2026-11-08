@@ -44,9 +44,8 @@ class IpAddressController extends Controller
         $message = DB::transaction(function () use ($company, $subnet, $ipAddress) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $subnet->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
-            $record->delete();
 
-            return IpamEvidence::releaseMessage($subnet, $record->address);
+            return IpamEvidence::remove($record);
         }, 3);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $message]);

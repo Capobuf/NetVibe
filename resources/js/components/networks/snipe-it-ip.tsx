@@ -1,5 +1,7 @@
 import { SourceAvatar } from '@/components/networks/source-avatar';
-import { ArrowUpRight, TriangleAlert } from 'lucide-react';
+import { useForm, usePage } from '@inertiajs/react';
+import { ArrowUpRight, RotateCcw, TriangleAlert } from 'lucide-react';
+import InputError from '@/components/input-error';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import {
@@ -9,6 +11,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import {
     Table,
     TableHeader,
@@ -23,20 +30,123 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { formatDateTime } from '@/lib/utils';
+import { restoreIp } from '@/routes/companies/snipe-it';
 import type { IpAddress } from '@/types/network';
+
+type Source = NonNullable<IpAddress['snipe_it']>;
+
+function RestoreButton({
+    company,
+    source,
+}: {
+    company: number;
+    source: Source;
+}) {
+    const { auth } = usePage().props;
+    const form = useForm<{ sync?: string }>({});
+    if (!auth.canEditIpam) return null;
+    return (
+        <div className="flex flex-col items-end gap-1">
+            <Button
+                type="button"
+                size="sm"
+                disabled={form.processing}
+                onClick={(event) => {
+                    event.stopPropagation();
+                    form.submit(
+                        restoreIp({ company, asset: source.asset_id }),
+                        { preserveScroll: true },
+                    );
+                }}
+            >
+                <RotateCcw data-icon="inline-start" />
+                Ripristina documentazione
+            </Button>
+            <InputError message={form.errors.sync} />
+        </div>
+    );
+}
+
+function OpenLink({ source }: { source: Source }) {
+    return (
+        <Button asChild variant="outline" size="sm">
+            <a
+                href={source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Apri ${source.name ?? 'asset'} in Snipe-IT (nuova scheda)`}
+                onClick={(event) => event.stopPropagation()}
+            >
+                <SnipeItMark />
+                Apri
+                <ArrowUpRight data-icon="inline-end" />
+            </a>
+        </Button>
+    );
+}
 
 export function SnipeItIp({
     source,
+    company,
     compact = false,
     avatar = false,
     mikrotikSources = [],
 }: {
     source: IpAddress['snipe_it'];
+    company: number;
     compact?: boolean;
     avatar?: boolean;
     mikrotikSources?: MikrotikSource[];
 }) {
     if (!source) return null;
+    if (avatar && source.removed)
+        return (
+            <Popover>
+                <PopoverTrigger asChild>
+                    <SourceAvatar
+                        label={`Snipe-IT: documentazione rimossa manualmente · ${source.name ?? 'asset'}`}
+                        className="opacity-50 hover:opacity-100"
+                    >
+                        <SnipeItMark />
+                    </SourceAvatar>
+                </PopoverTrigger>
+                <PopoverContent
+                    align="start"
+                    className="flex w-80 flex-col gap-3 text-sm"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex flex-col gap-1">
+                        <p className="flex items-center gap-2 font-medium">
+                            <SnipeItMark />
+                            <span className="min-w-0 break-words">
+                                {source.name ?? 'Asset Snipe-IT'}
+                            </span>
+                        </p>
+                        <p className="text-muted-foreground">
+                            Documentazione rimossa manualmente
+                        </p>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3">
+                        {Object.entries({ IP: source.ip, MAC: source.mac }).map(
+                            ([label, value]) => (
+                                <div key={label}>
+                                    <dt className="text-muted-foreground">
+                                        {label}
+                                    </dt>
+                                    <dd className="break-words tabular-nums">
+                                        {value ?? '—'}
+                                    </dd>
+                                </div>
+                            ),
+                        )}
+                    </dl>
+                    <div className="flex flex-wrap items-start justify-end gap-2">
+                        <OpenLink source={source} />
+                        <RestoreButton company={company} source={source} />
+                    </div>
+                </PopoverContent>
+            </Popover>
+        );
     const problem = !source.present
         ? 'Asset non più presente in Snipe-IT.'
         : !source.active
@@ -52,21 +162,7 @@ export function SnipeItIp({
                 <SnipeItMark />
             </SourceAvatar>
         );
-    const link = (
-        <Button asChild variant="outline" size="sm">
-            <a
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Apri ${source.name ?? 'asset'} in Snipe-IT (nuova scheda)`}
-                onClick={(event) => event.stopPropagation()}
-            >
-                <SnipeItMark />
-                Apri
-                <ArrowUpRight data-icon="inline-end" />
-            </a>
-        </Button>
-    );
+    const link = <OpenLink source={source} />;
     if (compact)
         return (
             <span className="inline-flex items-center gap-2">
@@ -92,9 +188,21 @@ export function SnipeItIp({
         );
     return (
         <section className="flex flex-col gap-3 rounded-lg border p-4 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="font-medium">Snipe-IT</h3>
-                {link}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-medium">Snipe-IT</h3>
+                    {source.removed ? (
+                        <Badge variant="outline">
+                            Documentazione rimossa manualmente
+                        </Badge>
+                    ) : null}
+                </div>
+                <div className="flex flex-wrap items-start gap-2">
+                    {link}
+                    {source.removed ? (
+                        <RestoreButton company={company} source={source} />
+                    ) : null}
+                </div>
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
                 {Object.entries({

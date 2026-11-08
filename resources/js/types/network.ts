@@ -27,6 +27,8 @@ export type IpAddress = {
         present: boolean;
         active: boolean;
         synced_at: string | null;
+        asset_id: number;
+        removed: boolean;
     } | null;
     mikrotik_edit_mode?: 'planned' | 'manual' | null;
     mikrotik_matched_at?: string | null;

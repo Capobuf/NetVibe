@@ -15,6 +15,8 @@ use App\Models\SnipeItConnection;
 use App\Models\SnipeItModel;
 use App\Models\SnipeItSetting;
 use App\Models\SnipeItSync;
+use App\Models\UnifiConnection;
+use App\Models\UnifiObservation;
 use App\Models\User;
 use App\Support\Ipv4Cidr;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -480,11 +482,13 @@ class SnipeItSyncTest extends TestCase
         $this->server([$this->asset(1, ['custom_fields' => $fields])]);
         $this->post($this->url('sync'))->assertSessionHasNoErrors();
         $this->post($this->url('sync'))->assertSessionHasNoErrors();
-        $this->assertDatabaseCount('ip_addresses', 3);
+        $this->assertDatabaseCount('ip_addresses', 2);
         $this->assertSame($device->id, $existing->fresh()->device_id);
         $this->assertSame('keep-hostname', $existing->fresh()->hostname);
         $this->assertSame('Keep notes', $existing->fresh()->description);
-        $this->assertModelExists($record);
+        // The previous address was justified only by this asset, so it is released.
+        $this->assertModelMissing($record);
+        $this->assertModelExists($otherIp);
         $this->assertDatabaseMissing('ip_addresses', ['address' => ip2long('10.0.0.20')]);
         $this->get(route('companies.sites.devices.show', [$this->company, $this->site, $device]))
             ->assertOk()->assertInertia(fn (Assert $page) => $page
@@ -747,6 +751,71 @@ class SnipeItSyncTest extends TestCase
         $this->assertSame('AA:BB:CC:DD:EE:FF', $source->fresh()->data['mac']);
         $this->assertSame('AA:BB:CC:DD:EE:02', $asset->ipamData()['mac']);
         $this->assertDatabaseCount('devices', 1);
+    }
+
+    public function test_client_ip_change_releases_only_its_own_record_and_manual_removal_is_point_in_time(): void
+    {
+        $subnet = $this->site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $sync = function (string $ip) {
+            $this->server([$this->asset(1, ['custom_fields' => ['IP Address [eth]' => ['value' => $ip]]])]);
+            $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        };
+        $address = fn (string $ip) => $subnet->ipAddresses()->where('address', ip2long($ip));
+        $sync('10.0.0.50');
+        $sync('10.0.0.60');
+        $this->assertFalse($address('10.0.0.50')->exists());
+        $this->assertSame($address('10.0.0.60')->sole()->id, SnipeItAsset::sole()->ip_address_id);
+
+        // Data documented by the technician keeps the old record, only the link moves.
+        $address('10.0.0.60')->update(['description' => 'Manual note']);
+        $sync('10.0.0.70');
+        $this->assertNull($address('10.0.0.60')->sole()->snipeItAsset);
+        $this->assertSame($address('10.0.0.70')->sole()->id, SnipeItAsset::sole()->ip_address_id);
+
+        $show = fn (bool $hideFree) => $this->get(route('companies.sites.subnets.show', [$this->company, $this->site, $subnet, 'search' => '10.0.0.70', 'hide_free' => (int) $hideFree]));
+        $this->delete(route('companies.sites.subnets.ip-addresses.destroy', [$this->company, $this->site, $subnet, $address('10.0.0.70')->sole()]), ['confirmed' => true])
+            ->assertSessionHasNoErrors();
+        $sync('10.0.0.70');
+        $this->assertFalse($address('10.0.0.70')->exists());
+        $this->assertNotSame('excluded', SnipeItAsset::sole()->state);
+        $show(false)->assertInertia(fn (Assert $page) => $page->where('ipAddresses.data.0.id', null)
+            ->where('ipAddresses.data.0.snipe_it.removed', true));
+        $show(true)->assertInertia(fn (Assert $page) => $page->where('ipAddresses.total', 0));
+        $this->get($this->url('edit'))->assertInertia(fn (Assert $page) => $page->where('sync.counts.ipam', 1)->where('sync.counts.pending', 0));
+
+        $this->post(route('companies.snipe-it.restore-ip', [$this->company, SnipeItAsset::sole()]))->assertSessionHasNoErrors();
+        $this->assertSame($address('10.0.0.70')->sole()->id, SnipeItAsset::sole()->ip_address_id);
+        $this->assertNull(SnipeItAsset::sole()->removed_address);
+
+        // A later real address change is documented again: the removal never excludes the whole asset.
+        $this->delete(route('companies.sites.subnets.ip-addresses.destroy', [$this->company, $this->site, $subnet, $address('10.0.0.70')->sole()]), ['confirmed' => true]);
+        $sync('10.0.0.80');
+        $this->assertSame($address('10.0.0.80')->sole()->id, SnipeItAsset::sole()->ip_address_id);
+        $this->assertNull(SnipeItAsset::sole()->removed_address);
+        Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    }
+
+    public function test_client_with_unifi_mac_discrepancy_is_flagged_without_overwriting(): void
+    {
+        $subnet = $this->site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $connection = UnifiConnection::create(['name' => 'Console', 'mode' => 'local', 'server_url' => 'https://unifi.example.test',
+            'api_key' => 'synthetic-key', 'revision' => (string) Str::uuid(), 'enabled' => true, 'check_status' => 'ok']);
+        $unifiSite = $connection->unifiSites()->create(['console_id' => 'console', 'console_name' => 'Console',
+            'external_site_id' => (string) Str::uuid(), 'name' => 'Sede UniFi', 'version' => '11.0.97', 'discovered_at' => now(),
+            'site_id' => $this->site->id, 'confirmed_at' => now(), 'available' => true, 'inventory_activated_at' => now(), 'sync_status' => 'ok']);
+        $observation = UnifiObservation::create(['unifi_site_id' => $unifiSite->id, 'site_id' => $this->site->id, 'kind' => 'client',
+            'source_key' => 'client:1', 'state' => 'current', 'address' => ip2long('10.0.0.20'), 'seen_at' => now(), 'present_at' => now(),
+            'data' => ['mac' => 'aa:bb:cc:dd:ee:ff']]);
+        $fields = ['IP Address [eth]' => ['value' => '10.0.0.20'], 'MAC Address [eth]' => ['value' => 'AA:BB:CC:DD:EE:02']];
+        $this->server([$this->asset(1, ['custom_fields' => $fields])]);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertStringContainsString('UniFi', SnipeItAsset::sole()->problem);
+        $this->assertSame('aa:bb:cc:dd:ee:ff', $observation->fresh()->data['mac']);
+
+        // A stale observation is not a current fact to compare.
+        $observation->update(['state' => 'missing']);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors();
+        $this->assertNull(SnipeItAsset::sole()->problem);
     }
 
     public function test_scheduled_sync_waits_for_the_configured_interval(): void

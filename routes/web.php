@@ -80,6 +80,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 Route::put('sources/{source}/exclusion', [NetworkExclusionController::class, 'source'])->name('sources.exclusion.update');
             });
         Route::resource('companies.sites.devices.interfaces', DeviceInterfaceController::class)->only(['show', 'store', 'update', 'destroy']);
+        Route::post('companies/{company}/snipe-it/assets/{asset}/restore-ip', [SnipeItSyncController::class, 'restoreIp'])
+            ->whereNumber('asset')->name('companies.snipe-it.restore-ip');
         Route::resource('companies.sites.devices.ip-addresses', DeviceIpController::class)->parameters(['ip-addresses' => 'ipAddress'])->only(['store', 'destroy']);
         Route::get('companies/{company}', [CompanyController::class, 'show'])->name('companies.show');
         Route::get('companies/{company}/settings', [CompanyController::class, 'show'])->name('companies.settings.show');

@@ -33,7 +33,9 @@ class MikrotikSource extends Model
         return static::query()->where('site_id', $siteId)->whereNotNull('address')->withoutUnresolvedArp()
             ->where(fn ($query) => $query->where('present_at', '>=', IpamEvidence::cutoff($siteId))
                 ->orWhere(fn ($query) => $query->where('state', '!=', 'missing')
+                    // A disabled reservation or address is configuration that assigns nothing.
                     ->where(fn ($query) => $query->whereIn('kind', ['address', 'lease'])
+                        ->where(fn ($query) => $query->whereNull('data->disabled')->orWhereNotIn('data->disabled', ['true', 'yes']))
                         ->orWhereNotExists(fn ($connection) => $connection->selectRaw('1')->from('mikrotik_connections')
                             ->whereColumn('mikrotik_connections.device_id', 'mikrotik_sources.device_id')
                             ->whereColumn('mikrotik_connections.source_generation', 'mikrotik_sources.generation')

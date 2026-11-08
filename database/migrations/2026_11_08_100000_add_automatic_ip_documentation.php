@@ -19,9 +19,17 @@ return new class extends Migration
             Schema::table($name, function (Blueprint $table) {
                 $table->timestamp('present_at')->nullable();
             });
-            // The last successful read is the only presence evidence the existing rows carry.
-            DB::table($name)->where('state', 'current')->update(['present_at' => DB::raw('seen_at')]);
         }
+        // The last read is the only presence evidence existing rows carry, and only where it proves presence.
+        DB::table('mikrotik_sources')->where('state', 'current')->whereNotNull('address')
+            ->where(fn ($query) => $query->where('kind', 'address')
+                ->orWhereIn(DB::raw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.menu'))"), ['/ip/arp', '/ip/neighbor'])
+                ->orWhere(DB::raw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.status'))"), 'bound'))
+            ->update(['present_at' => DB::raw('seen_at')]);
+        DB::table('unifi_observations')->where('state', 'current')->whereNotNull('address')
+            ->where(fn ($query) => $query->where('kind', '!=', 'device')
+                ->orWhere(DB::raw("JSON_UNQUOTE(JSON_EXTRACT(data, '$.state'))"), 'ONLINE'))
+            ->update(['present_at' => DB::raw('seen_at')]);
     }
 
     public function down(): void

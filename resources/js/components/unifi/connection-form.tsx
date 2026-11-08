@@ -1,11 +1,11 @@
-import { useForm } from "@inertiajs/react";
-import { Cloud, Server } from "lucide-react";
-import { store, update } from "@/actions/App/Http/Controllers/UnifiController";
-import PasswordInput from "@/components/password-input";
-import { SaveButton } from "@/components/save-button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useForm } from '@inertiajs/react';
+import { Cloud, Server } from 'lucide-react';
+import { store, update } from '@/actions/App/Http/Controllers/UnifiController';
+import PasswordInput from '@/components/password-input';
+import { SaveButton } from '@/components/save-button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Field,
     FieldDescription,
@@ -13,8 +13,8 @@ import {
     FieldGroup,
     FieldLabel,
     FieldSet,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import {
     Sheet,
     SheetContent,
@@ -22,8 +22,8 @@ import {
     SheetFooter,
     SheetHeader,
     SheetTitle,
-} from "@/components/ui/sheet";
-import { unifiAccess, type UnifiConnection, type UnifiMode } from "./types";
+} from '@/components/ui/sheet';
+import { unifiAccess, type UnifiConnection, type UnifiMode } from './types';
 
 export function UnifiConnectionForm({
     connection,
@@ -37,16 +37,16 @@ export function UnifiConnectionForm({
     onClose: () => void;
 }) {
     const form = useForm({
-        name: connection?.name ?? "",
+        name: connection?.name ?? '',
         mode,
         company_id:
-            connection?.company_id ?? (mode === "direct" ? companyId : null),
-        server_url: connection?.server_url ?? "",
-        api_key: "",
+            connection?.company_id ?? (mode === 'direct' ? companyId : null),
+        server_url: connection?.server_url ?? '',
+        api_key: '',
         allow_unverified_certificate:
             connection?.allow_unverified_certificate ?? false,
         enabled: connection?.enabled ?? true,
-        revision: connection?.revision ?? "",
+        revision: connection?.revision ?? '',
     });
 
     return (
@@ -61,19 +61,19 @@ export function UnifiConnectionForm({
                     <SheetTitle>
                         {connection
                             ? `Modifica ${connection.name}`
-                            : mode === "cloud"
+                            : mode === 'cloud'
                               ? `Configura ${unifiAccess.cloud}`
                               : `Nuovo ${unifiAccess.direct}`}
                     </SheetTitle>
                     <SheetDescription className="flex items-center gap-2">
-                        {mode === "cloud" ? (
+                        {mode === 'cloud' ? (
                             <Cloud className="size-4" />
                         ) : (
                             <Server className="size-4" />
                         )}
-                        {mode === "cloud"
-                            ? "Accesso a tutte le console dell’account tramite UniFi Site Manager"
-                            : "Accesso diretto a una console UniFi Network raggiungibile da NetVibe"}
+                        {mode === 'cloud'
+                            ? 'Accesso a tutte le console dell’account tramite UniFi Site Manager'
+                            : 'Accesso diretto a una console UniFi Network raggiungibile da NetVibe'}
                     </SheetDescription>
                 </SheetHeader>
                 <form
@@ -85,7 +85,7 @@ export function UnifiConnectionForm({
                             {
                                 preserveScroll: true,
                                 onSuccess: () => {
-                                    form.reset("api_key");
+                                    form.reset('api_key');
                                     onClose();
                                 },
                             },
@@ -94,7 +94,7 @@ export function UnifiConnectionForm({
                 >
                     <FieldSet disabled={form.processing} className="px-4">
                         <FieldGroup>
-                            {mode === "direct" ? (
+                            {mode === 'direct' ? (
                                 <Field data-invalid={!!form.errors.name}>
                                     <FieldLabel htmlFor="unifi-name">
                                         Nome
@@ -104,7 +104,7 @@ export function UnifiConnectionForm({
                                         value={form.data.name}
                                         onChange={(event) =>
                                             form.setData(
-                                                "name",
+                                                'name',
                                                 event.target.value,
                                             )
                                         }
@@ -116,7 +116,7 @@ export function UnifiConnectionForm({
                                     <FieldError>{form.errors.name}</FieldError>
                                 </Field>
                             ) : null}
-                            {mode === "direct" ? (
+                            {mode === 'direct' ? (
                                 <Field data-invalid={!!form.errors.server_url}>
                                     <FieldLabel htmlFor="unifi-url">
                                         Indirizzo dell’host (HTTPS)
@@ -127,7 +127,7 @@ export function UnifiConnectionForm({
                                         value={form.data.server_url}
                                         onChange={(event) =>
                                             form.setData(
-                                                "server_url",
+                                                'server_url',
                                                 event.target.value,
                                             )
                                         }
@@ -146,8 +146,8 @@ export function UnifiConnectionForm({
                             <Field data-invalid={!!form.errors.api_key}>
                                 <FieldLabel htmlFor="unifi-key">
                                     {connection
-                                        ? "Sostituisci API key"
-                                        : "API key"}
+                                        ? 'Sostituisci API key'
+                                        : 'API key'}
                                 </FieldLabel>
                                 <PasswordInput
                                     id="unifi-key"
@@ -155,7 +155,7 @@ export function UnifiConnectionForm({
                                     hasSavedValue={connection?.has_key}
                                     onChange={(event) =>
                                         form.setData(
-                                            "api_key",
+                                            'api_key',
                                             event.target.value,
                                         )
                                     }
@@ -173,7 +173,7 @@ export function UnifiConnectionForm({
                                 ) : null}
                                 <FieldError>{form.errors.api_key}</FieldError>
                             </Field>
-                            {mode === "direct" ? (
+                            {mode === 'direct' ? (
                                 <Field orientation="horizontal">
                                     <Checkbox
                                         id="unifi-tls"
@@ -183,7 +183,7 @@ export function UnifiConnectionForm({
                                         }
                                         onCheckedChange={(checked) =>
                                             form.setData(
-                                                "allow_unverified_certificate",
+                                                'allow_unverified_certificate',
                                                 checked === true,
                                             )
                                         }
@@ -207,9 +207,9 @@ export function UnifiConnectionForm({
                                     .filter(
                                         ([key]) =>
                                             ![
-                                                "name",
-                                                "server_url",
-                                                "api_key",
+                                                'name',
+                                                'server_url',
+                                                'api_key',
                                             ].includes(key),
                                     )
                                     .map(([, message]) => ({ message }))}

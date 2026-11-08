@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Company;
 use App\Models\IpAddress;
 use App\Models\MikrotikSource;
+use App\Models\SnipeItAsset;
 use App\Models\Subnet;
 use App\Models\UnifiDevice;
 use App\Models\UnifiObservation;
@@ -116,6 +117,16 @@ class IpamEvidence
         }
 
         return $states;
+    }
+
+    /** Explicit deletion by the technician, from the IP or the device detail alike. */
+    public static function remove(IpAddress $ip): string
+    {
+        // Removing the documentation is not excluding the asset: only this address is no longer recreated by Snipe-IT.
+        SnipeItAsset::where('ip_address_id', $ip->id)->update(['removed_address' => $ip->address]);
+        $ip->delete();
+
+        return self::releaseMessage($ip->subnet, $ip->address);
     }
 
     /** Truthful feedback after an explicit deletion: integrations are never modified by NetVibe. */

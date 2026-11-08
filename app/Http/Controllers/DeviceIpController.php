@@ -48,9 +48,8 @@ class DeviceIpController extends Controller
         $message = DB::transaction(function () use ($company, $device, $ipAddress) {
             Company::query()->lockForUpdate()->findOrFail($company->id);
             $record = $device->ipAddresses()->lockForUpdate()->findOrFail($ipAddress->id);
-            $record->delete();
 
-            return IpamEvidence::releaseMessage($record->subnet, $record->address);
+            return IpamEvidence::remove($record);
         }, 3);
         Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
 

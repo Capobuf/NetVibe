@@ -152,7 +152,11 @@ export function SubnetIpRow({
                             <AvatarGroup
                                 aria-label={`Fonti per ${ipAddress.ip}`}
                             >
-                                <SnipeItIp source={ipAddress.snipe_it} avatar />
+                                <SnipeItIp
+                                    source={ipAddress.snipe_it}
+                                    company={company}
+                                    avatar
+                                />
                                 <MikrotikIndicator
                                     sources={sources}
                                     avatar

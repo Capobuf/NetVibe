@@ -215,18 +215,17 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                                               : 'Nessun Cloud Connector'}
                                     </EmptyTitle>
                                 </EmptyHeader>
-                                <EmptyContent>
-                                    {search ? (
+                                {/* The header already offers the add action. */}
+                                {search ? (
+                                    <EmptyContent>
                                         <Button
                                             variant="outline"
                                             onClick={() => setSearch('')}
                                         >
                                             Azzera ricerca
                                         </Button>
-                                    ) : (
-                                        add
-                                    )}
-                                </EmptyContent>
+                                    </EmptyContent>
+                                ) : null}
                             </Empty>
                         ) : null}
                     </div>

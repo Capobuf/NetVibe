@@ -149,14 +149,18 @@ export default function Unifi({ company, connections, companies = [] }: Props) {
                                         ? 'Sincronizzazione ogni ora'
                                         : undefined
                                 }
-                                description={[
-                                    connections.length === 1
-                                        ? '1 accesso'
-                                        : `${connections.length} accessi`,
-                                    linkedSites === 1
-                                        ? '1 sito collegato'
-                                        : `${linkedSites} siti collegati`,
-                                ].join(' · ')}
+                                description={
+                                    connections.length
+                                        ? [
+                                              connections.length === 1
+                                                  ? '1 accesso'
+                                                  : `${connections.length} accessi`,
+                                              linkedSites === 1
+                                                  ? '1 sito collegato'
+                                                  : `${linkedSites} siti collegati`,
+                                          ].join(' · ')
+                                        : undefined
+                                }
                                 actions={add}
                             />
                         ) : (

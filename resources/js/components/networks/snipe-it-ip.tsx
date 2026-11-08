@@ -43,7 +43,7 @@ function RestoreButton({
     source: Source;
 }) {
     const { auth } = usePage().props;
-    const form = useForm({});
+    const form = useForm<{ sync?: string }>({});
     if (!auth.canEditIpam) return null;
     return (
         <div className="flex flex-col items-end gap-1">
@@ -62,7 +62,7 @@ function RestoreButton({
                 <RotateCcw data-icon="inline-start" />
                 Ripristina documentazione
             </Button>
-            <InputError message={Object.values(form.errors)[0]} />
+            <InputError message={form.errors.sync} />
         </div>
     );
 }

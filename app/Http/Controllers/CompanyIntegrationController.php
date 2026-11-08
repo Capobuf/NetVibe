@@ -49,7 +49,7 @@ class CompanyIntegrationController extends Controller
         $company->update($request->validate(['observation_retention_days' => ['required', 'integer', 'between:1,365']], [
             'observation_retention_days.*' => 'Inserisci un numero di giorni da 1 a 365.',
         ]));
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Conservazione delle osservazioni aggiornata.']);
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Periodo di liberazione degli IP rilevati aggiornato.']);
 
         return back();
     }

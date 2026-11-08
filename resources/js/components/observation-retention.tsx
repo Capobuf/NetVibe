@@ -19,7 +19,10 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { update } from '@/routes/companies/settings/integrations/retention';
 
-/** Company retention of temporary observations (ARP, dynamic leases, UniFi clients). */
+/**
+ * Company retention of automatically documented IPs backed only by temporary evidence (ARP, dynamic
+ * leases, neighbors, UniFi clients), counted from their last presence.
+ */
 export function ObservationRetention({
     company,
     days,
@@ -44,12 +47,13 @@ export function ObservationRetention({
             <PopoverTrigger asChild>
                 <Button type="button" variant="outline" size="sm">
                     <History data-icon="inline-start" />
-                    Osservazioni: {days} {days === 1 ? 'giorno' : 'giorni'}
+                    IP rilevati: liberati dopo {days}{' '}
+                    {days === 1 ? 'giorno' : 'giorni'}
                 </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80">
                 <PopoverHeader>
-                    <PopoverTitle>Conservazione osservazioni</PopoverTitle>
+                    <PopoverTitle>IP rilevati automaticamente</PopoverTitle>
                 </PopoverHeader>
                 <form
                     className="flex flex-col gap-4"
@@ -63,7 +67,7 @@ export function ObservationRetention({
                 >
                     <Field data-invalid={Boolean(form.errors.observation_retention_days)}>
                         <FieldLabel htmlFor="observation-retention-days">
-                            Dall’ultima presenza rilevata
+                            Libera gli IP non più rilevati dopo
                         </FieldLabel>
                         <InputGroup>
                             <InputGroupInput

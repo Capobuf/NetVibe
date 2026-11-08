@@ -33,7 +33,7 @@ class UnifiSync
                 throw ValidationException::withMessages(['connection' => 'Collega prima una sede disponibile.']);
             }
             $client = app(UnifiClient::class);
-            $snapshots = [];
+            $snapshots = $references = [];
             $status = 'ok';
             try {
                 foreach ($sites as $site) {
@@ -56,7 +56,18 @@ class UnifiSync
                         $networks = null;
                     }
                     $clients = $client->clients($connection, $site->external_site_id, $console);
-                    $snapshots[$site->id] = compact('devices', 'networks', 'clients');
+                    $references[$console ?? ''] ??= array_column($client->sites($connection, $console), 'reference', 'id');
+                    $reference = $references[$console ?? ''][$site->external_site_id] ?? null;
+                    $reservations = null;
+                    try {
+                        $reservations = $reference ? $client->reservations($connection, $reference, $console) : null;
+                    } catch (UnifiException $exception) {
+                        // A console without access to the client configuration keeps its last reservations as not updated.
+                        if (! in_array($exception->status, ['not_found', 'unauthorized', 'forbidden'], true)) {
+                            throw $exception;
+                        }
+                    }
+                    $snapshots[$site->id] = compact('devices', 'networks', 'clients', 'reservations');
                 }
             } catch (UnifiException $exception) {
                 $status = $exception->status;
@@ -76,7 +87,7 @@ class UnifiSync
                             Company::whereHas('sites', fn ($query) => $query->whereKey($site->site_id))->lockForUpdate()->firstOrFail();
                             Site::whereKey($site->site_id)->lockForUpdate()->firstOrFail();
                             app(UnifiInventory::class)->capture($site, $snapshots[$site->id]['devices']);
-                            app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices']);
+                            app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices'], $snapshots[$site->id]['reservations']);
                             $site->last_synced_at = now();
                         }
                         $site->sync_status = $status;

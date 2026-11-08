@@ -146,6 +146,7 @@ class MikrotikSync
             ->whereNotIn('id', array_map(fn ($source) => $source->id, $sources))->update(['state' => 'missing']);
         $associated += $this->associateInterfaces($device, $sources);
         MikrotikIpam::recognizeExpected($site->id, $device->id);
+        IpamEvidence::populate($site->id);
         IpamEvidence::expire($site->id);
 
         return ['created' => $created, 'associated' => $associated, 'updated' => $updated, 'read' => count($sources),
@@ -319,7 +320,6 @@ class MikrotikSync
                 return [0, 0];
             }
             $source->subnet_id = $subnet->id;
-            // DHCP comments and observed hostnames never satisfy I4 by being copied into manual fields.
             [$ip, $new] = IpamEvidence::document($subnet, $source->address, $source->kind === 'address' ? $device->id : null);
             if ($source->kind === 'address' && $ip->device_id !== $device->id) {
                 $source->problem = 'Dispositivo documentato diverso dal MikroTik che configura questo indirizzo.';
@@ -330,7 +330,7 @@ class MikrotikSync
 
             return [(int) $new, (int) $linked];
         }
-        if ($source->kind === 'observation' && $source->address !== null && in_array($data['menu'], ['/ip/arp', '/ip/dhcp-server/lease'], true)) {
+        if ($source->kind === 'observation' && $source->address !== null && in_array($data['menu'], ['/ip/arp', '/ip/dhcp-server/lease', '/ip/neighbor'], true)) {
             // Temporary evidence never moves a record: it follows the address and needs a MAC and a recent presence.
             $subnet = IpamEvidence::subnetFor($site->id, $source->address);
             $ip = $subnet?->ipAddresses()->where('address', $source->address)->first();

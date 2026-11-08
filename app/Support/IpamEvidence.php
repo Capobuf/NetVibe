@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\IpAddress;
 use App\Models\MikrotikSource;
 use App\Models\Subnet;
+use App\Models\UnifiDevice;
 use App\Models\UnifiObservation;
 use Carbon\CarbonInterface;
 
@@ -46,6 +47,76 @@ class IpamEvidence
         return [$ip, true];
     }
 
+    /**
+     * Fills automatic records with the values their current sources agree on. Disagreeing sources leave
+     * the field empty and stay visible side by side; once the technician saves the record it is never rewritten.
+     */
+    public static function populate(int $siteId): void
+    {
+        $ips = IpAddress::whereIn('subnet_id', Subnet::where('site_id', $siteId)->select('id'))
+            ->where('auto_managed', true)->lockForUpdate()->get();
+        if ($ips->isEmpty()) {
+            return;
+        }
+        $addresses = $ips->pluck('address')->all();
+        $mikrotik = MikrotikSource::where('site_id', $siteId)->where('state', 'current')->whereNull('excluded_at')
+            ->whereIn('address', $addresses)->withoutUnresolvedArp()->get()->groupBy('address');
+        $unifi = UnifiObservation::forSite($siteId)->where('state', 'current')->where('kind', '!=', 'network')
+            ->whereIn('address', $addresses)->get()->groupBy('address');
+        // Only a stable UniFi device reference already mapped to a device of this site assigns it.
+        $devices = UnifiDevice::whereNotNull('device_id')->where('present', true)
+            ->whereHas('device', fn ($query) => $query->where('site_id', $siteId))->get()
+            ->groupBy(fn ($device) => $device->unifi_site_id.':'.$device->external_id);
+        foreach ($ips as $ip) {
+            $facts = ['mac_address' => [], 'hostname' => [], 'description' => [], 'device_id' => []];
+            foreach ($mikrotik->get($ip->address, []) as $source) {
+                $facts['mac_address'][] = $source->data['mac'] ?? null;
+                $facts['hostname'][] = $source->data['hostname_observed'] ?? $source->data['identity'] ?? null;
+                $facts['description'][] = $source->data['comment'] ?? null;
+                $facts['device_id'][] = $source->kind === 'address' ? $source->device_id : null;
+            }
+            foreach ($unifi->get($ip->address, []) as $observation) {
+                $facts['mac_address'][] = $observation->data['mac'] ?? null;
+                $facts['hostname'][] = $observation->data['hostname_observed'] ?? null;
+                $facts['description'][] = $observation->data['alias'] ?? null;
+                $mapped = $observation->kind === 'device' ? $devices->get($observation->unifi_site_id.':'.$observation->source_key) : null;
+                $facts['device_id'][] = $mapped?->count() === 1 ? $mapped->first()->device_id : null;
+            }
+            if (! $mikrotik->has($ip->address) && ! $unifi->has($ip->address)) {
+                // Without current evidence the last documented values remain until the record expires.
+                continue;
+            }
+            foreach ($facts as $field => $values) {
+                // UniFi names an unnamed client after its MAC: that is not a hostname.
+                $values = collect($values)->filter(fn ($value) => $value !== null && $value !== ''
+                    && ($field !== 'hostname' || MikrotikSnapshot::mac(strtoupper(trim($value))) === null))
+                    ->unique(fn ($value) => is_string($value) ? mb_strtolower(trim($value)) : $value)->values();
+                $value = $values->count() === 1 ? $values->first() : null;
+                $ip->$field = is_string($value) && mb_strlen($value) > ($field === 'hostname' ? 255 : 2000) ? null : $value;
+            }
+            if ($ip->isDirty()) {
+                $ip->save();
+            }
+        }
+    }
+
+    /** Online when any readable source proves presence, offline when one proves absence, otherwise unknown. */
+    public static function presence(int $siteId, array $addresses): array
+    {
+        $states = [];
+        $sources = MikrotikSource::where('site_id', $siteId)->whereIn('address', $addresses)->whereNull('excluded_at')
+            ->with('device.mikrotikConnection')->get()->map(fn ($source) => [$source->address, $source->display()['presence']])
+            ->concat(UnifiObservation::forSite($siteId)->whereIn('address', $addresses)->with('unifiSite.unifiConnection', 'vlan', 'subnet.vlan')->get()
+                ->map(fn ($observation) => [$observation->address, $observation->display()['presence']]));
+        foreach ($sources as [$address, $presence]) {
+            $current = $states[$address] ?? 'unknown';
+            $states[$address] = $current === 'online' || $presence === 'online' ? 'online'
+                : ($current === 'offline' || $presence === 'offline' ? 'offline' : 'unknown');
+        }
+
+        return $states;
+    }
+
     /** Truthful feedback after an explicit deletion: integrations are never modified by NetVibe. */
     public static function releaseMessage(Subnet $subnet, int $address): string
     {
@@ -66,7 +137,6 @@ class IpamEvidence
     {
         $ips = IpAddress::whereIn('subnet_id', Subnet::where('site_id', $siteId)->select('id'))
             ->where('auto_managed', true)
-            ->whereNull('description')->whereNull('hostname')->whereNull('mac_address')
             ->whereNull('ip_status_id')->whereNull('device_interface_id')->whereNull('mikrotik_edit_mode')
             ->whereDoesntHave('tags')->whereDoesntHave('snipeItAsset')
             ->whereNotIn('address', UnifiIpam::addressSources($siteId, true)->select('address'))

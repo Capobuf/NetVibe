@@ -25,7 +25,7 @@ import { formatDateTime } from '@/lib/utils';
 
 export type UnifiObservation = {
     id: number;
-    kind: 'network' | 'client' | 'device';
+    kind: 'network' | 'client' | 'device' | 'reservation';
     state: 'current' | 'missing';
     seen_at: string;
     present_at?: string | null;
@@ -66,6 +66,8 @@ export type UnifiObservation = {
         hostname_observed?: string | null;
         type?: string | null;
         state?: string | null;
+        dns?: string | null;
+        alias?: string | null;
     };
 };
 
@@ -195,7 +197,9 @@ function ObservationDetails({
         ['IPv4', observation.ip],
         ['MAC', data.mac],
         ['Nome', data.hostname_observed],
-        ['Tipo', data.type],
+        ['Alias', data.alias],
+        ['Nome DNS', data.dns],
+        ['Tipo', observation.kind === 'reservation' ? null : data.type],
         [
             'Stato',
             data.state ? (deviceStates[data.state] ?? data.state) : null,
@@ -219,6 +223,9 @@ function ObservationDetails({
         <section className="flex flex-col gap-3 text-sm">
             <header className="flex flex-wrap items-center gap-2">
                 <h3 className="font-medium break-words">{title}</h3>
+                {observation.kind === 'reservation' ? (
+                    <Badge variant="secondary">Prenotazione IP fissa</Badge>
+                ) : null}
                 {observation.presence === 'online' ? (
                     <Badge variant="secondary">
                         {observation.kind === 'client' ? 'Connesso' : 'Online'}

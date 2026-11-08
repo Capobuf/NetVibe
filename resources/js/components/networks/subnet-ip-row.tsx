@@ -6,6 +6,10 @@ import {
     MikrotikValue,
     type MikrotikSource,
 } from '@/components/networks/mikrotik-source';
+import {
+    PresenceLed,
+    type Presence,
+} from '@/components/networks/presence-led';
 import { SnipeItIp } from '@/components/networks/snipe-it-ip';
 import { TagBadge } from '@/components/networks/tag-badge';
 import {
@@ -38,6 +42,7 @@ export type IpColumn = TableColumn<
 export type IpRow = Omit<IpAddress, 'id'> & {
     id: number | null;
     excluded: boolean;
+    presence?: Presence | null;
 };
 
 export function SubnetIpRow({
@@ -126,7 +131,13 @@ export function SubnetIpRow({
                     : undefined
             }
         >
-            <TableCell />
+            <TableCell>
+                {ipAddress.presence ? (
+                    <div className="flex justify-center">
+                        <PresenceLed presence={ipAddress.presence} />
+                    </div>
+                ) : null}
+            </TableCell>
             {visibleColumns.map((column) => (
                 <TableCell
                     key={column.id}

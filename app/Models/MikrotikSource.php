@@ -69,9 +69,15 @@ class MikrotikSource extends Model
             'site_id' => $this->site_id,
             'ip' => $this->address === null ? null : long2ip($this->address),
             'stale' => $stale,
-            // Only a reachable ARP entry proves current presence; other states stay neutral.
-            'presence' => ! $stale && $this->state === 'current' && ($this->data['menu'] ?? null) === '/ip/arp'
-                && ($this->data['status'] ?? null) === 'reachable' ? 'online' : null,
+            // A reachable ARP entry or a live neighbor proves presence and a failed resolution its absence;
+            // stale ARP entries and DHCP states stay neutral.
+            'presence' => $stale || $this->state !== 'current' ? null : match (true) {
+                ($this->data['menu'] ?? null) === '/ip/neighbor' => 'online',
+                ($this->data['menu'] ?? null) !== '/ip/arp' => null,
+                ($this->data['status'] ?? null) === 'reachable' => 'online',
+                ($this->data['status'] ?? null) === 'failed' => 'offline',
+                default => null,
+            },
             'read_at' => $connection?->synced_at,
         ];
     }

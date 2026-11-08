@@ -36,14 +36,14 @@ class UnifiObservation extends Model
         return static::query()->where('site_id', $siteId)->whereHas('unifiSite', fn ($query) => $query->where('site_id', $siteId));
     }
 
-    /** Same occupation rule as MikrotikSource::blocking(): networks are configuration, clients and devices observations. */
+    /** Same occupation rule as MikrotikSource::blocking(): networks and reservations are configuration, clients and devices observations. */
     public static function blocking(int $siteId): Builder
     {
         return static::forSite($siteId)->whereNotNull('address')
             ->whereHas('unifiSite', fn ($query) => $query->whereNotNull('inventory_activated_at'))
             ->where(fn ($query) => $query->where('present_at', '>=', IpamEvidence::cutoff($siteId))
                 ->orWhere(fn ($query) => $query->where('state', '!=', 'missing')
-                    ->where(fn ($query) => $query->where('kind', 'network')
+                    ->where(fn ($query) => $query->whereIn('kind', ['network', 'reservation'])
                         ->orWhereDoesntHave('unifiSite', fn ($query) => $query->where('available', true)->where('sync_status', 'ok')
                             ->whereHas('unifiConnection', fn ($connection) => $connection->where('enabled', true)->where('check_status', 'ok'))))));
     }

@@ -30,7 +30,7 @@ export function PresenceLed({ presence }: { presence: Presence }) {
                         {presence !== 'unknown' ? (
                             <span
                                 aria-hidden="true"
-                                className="absolute -inset-[3px] rounded-full bg-current opacity-30 blur-[3px] motion-safe:animate-led-breathe"
+                                className="absolute -inset-[3px] rounded-full bg-current opacity-45 blur-[3px] motion-safe:animate-led-breathe"
                             />
                         ) : null}
                         {/* A soft lit core: light falls off towards the edge instead of a hard bright dot. */}

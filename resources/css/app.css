@@ -288,16 +288,16 @@
     transform: none;
 }
 
-/* Presence LED: only the soft halo breathes, through opacity and scale. */
+/* Presence LED: the halo is always lit and only widens slightly as it breathes. */
 @keyframes led-breathe {
     0%,
     100% {
-        opacity: 0.2;
-        transform: scale(0.9);
+        opacity: 0.45;
+        transform: scale(1);
     }
     50% {
-        opacity: 0.55;
-        transform: scale(1.6);
+        opacity: 0.6;
+        transform: scale(1.3);
     }
 }
 

@@ -187,6 +187,27 @@ function assetName(row: Row) {
     return row.snapshot.name || row.snapshot.asset_tag || '—';
 }
 
+function problemText(row: Row) {
+    return row.problem ?? row.model_problem ?? 'Non più presente in Snipe-IT';
+}
+
+// Multi-line problems carry a heading (the IP) followed by one issue per line.
+function ProblemMessage({ text }: { text: string }) {
+    const [title, ...items] = text.split('\n');
+    if (!items.length) return <>{title}</>;
+
+    return (
+        <div className="flex flex-col gap-1">
+            <span className="font-medium">{title}</span>
+            <ul className="list-disc space-y-0.5 pl-4">
+                {items.map((item) => (
+                    <li key={item}>{item}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
 function SitePicker({
     sites,
     value,
@@ -543,17 +564,14 @@ function Records({
                             <TooltipTrigger asChild>
                                 <AlertTriangle
                                     className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-500"
-                                    aria-label={
-                                        row.problem ??
-                                        row.model_problem ??
-                                        'Non più presente in Snipe-IT'
-                                    }
+                                    aria-label={problemText(row).replace(
+                                        /\n/g,
+                                        '. ',
+                                    )}
                                 />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                                {row.problem ??
-                                    row.model_problem ??
-                                    'Non più presente in Snipe-IT'}
+                                <ProblemMessage text={problemText(row)} />
                             </TooltipContent>
                         </Tooltip>
                     ) : null}
@@ -1067,9 +1085,9 @@ function Records({
                                 <Alert>
                                     <AlertTriangle />
                                     <AlertDescription>
-                                        {current.problem ??
-                                            current.model_problem ??
-                                            'Non più presente in Snipe-IT'}
+                                        <ProblemMessage
+                                            text={problemText(current)}
+                                        />
                                     </AlertDescription>
                                 </Alert>
                             ) : null}

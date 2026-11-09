@@ -502,8 +502,8 @@ class SnipeItSync
             // Document the client independently; source discrepancies never assign a technical device.
             $record ??= $subnet->ipAddresses()->make(['address' => $address]);
             $problems = array_keys(array_filter([
-                "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT." => $sourceConflict,
-                "IP {$ip}: i dati UniFi sono in conflitto con Snipe-IT." => $unifiConflict,
+                'MikroTik riporta un dispositivo o un MAC diverso.' => $sourceConflict,
+                'UniFi riporta un dispositivo o un MAC diverso.' => $unifiConflict,
             ]));
             $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
             $values = ['hostname' => $name, 'mac_address' => $mac];
@@ -513,20 +513,21 @@ class SnipeItSync
                     continue;
                 }
                 if (mb_strlen($value) > ($field === 'hostname' ? 255 : 17)) {
-                    $problems[] = "IP {$ip}: nome o MAC troppo lungo in Snipe-IT.";
+                    $problems[] = 'Nome o MAC troppo lungo in Snipe-IT.';
                 } elseif ($record->device_id) {
-                    $problems[] = "IP {$ip}: già associato a un dispositivo tecnico. Dati documentati conservati.";
+                    $problems[] = 'Già associato a un dispositivo tecnico: dati di NetVibe mantenuti.';
                 } elseif (! $record->exists || ($asset->ip_address_id !== $record->id && blank($record->$field)) || $old[$field] === $record->$field) {
                     $record->$field = $value;
                 } elseif ($value !== $record->$field) {
                     $label = $field === 'hostname' ? 'Hostname' : 'MAC';
-                    $problems[] = "IP {$ip}: {$label} documentato diverso da Snipe-IT; valore conservato.";
+                    $problems[] = "{$label}: mantenuto «{$record->$field}» di NetVibe (Snipe-IT: «{$value}»).";
                 }
             }
             $record->save();
             $asset->update(['ip_address_id' => $record->id]);
 
-            return implode(' ', array_unique($problems)) ?: null;
+            // First line names the address; the UI renders the following lines as a list.
+            return $problems ? implode("\n", ["IP {$ip}", ...array_unique($problems)]) : null;
         }
         if ($record?->device_id && $record->device_id !== $device->id) {
             return "IP {$ip}: già associato a un altro dispositivo in NetVibe.";

@@ -16,7 +16,6 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LabelDialog } from '@/components/hardware-editor/editor-dialogs';
 import { BlockPanel } from '@/components/hardware-editor/block-panel';
 import {
     EditorCanvas,
@@ -102,7 +101,10 @@ export default function HardwareEditor({
                 : undefined,
         [block, hasReferenceImage],
     );
-    const [editLabel, setEditLabel] = useState(false);
+    const [editLabel, setEditLabel] = useState<{
+        typed?: string;
+        menu?: boolean;
+    } | null>(null);
     const [contextPoint, setContextPoint] = useState<Point>({ x: 0, y: 0 });
     const [contextOpen, setContextOpen] = useState(false);
     const [numberMode, setNumberMode] = useState<'quick' | 'click' | null>(
@@ -221,7 +223,7 @@ export default function HardwareEditor({
     };
     const fit = () => canvas.current?.fit();
     const label = () => {
-        setEditLabel(true);
+        setEditLabel({ menu: contextOpen });
         setContextOpen(false);
     };
     function add(
@@ -389,6 +391,15 @@ export default function HardwareEditor({
                     kind: 'ports',
                     ids: e.ports.filter((p) => !p.hidden).map((p) => p.id),
                 });
+            } else if (
+                !mod &&
+                !event.altKey &&
+                /^[\p{L}\p{N}]$/u.test(event.key) &&
+                e.selected.length === 1
+            ) {
+                // Typing on a selected port replaces its label, spreadsheet-style.
+                event.preventDefault();
+                setEditLabel({ typed: event.key });
             } else if (
                 event.key === 'Delete' &&
                 (e.selected.length || e.selection.kind === 'image')
@@ -656,6 +667,10 @@ export default function HardwareEditor({
                                         api={canvas}
                                         onZoom={setZoom}
                                         onEditLabel={label}
+                                        labelEdit={editLabel}
+                                        onLabelEditEnd={() =>
+                                            setEditLabel(null)
+                                        }
                                         onImageSelect={properties}
                                         onContext={(point) =>
                                             setContextPoint(point)
@@ -775,13 +790,6 @@ export default function HardwareEditor({
                     event.target.value = '';
                 }}
             />
-            {editLabel && e.selected.length === 1 && (
-                <LabelDialog
-                    key={e.selected[0].id}
-                    editor={e}
-                    onClose={() => setEditLabel(false)}
-                />
-            )}
             {leave && !e.session && (
                 <Dialog
                     open

@@ -15,7 +15,7 @@ class RackCabling
             'rj45', 'console' => ['copper'],
             'sfp', 'qsfp' => ['copper', 'fiber'],
             'usbA', 'usbC', 'usbMiniB', 'usbMicroB' => ['usb'],
-            'ac', 'acC19', 'acC7', 'acC5', 'dc' => ['power'],
+            'ac', 'acC19', 'acC7', 'acC5', 'schuko', 'dc' => ['power'],
             default => [],
         };
     }

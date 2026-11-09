@@ -35,6 +35,7 @@ import {
 import { ConnectorIcon } from './connector-icon';
 import { orderActions } from './editor-layers';
 import { alignmentActions } from './editor-inspector';
+import { portLabelInputId } from './port-label-input';
 import type { Editor } from './use-editor';
 
 export function EditorContextMenu({
@@ -59,6 +60,8 @@ export function EditorContextMenu({
         <ContextMenuContent
             className="w-64"
             onKeyDown={(event) => event.stopPropagation()}
+            // «Etichetta» opens an inline input that must receive the focus.
+            finalFocus={() => document.getElementById(portLabelInputId) ?? true}
         >
             <ContextMenuGroup>
                 {e.selection.kind === 'ports' && e.selected.length > 0 && (

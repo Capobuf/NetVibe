@@ -5,6 +5,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Slider } from '@/components/ui/slider';
 import {
     insertableConnectors,
+    rotationChoices,
     type BlockOptions,
     type ConnectorType,
 } from '@/lib/hardware-editor/document';
@@ -251,12 +252,7 @@ export function BlockPanel({
                     <Choice
                         label="Rotazione porte"
                         value={String(options.rotation)}
-                        choices={{
-                            0: '0°',
-                            90: '90°',
-                            180: '180°',
-                            270: '270°',
-                        }}
+                        choices={rotationChoices}
                         onChange={(rotation) =>
                             patch({ rotation: Number(rotation) })
                         }

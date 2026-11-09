@@ -860,6 +860,9 @@ function RackEditor({
                                     allCables={data.cables}
                                     focusedBundle={focusedBundle}
                                     selectedCable={selectedCableId}
+                                    focusedCable={
+                                        editing ? null : selectedCableId
+                                    }
                                     pendingCable={cableDraft}
                                     onPort={pickPort}
                                     onConnect={startCable}

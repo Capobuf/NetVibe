@@ -213,6 +213,7 @@ export function RackCanvas({
     allCables,
     focusedBundle,
     selectedCable,
+    focusedCable,
     pendingCable,
     onPort,
     onConnect,
@@ -225,6 +226,7 @@ export function RackCanvas({
     allCables: Cable[];
     focusedBundle: string | null;
     selectedCable: number | null;
+    focusedCable: number | null;
     pendingCable: Cable | null;
     onPort: (end: CableEnd) => void;
     onConnect: (a: CableEnd, b: CableEnd) => void;
@@ -257,6 +259,9 @@ export function RackCanvas({
     const [connectionSource, setConnectionSource] = useState<number | null>(
         null,
     );
+    const focused = allCables.find((cable) => cable.id === focusedCable);
+    // Devices outside the inspected cable fade like the other cables.
+    const focusedEnds = focused && [focused.a.device_id, focused.b.device_id];
     const { resolvedAppearance } = useAppearance();
     const dark = resolvedAppearance === 'dark';
     useEffect(() => {
@@ -439,11 +444,15 @@ export function RackCanvas({
                 {item.kind !== 'shelf' && (
                     <Group
                         opacity={
-                            connectionSource !== null &&
+                            focusedEnds &&
                             item.device_id &&
-                            item.device_id !== connectionSource
-                                ? 0.9
-                                : 1
+                            !focusedEnds.includes(item.device_id)
+                                ? 0.25
+                                : connectionSource !== null &&
+                                    item.device_id &&
+                                    item.device_id !== connectionSource
+                                  ? 0.9
+                                  : 1
                         }
                     >
                         <ItemDrawing

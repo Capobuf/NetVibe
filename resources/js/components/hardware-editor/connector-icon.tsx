@@ -22,7 +22,7 @@ export function ConnectorIcon({ type }: { type: ConnectorType }) {
                 <path
                     d={shape.detail}
                     fill={
-                        type === 'dc' || type === 'ac' || type === 'acC19'
+                        ['dc', 'ac', 'acC19', 'schuko'].includes(type)
                             ? color
                             : 'none'
                     }

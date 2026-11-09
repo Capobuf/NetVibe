@@ -38,6 +38,12 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
+    /** Mirrors the column defaults so new, unrefreshed users expose their table preferences. */
+    protected $attributes = [
+        'subnet_hide_free' => false,
+        'subnet_table_separators' => true,
+    ];
+
     /** @return BelongsToMany<Company, $this> */
     public function companies(): BelongsToMany
     {

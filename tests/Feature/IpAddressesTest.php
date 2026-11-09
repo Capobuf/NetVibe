@@ -228,6 +228,28 @@ class IpAddressesTest extends TestCase
             ->where('query.search', 'node')->where('ipAddresses.total', 30));
     }
 
+    public function test_subnet_table_toggles_are_remembered_on_the_profile(): void
+    {
+        $user = User::factory()->create(['is_superadmin' => true]);
+        $this->actingAs($user);
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => null]);
+        $subnet = $site->subnets()->create(Ipv4Cidr::parse('10.0.0.0/24'));
+        $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
+
+        $this->get($show.'?hide_free=1')->assertOk();
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('query.hide_free', 1)->where('auth.user.subnet_table_separators', true));
+
+        $this->from($show)->patch(route('preferences.update'), ['subnet_table_separators' => false])
+            ->assertRedirect($show)->assertSessionHasNoErrors();
+        $this->get($show)->assertInertia(fn (Assert $page) => $page
+            ->where('auth.user.subnet_table_separators', false)->where('auth.user.subnet_hide_free', true));
+
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]))
+            ->get($show)->assertInertia(fn (Assert $page) => $page->where('query.hide_free', 0));
+    }
+
     public function test_mac_addresses_are_stored_uppercase_with_colons(): void
     {
         $this->actingAs(User::factory()->create(['is_superadmin' => true]));

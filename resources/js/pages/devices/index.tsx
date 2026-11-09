@@ -1,10 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
-import { ArrowRight, Filter, RefreshCw } from 'lucide-react';
+import { ArrowRight, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { UnifiMark } from '@/components/unifi-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
+import { SnipeItMark } from '@/components/snipe-it-mark';
 import { unifiState } from '@/components/unifi/types';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -16,6 +17,7 @@ import { IconButton } from '@/components/icon-button';
 import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
     Popover,
@@ -25,7 +27,6 @@ import {
     PopoverTitle,
 } from '@/components/ui/popover';
 import { sync as snipeSync } from '@/routes/companies/settings/integrations/snipe-it';
-import { cn, formatDateTime } from '@/lib/utils';
 import {
     Select,
     SelectContent,
@@ -142,14 +143,14 @@ function DeviceList({
                     title="Dispositivi"
                     actions={
                         <div className="flex items-center gap-2">
+                            <DeviceForm
+                                {...route}
+                                manufacturers={manufacturers}
+                                view={view}
+                            />
                             {snipeIt ? (
-                                <IconButton
-                                    label={
-                                        snipeIt.synced_at
-                                            ? `Sincronizza Snipe-IT · ultima lettura ${formatDateTime(snipeIt.synced_at)}`
-                                            : 'Sincronizza Snipe-IT'
-                                    }
-                                    variant="ghost"
+                                <Button
+                                    variant="outline"
                                     disabled={syncing}
                                     onClick={() =>
                                         router.post(
@@ -169,18 +170,14 @@ function DeviceList({
                                         )
                                     }
                                 >
-                                    <RefreshCw
-                                        className={cn(
-                                            syncing && 'animate-spin',
-                                        )}
-                                    />
-                                </IconButton>
+                                    {syncing ? (
+                                        <Spinner />
+                                    ) : (
+                                        <SnipeItMark className="size-4" />
+                                    )}
+                                    Sincronizza
+                                </Button>
                             ) : null}
-                            <DeviceForm
-                                {...route}
-                                manufacturers={manufacturers}
-                                view={view}
-                            />
                         </div>
                     }
                 />

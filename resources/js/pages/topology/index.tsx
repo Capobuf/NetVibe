@@ -65,6 +65,9 @@ import {
 import type { TopologyOrientation } from '@/lib/topology-layout';
 import type { TopologyRack } from '@/lib/topology-rack-layout';
 import { unifiState } from '@/components/unifi/types';
+import { DeviceIps } from '@/components/devices/device-ips';
+import TextLink from '@/components/text-link';
+import { index as modelIndex } from '@/routes/device-models';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatDateTime } from '@/lib/utils';
 import { index } from '@/routes/companies/sites/topology';
@@ -88,12 +91,6 @@ type Props = {
     site: Site;
     topology: TopologyData;
     racks: TopologyRack[];
-};
-
-const indirectLabels: Record<string, string> = {
-    '/ip/arp': 'ARP',
-    '/ip/dhcp-server/lease': 'DHCP',
-    '/interface/bridge/host': 'MAC / FDB',
 };
 
 function LinkSwatch({
@@ -239,17 +236,31 @@ function TopologyView({ company, site, topology, racks }: Props) {
             source.device_id === selectedNode?.device_id,
     );
     const unifi = selectedNode?.unifi;
+    const deviceHref = selectedNode?.device_id
+        ? deviceShow({ ...route, device: selectedNode.device_id })
+        : null;
+    // Source freshness stays available on the device name without crowding the card.
+    const readings = [
+        mikrotikSource &&
+            `Lettura MikroTik: ${mikrotikSource.seen_at ? formatDateTime(mikrotikSource.seen_at) : 'mai acquisita'}${mikrotikSource.stale ? ' · Non aggiornata' : ''}`,
+        unifi &&
+            `Lettura UniFi: ${unifi.synced_at ? formatDateTime(unifi.synced_at) : 'mai sincronizzato'}${unifi.stale ? ' · Non aggiornata' : ''}`,
+    ].filter(Boolean);
     const nodeFacts: [string, ReactNode][] = selectedNode
         ? (
               [
                   [
-                      selectedNode.ips.length > 1 ? 'Indirizzi IP' : 'IP',
-                      selectedNode.ips.length > 0 &&
-                          selectedNode.ips.map((ip) => (
-                              <span key={ip} className="block">
-                                  {ip}
-                              </span>
-                          )),
+                      'IP',
+                      selectedNode.ips.length > 0 && (
+                          <DeviceIps
+                              ips={selectedNode.ips}
+                              name={selectedNode.label}
+                              className={cn(
+                                  'justify-end',
+                                  selectedNode.ips.length === 1 && '-mr-2',
+                              )}
+                          />
+                      ),
                   ],
                   [
                       'IP gestione',
@@ -262,26 +273,15 @@ function TopologyView({ company, site, topology, racks }: Props) {
                   [
                       'Rack',
                       selectedNode.rack && (
-                          <Link
-                              className="rounded-sm font-medium text-primary outline-none hover:text-primary/80 focus-visible:ring-2 focus-visible:ring-ring"
+                          <TextLink
                               href={rackShow({
                                   ...route,
                                   rack: selectedNode.rack.id,
                               })}
                           >
                               {selectedNode.rack.name}
-                          </Link>
+                          </TextLink>
                       ),
-                  ],
-                  [
-                      'Lettura UniFi',
-                      unifi &&
-                          `${unifi.synced_at ? formatDateTime(unifi.synced_at) : 'Mai sincronizzato'}${unifi.stale ? ' · Non aggiornata' : ''}`,
-                  ],
-                  [
-                      'Lettura MikroTik',
-                      mikrotikSource &&
-                          `${mikrotikSource.seen_at ? formatDateTime(mikrotikSource.seen_at) : 'Mai acquisita'}${mikrotikSource.stale ? ' · Non aggiornata' : ''}`,
                   ],
               ] as [string, ReactNode][]
           ).filter(([, value]) => value)
@@ -726,8 +726,8 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                 {selectedNode && (
                                     <div className="flex flex-col">
                                         <div className="flex flex-col gap-4 p-4">
-                                            <div className="flex min-h-24 items-center justify-center rounded-lg border bg-muted/40 p-3">
-                                                {selectedModel ? (
+                                            {(() => {
+                                                const image = selectedModel ? (
                                                     <PanelViewer
                                                         panel={
                                                             selectedModel.panel
@@ -739,18 +739,109 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                     />
                                                 ) : (
                                                     <Monitor className="size-8 text-muted-foreground" />
-                                                )}
-                                            </div>
+                                                );
+                                                const frame =
+                                                    'flex min-h-24 items-center justify-center rounded-lg border bg-muted/40 p-3';
+                                                // The name is the keyboard link; the image is a pointer shortcut.
+                                                return deviceHref ? (
+                                                    <Link
+                                                        href={deviceHref}
+                                                        tabIndex={-1}
+                                                        aria-hidden
+                                                        className={cn(
+                                                            frame,
+                                                            'transition-colors hover:bg-muted',
+                                                        )}
+                                                    >
+                                                        {image}
+                                                    </Link>
+                                                ) : (
+                                                    <div className={frame}>
+                                                        {image}
+                                                    </div>
+                                                );
+                                            })()}
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <h3 className="text-base font-semibold break-words">
-                                                        {selectedNode.label}
+                                                    {readings.length ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger
+                                                                asChild
+                                                            >
+                                                                <h3 className="text-base font-semibold break-words">
+                                                        {deviceHref ? (
+                                                            <TextLink
+                                                                href={
+                                                                    deviceHref
+                                                                }
+                                                                className="font-semibold"
+                                                            >
+                                                                {
+                                                                    selectedNode.label
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            selectedNode.label
+                                                        )}
                                                     </h3>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="flex flex-col gap-1">
+                                                                {readings.map(
+                                                                    (
+                                                                        reading,
+                                                                    ) => (
+                                                                        <span
+                                                                            key={String(
+                                                                                reading,
+                                                                            )}
+                                                                        >
+                                                                            {
+                                                                                reading
+                                                                            }
+                                                                        </span>
+                                                                    ),
+                                                                )}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <h3 className="text-base font-semibold break-words">
+                                                        {deviceHref ? (
+                                                            <TextLink
+                                                                href={
+                                                                    deviceHref
+                                                                }
+                                                                className="font-semibold"
+                                                            >
+                                                                {
+                                                                    selectedNode.label
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            selectedNode.label
+                                                        )}
+                                                    </h3>
+                                                    )}
                                                     <p className="mt-0.5 text-sm text-muted-foreground">
-                                                        {selectedNode.device_id
-                                                            ? (selectedNode.model ??
-                                                              'Modello non associato')
-                                                            : 'Non associato all’inventario'}
+                                                        {!selectedNode.device_id ? (
+                                                            'Non associato all’inventario'
+                                                        ) : selectedNode.model_id ? (
+                                                            <TextLink
+                                                                href={modelIndex(
+                                                                    {
+                                                                        query: {
+                                                                            model: selectedNode.model_id,
+                                                                        },
+                                                                    },
+                                                                )}
+                                                                className="font-normal text-muted-foreground hover:text-foreground"
+                                                            >
+                                                                {
+                                                                    selectedNode.model
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            'Modello non associato'
+                                                        )}
                                                     </p>
                                                 </div>
                                                 {selectedNode.unifi && (
@@ -791,14 +882,14 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                             </div>
                                         </div>
                                         {nodeFacts.length > 0 && (
-                                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2.5 border-t px-4 py-3 text-sm">
+                                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 gap-y-2.5 border-t px-4 py-3 text-sm">
                                                 {nodeFacts.map(
                                                     ([label, value]) => (
                                                         <Fragment key={label}>
                                                             <dt className="text-muted-foreground">
                                                                 {label}
                                                             </dt>
-                                                            <dd className="text-right break-words tabular-nums">
+                                                            <dd className="flex justify-end text-right break-words tabular-nums">
                                                                 {value}
                                                             </dd>
                                                         </Fragment>
@@ -821,18 +912,29 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                             ? edge.target
                                                             : edge.source,
                                                     );
-                                                    const ports =
-                                                        edge.kind === 'logical'
-                                                            ? topologyPortMessage(
-                                                                  edge,
-                                                                  selectedNode,
-                                                              )
-                                                            : `${topologyPortLabel(edge, selectedNode, false) ?? '—'} ↔ ${(peer && topologyPortLabel(edge, peer, false)) ?? '—'}`;
+                                                    const logical =
+                                                        edge.kind === 'logical';
+                                                    const details = [
+                                                        edge.cable_ids.length
+                                                            ? edge.cable_ids
+                                                                  .map(
+                                                                      (id) =>
+                                                                          `C-${id}`,
+                                                                  )
+                                                                  .join(', ')
+                                                            : linkKinds[
+                                                                  edge.kind
+                                                              ],
+                                                        edge.stale &&
+                                                            'Non aggiornato',
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ');
                                                     return (
                                                         <Button
                                                             key={edge.id}
                                                             variant="ghost"
-                                                            className="h-auto w-full justify-start gap-3 px-2 py-2 text-left whitespace-normal"
+                                                            className="h-auto w-full justify-between gap-3 px-2 py-2 text-left whitespace-normal"
                                                             onClick={() =>
                                                                 select({
                                                                     kind: 'edge',
@@ -840,42 +942,61 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                                 })
                                                             }
                                                         >
-                                                            <LinkSwatch
-                                                                kind={edge.kind}
-                                                                className="shrink-0"
-                                                            />
-                                                            <span className="min-w-0 flex-1">
-                                                                <span className="block truncate text-sm">
-                                                                    {peer?.label ??
-                                                                        'Dispositivo'}
-                                                                </span>
-                                                                <span className="block truncate text-xs text-muted-foreground">
-                                                                    {[
-                                                                        ports,
-                                                                        ...edge.cable_ids.map(
-                                                                            (
-                                                                                id,
-                                                                            ) =>
-                                                                                `C-${id}`,
-                                                                        ),
-                                                                        edge.stale &&
-                                                                            'Non aggiornato',
-                                                                    ]
-                                                                        .filter(
-                                                                            Boolean,
-                                                                        )
-                                                                        .join(
-                                                                            ' · ',
-                                                                        )}
+                                                            <span className="flex min-w-0 items-center gap-2">
+                                                                <LinkSwatch
+                                                                    kind={
+                                                                        edge.kind
+                                                                    }
+                                                                    className="shrink-0"
+                                                                />
+                                                                <span className="min-w-0">
+                                                                    <span className="block truncate text-sm">
+                                                                        {logical
+                                                                            ? topologyPortMessage(
+                                                                                  edge,
+                                                                                  selectedNode,
+                                                                              )
+                                                                            : (topologyPortLabel(
+                                                                                  edge,
+                                                                                  selectedNode,
+                                                                                  false,
+                                                                              ) ??
+                                                                              '—')}
+                                                                    </span>
+                                                                    <span className="block truncate text-xs font-normal text-muted-foreground">
+                                                                        {
+                                                                            details
+                                                                        }
+                                                                    </span>
                                                                 </span>
                                                             </span>
-                                                            {edge.issues.length >
-                                                                0 && (
-                                                                <CircleAlert
-                                                                    className="text-destructive"
-                                                                    aria-label="Discrepanza"
-                                                                />
-                                                            )}
+                                                            <span className="flex min-w-0 items-center gap-2">
+                                                                <span className="min-w-0 text-right">
+                                                                    <span className="block truncate text-sm">
+                                                                        {peer?.label ??
+                                                                            'Dispositivo'}
+                                                                    </span>
+                                                                    {!logical && (
+                                                                        <span className="block truncate text-xs font-normal text-muted-foreground">
+                                                                            {(peer &&
+                                                                                topologyPortLabel(
+                                                                                    edge,
+                                                                                    peer,
+                                                                                    false,
+                                                                                )) ??
+                                                                                '—'}
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                                {edge.issues
+                                                                    .length >
+                                                                    0 && (
+                                                                    <CircleAlert
+                                                                        className="text-destructive"
+                                                                        aria-label="Discrepanza"
+                                                                    />
+                                                                )}
+                                                            </span>
                                                         </Button>
                                                     );
                                                 })
@@ -885,58 +1006,6 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 </p>
                                             )}
                                         </div>
-                                        {selectedNode.indirect.length > 0 && (
-                                            <div className="flex flex-col gap-2 border-t px-4 py-3">
-                                                <h4 className="text-sm font-medium">
-                                                    Osservazioni indirette
-                                                </h4>
-                                                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
-                                                    {selectedNode.indirect.map(
-                                                        (item) => (
-                                                            <Fragment
-                                                                key={item.menu}
-                                                            >
-                                                                <dt className="text-muted-foreground">
-                                                                    {indirectLabels[
-                                                                        item
-                                                                            .menu
-                                                                    ] ??
-                                                                        item.menu}
-                                                                </dt>
-                                                                <dd className="text-right tabular-nums">
-                                                                    {item.count}
-                                                                    <span className="block text-xs text-muted-foreground">
-                                                                        {item.seen_at
-                                                                            ? formatDateTime(
-                                                                                  item.seen_at,
-                                                                              )
-                                                                            : 'Data non disponibile'}
-                                                                    </span>
-                                                                </dd>
-                                                            </Fragment>
-                                                        ),
-                                                    )}
-                                                </dl>
-                                            </div>
-                                        )}
-                                        {selectedNode.device_id && (
-                                            <div className="sticky bottom-0 border-t bg-popover p-3">
-                                                <Button
-                                                    className="w-full"
-                                                    asChild
-                                                >
-                                                    <Link
-                                                        href={deviceShow({
-                                                            ...route,
-                                                            device: selectedNode.device_id,
-                                                        })}
-                                                    >
-                                                        Apri dispositivo
-                                                        <ArrowUpRight data-icon="inline-end" />
-                                                    </Link>
-                                                </Button>
-                                            </div>
-                                        )}
                                     </div>
                                 )}
                                 {selectedEdge && (

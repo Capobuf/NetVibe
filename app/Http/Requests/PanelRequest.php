@@ -63,7 +63,7 @@ class PanelRequest extends FormRequest
                 "$f.shellState.locked" => ['required', 'boolean:strict'],
                 "$f.ports.*" => ['required', 'array:id,type,x,y,rotation,scale,label,labelPosition,poe,group,opacity,opacityCustomized,borderColor,hidden,locked,mikrotikName,unifiPort'],
                 "$f.ports.*.id" => ['required', 'string', 'regex:/^[a-f0-9]{32}$/', 'distinct'],
-                "$f.ports.*.type" => ['required', Rule::in(['rj45', 'sfp', 'qsfp', 'console', 'usbA', 'usbC', 'usbMiniB', 'usbMicroB', 'ac', 'acC19', 'acC7', 'acC5', 'dc'])],
+                "$f.ports.*.type" => ['required', Rule::in(['rj45', 'sfp', 'qsfp', 'console', 'usbA', 'usbC', 'usbMiniB', 'usbMicroB', 'ac', 'acC19', 'acC7', 'acC5', 'schuko', 'italian', 'dc'])],
                 "$f.ports.*.x" => $coordinate, "$f.ports.*.y" => $coordinate,
                 "$f.ports.*.rotation" => ['required', 'integer:strict', 'in:0,90,180,270'],
                 "$f.ports.*.scale" => ['required', 'numeric:strict', 'between:0.2,8'],

@@ -114,6 +114,20 @@ export const connectorTypes = {
         category: 'ac',
         color: '#8998aa',
     },
+    schuko: {
+        name: 'Schuko',
+        width: 36,
+        height: 36,
+        category: 'ac',
+        color: '#8998aa',
+    },
+    italian: {
+        name: 'Italiana bipasso',
+        width: 20,
+        height: 34,
+        category: 'ac',
+        color: '#8998aa',
+    },
     dc: {
         name: 'Alimentazione DC',
         width: 22,

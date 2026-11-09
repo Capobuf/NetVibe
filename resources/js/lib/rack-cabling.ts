@@ -1,6 +1,7 @@
 import {
     boundsOf,
     imageBounds,
+    isPowerConnector,
     portBounds,
     RACK_UNIT_HEIGHT,
     RACK_WIDTH,
@@ -62,7 +63,7 @@ export function connectionTypes(type: ConnectorType): Cable['type'][] {
     if (type === 'rj45' || type === 'console') return ['copper'];
     if (type === 'sfp' || type === 'qsfp') return ['copper', 'fiber'];
     if (type.startsWith('usb')) return ['usb'];
-    if (['ac', 'acC19', 'acC7', 'acC5', 'dc'].includes(type)) return ['power'];
+    if (isPowerConnector(type)) return ['power'];
     return [];
 }
 export function compatibleCableTypes(cable: Cable, devices: RackDevice[]) {

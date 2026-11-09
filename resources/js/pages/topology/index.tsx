@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { useId, useRef, useState } from 'react';
+import { Fragment, useId, useRef, useState, type ReactNode } from 'react';
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -64,6 +64,10 @@ import {
 } from '@/components/ui/popover';
 import type { TopologyOrientation } from '@/lib/topology-layout';
 import type { TopologyRack } from '@/lib/topology-rack-layout';
+import { unifiState } from '@/components/unifi/types';
+import { DeviceIps } from '@/components/devices/device-ips';
+import TextLink from '@/components/text-link';
+import { index as modelIndex } from '@/routes/device-models';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatDateTime } from '@/lib/utils';
 import { index } from '@/routes/companies/sites/topology';
@@ -89,11 +93,43 @@ type Props = {
     racks: TopologyRack[];
 };
 
-const indirectLabels: Record<string, string> = {
-    '/ip/arp': 'ARP',
-    '/ip/dhcp-server/lease': 'DHCP',
-    '/interface/bridge/host': 'MAC / FDB',
-};
+function LinkSwatch({
+    kind,
+    className,
+}: {
+    kind: TopologyEdge['kind'];
+    className?: string;
+}) {
+    return (
+        <svg
+            aria-hidden
+            className={cn(
+                'h-2 w-6',
+                kind === 'documented' && 'text-primary',
+                className,
+            )}
+            viewBox="0 0 24 8"
+        >
+            <line
+                x1="0"
+                y1="4"
+                x2="24"
+                y2="4"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeDasharray={
+                    kind === 'discovered'
+                        ? '10 6'
+                        : kind === 'partial'
+                          ? '2 6'
+                          : kind === 'logical'
+                            ? '12 4 2 4'
+                            : undefined
+                }
+            />
+        </svg>
+    );
+}
 
 export default function TopologyIndex(props: Props) {
     return <TopologyView key={props.site.id} {...props} />;
@@ -184,6 +220,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
         selection?.kind === 'edge'
             ? edges.find((edge) => edge.id === selection.id)
             : undefined;
+    // Cables open in the rack of one of the linked devices, with the cable selected.
+    const edgeRackId = selectedEdge
+        ? (byId.get(selectedEdge.source)?.rack?.id ??
+          byId.get(selectedEdge.target)?.rack?.id)
+        : undefined;
     const connected = selectedNode
         ? edges.filter(
               (edge) =>
@@ -194,6 +235,62 @@ function TopologyView({ company, site, topology, racks }: Props) {
     const selectedModel = selectedNode?.model_id
         ? topology.models[selectedNode.model_id]
         : undefined;
+    const mikrotikSource = topology.integrations.find(
+        (source) =>
+            source.vendor !== 'unifi' &&
+            source.device_id === selectedNode?.device_id,
+    );
+    const unifi = selectedNode?.unifi;
+    const deviceHref = selectedNode?.device_id
+        ? deviceShow({ ...route, device: selectedNode.device_id })
+        : null;
+    // Source freshness stays available on the device name without crowding the card.
+    const readings = [
+        mikrotikSource &&
+            `Lettura MikroTik: ${mikrotikSource.seen_at ? formatDateTime(mikrotikSource.seen_at) : 'mai acquisita'}${mikrotikSource.stale ? ' · Non aggiornata' : ''}`,
+        unifi &&
+            `Lettura UniFi: ${unifi.synced_at ? formatDateTime(unifi.synced_at) : 'mai sincronizzato'}${unifi.stale ? ' · Non aggiornata' : ''}`,
+    ].filter(Boolean);
+    const nodeFacts: [string, ReactNode][] = selectedNode
+        ? (
+              [
+                  [
+                      'IP',
+                      selectedNode.ips.length > 0 && (
+                          <DeviceIps
+                              ips={selectedNode.ips}
+                              name={selectedNode.label}
+                              className={cn(
+                                  'justify-end',
+                                  selectedNode.ips.length === 1 && '-mr-2',
+                              )}
+                          />
+                      ),
+                  ],
+                  [
+                      'IP gestione',
+                      unifi?.ip_address &&
+                          !selectedNode.ips.includes(unifi.ip_address) &&
+                          unifi.ip_address,
+                  ],
+                  ['MAC', selectedNode.mac ?? unifi?.mac_address],
+                  ['Firmware', unifi?.firmware_version],
+                  [
+                      'Rack',
+                      selectedNode.rack && (
+                          <TextLink
+                              href={rackShow({
+                                  ...route,
+                                  rack: selectedNode.rack.id,
+                              })}
+                          >
+                              {selectedNode.rack.name}
+                          </TextLink>
+                      ),
+                  ],
+              ] as [string, ReactNode][]
+          ).filter(([, value]) => value)
+        : [];
     const latest = topology.integrations
         .map((source) => source.seen_at)
         .filter((value): value is string => !!value)
@@ -208,6 +305,7 @@ function TopologyView({ company, site, topology, racks }: Props) {
     function select(next: TopologySelection) {
         setPanelOpen(true);
         setSelection(next);
+        popupContent.current?.scrollTo({ top: 0 });
         if (next?.kind === 'node') canvas.current?.focus(next.id);
     }
     function edgeButton(edge: TopologyEdge) {
@@ -505,17 +603,22 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                         if (anchor)
                                             popupAnchor.current = anchor;
                                         setPanelOpen(
-                                            next?.kind === 'edge' &&
-                                                edges.some(
-                                                    (edge) =>
-                                                        edge.id === next.id &&
-                                                        edge.kind === 'logical',
-                                                ),
+                                            !!anchor &&
+                                                (next?.kind === 'node' ||
+                                                    edges.some(
+                                                        (edge) =>
+                                                            edge.id ===
+                                                                next?.id &&
+                                                            edge.kind ===
+                                                                'logical',
+                                                    )),
                                         );
                                         setSelection(next);
                                     }}
                                     api={canvas}
                                     onZoom={setZoom}
+                                    // The details card already lists both ends; one popup at a time.
+                                    endpoints={!panelOpen}
                                 />
                             ) : (
                                 <Empty className="h-full min-h-96">
@@ -550,33 +653,9 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     key={value}
                                     className="flex items-center gap-2"
                                 >
-                                    <svg
-                                        aria-hidden
-                                        className={cn(
-                                            'h-2 w-6',
-                                            value === 'documented' &&
-                                                'text-primary',
-                                        )}
-                                        viewBox="0 0 24 8"
-                                    >
-                                        <line
-                                            x1="0"
-                                            y1="4"
-                                            x2="24"
-                                            y2="4"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeDasharray={
-                                                value === 'discovered'
-                                                    ? '10 6'
-                                                    : value === 'partial'
-                                                      ? '2 6'
-                                                      : value === 'logical'
-                                                        ? '12 4 2 4'
-                                                        : undefined
-                                            }
-                                        />
-                                    </svg>
+                                    <LinkSwatch
+                                        kind={value as TopologyEdge['kind']}
+                                    />
                                     {label}
                                 </span>
                             ))}
@@ -653,10 +732,10 @@ function TopologyView({ company, site, topology, racks }: Props) {
                         {selectedNode || selectedEdge ? (
                             <>
                                 {selectedNode && (
-                                    <div className="flex flex-col gap-5 p-5">
-                                        <div>
-                                            {selectedModel ? (
-                                                <div className="mb-4">
+                                    <div className="flex flex-col">
+                                        <div className="flex flex-col gap-4 p-4">
+                                            {(() => {
+                                                const image = selectedModel ? (
                                                     <PanelViewer
                                                         panel={
                                                             selectedModel.panel
@@ -666,90 +745,271 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                         }
                                                         compact
                                                     />
+                                                ) : (
+                                                    <Monitor className="size-8 text-muted-foreground" />
+                                                );
+                                                const frame =
+                                                    'flex min-h-24 items-center justify-center rounded-lg border bg-muted/40 p-3';
+                                                // The name is the keyboard link; the image is a pointer shortcut.
+                                                return deviceHref ? (
+                                                    <Link
+                                                        href={deviceHref}
+                                                        tabIndex={-1}
+                                                        aria-hidden
+                                                        className={cn(
+                                                            frame,
+                                                            'transition-colors hover:bg-muted',
+                                                        )}
+                                                    >
+                                                        {image}
+                                                    </Link>
+                                                ) : (
+                                                    <div className={frame}>
+                                                        {image}
+                                                    </div>
+                                                );
+                                            })()}
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    {readings.length ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger
+                                                                asChild
+                                                            >
+                                                                <h3 className="text-base font-semibold break-words">
+                                                        {deviceHref ? (
+                                                            <TextLink
+                                                                href={
+                                                                    deviceHref
+                                                                }
+                                                                className="font-semibold"
+                                                            >
+                                                                {
+                                                                    selectedNode.label
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            selectedNode.label
+                                                        )}
+                                                    </h3>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent className="flex flex-col gap-1">
+                                                                {readings.map(
+                                                                    (
+                                                                        reading,
+                                                                    ) => (
+                                                                        <span
+                                                                            key={String(
+                                                                                reading,
+                                                                            )}
+                                                                        >
+                                                                            {
+                                                                                reading
+                                                                            }
+                                                                        </span>
+                                                                    ),
+                                                                )}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        <h3 className="text-base font-semibold break-words">
+                                                        {deviceHref ? (
+                                                            <TextLink
+                                                                href={
+                                                                    deviceHref
+                                                                }
+                                                                className="font-semibold"
+                                                            >
+                                                                {
+                                                                    selectedNode.label
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            selectedNode.label
+                                                        )}
+                                                    </h3>
+                                                    )}
+                                                    <p className="mt-0.5 text-sm text-muted-foreground">
+                                                        {!selectedNode.device_id ? (
+                                                            'Non associato all’inventario'
+                                                        ) : selectedNode.model_id ? (
+                                                            <TextLink
+                                                                href={modelIndex(
+                                                                    {
+                                                                        query: {
+                                                                            model: selectedNode.model_id,
+                                                                        },
+                                                                    },
+                                                                )}
+                                                                className="font-normal text-muted-foreground hover:text-foreground"
+                                                            >
+                                                                {
+                                                                    selectedNode.model
+                                                                }
+                                                            </TextLink>
+                                                        ) : (
+                                                            'Modello non associato'
+                                                        )}
+                                                    </p>
                                                 </div>
-                                            ) : (
-                                                <Monitor className="mb-3 size-6 text-muted-foreground" />
-                                            )}
-                                            <h3 className="text-lg font-medium break-words">
-                                                {selectedNode.label}
-                                            </h3>
-                                            <p className="mt-1 text-sm text-muted-foreground">
-                                                {selectedNode.device_id
-                                                    ? selectedNode.model
-                                                    : 'Non associato all’inventario'}
-                                            </p>
+                                                {selectedNode.unifi && (
+                                                    <Badge
+                                                        variant="outline"
+                                                        className="shrink-0"
+                                                    >
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className={cn(
+                                                                'size-1.5 rounded-full bg-muted-foreground',
+                                                                !selectedNode
+                                                                    .unifi
+                                                                    .stale &&
+                                                                    selectedNode
+                                                                        .unifi
+                                                                        .state ===
+                                                                        'ONLINE' &&
+                                                                    'bg-emerald-500',
+                                                                !selectedNode
+                                                                    .unifi
+                                                                    .stale &&
+                                                                    selectedNode
+                                                                        .unifi
+                                                                        .state ===
+                                                                        'OFFLINE' &&
+                                                                    'bg-destructive',
+                                                            )}
+                                                        />
+                                                        {unifiState(
+                                                            selectedNode.unifi
+                                                                .state,
+                                                            selectedNode.unifi
+                                                                .stale,
+                                                        )}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </div>
-                                        {selectedNode.mac && (
-                                            <p className="text-sm tabular-nums">
-                                                {selectedNode.mac}
-                                            </p>
-                                        )}
-                                        {selectedNode.device_id && (
-                                            <Button variant="outline" asChild>
-                                                <Link
-                                                    href={deviceShow({
-                                                        ...route,
-                                                        device: selectedNode.device_id,
-                                                    })}
-                                                >
-                                                    Apri dispositivo
-                                                    <ArrowUpRight data-icon="inline-end" />
-                                                </Link>
-                                            </Button>
-                                        )}
-                                        {selectedNode.rack && (
-                                            <Button variant="outline" asChild>
-                                                <Link
-                                                    href={rackShow({
-                                                        ...route,
-                                                        rack: selectedNode.rack
-                                                            .id,
-                                                    })}
-                                                >
-                                                    <Server data-icon="inline-start" />
-                                                    {selectedNode.rack.name}
-                                                </Link>
-                                            </Button>
-                                        )}
-                                        {selectedNode.indirect.length > 0 && (
-                                            <>
-                                                <Separator />
-                                                <h4 className="text-sm font-medium">
-                                                    Osservazioni indirette
-                                                </h4>
-                                                {selectedNode.indirect.map(
-                                                    (item) => (
-                                                        <div
-                                                            key={item.menu}
-                                                            className="flex flex-col gap-1 text-sm"
-                                                        >
-                                                            <p>
-                                                                {indirectLabels[
-                                                                    item.menu
-                                                                ] ?? item.menu}
-                                                                : {item.count}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {item.seen_at
-                                                                    ? formatDateTime(
-                                                                          item.seen_at,
-                                                                      )
-                                                                    : 'Data non disponibile'}
-                                                            </p>
-                                                        </div>
+                                        {nodeFacts.length > 0 && (
+                                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-6 gap-y-2.5 border-t px-4 py-3 text-sm">
+                                                {nodeFacts.map(
+                                                    ([label, value]) => (
+                                                        <Fragment key={label}>
+                                                            <dt className="text-muted-foreground">
+                                                                {label}
+                                                            </dt>
+                                                            <dd className="flex justify-end text-right break-words tabular-nums">
+                                                                {value}
+                                                            </dd>
+                                                        </Fragment>
                                                     ),
                                                 )}
-                                            </>
+                                            </dl>
                                         )}
-                                        <Separator />
-                                        <h4 className="text-sm font-medium">
-                                            Collegamenti
-                                        </h4>
-                                        <div className="-mx-3 flex flex-col">
+                                        <div className="flex flex-col gap-1 border-t p-2">
+                                            <h4 className="flex items-center justify-between px-2 pt-1 pb-1 text-sm font-medium">
+                                                Collegamenti
+                                                <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                                                    {connected.length}
+                                                </span>
+                                            </h4>
                                             {connected.length ? (
-                                                connected.map(edgeButton)
+                                                connected.map((edge) => {
+                                                    const peer = byId.get(
+                                                        edge.source ===
+                                                            selectedNode.id
+                                                            ? edge.target
+                                                            : edge.source,
+                                                    );
+                                                    const logical =
+                                                        edge.kind === 'logical';
+                                                    const details = [
+                                                        edge.cable_ids.length
+                                                            ? edge.cable_ids
+                                                                  .map(
+                                                                      (id) =>
+                                                                          `C-${id}`,
+                                                                  )
+                                                                  .join(', ')
+                                                            : linkKinds[
+                                                                  edge.kind
+                                                              ],
+                                                        edge.stale &&
+                                                            'Non aggiornato',
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ');
+                                                    return (
+                                                        <Button
+                                                            key={edge.id}
+                                                            variant="ghost"
+                                                            className="h-auto w-full justify-between gap-3 px-2 py-2 text-left whitespace-normal"
+                                                            onClick={() =>
+                                                                select({
+                                                                    kind: 'edge',
+                                                                    id: edge.id,
+                                                                })
+                                                            }
+                                                        >
+                                                            <span className="flex min-w-0 items-center gap-2">
+                                                                <LinkSwatch
+                                                                    kind={
+                                                                        edge.kind
+                                                                    }
+                                                                    className="shrink-0"
+                                                                />
+                                                                <span className="min-w-0">
+                                                                    <span className="block truncate text-sm">
+                                                                        {logical
+                                                                            ? topologyPortMessage(
+                                                                                  edge,
+                                                                                  selectedNode,
+                                                                              )
+                                                                            : (topologyPortLabel(
+                                                                                  edge,
+                                                                                  selectedNode,
+                                                                                  false,
+                                                                              ) ??
+                                                                              '—')}
+                                                                    </span>
+                                                                    <span className="block truncate text-xs font-normal text-muted-foreground">
+                                                                        {
+                                                                            details
+                                                                        }
+                                                                    </span>
+                                                                </span>
+                                                            </span>
+                                                            <span className="flex min-w-0 items-center gap-2">
+                                                                <span className="min-w-0 text-right">
+                                                                    <span className="block truncate text-sm">
+                                                                        {peer?.label ??
+                                                                            'Dispositivo'}
+                                                                    </span>
+                                                                    {!logical && (
+                                                                        <span className="block truncate text-xs font-normal text-muted-foreground">
+                                                                            {(peer &&
+                                                                                topologyPortLabel(
+                                                                                    edge,
+                                                                                    peer,
+                                                                                    false,
+                                                                                )) ??
+                                                                                '—'}
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                                {edge.issues
+                                                                    .length >
+                                                                    0 && (
+                                                                    <CircleAlert
+                                                                        className="text-destructive"
+                                                                        aria-label="Discrepanza"
+                                                                    />
+                                                                )}
+                                                            </span>
+                                                        </Button>
+                                                    );
+                                                })
                                             ) : (
-                                                <p className="px-3 text-sm text-muted-foreground">
+                                                <p className="px-2 pb-2 text-sm text-muted-foreground">
                                                     Nessun collegamento noto
                                                 </p>
                                             )}
@@ -775,28 +1035,60 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 const node = byId.get(
                                                     selectedEdge[side],
                                                 );
+                                                const port =
+                                                    node &&
+                                                    topologyPortLabel(
+                                                        selectedEdge,
+                                                        node,
+                                                    );
                                                 return (
                                                     <div key={side}>
                                                         <p className="text-sm font-medium break-words">
-                                                            {
-                                                                byId.get(
-                                                                    selectedEdge[
-                                                                        side
-                                                                    ],
-                                                                )?.label
-                                                            }
+                                                            {node?.device_id ? (
+                                                                <TextLink
+                                                                    href={deviceShow(
+                                                                        {
+                                                                            ...route,
+                                                                            device: node.device_id,
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    {node.label}
+                                                                </TextLink>
+                                                            ) : (
+                                                                node?.label
+                                                            )}
                                                         </p>
                                                         <p className="mt-1 text-sm text-muted-foreground">
-                                                            {node
-                                                                ? (topologyPortLabel(
-                                                                      selectedEdge,
-                                                                      node,
-                                                                  ) ??
-                                                                  topologyPortMessage(
-                                                                      selectedEdge,
-                                                                      node,
-                                                                  ))
-                                                                : 'Dispositivo non disponibile'}
+                                                            {!node ? (
+                                                                'Dispositivo non disponibile'
+                                                            ) : port &&
+                                                              node.device_id &&
+                                                              end?.interface_id ? (
+                                                                <TextLink
+                                                                    href={deviceShow(
+                                                                        {
+                                                                            ...route,
+                                                                            device: node.device_id,
+                                                                        },
+                                                                        {
+                                                                            query: {
+                                                                                interface:
+                                                                                    end.interface_id,
+                                                                            },
+                                                                        },
+                                                                    )}
+                                                                    className="font-normal text-muted-foreground hover:text-foreground"
+                                                                >
+                                                                    {port}
+                                                                </TextLink>
+                                                            ) : (
+                                                                (port ??
+                                                                topologyPortMessage(
+                                                                    selectedEdge,
+                                                                    node,
+                                                                ))
+                                                            )}
                                                             {end?.stale
                                                                 ? ' · Non aggiornata'
                                                                 : ''}
@@ -838,9 +1130,32 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                         {selectedEdge.cable_ids.length > 0 && (
                                             <p className="text-sm">
                                                 Cablaggi:{' '}
-                                                {selectedEdge.cable_ids
-                                                    .map((id) => `C-${id}`)
-                                                    .join(', ')}
+                                                {selectedEdge.cable_ids.map(
+                                                    (id, index) => (
+                                                        <Fragment key={id}>
+                                                            {index > 0 && ', '}
+                                                            {edgeRackId ? (
+                                                                <TextLink
+                                                                    href={rackShow(
+                                                                        {
+                                                                            ...route,
+                                                                            rack: edgeRackId,
+                                                                        },
+                                                                        {
+                                                                            query: {
+                                                                                cable: id,
+                                                                            },
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    C-{id}
+                                                                </TextLink>
+                                                            ) : (
+                                                                `C-${id}`
+                                                            )}
+                                                        </Fragment>
+                                                    ),
+                                                )}
                                             </p>
                                         )}
                                         {selectedEdge.suggestion &&
@@ -867,146 +1182,6 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                     </Link>
                                                 </Button>
                                             )}
-                                        {selectedEdge.kind === 'documented' &&
-                                            (() => {
-                                                const rackId =
-                                                    byId.get(
-                                                        selectedEdge.source,
-                                                    )?.rack?.id ??
-                                                    byId.get(
-                                                        selectedEdge.target,
-                                                    )?.rack?.id;
-                                                return rackId ? (
-                                                    <Button
-                                                        variant="outline"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={rackShow({
-                                                                ...route,
-                                                                rack: rackId,
-                                                            })}
-                                                        >
-                                                            Apri Rack
-                                                            <ArrowUpRight data-icon="inline-end" />
-                                                        </Link>
-                                                    </Button>
-                                                ) : null;
-                                            })()}
-                                        {selectedEdge.evidence.length > 0 && (
-                                            <>
-                                                <Separator />
-                                                <h4 className="text-sm font-medium">
-                                                    Osservazioni
-                                                </h4>
-                                                {selectedEdge.evidence.map(
-                                                    (evidence, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className="flex flex-col gap-2 text-sm"
-                                                        >
-                                                            <p className="font-medium">
-                                                                {
-                                                                    evidence.source
-                                                                }
-                                                                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                                                    {evidence.protocols
-                                                                        .join(
-                                                                            ' / ',
-                                                                        )
-                                                                        .toUpperCase() ||
-                                                                        'Protocollo non disponibile'}
-                                                                </span>
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {evidence.seen_at
-                                                                    ? formatDateTime(
-                                                                          evidence.seen_at,
-                                                                      )
-                                                                    : 'Data non disponibile'}
-                                                                {evidence.state ===
-                                                                'missing'
-                                                                    ? ' · Non più rilevata'
-                                                                    : evidence.stale
-                                                                      ? ' · Non aggiornata'
-                                                                      : ''}
-                                                            </p>
-                                                            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-xs">
-                                                                {evidence.inventory_match && (
-                                                                    <>
-                                                                        <dt className="text-muted-foreground">
-                                                                            Associazione
-                                                                        </dt>
-                                                                        <dd>
-                                                                            {evidence.inventory_match ===
-                                                                            'external_id'
-                                                                                ? 'Identità UniFi'
-                                                                                : evidence.inventory_match ===
-                                                                                    'name_model'
-                                                                                  ? 'Nome e modello'
-                                                                                  : 'Nome e MAC'}
-                                                                        </dd>
-                                                                    </>
-                                                                )}
-                                                                {selectedEdge.kind !==
-                                                                    'logical' && (
-                                                                    <>
-                                                                        <dt className="text-muted-foreground">
-                                                                            Locale
-                                                                        </dt>
-                                                                        <dd className="break-words">
-                                                                            {evidence.local_port ??
-                                                                                '—'}
-                                                                        </dd>
-                                                                        <dt className="text-muted-foreground">
-                                                                            Remota
-                                                                        </dt>
-                                                                        <dd className="break-words">
-                                                                            {evidence.remote_port ??
-                                                                                '—'}
-                                                                        </dd>
-                                                                    </>
-                                                                )}
-                                                                {evidence.chassis_id && (
-                                                                    <>
-                                                                        <dt className="text-muted-foreground">
-                                                                            Chassis
-                                                                        </dt>
-                                                                        <dd className="break-words">
-                                                                            {
-                                                                                evidence.chassis_id
-                                                                            }
-                                                                        </dd>
-                                                                    </>
-                                                                )}
-                                                                <dt className="text-muted-foreground">
-                                                                    Sorgente
-                                                                </dt>
-                                                                <dd className="break-words">
-                                                                    {selectedEdge.kind ===
-                                                                    'logical'
-                                                                        ? 'Uplink UniFi'
-                                                                        : evidence.menu}
-                                                                </dd>
-                                                                {evidence.lldp_seen_at && (
-                                                                    <>
-                                                                        <dt className="text-muted-foreground">
-                                                                            Lettura
-                                                                            LLDP
-                                                                        </dt>
-                                                                        <dd>
-                                                                            {formatDateTime(
-                                                                                evidence.lldp_seen_at,
-                                                                            )}
-                                                                        </dd>
-                                                                    </>
-                                                                )}
-                                                            </dl>
-                                                        </div>
-                                                    ),
-                                                )}
-                                            </>
-                                        )}
                                     </div>
                                 )}
                             </>

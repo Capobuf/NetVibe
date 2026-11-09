@@ -84,11 +84,34 @@ class TopologyTest extends TestCase
         $this->assertNull($partial['b']);
         $this->assertNull($partial['suggestion']);
         $source->update(['data' => [...$source->data, 'identity' => 'Unknown', 'lldp' => null]]);
+        // A MAC documented on exactly one inventory interface identifies the device without its name.
+        $this->assertCount(2, (new Topology)->forSite($this->site)['nodes']);
+        $this->remote->interfaces()->update(['mac_address' => null]);
         $graph = (new Topology)->forSite($this->site);
         $this->assertCount(3, $graph['nodes']);
         $this->assertCount(1, array_filter($graph['edges'], fn ($edge) => $edge['kind'] === 'partial'));
         $this->assertDatabaseCount('devices', 2);
         Http::assertNothingSent();
+    }
+
+    public function test_nic_lldp_matches_a_mac_documented_on_one_interface_and_only_a_port_mac_resolves_the_port(): void
+    {
+        $mac = $this->remote->interfaces()->sole()->mac_address;
+        $source = $this->neighbor($this->local, $this->remote, ['identity' => 'Broadcom NIC', 'lldp' => [
+            'lldp-system-name' => 'Broadcom NIC', 'lldp-chassis-id' => $mac, 'lldp-chassis-id-subtype' => 'mac-address',
+            'lldp-port-id' => $mac, 'lldp-port-id-subtype' => 'mac-address',
+        ]]);
+        $edge = (new Topology)->forSite($this->site)['edges'][0];
+        $this->assertSame('device:'.$this->remote->id, $edge['target']);
+        $this->assertSame('interface_mac', $edge['evidence'][0]['inventory_match']);
+        $this->assertSame('discovered', $edge['kind']);
+        $this->assertSame(str_repeat('a', 32), $edge['b']['connector_id']);
+        // A chassis MAC may belong to another port: the device is known, the cabled port is not.
+        $source->update(['data' => [...$source->data, 'lldp' => [...$source->data['lldp'], 'lldp-port-id' => 'x', 'lldp-port-id-subtype' => 'local']]]);
+        $edge = (new Topology)->forSite($this->site)['edges'][0];
+        $this->assertSame('device:'.$this->remote->id, $edge['target']);
+        $this->assertSame('partial', $edge['kind']);
+        $this->assertNull($edge['b']);
     }
 
     public function test_neighbor_without_inventory_mac_matches_only_a_unique_exact_name_and_model_in_its_site(): void

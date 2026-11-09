@@ -16,7 +16,7 @@ import {
 } from '@/components/devices/snipe-it-import';
 import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
-import { CopyValue } from '@/components/copy-value';
+import { DeviceIps } from '@/components/devices/device-ips';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -286,50 +286,7 @@ function DeviceList({
                                     </TextLink>
                                 ) : c === 'ips' ? (
                                     d.ips?.length ? (
-                                        <div className="flex items-center gap-2 whitespace-nowrap tabular-nums">
-                                            <CopyValue
-                                                value={d.ips[0]}
-                                                className="-ml-2 whitespace-nowrap tabular-nums"
-                                            />
-                                            {d.ips.length > 1 ? (
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            type="button"
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            aria-label={`Mostra tutti i ${d.ips.length} IP documentati di ${d.name}`}
-                                                        >
-                                                            +{d.ips.length - 1}
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent
-                                                        align="end"
-                                                        className="flex flex-col gap-3"
-                                                        aria-label={`IP documentati di ${d.name}`}
-                                                    >
-                                                        <PopoverHeader>
-                                                            <PopoverTitle>
-                                                                IP documentati (
-                                                                {d.ips.length})
-                                                            </PopoverTitle>
-                                                        </PopoverHeader>
-                                                        <ul className="max-h-64 overflow-y-auto">
-                                                            {d.ips.map((ip) => (
-                                                                <li key={ip}>
-                                                                    <CopyValue
-                                                                        value={
-                                                                            ip
-                                                                        }
-                                                                        className="w-full tabular-nums"
-                                                                    />
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            ) : null}
-                                        </div>
+                                        <DeviceIps ips={d.ips} name={d.name} />
                                     ) : (
                                         <span className="text-muted-foreground">
                                             —

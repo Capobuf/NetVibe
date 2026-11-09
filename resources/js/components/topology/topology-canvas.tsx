@@ -58,6 +58,7 @@ export function TopologyCanvas({
     onSelect,
     api,
     onZoom,
+    endpoints = true,
 }: {
     nodes: TopologyNode[];
     models: Record<number, TopologyModel>;
@@ -68,6 +69,7 @@ export function TopologyCanvas({
     onSelect: (selection: TopologySelection, anchor?: PortAnchor) => void;
     api: Ref<TopologyCanvasApi>;
     onZoom: (zoom: number) => void;
+    endpoints?: boolean;
 }) {
     const container = useRef<HTMLDivElement>(null);
     const stage = useRef<Konva.Stage>(null);
@@ -167,6 +169,28 @@ export function TopologyCanvas({
                 );
             },
         });
+    }
+    // Devices anchor the details card to their whole box, so it opens beside them.
+    function selectNode(id: string, target: Konva.Node) {
+        const element = container.current;
+        if (!element) return;
+        element.focus({ preventScroll: true });
+        onSelect(
+            { kind: 'node', id },
+            {
+                contextElement: element,
+                getBoundingClientRect: () => {
+                    const bounds = element.getBoundingClientRect();
+                    const box = target.getClientRect();
+                    return new DOMRect(
+                        bounds.left + box.x,
+                        bounds.top + box.y,
+                        box.width,
+                        box.height,
+                    );
+                },
+            },
+        );
     }
     const colors = dark
         ? {
@@ -509,10 +533,10 @@ export function TopologyCanvas({
                                 draggable={!rackLayout}
                                 onDragStart={(event) => {
                                     event.cancelBubble = true;
-                                    selectAtPointer(
-                                        { kind: 'node', id: node.id },
-                                        event.currentTarget,
-                                    );
+                                    container.current?.focus({
+                                        preventScroll: true,
+                                    });
+                                    onSelect({ kind: 'node', id: node.id });
                                 }}
                                 onDragMove={(event) => {
                                     event.cancelBubble = true;
@@ -527,17 +551,11 @@ export function TopologyCanvas({
                                 }}
                                 onClick={(event) => {
                                     event.cancelBubble = true;
-                                    selectAtPointer(
-                                        { kind: 'node', id: node.id },
-                                        event.currentTarget,
-                                    );
+                                    selectNode(node.id, event.currentTarget);
                                 }}
                                 onTap={(event) => {
                                     event.cancelBubble = true;
-                                    selectAtPointer(
-                                        { kind: 'node', id: node.id },
-                                        event.currentTarget,
-                                    );
+                                    selectNode(node.id, event.currentTarget);
                                 }}
                                 onMouseEnter={() => {
                                     if (container.current)
@@ -662,7 +680,8 @@ export function TopologyCanvas({
                     })}
                 </Layer>
             </Stage>
-            {selectedEdge &&
+            {endpoints &&
+                selectedEdge &&
                 selectedEdge.kind !== 'logical' &&
                 (['source', 'target'] as const).map((side) => {
                     const node = nodes.find(

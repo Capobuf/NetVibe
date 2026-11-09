@@ -2,6 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { AlertTriangle, Link2, Search } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
+import { useSiteContext } from '@/hooks/use-site-context';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,7 @@ export function SnipeItImport({
     site: Site;
     data?: SnipeItImportData | null;
 }) {
+    const context = useSiteContext(company, site);
     const [open, setOpen] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -211,7 +213,7 @@ export function SnipeItImport({
                             <SnipeItMark className="size-5" />
                             Importa da Snipe-IT
                         </SheetTitle>
-                        <SheetDescription>Sede {site.name}</SheetDescription>
+                        <SheetDescription>{context}</SheetDescription>
                     </SheetHeader>
                     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
                         {error ? (

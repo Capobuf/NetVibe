@@ -20,6 +20,8 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property string $email
  * @property bool $is_superadmin
+ * @property bool $subnet_hide_free
+ * @property bool $subnet_table_separators
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -51,6 +53,8 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     {
         return [
             'is_superadmin' => 'boolean',
+            'subnet_hide_free' => 'boolean',
+            'subnet_table_separators' => 'boolean',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',

@@ -10,6 +10,7 @@ import {
 import { useSiteContext } from '@/hooks/use-site-context';
 import { NetworkExclusionAction } from '@/components/networks/network-exclusion';
 import { show as vlanShow } from '@/routes/companies/sites/vlans';
+import { update as updatePreferences } from '@/routes/preferences';
 import {
     Empty,
     EmptyHeader,
@@ -153,7 +154,24 @@ export default function SubnetShow({
     useEffect(() => setSearch(query.search), [query.search]);
     const dialogOpener = useRef<HTMLElement | null>(null);
     const createdIp = useRef<string | null>(null);
-    const { columns, setColumns, separators, setSeparators } =
+    const [separators, setSeparators] = useState(
+        auth.user.subnet_table_separators,
+    );
+    // The grid choice lives on the profile, so it follows the user across browsers.
+    function saveSeparators(value: boolean) {
+        setSeparators(value);
+        router.patch(
+            updatePreferences.url(),
+            { subnet_table_separators: value },
+            {
+                only: ['auth'],
+                preserveState: true,
+                preserveScroll: true,
+                onError: () => setSeparators(!value),
+            },
+        );
+    }
+    const { columns, setColumns } =
         useTablePreferences<IpColumn['id']>(
             'ip-addresses',
             [
@@ -170,7 +188,6 @@ export default function SubnetShow({
                 { id: 'status', label: 'Stato', visible: true },
                 { id: 'tags', label: 'Tag', visible: true },
             ],
-            true,
         );
     const sourcesByIp = new Map<string, MikrotikSource[]>();
     for (const source of mikrotikSources) {
@@ -620,7 +637,7 @@ export default function SubnetShow({
                                             columns={columns}
                                             onChange={setColumns}
                                             separators={separators}
-                                            onSeparatorsChange={setSeparators}
+                                            onSeparatorsChange={saveSeparators}
                                         />
                                     </TableHead>
                                 </TableRow>

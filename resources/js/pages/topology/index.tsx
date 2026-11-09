@@ -600,9 +600,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                             !!anchor &&
                                                 (next?.kind === 'node' ||
                                                     edges.some(
-                                                    (edge) =>
-                                                        edge.id === next.id &&
-                                                        edge.kind === 'logical',
+                                                        (edge) =>
+                                                            edge.id ===
+                                                                next?.id &&
+                                                            edge.kind ===
+                                                                'logical',
                                                     )),
                                         );
                                         setSelection(next);

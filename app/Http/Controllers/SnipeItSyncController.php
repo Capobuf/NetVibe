@@ -27,8 +27,16 @@ class SnipeItSyncController extends Controller
 
     public function refresh(Company $company): RedirectResponse
     {
-        $this->synchronizer->refresh($company);
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Sincronizzazione completata.']);
+        // Assets created by this run get ids above the current maximum.
+        $lastId = (int) SnipeItAsset::max('id');
+        $new = $this->synchronizer->refresh($company)->assets()->where('present', true)
+            ->where('id', '>', $lastId)->pluck('id');
+        Inertia::flash('snipeItNew', $new->all());
+        Inertia::flash('toast', ['type' => 'success', 'message' => match ($new->count()) {
+            0 => 'Sincronizzazione completata.',
+            1 => 'Sincronizzazione completata · 1 nuovo asset.',
+            default => "Sincronizzazione completata · {$new->count()} nuovi asset.",
+        }]);
 
         return back();
     }

@@ -21,6 +21,7 @@ use App\Models\UnifiObservation;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -494,17 +495,15 @@ class SnipeItSync
         if ($record && SnipeItAsset::where('ip_address_id', $record->id)->whereKeyNot($asset->id)->exists()) {
             return "IP {$ip}: già collegato a un altro asset Snipe-IT.";
         }
-        $sources = MikrotikSource::blocking($subnet->site_id)->where('address', $address)->get();
-        $sourceConflict = $sources->contains(fn ($source) => ($source->kind === 'address' && $source->device_id !== $device?->id)
-            || ($mac !== null && ! empty($source->data['mac']) && MacAddress::normalize($source->data['mac']) !== $mac));
-        $unifiConflict = $this->unifiConflict($subnet->site_id, $address, $mac, $device);
+        $sourceConflicts = MikrotikSource::blocking($subnet->site_id)->where('address', $address)->with('device')->get()
+            ->filter(fn ($source) => ($source->kind === 'address' && $source->device_id !== $device?->id)
+                || ($mac !== null && ! empty($source->data['mac']) && MacAddress::normalize($source->data['mac']) !== $mac));
+        $unifiConflicts = $this->unifiConflicts($subnet->site_id, $address, $mac, $device);
         if (! $device) {
             // Document the client independently; source discrepancies never assign a technical device.
             $record ??= $subnet->ipAddresses()->make(['address' => $address]);
-            $problems = array_keys(array_filter([
-                "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT." => $sourceConflict,
-                "IP {$ip}: i dati UniFi sono in conflitto con Snipe-IT." => $unifiConflict,
-            ]));
+            $problems = [];
+            $kept = [];
             $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
             $values = ['hostname' => $name, 'mac_address' => $mac];
             $old = ['hostname' => $previous['name'] ?? $previous['asset_tag'] ?? null, 'mac_address' => MacAddress::normalize($previous['network']['mac'] ?? null)];
@@ -513,32 +512,36 @@ class SnipeItSync
                     continue;
                 }
                 if (mb_strlen($value) > ($field === 'hostname' ? 255 : 17)) {
-                    $problems[] = "IP {$ip}: nome o MAC troppo lungo in Snipe-IT.";
+                    $problems[] = 'Nome o MAC troppo lungo in Snipe-IT.';
                 } elseif ($record->device_id) {
-                    $problems[] = "IP {$ip}: già associato a un dispositivo tecnico. Dati documentati conservati.";
+                    $problems[] = 'Associato a un dispositivo tecnico: hostname e MAC non aggiornati in NetVibe.';
                 } elseif (! $record->exists || ($asset->ip_address_id !== $record->id && blank($record->$field)) || $old[$field] === $record->$field) {
                     $record->$field = $value;
                 } elseif ($value !== $record->$field) {
-                    $label = $field === 'hostname' ? 'Hostname' : 'MAC';
-                    $problems[] = "IP {$ip}: {$label} documentato diverso da Snipe-IT; valore conservato.";
+                    $kept[] = $field === 'hostname' ? 'hostname' : 'MAC';
                 }
             }
             $record->save();
             $asset->update(['ip_address_id' => $record->id]);
+            $rows = [];
+            if ($kept || $sourceConflicts->isNotEmpty() || $unifiConflicts->isNotEmpty()) {
+                $outcome = $kept ? ucfirst(Arr::join($kept, ', ', ' e ')).(count($kept) === 1 ? ' non aggiornato' : ' non aggiornati').' in NetVibe.' : '';
+                $problems[] = $this->mismatch(['NetVibe' => $kept, 'MikroTik' => $sourceConflicts, 'UniFi' => $unifiConflicts], $outcome);
+                $rows = $this->comparison($asset, $mac, $record, $sourceConflicts, $unifiConflicts);
+            }
 
-            return implode(' ', array_unique($problems)) ?: null;
+            return $problems ? implode("\n", ["IP {$ip}", ...array_unique($problems), ...$rows]) : null;
         }
         if ($record?->device_id && $record->device_id !== $device->id) {
             return "IP {$ip}: già associato a un altro dispositivo in NetVibe.";
         }
-        if ($mac !== null && $record?->mac_address && $record->mac_address !== $mac) {
-            return "IP {$ip}: il MAC documentato in NetVibe è diverso da Snipe-IT.";
-        }
-        if ($sourceConflict) {
-            return "IP {$ip}: i dati MikroTik sono in conflitto con Snipe-IT.";
-        }
-        if ($unifiConflict) {
-            return "IP {$ip}: i dati UniFi sono in conflitto con Snipe-IT.";
+        $macMismatch = $mac !== null && $record?->mac_address && $record->mac_address !== $mac;
+        if ($macMismatch || $sourceConflicts->isNotEmpty() || $unifiConflicts->isNotEmpty()) {
+            return implode("\n", [
+                "IP {$ip}",
+                $this->mismatch(['NetVibe' => $macMismatch, 'MikroTik' => $sourceConflicts, 'UniFi' => $unifiConflicts], "IP non assegnato a {$device->name}."),
+                ...$this->comparison($asset, $mac, $record, $sourceConflicts, $unifiConflicts),
+            ]);
         }
         try {
             // A shared interface MAC may require confirmation; roll back all its changes in that case.
@@ -560,12 +563,47 @@ class SnipeItSync
         return $subnet->isExcluded($address) ? "IP {$ip} documentato in un intervallo escluso dai suggerimenti." : null;
     }
 
+    /** One sentence naming the sources that disagree with Snipe-IT and what was not applied because of it. */
+    private function mismatch(array $sources, string $outcome): string
+    {
+        $parties = array_keys(array_filter($sources, fn ($value) => $value instanceof Collection ? $value->isNotEmpty() : (bool) $value));
+
+        return trim('Snipe-IT non corrisponde a '.Arr::join($parties, ', ', ' e ').'. '.$outcome);
+    }
+
+    /** Tab-separated "source, hostname, MAC" lines: the UI renders them as a comparison table. */
+    private function comparison(SnipeItAsset $asset, ?string $mac, ?IpAddress $record, Collection $sources, Collection $unifi): array
+    {
+        $row = fn (string $label, ?string $hostname, ?string $mac) => implode("\t", [$label, $hostname ?: '—', MacAddress::normalize($mac) ?? '—']);
+        $name = $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'];
+        $rows = [$row('Snipe-IT', $name, $mac)];
+        // NetVibe matters only when its documentation differs from what Snipe-IT declares.
+        if ($record && (filled($record->hostname) || filled($record->mac_address))
+            && [$record->hostname, $record->mac_address] !== [$name, $mac]) {
+            $rows[] = $row('NetVibe', $record->hostname, $record->mac_address);
+        }
+        // A lease and an ARP entry of one router describe the same client: show it once, with any observed hostname.
+        $clients = $sources->where('kind', '!=', 'address')->groupBy(fn ($source) => $source->device->name."\t".MacAddress::normalize($source->data['mac'] ?? null));
+        foreach ($clients as $group) {
+            $rows[] = $row("MikroTik {$group->first()->device->name}", $group->pluck('data.hostname_observed')->filter()->first(), $group->first()->data['mac'] ?? null);
+        }
+        foreach ($sources->where('kind', 'address') as $source) {
+            // A configured address belongs to the router interface itself, not to a client.
+            $rows[] = "MikroTik {$source->device->name}\tIP dell’interfaccia {$source->data['interface']}";
+        }
+        foreach ($unifi as $observation) {
+            $rows[] = $row("UniFi {$observation->unifiSite->name}", $observation->data['hostname_observed'] ?? $observation->data['name'] ?? null, $observation->data['mac'] ?? null);
+        }
+
+        return array_values(array_unique($rows));
+    }
+
     /** Only current clients and devices of readable UniFi sites are comparable facts: a different MAC or mapped device. */
-    private function unifiConflict(int $siteId, int $address, ?string $mac, ?Device $device): bool
+    private function unifiConflicts(int $siteId, int $address, ?string $mac, ?Device $device): Collection
     {
         return UnifiObservation::forSite($siteId)->where('address', $address)->whereIn('kind', ['client', 'device'])
             ->where('state', 'current')->with('unifiSite.unifiConnection')->get()->reject->stale()
-            ->contains(function ($observation) use ($mac, $device) {
+            ->filter(function ($observation) use ($mac, $device) {
                 if ($mac !== null && ! empty($observation->data['mac']) && MacAddress::normalize($observation->data['mac']) !== $mac) {
                     return true;
                 }

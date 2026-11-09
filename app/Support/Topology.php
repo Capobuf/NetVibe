@@ -273,7 +273,18 @@ class Topology
                 continue;
             }
             if ($aCable || $bCable) {
-                $edge['issues'][] = 'Terminazioni già documentate su altri cavi: '.implode(', ', array_map(fn ($id) => 'C-'.$id, $edge['cable_ids'])).'. Verifica l’eventuale percorso intermedio.';
+                // Name what the documented cable says, so the technician can compare it with the observed link.
+                $documented = [];
+                foreach ([[$a, $aCable], [$b, $bCable]] as [$end, $cableId]) {
+                    if (! $cableId) {
+                        continue;
+                    }
+                    $other = $cables->firstWhere('id', $cableId)->ends
+                        ->first(fn ($cableEnd) => $cableEnd->device_id !== $end['device_id'] || $cableEnd->connector_id !== $end['connector_id']);
+                    $documented[] = $this->portName($devices[$end['device_id']], $end['connector_id'], $ports)
+                        .' è collegata con C-'.$cableId.' a '.$this->portName($devices[$other->device_id], $other->connector_id, $ports).'.';
+                }
+                $edge['issues'][] = 'Diverso dalla documentazione: '.implode(' ', array_unique($documented));
 
                 continue;
             }
@@ -315,6 +326,11 @@ class Topology
 
         return $source->state !== 'current' || ! $connection?->activated_at
             || $source->generation !== $connection->source_generation || $connection->sync_status !== 'ok';
+    }
+
+    private function portName(Device $device, string $connector, array $ports): string
+    {
+        return $device->name.' · '.$this->documentedEnd($device, $connector, $ports)['label'];
     }
 
     private function documentedEnd(Device $device, string $connector, array $ports): array

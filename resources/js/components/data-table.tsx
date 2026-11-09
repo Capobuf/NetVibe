@@ -34,7 +34,6 @@ export function DataTable<
     isRowClickable,
     rowOpensDialog = true,
     filters,
-    toolbarStart,
     headerActions,
     bulkActions,
     empty = 'Nessun risultato',
@@ -55,7 +54,6 @@ export function DataTable<
     isRowClickable?: (row: Row) => boolean;
     rowOpensDialog?: boolean;
     filters?: ReactNode;
-    toolbarStart?: ReactNode;
     headerActions?: ReactNode;
     bulkActions?: (rows: Row[], clearSelection: () => void) => ReactNode;
     empty?: string;
@@ -108,7 +106,6 @@ export function DataTable<
     return (
         <div className="flex min-w-0 flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-                {toolbarStart}
                 <TableSearch
                     value={search}
                     onChange={changeSearch}

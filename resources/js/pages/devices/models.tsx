@@ -149,147 +149,147 @@ export default function Models({
                     total={models.length}
                     filterKey={[manufacturerId, typeFilter, panelFilter].join()}
                     onRowClick={(m) => openModel(m.id)}
-                    toolbarStart={
-                        canManage ? (
-                            <Tabs
-                                value={tab}
-                                onValueChange={(value) =>
-                                    visit({ tab: value as Props['tab'] })
-                                }
-                            >
-                                <TabsList aria-label="Sezione del catalogo">
-                                    <TabsTrigger value="models">
-                                        <LayoutTemplate />
-                                        Modelli
-                                    </TabsTrigger>
-                                    <TabsTrigger value="manufacturers">
-                                        <Factory />
-                                        Produttori
-                                    </TabsTrigger>
-                                    <TabsTrigger value="types">
-                                        <Shapes />
-                                        Tipi
-                                    </TabsTrigger>
-                                </TabsList>
-                            </Tabs>
-                        ) : null
-                    }
                     filters={
-                        models.length ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                {manufacturerIds.size > 1 ||
-                                manufacturerId !== null ? (
-                                    <Select
-                                        value={String(manufacturerId ?? ALL)}
-                                        onValueChange={(value) =>
-                                            visit({
-                                                manufacturer:
-                                                    value === ALL
-                                                        ? null
-                                                        : Number(value),
-                                            })
-                                        }
-                                    >
-                                        <SelectTrigger
-                                            className="w-48 max-w-full"
-                                            aria-label="Filtra per produttore"
+                        <>
+                            {canManage ? (
+                                <Tabs
+                                    value={tab}
+                                    onValueChange={(value) =>
+                                        visit({ tab: value as Props['tab'] })
+                                    }
+                                >
+                                    <TabsList aria-label="Sezione del catalogo">
+                                        <TabsTrigger value="models">
+                                            <LayoutTemplate />
+                                            Modelli
+                                        </TabsTrigger>
+                                        <TabsTrigger value="manufacturers">
+                                            <Factory />
+                                            Produttori
+                                        </TabsTrigger>
+                                        <TabsTrigger value="types">
+                                            <Shapes />
+                                            Tipi
+                                        </TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                            ) : null}
+                            {models.length ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {manufacturerIds.size > 1 ||
+                                    manufacturerId !== null ? (
+                                        <Select
+                                            value={String(manufacturerId ?? ALL)}
+                                            onValueChange={(value) =>
+                                                visit({
+                                                    manufacturer:
+                                                        value === ALL
+                                                            ? null
+                                                            : Number(value),
+                                                })
+                                            }
                                         >
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectGroup>
-                                                <SelectItem value={ALL}>
-                                                    Tutti i produttori
-                                                </SelectItem>
-                                                {manufacturers
-                                                    .filter(
-                                                        (m) =>
-                                                            manufacturerIds.has(
-                                                                m.id,
-                                                            ) ||
-                                                            m.id ===
-                                                                manufacturerId,
-                                                    )
-                                                    .map((m) => (
+                                            <SelectTrigger
+                                                className="w-48 max-w-full"
+                                                aria-label="Filtra per produttore"
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup>
+                                                    <SelectItem value={ALL}>
+                                                        Tutti i produttori
+                                                    </SelectItem>
+                                                    {manufacturers
+                                                        .filter(
+                                                            (m) =>
+                                                                manufacturerIds.has(
+                                                                    m.id,
+                                                                ) ||
+                                                                m.id ===
+                                                                    manufacturerId,
+                                                        )
+                                                        .map((m) => (
+                                                            <SelectItem
+                                                                key={m.id}
+                                                                value={String(m.id)}
+                                                            >
+                                                                {m.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : null}
+                                    {usedTypes.length > 1 ||
+                                    (usedTypes.length && untyped) ? (
+                                        <Select
+                                            value={typeFilter}
+                                            onValueChange={setTypeFilter}
+                                        >
+                                            <SelectTrigger
+                                                className="w-44 max-w-full"
+                                                aria-label="Filtra per tipo"
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup>
+                                                    <SelectItem value={ALL}>
+                                                        Tutti i tipi
+                                                    </SelectItem>
+                                                    {usedTypes.map((type) => (
                                                         <SelectItem
-                                                            key={m.id}
-                                                            value={String(m.id)}
+                                                            key={type.id}
+                                                            value={String(type.id)}
                                                         >
-                                                            {m.name}
+                                                            {type.name}
                                                         </SelectItem>
                                                     ))}
-                                            </SelectGroup>
-                                        </SelectContent>
-                                    </Select>
-                                ) : null}
-                                {usedTypes.length > 1 ||
-                                (usedTypes.length && untyped) ? (
+                                                    {untyped ? (
+                                                        <SelectItem value={NONE}>
+                                                            Senza tipo
+                                                        </SelectItem>
+                                                    ) : null}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : null}
                                     <Select
-                                        value={typeFilter}
-                                        onValueChange={setTypeFilter}
+                                        value={panelFilter}
+                                        onValueChange={setPanelFilter}
                                     >
                                         <SelectTrigger
                                             className="w-44 max-w-full"
-                                            aria-label="Filtra per tipo"
+                                            aria-label="Filtra per pannello"
                                         >
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectGroup>
                                                 <SelectItem value={ALL}>
-                                                    Tutti i tipi
+                                                    Tutti i pannelli
                                                 </SelectItem>
-                                                {usedTypes.map((type) => (
-                                                    <SelectItem
-                                                        key={type.id}
-                                                        value={String(type.id)}
-                                                    >
-                                                        {type.name}
-                                                    </SelectItem>
-                                                ))}
-                                                {untyped ? (
-                                                    <SelectItem value={NONE}>
-                                                        Senza tipo
-                                                    </SelectItem>
-                                                ) : null}
+                                                <SelectItem value="with">
+                                                    Con pannello
+                                                </SelectItem>
+                                                <SelectItem value="without">
+                                                    Senza pannello
+                                                </SelectItem>
                                             </SelectGroup>
                                         </SelectContent>
                                     </Select>
-                                ) : null}
-                                <Select
-                                    value={panelFilter}
-                                    onValueChange={setPanelFilter}
-                                >
-                                    <SelectTrigger
-                                        className="w-44 max-w-full"
-                                        aria-label="Filtra per pannello"
-                                    >
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value={ALL}>
-                                                Tutti i pannelli
-                                            </SelectItem>
-                                            <SelectItem value="with">
-                                                Con pannello
-                                            </SelectItem>
-                                            <SelectItem value="without">
-                                                Senza pannello
-                                            </SelectItem>
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                                {filtering ? (
-                                    <Button
-                                        variant="ghost"
-                                        onClick={clearFilters}
-                                    >
-                                        Azzera filtri
-                                    </Button>
-                                ) : null}
-                            </div>
-                        ) : null
+                                    {filtering ? (
+                                        <Button
+                                            variant="ghost"
+                                            onClick={clearFilters}
+                                        >
+                                            Azzera filtri
+                                        </Button>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </>
                     }
                     rows={filtered}
                     columns={[

@@ -50,10 +50,6 @@ export const connectorShapes: Record<
     },
     schuko: {
         outline: 'M -18 0 A 18 18 0 1 0 18 0 A 18 18 0 1 0 -18 0 Z',
-        detail: 'M -12 0 A 2.5 2.5 0 1 0 -7 0 A 2.5 2.5 0 1 0 -12 0 Z M 7 0 A 2.5 2.5 0 1 0 12 0 A 2.5 2.5 0 1 0 7 0 Z M -4 -16 H 4 V -13 H -4 Z M -4 13 H 4 V 16 H -4 Z',
-    },
-    schukoBipasso: {
-        outline: 'M -18 0 A 18 18 0 1 0 18 0 A 18 18 0 1 0 -18 0 Z',
         detail: 'M -12 0 A 2.5 2.5 0 1 0 -7 0 A 2.5 2.5 0 1 0 -12 0 Z M -2 0 A 2 2 0 1 0 2 0 A 2 2 0 1 0 -2 0 Z M 7 0 A 2.5 2.5 0 1 0 12 0 A 2.5 2.5 0 1 0 7 0 Z M -4 -16 H 4 V -13 H -4 Z M -4 13 H 4 V 16 H -4 Z',
     },
     dc: {

@@ -44,6 +44,7 @@ import {
     type PointerMotion,
     type Port,
 } from '@/lib/hardware-editor/document';
+import { PortLabelInput } from './port-label-input';
 import { PortSymbol } from './port-symbol';
 import { PanelScene } from './panel-scene';
 import type { Editor, Selection } from './use-editor';
@@ -100,6 +101,8 @@ export function EditorCanvas({
     onChangeBlock,
     onContext,
     onEditLabel,
+    labelEdit,
+    onLabelEditEnd,
     onImageSelect,
     onZoom,
     api,
@@ -113,6 +116,8 @@ export function EditorCanvas({
     onChangeBlock: (options: BlockOptions) => void;
     onContext: (point: Point, selection: Selection) => void;
     onEditLabel: () => void;
+    labelEdit: { typed?: string; menu?: boolean } | null;
+    onLabelEditEnd: () => void;
     onImageSelect: () => void;
     onZoom: (zoom: number) => void;
     api: Ref<CanvasApi>;
@@ -1397,6 +1402,31 @@ export function EditorCanvas({
                     />
                 </Layer>
             </Stage>
+            {labelEdit && e.selected.length === 1 && (
+                <PortLabelInput
+                    key={e.selected[0].id}
+                    editor={e}
+                    typed={labelEdit.typed}
+                    autoFocus={!labelEdit.menu}
+                    onClose={onLabelEditEnd}
+                    style={{
+                        left:
+                            view.x +
+                            (portBounds(e.selected[0]).x +
+                                portBounds(e.selected[0]).width / 2) *
+                                view.zoom,
+                        top:
+                            view.y +
+                            (portBounds(e.selected[0]).y +
+                                portBounds(e.selected[0]).height / 2) *
+                                view.zoom,
+                        width: Math.max(
+                            72,
+                            portBounds(e.selected[0]).width * view.zoom,
+                        ),
+                    }}
+                />
+            )}
             {labelPort && tooltipKey && (
                 <Tooltip
                     open={labelTooltip === tooltipKey}

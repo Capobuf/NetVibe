@@ -16,7 +16,6 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LabelDialog } from '@/components/hardware-editor/editor-dialogs';
 import { BlockPanel } from '@/components/hardware-editor/block-panel';
 import {
     EditorCanvas,
@@ -102,9 +101,10 @@ export default function HardwareEditor({
                 : undefined,
         [block, hasReferenceImage],
     );
-    const [editLabel, setEditLabel] = useState<{ typed?: string } | null>(
-        null,
-    );
+    const [editLabel, setEditLabel] = useState<{
+        typed?: string;
+        menu?: boolean;
+    } | null>(null);
     const [contextPoint, setContextPoint] = useState<Point>({ x: 0, y: 0 });
     const [contextOpen, setContextOpen] = useState(false);
     const [numberMode, setNumberMode] = useState<'quick' | 'click' | null>(
@@ -223,7 +223,7 @@ export default function HardwareEditor({
     };
     const fit = () => canvas.current?.fit();
     const label = () => {
-        setEditLabel({});
+        setEditLabel({ menu: contextOpen });
         setContextOpen(false);
     };
     function add(
@@ -667,6 +667,10 @@ export default function HardwareEditor({
                                         api={canvas}
                                         onZoom={setZoom}
                                         onEditLabel={label}
+                                        labelEdit={editLabel}
+                                        onLabelEditEnd={() =>
+                                            setEditLabel(null)
+                                        }
                                         onImageSelect={properties}
                                         onContext={(point) =>
                                             setContextPoint(point)
@@ -786,14 +790,6 @@ export default function HardwareEditor({
                     event.target.value = '';
                 }}
             />
-            {editLabel && e.selected.length === 1 && (
-                <LabelDialog
-                    key={e.selected[0].id}
-                    editor={e}
-                    typed={editLabel.typed}
-                    onClose={() => setEditLabel(null)}
-                />
-            )}
             {leave && !e.session && (
                 <Dialog
                     open

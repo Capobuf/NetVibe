@@ -115,13 +115,6 @@ export const connectorTypes = {
         color: '#8998aa',
     },
     schuko: {
-        name: 'Schuko',
-        width: 36,
-        height: 36,
-        category: 'ac',
-        color: '#8998aa',
-    },
-    schukoBipasso: {
         name: 'Schuko bipasso',
         width: 36,
         height: 36,

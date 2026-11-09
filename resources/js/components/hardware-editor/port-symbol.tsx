@@ -55,7 +55,7 @@ export function PortSymbol({
                     <Path
                         data={shape.detail}
                         fill={
-                            ['dc', 'ac', 'acC19', 'schuko', 'schukoBipasso'].includes(
+                            ['dc', 'ac', 'acC19', 'schuko'].includes(
                                 port.type,
                             )
                                 ? port.borderColor

@@ -15,13 +15,15 @@ import type { Editor } from './use-editor';
 
 export function LabelDialog({
     editor: e,
+    typed,
     onClose,
 }: {
     editor: Editor;
+    typed?: string;
     onClose: () => void;
 }) {
     const port = e.selected[0];
-    const [label, setLabel] = useState(port?.label ?? '');
+    const [label, setLabel] = useState(typed ?? port?.label ?? '');
     const candidate = updatePorts(
         e.doc,
         e.face,
@@ -58,6 +60,11 @@ export function LabelDialog({
                             value={label}
                             maxLength={40}
                             aria-invalid={!!conflict}
+                            onFocus={(event) => {
+                                // Keep typing after the first character instead of overwriting it.
+                                if (typed)
+                                    event.currentTarget.setSelectionRange(1, 1);
+                            }}
                             onChange={(event) => setLabel(event.target.value)}
                         />
                         {conflict && (

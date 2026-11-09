@@ -102,7 +102,9 @@ export default function HardwareEditor({
                 : undefined,
         [block, hasReferenceImage],
     );
-    const [editLabel, setEditLabel] = useState(false);
+    const [editLabel, setEditLabel] = useState<{ typed?: string } | null>(
+        null,
+    );
     const [contextPoint, setContextPoint] = useState<Point>({ x: 0, y: 0 });
     const [contextOpen, setContextOpen] = useState(false);
     const [numberMode, setNumberMode] = useState<'quick' | 'click' | null>(
@@ -221,7 +223,7 @@ export default function HardwareEditor({
     };
     const fit = () => canvas.current?.fit();
     const label = () => {
-        setEditLabel(true);
+        setEditLabel({});
         setContextOpen(false);
     };
     function add(
@@ -389,6 +391,15 @@ export default function HardwareEditor({
                     kind: 'ports',
                     ids: e.ports.filter((p) => !p.hidden).map((p) => p.id),
                 });
+            } else if (
+                !mod &&
+                !event.altKey &&
+                /^[\p{L}\p{N}]$/u.test(event.key) &&
+                e.selected.length === 1
+            ) {
+                // Typing on a selected port replaces its label, spreadsheet-style.
+                event.preventDefault();
+                setEditLabel({ typed: event.key });
             } else if (
                 event.key === 'Delete' &&
                 (e.selected.length || e.selection.kind === 'image')
@@ -779,7 +790,8 @@ export default function HardwareEditor({
                 <LabelDialog
                     key={e.selected[0].id}
                     editor={e}
-                    onClose={() => setEditLabel(false)}
+                    typed={editLabel.typed}
+                    onClose={() => setEditLabel(null)}
                 />
             )}
             {leave && !e.session && (

@@ -46,8 +46,8 @@ class DeviceController extends Controller
             'view' => $options['view'] ?? 'infrastructure',
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'manufacturers' => $this->catalog(),
-            'snipePending' => $request->user()->is_superadmin
-                ? (SnipeItSync::current($company)?->assets()->where('state', 'site')->where('present', true)->count() ?? 0) : 0,
+            'snipeIt' => $request->user()->is_superadmin && ($sync = SnipeItSync::current($company))?->isActive()
+                ? $sync->only('synced_at') : null,
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()
                 ->select(['id', 'site_id', 'name', 'manufacturer_id', 'device_model_id', 'infrastructure_override', 'image_path'])

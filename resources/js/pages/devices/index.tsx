@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
-import { ArrowRight, Filter } from 'lucide-react';
+import { ArrowRight, Filter, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { UnifiMark } from '@/components/unifi-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
@@ -14,7 +15,6 @@ import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
@@ -24,7 +24,8 @@ import {
     PopoverHeader,
     PopoverTitle,
 } from '@/components/ui/popover';
-import { records as snipeRecords } from '@/routes/companies/settings/integrations/snipe-it';
+import { sync as snipeSync } from '@/routes/companies/settings/integrations/snipe-it';
+import { cn, formatDateTime } from '@/lib/utils';
 import {
     Select,
     SelectContent,
@@ -47,7 +48,7 @@ type Props = {
     site: Site;
     devices: Device[];
     manufacturers: Manufacturer[];
-    snipePending: number;
+    snipeIt: { synced_at: string | null } | null;
     view: DeviceView;
 };
 export default function Devices(props: Props) {
@@ -59,10 +60,11 @@ function DeviceList({
     site,
     devices,
     manufacturers,
-    snipePending,
+    snipeIt,
     view,
 }: Props) {
     const [manufacturer, setManufacturer] = useState('all');
+    const [syncing, setSyncing] = useState(false);
     const [type, setType] = useState('all');
     const activeFilters =
         Number(manufacturer !== 'all') + Number(type !== 'all');
@@ -139,32 +141,49 @@ function DeviceList({
                 <ListPageHeader
                     title="Dispositivi"
                     actions={
-                        <DeviceForm
-                            {...route}
-                            manufacturers={manufacturers}
-                            view={view}
-                        />
+                        <div className="flex items-center gap-2">
+                            {snipeIt ? (
+                                <IconButton
+                                    label={
+                                        snipeIt.synced_at
+                                            ? `Sincronizza Snipe-IT · ultima lettura ${formatDateTime(snipeIt.synced_at)}`
+                                            : 'Sincronizza Snipe-IT'
+                                    }
+                                    variant="ghost"
+                                    disabled={syncing}
+                                    onClick={() =>
+                                        router.post(
+                                            snipeSync.url(company.id),
+                                            {},
+                                            {
+                                                preserveScroll: true,
+                                                onStart: () => setSyncing(true),
+                                                onFinish: () =>
+                                                    setSyncing(false),
+                                                onError: (errors) =>
+                                                    toast.error(
+                                                        errors.sync ??
+                                                            'Sincronizzazione non riuscita.',
+                                                    ),
+                                            },
+                                        )
+                                    }
+                                >
+                                    <RefreshCw
+                                        className={cn(
+                                            syncing && 'animate-spin',
+                                        )}
+                                    />
+                                </IconButton>
+                            ) : null}
+                            <DeviceForm
+                                {...route}
+                                manufacturers={manufacturers}
+                                view={view}
+                            />
+                        </div>
                     }
                 />
-                {snipePending > 0 ? (
-                    <Alert>
-                        <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                            <span>
-                                Snipe-IT · {snipePending} dispositivi da
-                                assegnare
-                            </span>
-                            <Button asChild variant="outline" size="sm">
-                                <Link
-                                    href={snipeRecords(company.id, {
-                                        query: { view: 'sites' },
-                                    })}
-                                >
-                                    Assegna sedi
-                                </Link>
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
                 <Tabs
                     value={view}
                     onValueChange={(value) =>

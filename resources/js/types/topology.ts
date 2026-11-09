@@ -34,7 +34,12 @@ export type TopologyEnd = {
     stale: boolean;
 };
 export type TopologyEvidence = {
-    inventory_match: 'name_mac' | 'name_model' | 'external_id' | null;
+    inventory_match:
+        | 'name_mac'
+        | 'name_model'
+        | 'interface_mac'
+        | 'external_id'
+        | null;
     device_id: number;
     source: string;
     seen_at: string | null;

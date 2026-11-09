@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Cable;
 use App\Models\Device;
+use App\Models\DeviceInterface;
 use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\UnifiDevice;
@@ -34,7 +35,7 @@ class Topology
             ->selectRaw('COUNT(*) as total, MAX(seen_at) as seen_at, MAX(id) as last_id')
             ->groupBy('device_id', 'generation', 'menu')->orderByDesc('seen_at')->orderByDesc('last_id')
             ->get()->filter($inGeneration)->groupBy('device_id');
-        $nodes = $edges = $ports = $names = $macs = $logicalInterfaces = [];
+        $nodes = $edges = $ports = $names = $macs = $interfaceMacs = $logicalInterfaces = [];
         foreach ($devices as $device) {
             $logicalInterfaces[$device->id] = array_unique([
                 ...$device->interfaces->where('kind', 'logical')->pluck('name')->filter()->all(),
@@ -57,6 +58,7 @@ class Topology
             foreach ($device->interfaces as $interface) {
                 if ($mac = MikrotikSnapshot::mac($interface->mac_address)) {
                     $macs[$mac][] = $device->id;
+                    $interfaceMacs[$mac][] = $interface;
                 }
             }
             foreach ($interfaces->get($device->id, collect()) as $source) {
@@ -106,6 +108,8 @@ class Topology
             $remoteMac = MikrotikSnapshot::mac($data['mac'] ?? null);
             $chassis = ($lldp['lldp-chassis-id-subtype'] ?? null) === 'mac-address'
                 ? MikrotikSnapshot::mac($lldp['lldp-chassis-id'] ?? null) : null;
+            $portMac = ($lldp['lldp-port-id-subtype'] ?? null) === 'mac-address'
+                ? MikrotikSnapshot::mac($lldp['lldp-port-id'] ?? null) : null;
             // Require corroborating inventory data, never a name or MAC alone.
             $macCandidates = array_unique([...($macs[$remoteMac ?? ''] ?? []), ...($macs[$chassis ?? ''] ?? [])]);
             $candidates = array_values(array_intersect($names[$identity ?? ''] ?? [], $macCandidates));
@@ -118,6 +122,21 @@ class Topology
                 if (count($modelCandidates) === 1) {
                     $remote = $devices[$modelCandidates[0]];
                     $inventoryMatch = 'name_model';
+                }
+            }
+            // NIC firmware LLDP agents announce the card, not the host name: a MAC the technician documented
+            // on exactly one inventory interface, claimed by no other device, identifies the remote device.
+            $remoteInterface = null;
+            if (! $remote) {
+                $reported = array_unique(array_filter([$remoteMac, $chassis, $portMac]));
+                $owners = array_values(array_unique(array_merge([], ...array_map(fn ($mac) => $macs[$mac] ?? [], $reported))));
+                $documented = collect($reported)->flatMap(fn ($mac) => $interfaceMacs[$mac] ?? [])->unique('id');
+                if (count($owners) === 1 && $owners[0] !== $device->id && $documented->count() === 1) {
+                    $remote = $devices[$owners[0]];
+                    $inventoryMatch = 'interface_mac';
+                    // Only the port identifier proves the cabled port; a chassis MAC may belong to another port.
+                    $remoteInterface = $portMac && MikrotikSnapshot::mac($documented->first()->mac_address) === $portMac
+                        ? $documented->first() : null;
                 }
             }
             $target = $remote ? 'device:'.$remote->id : 'neighbor:'.$source->id;
@@ -142,7 +161,8 @@ class Topology
             if ($remote && $remoteName && in_array($remoteName, $logicalInterfaces[$remote->id], true)) {
                 continue;
             }
-            $b = $remote && $remoteName ? $this->observedEnd($remote, $interfaces->get($remote->id, collect()), [$remoteName], $ports) : null;
+            $b = $remote && $remoteName ? $this->observedEnd($remote, $interfaces->get($remote->id, collect()), [$remoteName], $ports)
+                : ($remoteInterface ? $this->interfaceEnd($remote, $remoteInterface, $ports) : null);
             $stale = $this->stale($source, $device) || ($lldp && ! ($data['lldp_read'] ?? false))
                 || ($a['stale'] ?? false) || ($b['stale'] ?? false);
             $known = $a && $b && count(array_intersect(['lldp', 'cdp'], $protocols)) > 0;
@@ -152,8 +172,7 @@ class Topology
                 'state' => $source->state, 'stale' => (bool) $stale, 'protocols' => $protocols,
                 'local_port' => $localNames ? implode(',', $localNames) : null, 'remote_port' => $remoteName,
                 'remote_port_description' => $lldp['lldp-port-description'] ?? null,
-                'remote_port_mac' => ($lldp['lldp-port-id-subtype'] ?? null) === 'mac-address'
-                    ? MikrotikSnapshot::mac($lldp['lldp-port-id'] ?? null) : null,
+                'remote_port_mac' => $portMac,
                 'remote_identity' => $identity, 'remote_mac' => $remoteMac,
                 'chassis_id' => $lldp['lldp-chassis-id'] ?? null,
                 'lldp_seen_at' => $data['lldp_seen_at'] ?? null,
@@ -339,11 +358,15 @@ class Topology
         if ($interfaces->count() !== 1) {
             return null;
         }
-        $interface = $interfaces->first();
+
+        return $this->interfaceEnd($device, $interfaces->first(), $ports);
+    }
+
+    private function interfaceEnd(Device $device, DeviceInterface $interface, array $ports): array
+    {
         $connector = $interface->connector_id && $ports[$device->id]->has($interface->connector_id) ? $interface->connector_id : null;
 
-        return ['device_id' => $device->id, 'interface_id' => $interface->id,
-            'connector_id' => $connector,
-            'label' => $interface->name, 'key' => $connector ? $device->id.':'.$connector : $device->id.':documented-interface:'.$interface->id, 'stale' => false];
+        return $connector ? $this->documentedEnd($device, $connector, $ports) : ['device_id' => $device->id, 'interface_id' => $interface->id,
+            'connector_id' => null, 'label' => $interface->name, 'key' => $device->id.':documented-interface:'.$interface->id, 'stale' => false];
     }
 }

@@ -1127,7 +1127,10 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                                                 : evidence.inventory_match ===
                                                                                     'name_model'
                                                                                   ? 'Nome e modello'
-                                                                                  : 'Nome e MAC'}
+                                                                                  : evidence.inventory_match ===
+                                                                                      'interface_mac'
+                                                                                    ? 'MAC interfaccia'
+                                                                                    : 'Nome e MAC'}
                                                                         </dd>
                                                                     </>
                                                                 )}

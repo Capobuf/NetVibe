@@ -220,6 +220,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
         selection?.kind === 'edge'
             ? edges.find((edge) => edge.id === selection.id)
             : undefined;
+    // Cables open in the rack of one of the linked devices, with the cable selected.
+    const edgeRackId = selectedEdge
+        ? (byId.get(selectedEdge.source)?.rack?.id ??
+          byId.get(selectedEdge.target)?.rack?.id)
+        : undefined;
     const connected = selectedNode
         ? edges.filter(
               (edge) =>
@@ -1030,28 +1035,60 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 const node = byId.get(
                                                     selectedEdge[side],
                                                 );
+                                                const port =
+                                                    node &&
+                                                    topologyPortLabel(
+                                                        selectedEdge,
+                                                        node,
+                                                    );
                                                 return (
                                                     <div key={side}>
                                                         <p className="text-sm font-medium break-words">
-                                                            {
-                                                                byId.get(
-                                                                    selectedEdge[
-                                                                        side
-                                                                    ],
-                                                                )?.label
-                                                            }
+                                                            {node?.device_id ? (
+                                                                <TextLink
+                                                                    href={deviceShow(
+                                                                        {
+                                                                            ...route,
+                                                                            device: node.device_id,
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    {node.label}
+                                                                </TextLink>
+                                                            ) : (
+                                                                node?.label
+                                                            )}
                                                         </p>
                                                         <p className="mt-1 text-sm text-muted-foreground">
-                                                            {node
-                                                                ? (topologyPortLabel(
-                                                                      selectedEdge,
-                                                                      node,
-                                                                  ) ??
-                                                                  topologyPortMessage(
-                                                                      selectedEdge,
-                                                                      node,
-                                                                  ))
-                                                                : 'Dispositivo non disponibile'}
+                                                            {!node ? (
+                                                                'Dispositivo non disponibile'
+                                                            ) : port &&
+                                                              node.device_id &&
+                                                              end?.interface_id ? (
+                                                                <TextLink
+                                                                    href={deviceShow(
+                                                                        {
+                                                                            ...route,
+                                                                            device: node.device_id,
+                                                                        },
+                                                                        {
+                                                                            query: {
+                                                                                interface:
+                                                                                    end.interface_id,
+                                                                            },
+                                                                        },
+                                                                    )}
+                                                                    className="font-normal text-muted-foreground hover:text-foreground"
+                                                                >
+                                                                    {port}
+                                                                </TextLink>
+                                                            ) : (
+                                                                (port ??
+                                                                topologyPortMessage(
+                                                                    selectedEdge,
+                                                                    node,
+                                                                ))
+                                                            )}
                                                             {end?.stale
                                                                 ? ' · Non aggiornata'
                                                                 : ''}
@@ -1093,9 +1130,32 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                         {selectedEdge.cable_ids.length > 0 && (
                                             <p className="text-sm">
                                                 Cablaggi:{' '}
-                                                {selectedEdge.cable_ids
-                                                    .map((id) => `C-${id}`)
-                                                    .join(', ')}
+                                                {selectedEdge.cable_ids.map(
+                                                    (id, index) => (
+                                                        <Fragment key={id}>
+                                                            {index > 0 && ', '}
+                                                            {edgeRackId ? (
+                                                                <TextLink
+                                                                    href={rackShow(
+                                                                        {
+                                                                            ...route,
+                                                                            rack: edgeRackId,
+                                                                        },
+                                                                        {
+                                                                            query: {
+                                                                                cable: id,
+                                                                            },
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    C-{id}
+                                                                </TextLink>
+                                                            ) : (
+                                                                `C-${id}`
+                                                            )}
+                                                        </Fragment>
+                                                    ),
+                                                )}
                                             </p>
                                         )}
                                         {selectedEdge.suggestion &&
@@ -1122,32 +1182,6 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                     </Link>
                                                 </Button>
                                             )}
-                                        {selectedEdge.kind === 'documented' &&
-                                            (() => {
-                                                const rackId =
-                                                    byId.get(
-                                                        selectedEdge.source,
-                                                    )?.rack?.id ??
-                                                    byId.get(
-                                                        selectedEdge.target,
-                                                    )?.rack?.id;
-                                                return rackId ? (
-                                                    <Button
-                                                        variant="outline"
-                                                        asChild
-                                                    >
-                                                        <Link
-                                                            href={rackShow({
-                                                                ...route,
-                                                                rack: rackId,
-                                                            })}
-                                                        >
-                                                            Apri Rack
-                                                            <ArrowUpRight data-icon="inline-end" />
-                                                        </Link>
-                                                    </Button>
-                                                ) : null;
-                                            })()}
                                     </div>
                                 )}
                             </>

@@ -15,7 +15,16 @@ export type TopologyNode = {
     rack: { id: number; name: string } | null;
     identity: string | null;
     mac: string | null;
-    indirect: { menu: string; count: number; seen_at: string | null }[];
+    ips: string[];
+    unifi: {
+        state: string | null;
+        ip_address: string | null;
+        mac_address: string | null;
+        firmware_version: string | null;
+        stale: boolean;
+        synced_at: string | null;
+    } | null;
+    indirect:{ menu: string; count: number; seen_at: string | null }[];
 };
 export type TopologyEnd = {
     device_id: number;

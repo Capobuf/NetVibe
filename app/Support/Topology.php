@@ -16,6 +16,7 @@ class Topology
         $devices = $site->devices()->with([
             'model', 'rackItem.rack', 'mikrotikConnection',
             'interfaces' => fn ($query) => $query->without('mikrotikSource'),
+            'ipAddresses' => fn ($query) => $query->select('id', 'device_id', 'address')->orderBy('address'),
         ])->orderBy('name')->orderBy('id')->get()->keyBy('id');
         $inGeneration = fn ($source) => ! $devices[$source->device_id]->mikrotikConnection?->activated_at
             || $source->generation === $devices[$source->device_id]->mikrotikConnection->source_generation;
@@ -44,6 +45,7 @@ class Topology
                 'id' => 'device:'.$device->id, 'device_id' => $device->id, 'label' => $device->name,
                 'model' => $device->model?->name, 'rack' => $rack?->only('id', 'name'), 'identity' => null, 'mac' => null,
                 'model_id' => $device->device_model_id,
+                'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))->all(), 'unifi' => null,
                 'indirect' => $indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
                     'menu' => $menu, 'count' => (int) $items->sum('total'), 'seen_at' => $items->first()->seen_at?->toIso8601String(),
                 ])->values()->all(),
@@ -123,7 +125,7 @@ class Topology
                 $nodes[$target] = [
                     'id' => $target, 'device_id' => null, 'label' => $identity ?: ($remoteMac ?: 'Neighbor non identificato'),
                     'model' => $data['board'] ?? $data['platform'] ?? null, 'rack' => null,
-                    'model_id' => null,
+                    'model_id' => null, 'ips' => [], 'unifi' => null,
                     'identity' => $identity, 'mac' => $remoteMac, 'indirect' => [],
                 ];
             }
@@ -188,6 +190,10 @@ class Topology
             ->with('unifiSite.unifiConnection')->get();
         $byExternalId = $unifi->groupBy(fn ($source) => $source->unifi_site_id.':'.$source->external_id);
         foreach ($unifi as $source) {
+            $nodes['device:'.$source->device_id]['unifi'] = [
+                ...array_intersect_key($source->observed, array_flip(['state', 'ip_address', 'mac_address', 'firmware_version'])),
+                'stale' => $source->stale(), 'synced_at' => $source->synced_at?->toIso8601String(),
+            ];
             $parentId = $source->observed['uplink_device_id'] ?? null;
             $matches = $parentId ? $byExternalId->get($source->unifi_site_id.':'.$parentId, collect()) : collect();
             if ($matches->count() !== 1 || $matches->first()->device_id === $source->device_id) {

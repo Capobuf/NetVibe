@@ -10,11 +10,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceImage } from '@/components/devices/device-image';
+import {
+    SnipeItImport,
+    type SnipeItImportData,
+} from '@/components/devices/snipe-it-import';
 import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
@@ -24,7 +27,6 @@ import {
     PopoverHeader,
     PopoverTitle,
 } from '@/components/ui/popover';
-import { records as snipeRecords } from '@/routes/companies/settings/integrations/snipe-it';
 import {
     Select,
     SelectContent,
@@ -47,7 +49,8 @@ type Props = {
     site: Site;
     devices: Device[];
     manufacturers: Manufacturer[];
-    snipePending: number;
+    snipeIt: boolean;
+    snipeItImport?: SnipeItImportData | null;
     view: DeviceView;
 };
 export default function Devices(props: Props) {
@@ -59,7 +62,8 @@ function DeviceList({
     site,
     devices,
     manufacturers,
-    snipePending,
+    snipeIt,
+    snipeItImport,
     view,
 }: Props) {
     const [manufacturer, setManufacturer] = useState('all');
@@ -139,32 +143,22 @@ function DeviceList({
                 <ListPageHeader
                     title="Dispositivi"
                     actions={
-                        <DeviceForm
-                            {...route}
-                            manufacturers={manufacturers}
-                            view={view}
-                        />
+                        <div className="flex items-center gap-2">
+                            <DeviceForm
+                                {...route}
+                                manufacturers={manufacturers}
+                                view={view}
+                            />
+                            {snipeIt ? (
+                                <SnipeItImport
+                                    company={company}
+                                    site={site}
+                                    data={snipeItImport}
+                                />
+                            ) : null}
+                        </div>
                     }
                 />
-                {snipePending > 0 ? (
-                    <Alert>
-                        <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                            <span>
-                                Snipe-IT · {snipePending} dispositivi da
-                                assegnare
-                            </span>
-                            <Button asChild variant="outline" size="sm">
-                                <Link
-                                    href={snipeRecords(company.id, {
-                                        query: { view: 'sites' },
-                                    })}
-                                >
-                                    Assegna sedi
-                                </Link>
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
                 <Tabs
                     value={view}
                     onValueChange={(value) =>

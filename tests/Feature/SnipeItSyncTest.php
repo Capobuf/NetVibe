@@ -196,6 +196,28 @@ class SnipeItSyncTest extends TestCase
         $this->assertNull(SnipeItAsset::where('external_id', 4)->sole()->device_id);
     }
 
+    public function test_device_list_offers_unlinked_assets_for_import_only_to_superadmins(): void
+    {
+        $this->activate();
+        $model = DeviceModel::sole();
+        $this->site->devices()->create(['name' => 'Device 3', 'manufacturer_id' => $model->manufacturer_id, 'device_model_id' => $model->id]);
+        Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Foreign'])->devices()
+            ->create(['name' => 'Device 2', 'manufacturer_id' => $model->manufacturer_id, 'device_model_id' => $model->id]);
+        $this->server([$this->asset(1), $this->asset(2), $this->asset(3)]);
+        $this->post($this->url('sync'))->assertSessionHasNoErrors()
+            ->assertInertiaFlash('toast.message', 'Sincronizzazione completata · 2 nuovi asset.');
+        $url = route('companies.sites.devices.index', [$this->company, $this->site]);
+        $this->get($url)->assertInertia(fn (Assert $page) => $page->where('snipeIt', true)->missing('snipeItImport')
+            ->reloadOnly('snipeItImport', fn (Assert $reload) => $reload->has('snipeItImport.assets', 2)
+                ->where('snipeItImport.assets.0.name', 'Device 3')->where('snipeItImport.assets.0.candidates.0.name', 'Device 3')
+                // A same-named device of another company is never proposed.
+                ->where('snipeItImport.assets.1.name', 'Device 2')->where('snipeItImport.assets.1.candidates', [])));
+        $user = User::factory()->create(['is_superadmin' => false]);
+        $this->company->users()->attach($user);
+        $this->actingAs($user)->get($url)->assertInertia(fn (Assert $page) => $page->where('snipeIt', false)
+            ->reloadOnly('snipeItImport', fn (Assert $reload) => $reload->where('snipeItImport', null)));
+    }
+
     public function test_partial_reads_keep_the_snapshot_and_missing_assets_keep_the_device(): void
     {
         $this->activate();

@@ -694,7 +694,7 @@ export function EditorCanvas({
         if (e.selection.kind === 'ports' && e.selected.length === 1) {
             const p = e.selected[0];
             const rotation =
-                (((Math.round(node.rotation() / 90) * 90) % 360) + 360) % 360;
+                (((Math.round(node.rotation() / 45) * 45) % 360) + 360) % 360;
             const scale = Math.max(0.2, Math.min(8, node.scaleX()));
             const offset = { x: node.x(), y: node.y() };
             node.position({ x: 0, y: 0 });
@@ -1324,8 +1324,8 @@ export function EditorCanvas({
                     <Transformer
                         ref={transformer}
                         rotateEnabled={e.selection.kind === 'ports'}
-                        rotationSnaps={[0, 90, 180, 270]}
-                        rotationSnapTolerance={45}
+                        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+                        rotationSnapTolerance={22.5}
                         keepRatio={e.selection.kind !== 'shell'}
                         ignoreStroke={e.selection.kind === 'shell'}
                         flipEnabled={false}

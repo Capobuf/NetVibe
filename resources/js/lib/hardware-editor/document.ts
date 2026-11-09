@@ -121,10 +121,10 @@ export const connectorTypes = {
         category: 'ac',
         color: '#8998aa',
     },
-    italian: {
-        name: 'Italiana bipasso',
-        width: 20,
-        height: 34,
+    schukoBipasso: {
+        name: 'Schuko bipasso',
+        width: 36,
+        height: 36,
         category: 'ac',
         color: '#8998aa',
     },
@@ -155,6 +155,12 @@ export const powerLabelPositions = {
     right: 'A destra',
     hidden: 'Nascosta',
 } as const;
+export const rotationChoices = Object.fromEntries(
+    [0, 45, 90, 135, 180, 225, 270, 315].map((degrees) => [
+        degrees,
+        `${degrees}°`,
+    ]),
+);
 export function isPowerConnector(type: ConnectorType): boolean {
     return (
         connectorTypes[type].category === 'ac' ||
@@ -280,13 +286,20 @@ export function makePort(type: ConnectorType, point: Point): Port {
 export function portBounds(port: Port): Bounds {
     const type = connectorTypes[port.type];
     const sideways = port.rotation % 180 !== 0;
-    const width = (sideways ? type.height : type.width) * port.scale;
-    const height = (sideways ? type.width : type.height) * port.scale;
+    // A diagonal port is bounded by the square enclosing its rotated body.
+    const diagonal = (type.width + type.height) * Math.SQRT1_2;
+    const width =
+        (port.rotation % 90 ? diagonal : sideways ? type.height : type.width) *
+        port.scale;
+    const height =
+        (port.rotation % 90 ? diagonal : sideways ? type.width : type.height) *
+        port.scale;
     return { x: port.x - width / 2, y: port.y - height / 2, width, height };
 }
 export function portBodyBounds(port: Port): Bounds {
     const bounds = portBounds(port);
-    if (port.type !== 'rj45' && port.type !== 'console') return bounds;
+    if ((port.type !== 'rj45' && port.type !== 'console') || port.rotation % 90)
+        return bounds;
     // Exclude the RJ45 notch from the area used by labels and badges.
     const sideways = port.rotation % 180 !== 0;
     const angle = (port.rotation * Math.PI) / 180;

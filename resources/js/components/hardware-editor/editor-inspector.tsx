@@ -43,6 +43,7 @@ import {
     powerLabelPositions,
     isPowerConnector,
     portLabelPosition,
+    rotationChoices,
     type Port,
 } from '@/lib/hardware-editor/document';
 import { NumberField, Choice } from './editor-fields';
@@ -177,12 +178,7 @@ export function EditorInspector({
                                     disabled={e.selected.some(e.portLocked)}
                                     label="Orientamento"
                                     value={common('rotation')?.toString() ?? ''}
-                                    choices={{
-                                        0: '0°',
-                                        90: '90°',
-                                        180: '180°',
-                                        270: '270°',
-                                    }}
+                                    choices={rotationChoices}
                                     onChange={(rotation) =>
                                         e.patchPorts({
                                             rotation: Number(rotation),

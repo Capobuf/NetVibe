@@ -88,7 +88,7 @@ export function validateDraft(value: Draft): void {
                 ![p.x, p.y, p.scale, p.rotation].every(finite) ||
                 p.scale < 0.2 ||
                 p.scale > 8 ||
-                ![0, 90, 180, 270].includes(p.rotation) ||
+                ![0, 45, 90, 135, 180, 225, 270, 315].includes(p.rotation) ||
                 (p.group !== null && typeof p.group !== 'string')
             )
                 return fail();

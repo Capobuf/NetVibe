@@ -1,6 +1,6 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { ChevronDown, Factory, LayoutTemplate, Shapes } from 'lucide-react';
+import { Factory, LayoutTemplate, Shapes } from 'lucide-react';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from '@/components/devices/catalog-form';
@@ -10,12 +10,6 @@ import { DataTable } from '@/components/data-table';
 import { ModelSheet, type ModelDevice } from '@/components/devices/model-sheet';
 import { PanelViewer } from '@/components/devices/panel-viewer';
 import { Button } from '@/components/ui/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -30,6 +24,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { index } from '@/routes/device-models';
 import {
     store as storeType,
@@ -134,44 +129,16 @@ export default function Models({
                     icon={LayoutTemplate}
                     actions={
                         canManage ? (
-                            <>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline">
-                                            Produttori e tipi
-                                            <ChevronDown data-icon="inline-end" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem
-                                            onSelect={() =>
-                                                visit({ tab: 'manufacturers' })
-                                            }
-                                        >
-                                            <Factory />
-                                            Produttori
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            onSelect={() =>
-                                                visit({ tab: 'types' })
-                                            }
-                                        >
-                                            <Shapes />
-                                            Tipi
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                <CatalogForm
-                                    key="model"
-                                    title="Nuovo modello"
-                                    types={types}
-                                    manufacturers={manufacturers}
-                                    manufacturerId={manufacturerId}
-                                    action={(manufacturer) =>
-                                        store.form(manufacturer)
-                                    }
-                                />
-                            </>
+                            <CatalogForm
+                                key="model"
+                                title="Nuovo modello"
+                                types={types}
+                                manufacturers={manufacturers}
+                                manufacturerId={manufacturerId}
+                                action={(manufacturer) =>
+                                    store.form(manufacturer)
+                                }
+                            />
                         ) : null
                     }
                 />
@@ -182,6 +149,31 @@ export default function Models({
                     total={models.length}
                     filterKey={[manufacturerId, typeFilter, panelFilter].join()}
                     onRowClick={(m) => openModel(m.id)}
+                    toolbarStart={
+                        canManage ? (
+                            <Tabs
+                                value={tab}
+                                onValueChange={(value) =>
+                                    visit({ tab: value as Props['tab'] })
+                                }
+                            >
+                                <TabsList aria-label="Sezione del catalogo">
+                                    <TabsTrigger value="models">
+                                        <LayoutTemplate />
+                                        Modelli
+                                    </TabsTrigger>
+                                    <TabsTrigger value="manufacturers">
+                                        <Factory />
+                                        Produttori
+                                    </TabsTrigger>
+                                    <TabsTrigger value="types">
+                                        <Shapes />
+                                        Tipi
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        ) : null
+                    }
                     filters={
                         models.length ? (
                             <div className="flex flex-wrap items-center gap-2">

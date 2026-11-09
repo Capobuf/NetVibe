@@ -550,6 +550,12 @@ function SourceTable({
                     ) : undefined
                 }
                 filterKey={`${section}:${type}:${visibility}`}
+                activeFilters={
+                    catalog
+                        ? Number(type !== 'all') +
+                          Number(visibility === 'excluded')
+                        : 0
+                }
                 onRowClick={onSelect}
                 rowOpensDialog={!catalog}
                 searchLabel={

@@ -26,6 +26,15 @@ class ProfileController extends Controller
         ]);
     }
 
+    public function updatePreferences(Request $request): RedirectResponse
+    {
+        $request->user()->forceFill($request->validate([
+            'subnet_table_separators' => ['required', 'boolean'],
+        ]))->save();
+
+        return back();
+    }
+
     /**
      * Update the user's profile information.
      */

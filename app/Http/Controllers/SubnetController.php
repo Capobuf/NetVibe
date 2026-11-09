@@ -69,7 +69,11 @@ class SubnetController extends Controller
             'ip_address' => ['sometimes', 'integer', 'min:1'],
             'focus_ip' => ['sometimes', 'ipv4'],
         ]);
-        $hideFree = (bool) ($options['hide_free'] ?? false);
+        // An explicit toggle is remembered on the profile; otherwise the saved choice applies.
+        if (isset($options['hide_free'])) {
+            $request->user()->forceFill(['subnet_hide_free' => (bool) $options['hide_free']])->save();
+        }
+        $hideFree = $request->user()->subnet_hide_free;
         $search = $options['search'] ?? '';
         $sort = $options['sort'] ?? null;
         $direction = $sort === null ? 'asc' : ($options['direction'] ?? 'asc');

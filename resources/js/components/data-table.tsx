@@ -1,10 +1,17 @@
+import { ListFilter } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { IconButton } from '@/components/icon-button';
 import { TableColumns, type TableColumn } from '@/components/table-columns';
 import { TableSortHead } from '@/components/table-sort-head';
 import { TableSearch } from '@/components/table-search';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
 import { useTablePagination } from '@/hooks/use-table-pagination';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { sortTableRows, type TableSort } from '@/lib/table-sort';
@@ -34,6 +41,8 @@ export function DataTable<
     isRowClickable,
     rowOpensDialog = true,
     filters,
+    activeFilters = 0,
+    tabs,
     headerActions,
     bulkActions,
     empty = 'Nessun risultato',
@@ -54,6 +63,8 @@ export function DataTable<
     isRowClickable?: (row: Row) => boolean;
     rowOpensDialog?: boolean;
     filters?: ReactNode;
+    activeFilters?: number;
+    tabs?: ReactNode;
     headerActions?: ReactNode;
     bulkActions?: (rows: Row[], clearSelection: () => void) => ReactNode;
     empty?: string;
@@ -105,14 +116,25 @@ export function DataTable<
     }
     return (
         <div className="flex min-w-0 flex-col gap-4">
-            <div className="flex flex-wrap items-center gap-3">
+            <div
+                className={cn(
+                    'flex flex-wrap items-center gap-3',
+                    // Three tracks keep the tabs centred on the table while the search stays on their left.
+                    tabs &&
+                        'sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]',
+                )}
+            >
                 <TableSearch
                     value={search}
                     onChange={changeSearch}
                     total={total}
                     label={searchLabel}
                 />
-                {filters}
+                {tabs ? (
+                    <div className="flex basis-full justify-center sm:basis-auto">
+                        {tabs}
+                    </div>
+                ) : null}
                 {bulkActions && selected.length > 0 ? (
                     <div className="flex flex-wrap items-center gap-2">
                         <span role="status" className="text-sm tabular-nums">
@@ -182,6 +204,36 @@ export function DataTable<
                             <TableHead className="w-16 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                     {headerActions}
+                                    {filters ? (
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <IconButton
+                                                    label={
+                                                        activeFilters
+                                                            ? `Filtri, ${activeFilters} attivi`
+                                                            : 'Filtri'
+                                                    }
+                                                    className="relative"
+                                                >
+                                                    <ListFilter />
+                                                    {activeFilters ? (
+                                                        <span
+                                                            aria-hidden
+                                                            className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground tabular-nums"
+                                                        >
+                                                            {activeFilters}
+                                                        </span>
+                                                    ) : null}
+                                                </IconButton>
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                                align="end"
+                                                className="flex w-64 flex-col gap-2"
+                                            >
+                                                {filters}
+                                            </PopoverContent>
+                                        </Popover>
+                                    ) : null}
                                     <TableColumns
                                         columns={availableColumns}
                                         onChange={(next) => {

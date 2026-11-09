@@ -191,19 +191,63 @@ function problemText(row: Row) {
     return row.problem ?? row.model_problem ?? 'Non più presente in Snipe-IT';
 }
 
-// Multi-line problems carry a heading (the IP) followed by one issue per line.
+// Multi-line problems: the IP, then sentences, then tab-separated "source, hostname, MAC" rows.
 function ProblemMessage({ text }: { text: string }) {
-    const [title, ...items] = text.split('\n');
-    if (!items.length) return <>{title}</>;
+    const [title, ...lines] = text.split('\n');
+    if (!lines.length) return <>{title}</>;
+    const rows = lines
+        .filter((line) => line.includes('\t'))
+        .map((line) => line.split('\t'));
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
             <span className="font-medium">{title}</span>
-            <ul className="list-disc space-y-0.5 pl-4">
-                {items.map((item) => (
-                    <li key={item}>{item}</li>
+            {lines
+                .filter((line) => !line.includes('\t'))
+                .map((line) => (
+                    <p key={line}>{line}</p>
                 ))}
-            </ul>
+            {rows.length ? (
+                <table className="mt-0.5 w-full text-left">
+                    <thead className="opacity-70">
+                        <tr>
+                            <th scope="col" className="pr-3 font-normal">
+                                Fonte
+                            </th>
+                            <th scope="col" className="pr-3 font-normal">
+                                Hostname
+                            </th>
+                            <th scope="col" className="font-normal">
+                                MAC
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map(([source, ...values]) => (
+                            <tr key={[source, ...values].join()}>
+                                <th
+                                    scope="row"
+                                    className="pr-3 font-medium whitespace-nowrap"
+                                >
+                                    {source}
+                                </th>
+                                {values.length === 1 ? (
+                                    <td colSpan={2}>{values[0]}</td>
+                                ) : (
+                                    <>
+                                        <td className="pr-3 break-all">
+                                            {values[0]}
+                                        </td>
+                                        <td className="font-mono whitespace-nowrap">
+                                            {values[1]}
+                                        </td>
+                                    </>
+                                )}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            ) : null}
         </div>
     );
 }
@@ -565,12 +609,12 @@ function Records({
                                 <AlertTriangle
                                     className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-500"
                                     aria-label={problemText(row).replace(
-                                        /\n/g,
-                                        '. ',
+                                        /[\n\t]/g,
+                                        ' ',
                                     )}
                                 />
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
+                            <TooltipContent className="max-w-sm">
                                 <ProblemMessage text={problemText(row)} />
                             </TooltipContent>
                         </Tooltip>

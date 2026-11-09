@@ -1,23 +1,24 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import { ArrowRight, Filter } from 'lucide-react';
-import { toast } from 'sonner';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { UnifiMark } from '@/components/unifi-mark';
 import { MikrotikMark } from '@/components/mikrotik-mark';
-import { SnipeItMark } from '@/components/snipe-it-mark';
 import { unifiState } from '@/components/unifi/types';
 import { ListPageHeader } from '@/components/list-page-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { DeviceForm } from '@/components/devices/device-form';
 import { DeviceImage } from '@/components/devices/device-image';
+import {
+    SnipeItImport,
+    type SnipeItImportData,
+} from '@/components/devices/snipe-it-import';
 import { DataTable } from '@/components/data-table';
 import { IconButton } from '@/components/icon-button';
 import { CopyValue } from '@/components/copy-value';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
     Popover,
@@ -26,7 +27,6 @@ import {
     PopoverHeader,
     PopoverTitle,
 } from '@/components/ui/popover';
-import { sync as snipeSync } from '@/routes/companies/settings/integrations/snipe-it';
 import {
     Select,
     SelectContent,
@@ -49,7 +49,8 @@ type Props = {
     site: Site;
     devices: Device[];
     manufacturers: Manufacturer[];
-    snipeIt: { synced_at: string | null } | null;
+    snipeIt: boolean;
+    snipeItImport?: SnipeItImportData | null;
     view: DeviceView;
 };
 export default function Devices(props: Props) {
@@ -62,10 +63,10 @@ function DeviceList({
     devices,
     manufacturers,
     snipeIt,
+    snipeItImport,
     view,
 }: Props) {
     const [manufacturer, setManufacturer] = useState('all');
-    const [syncing, setSyncing] = useState(false);
     const [type, setType] = useState('all');
     const activeFilters =
         Number(manufacturer !== 'all') + Number(type !== 'all');
@@ -149,34 +150,11 @@ function DeviceList({
                                 view={view}
                             />
                             {snipeIt ? (
-                                <Button
-                                    variant="outline"
-                                    disabled={syncing}
-                                    onClick={() =>
-                                        router.post(
-                                            snipeSync.url(company.id),
-                                            {},
-                                            {
-                                                preserveScroll: true,
-                                                onStart: () => setSyncing(true),
-                                                onFinish: () =>
-                                                    setSyncing(false),
-                                                onError: (errors) =>
-                                                    toast.error(
-                                                        errors.sync ??
-                                                            'Sincronizzazione non riuscita.',
-                                                    ),
-                                            },
-                                        )
-                                    }
-                                >
-                                    {syncing ? (
-                                        <Spinner />
-                                    ) : (
-                                        <SnipeItMark className="size-4" />
-                                    )}
-                                    Sincronizza
-                                </Button>
+                                <SnipeItImport
+                                    company={company}
+                                    site={site}
+                                    data={snipeItImport}
+                                />
                             ) : null}
                         </div>
                     }

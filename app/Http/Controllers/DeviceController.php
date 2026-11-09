@@ -49,7 +49,7 @@ class DeviceController extends Controller
             'view' => $options['view'] ?? 'infrastructure',
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'manufacturers' => $this->catalog(),
-            'snipeIt' => $sync?->only('synced_at'),
+            'snipeIt' => $sync !== null,
             'snipeItImport' => Inertia::optional(fn () => $sync ? $this->snipeItImport($sync) : null),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()

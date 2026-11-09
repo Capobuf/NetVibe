@@ -58,6 +58,7 @@ export function TopologyCanvas({
     onSelect,
     api,
     onZoom,
+    endpoints = true,
 }: {
     nodes: TopologyNode[];
     models: Record<number, TopologyModel>;
@@ -68,6 +69,7 @@ export function TopologyCanvas({
     onSelect: (selection: TopologySelection, anchor?: PortAnchor) => void;
     api: Ref<TopologyCanvasApi>;
     onZoom: (zoom: number) => void;
+    endpoints?: boolean;
 }) {
     const container = useRef<HTMLDivElement>(null);
     const stage = useRef<Konva.Stage>(null);
@@ -678,7 +680,8 @@ export function TopologyCanvas({
                     })}
                 </Layer>
             </Stage>
-            {selectedEdge &&
+            {endpoints &&
+                selectedEdge &&
                 selectedEdge.kind !== 'logical' &&
                 (['source', 'target'] as const).map((side) => {
                     const node = nodes.find(

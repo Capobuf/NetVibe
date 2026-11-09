@@ -300,6 +300,7 @@ function TopologyView({ company, site, topology, racks }: Props) {
     function select(next: TopologySelection) {
         setPanelOpen(true);
         setSelection(next);
+        popupContent.current?.scrollTo({ top: 0 });
         if (next?.kind === 'node') canvas.current?.focus(next.id);
     }
     function edgeButton(edge: TopologyEdge) {
@@ -611,6 +612,8 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     }}
                                     api={canvas}
                                     onZoom={setZoom}
+                                    // The details card already lists both ends; one popup at a time.
+                                    endpoints={!panelOpen}
                                 />
                             ) : (
                                 <Empty className="h-full min-h-96">

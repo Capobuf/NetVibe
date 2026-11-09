@@ -103,14 +103,21 @@ test('internal labels fit narrow and rotated ports and scale with their symbols'
 });
 
 test('power labels stay outside the selected side even after rotation', () => {
-    for (const type of ['ac', 'acC19', 'acC7', 'acC5', 'dc'] as const) {
+    for (const type of [
+        'ac',
+        'acC19',
+        'acC7',
+        'acC5',
+        'schuko',
+        'dc',
+    ] as const) {
         const port = makePort(type, { x: 100, y: 200 });
         assert.equal(portLabelPosition(port), 'bottom');
         assert.equal(
             portLabelPosition({ ...port, labelPosition: 'center' }),
             'bottom',
         );
-        for (const rotation of [0, 90]) {
+        for (const rotation of [0, 45, 90]) {
             const current = { ...port, rotation };
             const box = portBounds(current);
             const top = portLabelLayout(

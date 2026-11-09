@@ -115,6 +115,7 @@ export default function VlanShow({
                         searchLabel="Cerca subnet"
                         rows={subnets}
                         filterKey={visibility}
+                        activeFilters={Number(visibility === 'excluded')}
                         filters={
                             !vlan.excluded_at ? (
                                 <NetworkVisibilityFilter

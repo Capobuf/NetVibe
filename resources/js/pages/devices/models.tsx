@@ -142,30 +142,6 @@ export default function Models({
                         ) : null
                     }
                 />
-                {canManage ? (
-                    <Tabs
-                        className="items-center"
-                        value={tab}
-                        onValueChange={(value) =>
-                            visit({ tab: value as Props['tab'] })
-                        }
-                    >
-                        <TabsList aria-label="Sezione del catalogo">
-                            <TabsTrigger value="models">
-                                <LayoutTemplate />
-                                Modelli
-                            </TabsTrigger>
-                            <TabsTrigger value="manufacturers">
-                                <Factory />
-                                Produttori
-                            </TabsTrigger>
-                            <TabsTrigger value="types">
-                                <Shapes />
-                                Tipi
-                            </TabsTrigger>
-                        </TabsList>
-                    </Tabs>
-                ) : null}
                 <DataTable
                     name="device-models"
                     variant="list"
@@ -173,9 +149,39 @@ export default function Models({
                     total={models.length}
                     filterKey={[manufacturerId, typeFilter, panelFilter].join()}
                     onRowClick={(m) => openModel(m.id)}
+                    tabs={
+                        canManage ? (
+                            <Tabs
+                                value={tab}
+                                onValueChange={(value) =>
+                                    visit({ tab: value as Props['tab'] })
+                                }
+                            >
+                                <TabsList aria-label="Sezione del catalogo">
+                                    <TabsTrigger value="models">
+                                        <LayoutTemplate />
+                                        Modelli
+                                    </TabsTrigger>
+                                    <TabsTrigger value="manufacturers">
+                                        <Factory />
+                                        Produttori
+                                    </TabsTrigger>
+                                    <TabsTrigger value="types">
+                                        <Shapes />
+                                        Tipi
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        ) : null
+                    }
+                    activeFilters={
+                        Number(manufacturerId !== null) +
+                        Number(typeFilter !== ALL) +
+                        Number(panelFilter !== ALL)
+                    }
                     filters={
                         models.length ? (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <>
                                 {manufacturerIds.size > 1 ||
                                 manufacturerId !== null ? (
                                     <Select
@@ -190,7 +196,7 @@ export default function Models({
                                         }
                                     >
                                         <SelectTrigger
-                                            className="w-48 max-w-full"
+                                            className="w-full"
                                             aria-label="Filtra per produttore"
                                         >
                                             <SelectValue />
@@ -228,7 +234,7 @@ export default function Models({
                                         onValueChange={setTypeFilter}
                                     >
                                         <SelectTrigger
-                                            className="w-44 max-w-full"
+                                            className="w-full"
                                             aria-label="Filtra per tipo"
                                         >
                                             <SelectValue />
@@ -260,7 +266,7 @@ export default function Models({
                                     onValueChange={setPanelFilter}
                                 >
                                     <SelectTrigger
-                                        className="w-44 max-w-full"
+                                        className="w-full"
                                         aria-label="Filtra per pannello"
                                     >
                                         <SelectValue />
@@ -282,12 +288,13 @@ export default function Models({
                                 {filtering ? (
                                     <Button
                                         variant="ghost"
+                                        className="justify-start"
                                         onClick={clearFilters}
                                     >
                                         Azzera filtri
                                     </Button>
                                 ) : null}
-                            </div>
+                            </>
                         ) : null
                     }
                     rows={filtered}

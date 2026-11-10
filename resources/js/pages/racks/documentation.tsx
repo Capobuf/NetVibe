@@ -25,6 +25,7 @@ import {
     defaultSection,
     PLAN_TITLE,
     partLabels,
+    planPage,
     planProblem,
     sectionLabels,
     type PlanOptions,
@@ -42,23 +43,35 @@ function InstallationPlan(props: RackDocumentProps) {
     const { company, site, rack, document } = props;
     const [defaults] = useState(() => defaultPlanOptions(document));
     const [options, setOptions] = useState<PlanOptions>(defaults);
+    // Part of the document the last change touched: the preview reopens there.
+    const [focus, setFocus] = useState('cover');
     const route = { company: company.id, site: site.id };
     const generate = useCallback(
         () =>
             import('@/lib/rack-document-pdf').then(({ rackDocumentPdf }) =>
-                rackDocumentPdf({ company, site, rack, document }, options),
+                rackDocumentPdf(
+                    { company, site, rack, document },
+                    options,
+                ).then((result) => ({
+                    ...result,
+                    page: planPage(options, result.anchors, focus),
+                })),
             ),
-        [company, site, rack, document, options],
+        [company, site, rack, document, options, focus],
     );
-    const change = (value: Partial<PlanOptions>) =>
+    const change = (value: Partial<PlanOptions>, part?: string) => {
+        if (part) setFocus(part);
         setOptions((current) => ({ ...current, ...value }));
-    const changeSection = (id: string, value: Partial<PlanSection>) =>
+    };
+    const changeSection = (id: string, value: Partial<PlanSection>) => {
+        setFocus(id);
         setOptions((current) => ({
             ...current,
             sections: current.sections.map((section) =>
                 section.id === id ? { ...section, ...value } : section,
             ),
         }));
+    };
     const visibleCount = options.sections.filter((s) => s.visible).length;
 
     function partVisibility(
@@ -202,13 +215,16 @@ function InstallationPlan(props: RackDocumentProps) {
                     icon={PanelTop}
                     label="Copertina"
                     onReset={() =>
-                        change({
-                            title: defaults.title,
-                            cover: defaults.cover,
-                            logo: defaults.logo,
-                            summary: defaults.summary,
-                            notes: defaults.notes,
-                        })
+                        change(
+                            {
+                                title: defaults.title,
+                                cover: defaults.cover,
+                                logo: defaults.logo,
+                                summary: defaults.summary,
+                                notes: defaults.notes,
+                            },
+                            'cover',
+                        )
                     }
                 >
                     <Field>
@@ -219,24 +235,24 @@ function InstallationPlan(props: RackDocumentProps) {
                             maxLength={120}
                             aria-invalid={!options.title.trim()}
                             onChange={(event) =>
-                                change({ title: event.target.value })
+                                change({ title: event.target.value }, 'cover')
                             }
                         />
                     </Field>
                     <VisibilityField
                         label="Pagina di copertina"
                         visible={options.cover}
-                        onChange={(cover) => change({ cover })}
+                        onChange={(cover) => change({ cover }, 'cover')}
                     />
                     <VisibilityField
                         label="Logo NetVibe"
                         visible={options.logo}
-                        onChange={(logo) => change({ logo })}
+                        onChange={(logo) => change({ logo }, 'cover')}
                     />
                     <VisibilityField
                         label="Riepilogo rack, dispositivi e cavi"
                         visible={options.summary}
-                        onChange={(summary) => change({ summary })}
+                        onChange={(summary) => change({ summary }, 'cover')}
                     />
                     <Field>
                         <FieldLabel htmlFor="plan-notes">Note</FieldLabel>
@@ -246,7 +262,7 @@ function InstallationPlan(props: RackDocumentProps) {
                             maxLength={2000}
                             rows={4}
                             onChange={(event) =>
-                                change({ notes: event.target.value })
+                                change({ notes: event.target.value }, 'cover')
                             }
                         />
                     </Field>
@@ -286,7 +302,8 @@ function InstallationPlan(props: RackDocumentProps) {
                         onVisibilityChange={(id, visible) =>
                             changeSection(id, { visible })
                         }
-                        onOrderChange={(ids) =>
+                        onOrderChange={(ids, moved) => {
+                            setFocus(moved);
                             setOptions((current) => ({
                                 ...current,
                                 sections: ids.map((id) =>
@@ -294,8 +311,8 @@ function InstallationPlan(props: RackDocumentProps) {
                                         (section) => section.id === id,
                                     )!,
                                 ),
-                            }))
-                        }
+                            }));
+                        }}
                     />
                 </OptionGroup>
                 <OptionGroup

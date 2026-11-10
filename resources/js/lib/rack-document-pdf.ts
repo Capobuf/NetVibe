@@ -191,8 +191,13 @@ export async function rackDocumentPdf(
             y += lineHeight;
         }
     }
+    // First page of each part, so the preview can reopen where the user is working.
+    const anchors: Record<string, number> = { cover: 1 };
+    let anchor: string | null = null;
     function heading(value: string) {
         room(25);
+        if (anchor) anchors[anchor] = pdf.getNumberOfPages();
+        anchor = null;
         y += 5;
         write(value, 15, true);
         y += 4;
@@ -707,6 +712,7 @@ export async function rackDocumentPdf(
 
     cover();
     for (const section of sections) {
+        anchor = section.id;
         if (section.id === 'inventory') inventory(section);
         else if (section.id === 'racks') await racks(section);
         else if (section.id === 'topology') topologyMap(section);
@@ -770,6 +776,7 @@ export async function rackDocumentPdf(
         blob: pdf.output('blob'),
         filename: `${filename}.pdf`,
         pages: pdf.getNumberOfPages(),
+        anchors,
         warnings: [...warnings],
     };
 }

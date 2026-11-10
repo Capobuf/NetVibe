@@ -127,3 +127,21 @@ export function planProblem(options: PlanOptions) {
         return `Inserisci il titolo della sezione «${sectionLabels[untitled.id]}».`;
     return null;
 }
+
+/** Page to show after a change: where the focused part starts, or where it was before being hidden. */
+export function planPage(
+    options: PlanOptions,
+    anchors: Record<string, number>,
+    focus: string,
+) {
+    if (anchors[focus]) return anchors[focus];
+    const order = options.sections.map((section) => section.id as string);
+    const index = order.indexOf(focus);
+    if (index < 0) return 1;
+    const next = order.slice(index + 1).find((id) => anchors[id]);
+    const previous = order
+        .slice(0, index)
+        .reverse()
+        .find((id) => anchors[id]);
+    return anchors[next ?? previous ?? 'cover'] ?? 1;
+}

@@ -18,6 +18,8 @@ export type PdfDocument = {
     filename: string;
     pages: number;
     warnings: string[];
+    /** Page the preview opens on. */
+    page?: number;
 };
 type Preview = Omit<PdfDocument, 'blob'> & { url: string };
 
@@ -183,7 +185,7 @@ export function PrintWorkspace({
                         <iframe
                             ref={frame}
                             title={`Anteprima ${title}`}
-                            src={preview.url}
+                            src={`${preview.url}#page=${preview.page ?? 1}`}
                             className="size-full"
                         />
                     ) : (

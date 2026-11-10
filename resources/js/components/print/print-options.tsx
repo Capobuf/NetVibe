@@ -250,7 +250,7 @@ export function SortableOptions({
     options: SortableOption[];
     label: string;
     onVisibilityChange: (id: string, visible: boolean) => void;
-    onOrderChange: (ids: string[]) => void;
+    onOrderChange: (ids: string[], moved: string) => void;
 }) {
     const id = useId();
     const sensors = useSensors(
@@ -316,6 +316,7 @@ export function SortableOptions({
                         ids.indexOf(String(active.id)),
                         ids.indexOf(String(over.id)),
                     ),
+                    String(active.id),
                 );
             }}
         >

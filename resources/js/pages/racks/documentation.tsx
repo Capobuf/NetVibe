@@ -1,180 +1,342 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
-    ArrowLeft,
-    Download,
-    LoaderCircle,
-    Printer,
-    RotateCcw,
+    File,
+    LayoutList,
+    PanelBottom,
+    PanelTop,
+    RectangleHorizontal,
+    RectangleVertical,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { IconButton } from '@/components/icon-button';
+import { useCallback, useState } from 'react';
+import {
+    OptionGroup,
+    ResetButton,
+    SortableOptions,
+    VisibilityField,
+} from '@/components/print/print-options';
+import { PrintWorkspace } from '@/components/print/print-workspace';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+    defaultPlanOptions,
+    defaultSection,
+    PLAN_TITLE,
+    partLabels,
+    planPage,
+    planProblem,
+    sectionLabels,
+    type PlanOptions,
+    type PlanPart,
+    type PlanSection,
+} from '@/lib/installation-plan';
 import { index, show } from '@/routes/companies/sites/racks';
 import type { RackDocumentProps } from '@/types/rack-document';
 
-type Preview = {
-    url: string;
-    filename: string;
-    pages: number;
-    warnings: string[];
-};
-
 export default function Documentation(props: RackDocumentProps) {
-    return <DocumentPreview key={props.document.generatedAt} {...props} />;
+    return <InstallationPlan key={props.document.generatedAt} {...props} />;
 }
 
-function DocumentPreview(props: RackDocumentProps) {
+function InstallationPlan(props: RackDocumentProps) {
     const { company, site, rack, document } = props;
-    const [preview, setPreview] = useState<Preview | null>(null);
-    const [error, setError] = useState('');
-    const [attempt, setAttempt] = useState(0);
+    const [defaults] = useState(() => defaultPlanOptions(document));
+    const [options, setOptions] = useState<PlanOptions>(defaults);
+    // Part of the document the last change touched: the preview reopens there.
+    const [focus, setFocus] = useState('cover');
     const route = { company: company.id, site: site.id };
-    useEffect(() => {
-        let cancelled = false;
-        let objectUrl: string | undefined;
-        import('@/lib/rack-document-pdf')
-            .then(({ rackDocumentPdf }) =>
-                rackDocumentPdf({ company, site, rack, document }),
-            )
-            .then(({ blob, ...result }) => {
-                if (cancelled) return;
-                objectUrl = URL.createObjectURL(blob);
-                setPreview({ ...result, url: objectUrl });
-            })
-            .catch((reason: unknown) => {
-                if (!cancelled)
-                    setError(
-                        reason instanceof Error
-                            ? reason.message
-                            : 'Generazione del PDF non riuscita. Riprova.',
-                    );
-            });
-        return () => {
-            cancelled = true;
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
-        };
-    }, [company, site, rack, document, attempt]);
+    const generate = useCallback(
+        () =>
+            import('@/lib/rack-document-pdf').then(({ rackDocumentPdf }) =>
+                rackDocumentPdf(
+                    { company, site, rack, document },
+                    options,
+                ).then((result) => ({
+                    ...result,
+                    page: planPage(options, result.anchors, focus),
+                })),
+            ),
+        [company, site, rack, document, options, focus],
+    );
+    const change = (value: Partial<PlanOptions>, part?: string) => {
+        if (part) setFocus(part);
+        setOptions((current) => ({ ...current, ...value }));
+    };
+    const changeSection = (id: string, value: Partial<PlanSection>) => {
+        setFocus(id);
+        setOptions((current) => ({
+            ...current,
+            sections: current.sections.map((section) =>
+                section.id === id ? { ...section, ...value } : section,
+            ),
+        }));
+    };
+    const visibleCount = options.sections.filter((s) => s.visible).length;
+
+    function partVisibility(
+        section: PlanSection,
+        id: string,
+        visible: boolean,
+    ) {
+        changeSection(section.id, {
+            parts: section.parts.map((part) =>
+                part.id === id ? { ...part, visible } : part,
+            ),
+        });
+    }
+
+    function sectionOptions(section: PlanSection) {
+        const shown = section.parts.filter((part) => part.visible).length;
+        const canHide = (part: PlanPart) => !part.visible || shown > 1;
+        return (
+            <div className="flex flex-col gap-3">
+                <Field>
+                    <FieldLabel htmlFor={`plan-title-${section.id}`}>
+                        Titolo
+                    </FieldLabel>
+                    <Input
+                        id={`plan-title-${section.id}`}
+                        value={section.title}
+                        maxLength={120}
+                        aria-invalid={!section.title.trim()}
+                        onChange={(event) =>
+                            changeSection(section.id, {
+                                title: event.target.value,
+                            })
+                        }
+                    />
+                </Field>
+                {section.id === 'racks' &&
+                    section.parts.map((part) => (
+                        <VisibilityField
+                            key={part.id}
+                            label={partLabels[part.id]}
+                            visible={part.visible}
+                            disabled={!canHide(part)}
+                            onChange={(visible) =>
+                                partVisibility(section, part.id, visible)
+                            }
+                        />
+                    ))}
+                {section.id !== 'racks' && section.parts.length > 0 && (
+                    <Field>
+                        <FieldLabel asChild>
+                            <span>Colonne</span>
+                        </FieldLabel>
+                        <SortableOptions
+                            label={`Colonne di ${section.title}`}
+                            options={section.parts.map((part) => ({
+                                id: part.id,
+                                label: partLabels[part.id],
+                                visible: part.visible,
+                                canHide: canHide(part),
+                            }))}
+                            onVisibilityChange={(id, visible) =>
+                                partVisibility(section, id, visible)
+                            }
+                            onOrderChange={(ids) =>
+                                changeSection(section.id, {
+                                    parts: ids.map((id) =>
+                                        section.parts.find(
+                                            (part) => part.id === id,
+                                        )!,
+                                    ),
+                                })
+                            }
+                        />
+                    </Field>
+                )}
+            </div>
+        );
+    }
 
     return (
         <>
-            <Head title={`Documentazione rack · ${company.name}`} />
-            <div className="flex min-w-0 flex-col gap-5 p-4 md:p-6">
-                <header className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-3">
-                        <IconButton label="Torna ai rack" asChild>
-                            <Link
-                                href={
-                                    rack
-                                        ? show({ ...route, rack: rack.id })
-                                        : index(route)
-                                }
-                            >
-                                <ArrowLeft />
-                            </Link>
-                        </IconButton>
-                        <div className="flex min-w-0 flex-col gap-1">
-                            <p className="text-sm text-muted-foreground">
-                                {[company.name, site.name]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                            </p>
-                            <h1 className="text-2xl font-medium tracking-tight">
-                                Documentazione rack
-                            </h1>
-                            <p className="text-sm text-muted-foreground">
-                                {rack?.name ?? 'Intera sede'}
-                                {preview ? ` · ${preview.pages} pagine` : ''}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {preview ? (
-                            <>
-                                <Button variant="outline" asChild>
-                                    <a
-                                        href={preview.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <Printer data-icon="inline-start" />
-                                        Apri / stampa PDF
-                                    </a>
-                                </Button>
-                                <Button asChild>
-                                    <a
-                                        href={preview.url}
-                                        download={preview.filename}
-                                    >
-                                        <Download data-icon="inline-start" />
-                                        Scarica PDF
-                                    </a>
-                                </Button>
-                            </>
-                        ) : (
-                            <Button disabled>
-                                <Printer data-icon="inline-start" />
-                                {error
-                                    ? 'PDF non disponibile'
-                                    : 'Preparazione PDF…'}
-                            </Button>
-                        )}
-                    </div>
-                </header>
-                {error ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>
-                            Impossibile preparare il documento
-                        </AlertTitle>
-                        <AlertDescription>
-                            <p>{error}</p>
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setError('');
-                                    setAttempt((value) => value + 1);
-                                }}
-                            >
-                                <RotateCcw data-icon="inline-start" />
-                                Riprova
-                            </Button>
-                        </AlertDescription>
-                    </Alert>
-                ) : preview ? (
-                    <>
-                        {preview.warnings.length > 0 && (
-                            <Alert>
-                                <AlertTitle>
-                                    Alcune immagini non sono disponibili
-                                </AlertTitle>
-                                <AlertDescription>
-                                    Nel PDF sono sostituite dal nome del
-                                    dispositivo: {preview.warnings.join(', ')}.
-                                </AlertDescription>
-                            </Alert>
-                        )}
-                        <iframe
-                            title="Anteprima documentazione infrastruttura rack"
-                            src={preview.url}
-                            className="h-[75vh] min-h-96 w-full rounded-xl border bg-muted"
-                        />
-                    </>
-                ) : (
-                    <div
-                        className="flex flex-col gap-4"
-                        role="status"
-                        aria-live="polite"
+            <Head title={`${PLAN_TITLE} · ${company.name}`} />
+            <PrintWorkspace
+                title={PLAN_TITLE}
+                context={[company.name, site.name, rack?.name ?? 'Intera sede']
+                    .filter(Boolean)
+                    .join(' · ')}
+                back={
+                    rack
+                        ? {
+                              href: show({ ...route, rack: rack.id }).url,
+                              label: 'Torna al rack',
+                          }
+                        : { href: index(route).url, label: 'Torna ai rack' }
+                }
+                generate={generate}
+                problem={planProblem(options)}
+                notice={(preview) =>
+                    preview.warnings.length > 0 && (
+                        <Alert>
+                            <AlertTitle>
+                                Alcune immagini non sono disponibili
+                            </AlertTitle>
+                            <AlertDescription>
+                                Nel PDF sono sostituite dal nome del
+                                dispositivo: {preview.warnings.join(', ')}.
+                            </AlertDescription>
+                        </Alert>
+                    )
+                }
+            >
+                <OptionGroup
+                    icon={File}
+                    label="Formato A4"
+                    defaultOpen
+                    onReset={() =>
+                        change({ orientation: defaults.orientation })
+                    }
+                >
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={options.orientation}
+                        aria-label="Orientamento"
+                        onValueChange={(value) => {
+                            if (value === 'portrait' || value === 'landscape')
+                                change({ orientation: value });
+                        }}
                     >
-                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <LoaderCircle className="size-4 motion-safe:animate-spin" />
-                            Preparazione di inventario, tavole rack e
-                            collegamenti…
-                        </p>
-                        <Skeleton className="h-[65vh] w-full rounded-xl" />
-                    </div>
-                )}
-            </div>
+                        <ToggleGroupItem value="portrait">
+                            <RectangleVertical data-icon="inline-start" />
+                            Verticale
+                        </ToggleGroupItem>
+                        <ToggleGroupItem value="landscape">
+                            <RectangleHorizontal data-icon="inline-start" />
+                            Orizzontale
+                        </ToggleGroupItem>
+                    </ToggleGroup>
+                </OptionGroup>
+                <OptionGroup
+                    icon={PanelTop}
+                    label="Copertina"
+                    onReset={() =>
+                        change(
+                            {
+                                title: defaults.title,
+                                cover: defaults.cover,
+                                logo: defaults.logo,
+                                summary: defaults.summary,
+                                notes: defaults.notes,
+                            },
+                            'cover',
+                        )
+                    }
+                >
+                    <Field>
+                        <FieldLabel htmlFor="plan-title">Titolo</FieldLabel>
+                        <Input
+                            id="plan-title"
+                            value={options.title}
+                            maxLength={120}
+                            aria-invalid={!options.title.trim()}
+                            onChange={(event) =>
+                                change({ title: event.target.value }, 'cover')
+                            }
+                        />
+                    </Field>
+                    <VisibilityField
+                        label="Pagina di copertina"
+                        visible={options.cover}
+                        onChange={(cover) => change({ cover }, 'cover')}
+                    />
+                    <VisibilityField
+                        label="Logo NetVibe"
+                        visible={options.logo}
+                        onChange={(logo) => change({ logo }, 'cover')}
+                    />
+                    <VisibilityField
+                        label="Riepilogo rack, dispositivi e cavi"
+                        visible={options.summary}
+                        onChange={(summary) => change({ summary }, 'cover')}
+                    />
+                    <Field>
+                        <FieldLabel htmlFor="plan-notes">Note</FieldLabel>
+                        <Textarea
+                            id="plan-notes"
+                            value={options.notes}
+                            maxLength={2000}
+                            rows={4}
+                            onChange={(event) =>
+                                change({ notes: event.target.value }, 'cover')
+                            }
+                        />
+                    </Field>
+                </OptionGroup>
+                <OptionGroup
+                    icon={LayoutList}
+                    label="Contenuto"
+                    defaultOpen
+                    onReset={() => change({ sections: defaults.sections })}
+                >
+                    <SortableOptions
+                        label="Sezioni del documento"
+                        options={options.sections.map((section) => ({
+                            id: section.id,
+                            label: sectionLabels[section.id],
+                            visible: section.visible,
+                            canHide: !section.visible || visibleCount > 1,
+                            actions: (
+                                <ResetButton
+                                    label={sectionLabels[section.id]}
+                                    onClick={() =>
+                                        changeSection(section.id, {
+                                            ...defaultSection(
+                                                section.id,
+                                                document,
+                                            ),
+                                            visible: true,
+                                        })
+                                    }
+                                />
+                            ),
+                            content:
+                                section.id === 'topology'
+                                    ? undefined
+                                    : sectionOptions(section),
+                        }))}
+                        onVisibilityChange={(id, visible) =>
+                            changeSection(id, { visible })
+                        }
+                        onOrderChange={(ids, moved) => {
+                            setFocus(moved);
+                            setOptions((current) => ({
+                                ...current,
+                                sections: ids.map((id) =>
+                                    current.sections.find(
+                                        (section) => section.id === id,
+                                    )!,
+                                ),
+                            }));
+                        }}
+                    />
+                </OptionGroup>
+                <OptionGroup
+                    icon={PanelBottom}
+                    label="Intestazione e piè di pagina"
+                    onReset={() =>
+                        change({
+                            pageHeader: defaults.pageHeader,
+                            pageNumbers: defaults.pageNumbers,
+                        })
+                    }
+                >
+                    <VisibilityField
+                        label="Intestazione con azienda e sede"
+                        visible={options.pageHeader}
+                        onChange={(pageHeader) => change({ pageHeader })}
+                    />
+                    <VisibilityField
+                        label="Numeri di pagina"
+                        visible={options.pageNumbers}
+                        onChange={(pageNumbers) => change({ pageNumbers })}
+                    />
+                </OptionGroup>
+            </PrintWorkspace>
         </>
     );
 }
@@ -194,6 +356,6 @@ Documentation.layout = ({ company, site, rack }: RackDocumentProps) => ({
                   },
               ]
             : []),
-        { title: 'Documentazione', href: '#' },
+        { title: PLAN_TITLE, href: '#' },
     ],
 });

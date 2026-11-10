@@ -1,11 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Pencil, Printer } from 'lucide-react';
+import { FileText, Pencil } from 'lucide-react';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { DataTable } from '@/components/data-table';
 import { RackForm, RackDelete } from '@/components/racks/rack-form';
 import { RackThumbnail } from '@/components/racks/rack-thumbnail';
 import { IconButton } from '@/components/icon-button';
-import { Button } from '@/components/ui/button';
+import { PrintMenu } from '@/components/print/print-menu';
 import TextLink from '@/components/text-link';
 import { documentation, index, show } from '@/routes/companies/sites/racks';
 import type { Company, Site } from '@/types/company';
@@ -40,12 +40,16 @@ export default function Racks({ company, site, racks }: Props) {
                         </h1>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" asChild>
-                            <Link href={documentation(route)}>
-                                <Printer data-icon="inline-start" />
-                                Stampa documentazione
-                            </Link>
-                        </Button>
+                        <PrintMenu
+                            documents={[
+                                {
+                                    label: 'Piano di Installazione',
+                                    icon: FileText,
+                                    onSelect: () =>
+                                        router.visit(documentation(route)),
+                                },
+                            ]}
+                        />
                         <RackForm {...route} />
                     </div>
                 </header>

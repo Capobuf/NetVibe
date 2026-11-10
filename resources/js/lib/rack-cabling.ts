@@ -34,7 +34,7 @@ export const FACE_WIDTH = RACK_WIDTH + RACK_LEFT * 2;
 export type PortAnchor = CableEnd &
     Point & { face: Face; type: ConnectorType; width: number; height: number };
 export const endKey = (end: CableEnd) => `${end.device_id}:${end.connector_id}`;
-export const cableCode = (cable: Cable) =>
+export const cableCode = (cable: Pick<Cable, 'id'>) =>
     cable.id > 0 ? `C-${cable.id}` : 'Nuovo cavo';
 export const bundleKey = (cable: Cable) =>
     [cable.a.device_id, cable.b.device_id].sort((a, b) => a - b).join(':');

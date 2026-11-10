@@ -20,7 +20,7 @@ import {
     Eye,
     Hand,
     Pencil,
-    Printer,
+    FileText,
 } from 'lucide-react';
 import { RackCableTable } from '@/components/racks/rack-cable-table';
 import { RackFloorField } from '@/components/racks/rack-floor-field';
@@ -44,6 +44,7 @@ import {
     Choice,
 } from '@/components/hardware-editor/editor-fields';
 import { IconButton } from '@/components/icon-button';
+import { PrintMenu } from '@/components/print/print-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -177,7 +178,9 @@ function RackEditor({
     const form = useForm<Draft>(draftOf(rack, cables, cablingRevision));
     const { data, setData, errors } = form;
     const processing = form.processing;
-    const [editing, setEditing] = useState(initialEditing || !!topologySuggestion);
+    const [editing, setEditing] = useState(
+        initialEditing || !!topologySuggestion,
+    );
     // A cable opened from the search starts selected in the cabling tab.
     const linkedCable = cables.find((cable) => cable.id === linkedCableId);
     const [selectedCableId, setSelectedCableId] = useState<number | null>(
@@ -670,17 +673,19 @@ function RackEditor({
                         <Badge variant="secondary">{data.height_u}U</Badge>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            variant="outline"
+                        <PrintMenu
                             disabled={processing}
-                            onClick={() => {
-                                setPrintingDocument(true);
-                                router.visit(documentation(route));
-                            }}
-                        >
-                            <Printer data-icon="inline-start" />
-                            Stampa documentazione
-                        </Button>
+                            documents={[
+                                {
+                                    label: 'Piano di Installazione',
+                                    icon: FileText,
+                                    onSelect: () => {
+                                        setPrintingDocument(true);
+                                        router.visit(documentation(route));
+                                    },
+                                },
+                            ]}
+                        />
                         <ToggleGroup
                             type="single"
                             variant="outline"
@@ -779,7 +784,9 @@ function RackEditor({
                                 </IconButton>
                                 <ZoomControls
                                     zoom={zoom}
-                                    onZoom={(factor) => canvas.current?.zoom(factor)}
+                                    onZoom={(factor) =>
+                                        canvas.current?.zoom(factor)
+                                    }
                                     onFit={() => canvas.current?.fit()}
                                     fitLabel="Adatta rack"
                                 />

@@ -174,15 +174,17 @@ class UnifiIpamTest extends TestCase
         Http::preventStrayRequests();
         $source = $this->source();
         $subnet = $source->site->subnets()->create(Ipv4Cidr::parse('192.0.2.0/29'));
+        // Computed once: a second boundary between two now() calls would make the assertion flaky.
+        $lastSeen = now()->subDays(40)->timestamp;
         $reservation = ['id' => str_repeat('a', 24), 'mac' => '02:00:00:00:00:51', 'ip' => '192.0.2.5', 'name' => 'PRINT-1',
-            'hostname' => 'XeroxC7025', 'dns' => 'print1.example.test', 'last_seen' => now()->subDays(40)->timestamp];
+            'hostname' => 'XeroxC7025', 'dns' => 'print1.example.test', 'last_seen' => $lastSeen];
         $capture = fn (?array $reservations) => DB::transaction(fn () => (new UnifiIpam)->capture($source, null, [], [], $reservations));
         $capture([$reservation]);
 
         $ip = $subnet->ipAddresses()->sole();
         $this->assertSame(['192.0.2.5', 'XeroxC7025', 'PRINT-1', '02:00:00:00:00:51', true],
             [long2ip($ip->address), $ip->hostname, $ip->description, $ip->mac_address, $ip->auto_managed]);
-        $this->assertSame(now()->subDays(40)->timestamp, UnifiObservation::sole()->present_at->timestamp);
+        $this->assertSame($lastSeen, UnifiObservation::sole()->present_at->timestamp);
         $this->assertSame('192.0.2.1', $subnet->firstProposableIp());
         // An unreadable reservation list keeps the last data instead of reporting the reservation as removed.
         $capture(null);

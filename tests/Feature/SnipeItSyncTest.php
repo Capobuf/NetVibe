@@ -381,6 +381,13 @@ class SnipeItSyncTest extends TestCase
         $this->assertDatabaseMissing('manufacturers', ['name' => 'Vendor']);
     }
 
+    public function test_records_open_the_configuration_until_a_company_is_associated(): void
+    {
+        $this->get($this->url('records'))->assertOk();
+        SnipeItCompanyLink::query()->delete();
+        $this->get($this->url('records'))->assertRedirect($this->url('edit'));
+    }
+
     public function test_records_group_by_source_type_and_import_a_larger_page_with_its_types(): void
     {
         $this->company->sites()->create(['name' => 'Milano']);

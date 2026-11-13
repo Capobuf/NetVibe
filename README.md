@@ -81,6 +81,14 @@ Per un’istanza esistente seguire [la procedura di migrazione e rollback](docs/
 
 Servono PHP 8.5 aggiornato (CLI e PHP-FPM coerenti), le estensioni richieste dal lockfile e MariaDB 11.4 LTS. Verificare queste versioni con il provider prima del deploy: non è ancora stato convalidato un hosting di produzione. Configurare `DB_CONNECTION=mariadb` e host/credenziali forniti dall’hosting; il driver PHP resta `pdo_mysql`. Distribuire gli asset già compilati e puntare la document root a `public`, preservando `APP_KEY` negli aggiornamenti. Docker resta uno strumento di sviluppo.
 
+## Deploy in produzione
+
+Dopo ogni CI verde su `main`, `.github/workflows/deploy.yml` compila asset e dipendenze senza pacchetti dev, carica con rsync una nuova release in `~/netvibe/releases/<data>-<sha>` ed esegue `deploy/activate.sh` sul server: collega `.env` e `storage` condivisi (`~/netvibe/shared`), esegue `migrate --force` e `optimize`, poi sposta atomicamente il symlink `~/htdocs/netvibe.bydot.it` (document root CloudPanel: `public`). Se le migrazioni falliscono la release resta inattiva e viene rimossa. Restano solo le ultime 5 release; i log Laravel sono giornalieri e conservati 14 giorni. Il deploy si può rilanciare a mano da **Actions → Deploy → Run workflow**.
+
+Secret richiesti nel repository: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` (chiave privata autorizzata sul server) e `DEPLOY_KNOWN_HOSTS` (output di `ssh-keyscan` dell’host).
+
+Rollback: `ln -sfn ~/netvibe/releases/<release-precedente> ~/htdocs/netvibe.bydot.it` (le migrazioni già applicate non vengono annullate).
+
 ## Sincronizzazione Snipe-IT e cron
 
 Il Superadmin acquisisce l’anteprima da **Azienda → Impostazioni → Integrazioni → Snipe-IT**, conferma i dispositivi (produttori, tipologie e modelli necessari vengono creati o riutilizzati durante l’importazione) e attiva la sincronizzazione oraria. Gli asset rimandati nella prima acquisizione restano in attesa di una scelta esplicita. «Sincronizza ora» usa la stessa logica del comando `php artisan snipe-it:sync` (quest’ultimo riguarda solo le aziende già attivate).

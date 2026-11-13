@@ -10,6 +10,7 @@ use App\Models\IpStatus;
 use App\Models\Site;
 use App\Models\SnipeItAsset;
 use App\Models\Subnet;
+use App\Models\Vlan;
 use App\Support\DeletionImpact;
 use App\Support\DeviceAssignment;
 use App\Support\Ipv4Cidr;
@@ -35,6 +36,9 @@ class SubnetController extends Controller
             'company' => $company->only('id', 'name'),
             'site' => $site->only('id', 'name'),
             'unifiNetworks' => UnifiIpam::networks($site->id),
+            // Lets the export offer excluded networks only where some exist.
+            'companyHasExcludedNetworks' => Vlan::whereIn('site_id', $company->sites()->select('id'))->whereNotNull('excluded_at')->exists()
+                || Subnet::whereIn('site_id', $company->sites()->select('id'))->whereNotNull('excluded_at')->exists(),
             'vlans' => $site->vlans()->orderBy('tag')->get(['id', 'tag', 'name', 'excluded_at']),
             'subnets' => $site->subnets()
                 ->select(['id', 'cidr', 'name', 'description', 'vlan_id', 'network_address', 'broadcast_address', 'excluded_at'])

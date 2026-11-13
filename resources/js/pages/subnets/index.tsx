@@ -12,6 +12,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { Filter, Layers3, Network, X } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { ListPageHeader } from '@/components/list-page-header';
+import { IpamExportMenu } from '@/components/networks/ipam-export-menu';
 import { TableSearch } from '@/components/table-search';
 import { useTablePagination } from '@/hooks/use-table-pagination';
 import SubnetForm from '@/components/networks/subnet-form';
@@ -66,6 +67,7 @@ type Props = {
     subnets: SubnetListItem[];
     vlans: Vlan[];
     unifiNetworks: UnifiObservation[];
+    companyHasExcludedNetworks: boolean;
 };
 
 export default function SubnetIndex(props: Props) {
@@ -78,6 +80,7 @@ function SubnetList({
     subnets,
     vlans,
     unifiNetworks = [],
+    companyHasExcludedNetworks,
 }: Props) {
     const { auth } = usePage().props;
     const [filter, setFilter] = useState('all');
@@ -186,6 +189,19 @@ function SubnetList({
                                     >
                                         Reti rilevate da UniFi
                                     </UnifiObservationIndicator>
+                                    <IpamExportMenu
+                                        company={company}
+                                        site={site}
+                                        excludedInSite={
+                                            excludedCount > 0 ||
+                                            vlans.some(
+                                                (vlan) => vlan.excluded_at,
+                                            )
+                                        }
+                                        excludedInCompany={
+                                            companyHasExcludedNetworks
+                                        }
+                                    />
                                     {auth.canEditIpam ? (
                                         <SubnetForm {...formContext} />
                                     ) : null}

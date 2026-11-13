@@ -42,6 +42,7 @@ import { useTablePreferences } from '@/hooks/use-table-preferences';
 import IpAddressForm from '@/components/networks/ip-address-form';
 import ExcludedRanges from '@/components/networks/excluded-ranges';
 import SubnetForm from '@/components/networks/subnet-form';
+import { ExportFormatItems } from '@/components/networks/ipam-export-menu';
 import { Badge } from '@/components/ui/badge';
 import SubnetOccupancyChart from '@/components/networks/subnet-occupancy-chart';
 import SubnetSummary from '@/components/networks/subnet-summary';
@@ -68,7 +69,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { index, show } from '@/routes/companies/sites/subnets';
+import { download, index, show } from '@/routes/companies/sites/subnets';
 import type { Company, Site } from '@/types/company';
 import type {
     ExcludedRange,
@@ -385,6 +386,20 @@ export default function SubnetShow({
                                                 </Badge>
                                             </DropdownMenuItem>
                                         </DropdownMenuGroup>
+                                        <DropdownMenuSeparator />
+                                        <ExportFormatItems
+                                            label="Esporta"
+                                            href={(format) =>
+                                                download.url(
+                                                    {
+                                                        company: company.id,
+                                                        site: site.id,
+                                                        subnet: subnet.id,
+                                                    },
+                                                    { query: { format } },
+                                                )
+                                            }
+                                        />
                                         {auth.canEditIpam ? (
                                             <>
                                                 <DropdownMenuSeparator />

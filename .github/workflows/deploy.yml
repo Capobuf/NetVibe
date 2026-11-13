@@ -16,8 +16,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # CI runs can finish out of order: only the commit still at the tip of main may go live,
+  # a newer commit gets its own deploy when its CI turns green.
+  latest:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.tip.outputs.deploy }}
+    steps:
+      - id: tip
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          tip="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" refs/heads/main | cut -f1)"
+          if [ "$tip" = "$SHA" ]; then
+            echo deploy=true >> "$GITHUB_OUTPUT"
+          else
+            echo deploy=false >> "$GITHUB_OUTPUT"
+            echo "::notice::$SHA superato da $tip su main: deploy saltato"
+          fi
+
+  deploy:
+    needs: latest
+    if: needs.latest.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

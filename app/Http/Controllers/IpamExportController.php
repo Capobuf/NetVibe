@@ -46,6 +46,7 @@ class IpamExportController extends Controller
                 $format === 'csv' ? new IpamCsv($export) : new IpamWorkbook($export),
                 $export->filename($format),
                 $format === 'csv' ? ExcelWriter::CSV : ExcelWriter::XLSX,
+                $format === 'csv' ? ['Content-Type' => 'text/csv; charset=UTF-8'] : [],
             ));
         } catch (\OverflowException $exception) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);

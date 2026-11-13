@@ -80,11 +80,15 @@ class IpamExport
         if ($this->subnet) {
             $vlan = $this->subnet->vlan;
             $parts[] = $vlan ? "vlan {$vlan->tag}" : 'senza vlan';
+        }
+        $parts = collect($parts)->map(fn ($part) => Str::slug((string) $part));
+        if ($this->subnet) {
+            // A slug would drop the dots of the address.
             $parts[] = str_replace('/', '-', $this->subnet->cidr);
         }
         $parts[] = $this->generatedAt->format('Y-m-d');
 
-        return collect($parts)->map(fn ($part) => Str::slug((string) $part))->filter()->implode('_').'.'.$extension;
+        return $parts->filter()->implode('_').'.'.$extension;
     }
 
     /**

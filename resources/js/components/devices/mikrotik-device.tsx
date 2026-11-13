@@ -668,11 +668,7 @@ function MikrotikPanel({ connection, ...route }: Props) {
                             </div>
                             <PasswordInput
                                 id="mikrotik-password"
-                                placeholder={
-                                    connection?.has_password
-                                        ? '•'.repeat(128)
-                                        : undefined
-                                }
+                                hasSavedValue={connection?.has_password}
                                 autoComplete="new-password"
                                 required={!connection}
                                 value={form.data.password}

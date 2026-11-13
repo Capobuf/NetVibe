@@ -11,6 +11,7 @@ use App\Http\Controllers\DeviceIpController;
 use App\Http\Controllers\DeviceModelController;
 use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\IpAddressController;
+use App\Http\Controllers\IpamExportController;
 use App\Http\Controllers\IpSearchController;
 use App\Http\Controllers\IpStatusController;
 use App\Http\Controllers\ManufacturerController;
@@ -126,6 +127,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->name('companies.sites.search.index');
             Route::get('companies/{company}/sites/{site}/search/suggestions', [IpSearchController::class, 'suggestions'])
                 ->name('companies.sites.search.suggestions');
+            Route::get('companies/{company}/sites/{site}/ipam/download', [IpamExportController::class, 'site'])
+                ->name('companies.sites.ipam.download');
+            Route::get('companies/{company}/sites/{site}/subnets/{subnet}/download', [IpamExportController::class, 'subnet'])
+                ->name('companies.sites.subnets.download');
             Route::resource('companies.sites.subnets', SubnetController::class)->only(['index', 'show']);
             Route::resource('companies.sites.vlans', VlanController::class)->only(['index', 'show']);
         });

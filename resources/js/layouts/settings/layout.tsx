@@ -48,7 +48,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
                                 variant="ghost"
                                 asChild
                                 className={cn(
-                                    'flex-1 justify-start lg:w-full',
+                                    'flex-1 justify-start lg:w-full lg:flex-none',
                                     {
                                         'bg-background shadow-xs':
                                             isCurrentOrParentUrl(item.href),

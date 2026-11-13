@@ -15,6 +15,7 @@ import {
     Terminal,
 } from 'lucide-react';
 import InputError from '@/components/input-error';
+import PasswordInput from '@/components/password-input';
 import { IconButton } from '@/components/icon-button';
 import { DataTable } from '@/components/data-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -665,9 +666,8 @@ function MikrotikPanel({ connection, ...route }: Props) {
                                     </Badge>
                                 ) : null}
                             </div>
-                            <Input
+                            <PasswordInput
                                 id="mikrotik-password"
-                                type="password"
                                 placeholder={
                                     connection?.has_password
                                         ? '•'.repeat(128)

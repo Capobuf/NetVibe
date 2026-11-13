@@ -1,0 +1,68 @@
+name: Deploy
+
+# Production deploy runs only after CI is green on main (or manually from the Actions tab).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.5'
+          tools: composer:v2
+          coverage: none
+        env:
+          update: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      # Wayfinder needs the PHP app during the Vite build; dev packages are pruned afterwards.
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: npm run build
+      - run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload and activate release
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          release="$(date -u +%Y%m%d%H%M%S)-${SHA::7}"
+          live="$(ssh "$TARGET" 'mkdir -p ~/netvibe/releases && readlink -f ~/htdocs/netvibe.bydot.it')"
+          # Unchanged files are hard-linked from the live release instead of being re-uploaded.
+          rsync -az --delete --link-dest="$live" \
+            --exclude=/.git/ --exclude=/.github/ --exclude=/.agents/ --exclude=/.claude/ --exclude=/.codex/ \
+            --exclude=/node_modules/ --exclude=/tests/ --exclude=/docs/ --exclude=/docker/ \
+            --exclude=/storage/ --exclude='/.env*' \
+            ./ "$TARGET:netvibe/releases/$release/"
+          ssh "$TARGET" "bash ~/netvibe/releases/$release/deploy/activate.sh $release"

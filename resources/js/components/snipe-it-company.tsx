@@ -107,12 +107,12 @@ export function SnipeItSections({
     company,
     value,
     pending,
-    connected,
+    configured,
 }: {
     company: number;
     value: 'assets' | 'fields' | 'settings';
     pending?: number;
-    connected: boolean;
+    configured: boolean;
 }) {
     return (
         <SectionTabs
@@ -125,13 +125,14 @@ export function SnipeItSections({
                     icon: Boxes,
                     count: pending,
                     href: records(company),
+                    disabled: !configured,
                 },
                 {
                     value: 'fields',
                     label: 'Mappatura campi',
                     icon: SlidersHorizontal,
                     href: mapping(company),
-                    disabled: !connected,
+                    disabled: !configured,
                 },
                 {
                     value: 'settings',

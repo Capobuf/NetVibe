@@ -41,8 +41,13 @@ class SnipeItSyncController extends Controller
         return back();
     }
 
-    public function index(Request $request, Company $company): Response
+    public function index(Request $request, Company $company): Response|RedirectResponse
     {
+        $integration = $this->integration($company);
+        // Without a connection and an associated company there are no assets: open the configuration instead.
+        if (! $integration['connected'] || ! $integration['association']) {
+            return to_route('companies.settings.integrations.snipe-it.edit', $company);
+        }
         $filters = $request->validate([
             'view' => ['sometimes', Rule::in(SnipeItAsset::VIEWS)],
             ...$this->filterRules(),
@@ -123,7 +128,7 @@ class SnipeItSyncController extends Controller
 
         return Inertia::render('integrations/snipe-it-records', [
             'company' => $company->only('id', 'name'), 'sync' => $sync?->only('id', 'revision', 'activated_at', 'synced_at', 'error'),
-            'integration' => $this->integration($company),
+            'integration' => $integration,
             'active' => $sync?->isActive() ?? false, 'view' => $view, 'filters' => $filters,
             'counts' => $sync?->counts() ?? [...array_fill_keys([...SnipeItAsset::VIEWS, 'problems'], 0), 'problems_by_view' => []],
             'categories' => $this->filtered($sync, $view, $categoryFilters)

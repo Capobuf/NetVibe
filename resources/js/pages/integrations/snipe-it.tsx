@@ -855,7 +855,8 @@ function SnipeItForm({
     }
 
     const counts = sync?.counts;
-    const mapping = section === 'fields' && !!settings.connection;
+    const configured = !!settings.connection && !!settings.association;
+    const mapping = section === 'fields' && configured;
 
     return (
         <>
@@ -881,7 +882,7 @@ function SnipeItForm({
                         company={company.id}
                         value={mapping ? 'fields' : 'settings'}
                         pending={counts?.pending}
-                        connected={!!settings.connection}
+                        configured={configured}
                     />
                     {mapping ? (
                         <div className="max-w-3xl">

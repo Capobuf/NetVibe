@@ -696,7 +696,7 @@ function Records({
                         company={company.id}
                         value="assets"
                         pending={counts.pending}
-                        connected={integration.connected}
+                        configured
                     />
                     {sync && !active ? (
                         <Alert>

@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Support\IpamExport;
+use Maatwebsite\Excel\Concerns\Export;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 use Maatwebsite\Excel\Concerns\WithProperties;
 
@@ -10,7 +11,7 @@ use Maatwebsite\Excel\Concerns\WithProperties;
  * Consultation workbook: «Riepilogo» followed by one sheet per VLAN. A single subnet reuses its VLAN sheet.
  * Callers pick the destination (download now, Excel::store()/raw() for a later Drive upload).
  */
-class IpamWorkbook implements WithMultipleSheets, WithProperties
+class IpamWorkbook implements Export, WithMultipleSheets, WithProperties
 {
     public function __construct(private IpamExport $export) {}
 

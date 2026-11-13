@@ -3,13 +3,14 @@
 namespace App\Exports;
 
 use App\Support\IpamExport;
+use Maatwebsite\Excel\Concerns\Export;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithCustomCsvSettings;
 use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use PhpOffice\PhpSpreadsheet\Cell\StringValueBinder;
 
 /** CSV has no sheets or styling: the same rows as the workbook, flattened with their context columns. */
-class IpamCsv extends StringValueBinder implements FromArray, WithCustomCsvSettings, WithCustomValueBinder
+class IpamCsv extends StringValueBinder implements Export, FromArray, WithCustomCsvSettings, WithCustomValueBinder
 {
     public function __construct(private IpamExport $export) {}
 

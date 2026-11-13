@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Support\IpamExport;
+use Maatwebsite\Excel\Concerns\Export;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
@@ -16,7 +17,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Table\TableStyle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /** Shared layout of the workbook: a document-like title block followed by filterable, banded Excel tables. */
-abstract class IpamSheet implements WithEvents, WithTitle
+abstract class IpamSheet implements Export, WithEvents, WithTitle
 {
     private const MAX_ROWS = 1048576;
 

@@ -396,7 +396,7 @@ export default function Models({
                 >
                     <SheetContent
                         overlayClassName="bg-black/30"
-                        className="w-full gap-0 overflow-y-auto sm:max-w-2xl"
+                        className="w-full gap-0 overflow-y-auto sm:max-w-4xl"
                     >
                         <SheetHeader className="flex-row items-center justify-between gap-4 border-b px-6 py-4 pr-12">
                             <SheetTitle>

@@ -5,9 +5,11 @@ namespace App\Support;
 use App\Models\Cable;
 use App\Models\Device;
 use App\Models\DeviceInterface;
+use App\Models\IpAddress;
 use App\Models\MikrotikSource;
 use App\Models\Site;
 use App\Models\UnifiDevice;
+use App\Models\UnifiObservation;
 use Illuminate\Support\Collection;
 
 class Topology
@@ -46,8 +48,8 @@ class Topology
                 'id' => 'device:'.$device->id, 'device_id' => $device->id, 'label' => $device->name,
                 'model' => $device->model?->name, 'rack' => $rack?->only('id', 'name'), 'identity' => null, 'mac' => null,
                 'model_id' => $device->device_model_id,
-                'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))->all(), 'unifi' => null,
-                'indirect' => $indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
+                'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))->all(), 'unifi' => null, 'observed' => [],
+                'indirect' =>$indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
                     'menu' => $menu, 'count' => (int) $items->sum('total'), 'seen_at' => $items->first()->seen_at?->toIso8601String(),
                 ])->values()->all(),
             ];
@@ -144,7 +146,7 @@ class Topology
                 $nodes[$target] = [
                     'id' => $target, 'device_id' => null, 'label' => $identity ?: ($remoteMac ?: 'Neighbor non identificato'),
                     'model' => $data['board'] ?? $data['platform'] ?? null, 'rack' => null,
-                    'model_id' => null, 'ips' => [], 'unifi' => null,
+                    'model_id' => null, 'ips' => [], 'unifi' => null, 'observed' => [],
                     'identity' => $identity, 'mac' => $remoteMac, 'indirect' => [],
                 ];
             }
@@ -236,6 +238,10 @@ class Topology
                 ]],
             ];
         }
+        $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
+        foreach ($observed as $deviceId => $rows) {
+            $nodes['device:'.$deviceId]['observed'] = $rows;
+        }
         $peers = [];
         foreach ($edges as $edge) {
             if ($edge['kind'] === 'discovered' && ! $edge['stale']) {
@@ -326,6 +332,120 @@ class Topology
             ->mapWithKeys(fn ($model) => [$model->id => ['panel' => $model->panel, 'assetUrls' => $model->assetUrls()]])->all();
 
         return ['nodes' => array_values($nodes), 'edges' => array_values($edges), 'integrations' => array_values($integrations), 'models' => $models];
+    }
+
+    /**
+     * MACs seen beyond each port: MikroTik bridge hosts on their learning port and UniFi clients on their
+     * uplink device. They are observations to consult, never cables or links; a MAC names a device only
+     * when exactly one inventory device owns it, and a port only when every sighting agrees on it.
+     */
+    private function portObservations(Site $site, Collection $devices, Collection $interfaces, array $logicalInterfaces, array $ports,
+        array $macs, Collection $unifi, Collection $byExternalId, \Closure $inGeneration): array
+    {
+        foreach ($unifi as $source) {
+            if ($mac = MikrotikSnapshot::mac($source->observed['mac_address'] ?? null)) {
+                $macs[$mac][] = $source->device_id;
+            }
+        }
+        $hints = [];
+        $documented = IpAddress::whereHas('subnet', fn ($query) => $query->where('site_id', $site->id))
+            ->whereNotNull('mac_address')->get(['address', 'mac_address', 'hostname', 'device_id']);
+        foreach ($documented as $ip) {
+            if (! $mac = MikrotikSnapshot::mac($ip->mac_address)) {
+                continue;
+            }
+            $hints[$mac]['documented'][long2ip($ip->address)] = $ip->hostname;
+            if ($devices->has($ip->device_id)) {
+                $macs[$mac][] = $ip->device_id;
+            }
+        }
+        $clients = UnifiObservation::forSite($site->id)->where('kind', 'client')->where('state', 'current')
+            ->with('unifiSite.unifiConnection')->orderBy('id')->get();
+        $sightings = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
+            ->where('kind', 'observation')->where('state', 'current')->whereIn('data->menu', ['/ip/arp', '/ip/dhcp-server/lease'])
+            ->get()->filter($inGeneration);
+        foreach ([...$sightings->pluck('data'), ...$clients->pluck('data')] as $data) {
+            if (($mac = MikrotikSnapshot::mac($data['mac'] ?? null)) && is_string($data['ip'] ?? null)) {
+                $hints[$mac]['observed'][$data['ip']] = true;
+                if ($name = $data['name'] ?? $data['hostname_observed'] ?? null) {
+                    $hints[$mac]['names'][$name] = true;
+                }
+            }
+        }
+        $found = [];
+        $hosts = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
+            ->where('kind', 'observation')->where('state', 'current')->where('data->menu', '/interface/bridge/host')
+            ->orderBy('id')->get()->filter($inGeneration);
+        foreach ($hosts as $source) {
+            $mac = MikrotikSnapshot::mac($source->data['mac'] ?? null);
+            // The bridge's own addresses (local, or not stated) are not hosts beyond a port.
+            if (! $mac || MikrotikSnapshot::flag($source->data['local'] ?? null) !== false) {
+                continue;
+            }
+            $device = $devices[$source->device_id];
+            $reported = $source->data['on-interface'] ?? null;
+            // A VLAN or other logical interface is not a physical port.
+            $end = is_string($reported) && ! in_array($reported, $logicalInterfaces[$device->id], true)
+                ? $this->observedEnd($device, $interfaces->get($device->id, collect()), [$reported], $ports) : null;
+            $found[$device->id][$mac][] = [$end, $reported, false, ['vendor' => 'mikrotik', 'source' => 'MikroTik',
+                'seen_at' => $source->seen_at?->toIso8601String(), 'stale' => $this->stale($source, $device)]];
+        }
+        foreach ($clients as $client) {
+            $mac = MikrotikSnapshot::mac($client->data['mac'] ?? null);
+            $parents = $byExternalId->get($client->unifi_site_id.':'.($client->data['uplink_device_id'] ?? ''), collect());
+            if (! $mac || $parents->count() !== 1) {
+                continue;
+            }
+            $parent = $parents->first();
+            $found[$parent->device_id][$mac][] = [null, null, ($client->data['type'] ?? null) === 'WIRELESS', [
+                'vendor' => 'unifi', 'source' => 'UniFi · '.$client->unifiSite->name,
+                'seen_at' => $client->seen_at?->toIso8601String(), 'stale' => $client->stale() || $parent->stale()]];
+        }
+        $result = [];
+        foreach ($found as $deviceId => $byMac) {
+            $rows = [];
+            foreach ($byMac as $mac => $sightings) {
+                $owners = array_values(array_unique($macs[$mac] ?? []));
+                if (in_array($deviceId, $owners, true)) {
+                    continue;
+                }
+                $ends = collect($sightings)->map(fn ($sighting) => $sighting[0])->unique(fn ($end) => $end['key'] ?? null);
+                $end = $ends->count() === 1 ? $ends->first() : null;
+                $owner = count($owners) === 1 ? $devices[$owners[0]] : null;
+                $documentedIps = $hints[$mac]['documented'] ?? [];
+                $ips = array_keys($documentedIps ?: ($hints[$mac]['observed'] ?? []));
+                $names = array_keys($hints[$mac]['names'] ?? []);
+                $name = $owner?->name ?? (count($documentedIps) === 1 && reset($documentedIps) ? reset($documentedIps)
+                    : (count($names) === 1 ? $names[0] : null));
+                $key = ($end['key'] ?? 'unknown').'|'.($owner ? 'device:'.$owner->id : 'mac:'.$mac);
+                $row = $rows[$key] ?? [
+                    'key' => $key, 'port' => $end['label'] ?? null, 'interface_id' => $end['interface_id'] ?? null,
+                    'reported_ports' => [], 'wireless' => true, 'device_id' => $owner?->id, 'name' => $name,
+                    'ips' => [], 'macs' => [], 'sources' => [],
+                ];
+                $row['macs'][] = $mac;
+                $row['ips'] = array_values(array_unique([...$row['ips'], ...(count($ips) === 1 ? $ips : [])]));
+                $row['name'] ??= $name;
+                foreach ($sightings as [, $reported, $wireless, $evidence]) {
+                    $row['wireless'] = $row['wireless'] && $wireless;
+                    if ($reported !== null && ! in_array($reported, $row['reported_ports'], true)) {
+                        $row['reported_ports'][] = $reported;
+                    }
+                    // One entry per source, with its latest sighting; stale only when every sighting is.
+                    $previous = $row['sources'][$evidence['source']] ?? null;
+                    $row['sources'][$evidence['source']] = [...$evidence,
+                        'seen_at' => max($previous['seen_at'] ?? null, $evidence['seen_at']),
+                        'stale' => ($previous['stale'] ?? true) && $evidence['stale']];
+                }
+                $rows[$key] = $row;
+            }
+            $rows = array_map(fn ($row) => [...$row, 'sources' => array_values($row['sources'])], array_values($rows));
+            usort($rows, fn ($a, $b) => [$a['port'] === null, $a['port'] ?? '', $a['name'] === null, $a['name'] ?? $a['macs'][0]]
+                <=> [$b['port'] === null, $b['port'] ?? '', $b['name'] === null, $b['name'] ?? $b['macs'][0]]);
+            $result[$deviceId] = $rows;
+        }
+
+        return $result;
     }
 
     private function stale(MikrotikSource $source, Device $device): bool

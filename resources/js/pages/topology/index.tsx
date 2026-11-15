@@ -16,6 +16,7 @@ import {
     X,
 } from 'lucide-react';
 import { ZoomControls } from '@/components/zoom-controls';
+import { PortObservations } from '@/components/topology/port-observations';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { IconButton } from '@/components/icon-button';
 import {
@@ -186,6 +187,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
                         node.identity,
                         node.mac,
                         node.rack?.name,
+                        // A MAC or name seen on a port finds the device that observes it.
+                        ...node.observed.flatMap((row) => [
+                            row.name,
+                            ...row.macs,
+                        ]),
                     ]
                         .join(' ')
                         .toLocaleLowerCase()
@@ -1014,6 +1020,12 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 </p>
                                             )}
                                         </div>
+                                        {selectedNode.observed.length > 0 && (
+                                            <PortObservations
+                                                rows={selectedNode.observed}
+                                                route={route}
+                                            />
+                                        )}
                                     </div>
                                 )}
                                 {selectedEdge && (

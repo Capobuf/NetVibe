@@ -237,9 +237,11 @@ class UnifiClient
 
     public function clients(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
     {
-        return array_map(fn ($client) => array_intersect_key($client, array_flip([
+        // uplinkDeviceId names the switch or access point only: the official API reports no client port.
+        return array_map(fn ($client) => [...array_intersect_key($client, array_flip([
             'id', 'type', 'name', 'ipAddress', 'macAddress', 'connectedAt', 'access',
-        ])), $this->pages($connection, '/sites/'.$this->uuid($siteId).'/clients', $consoleId));
+        ])), 'uplinkDeviceId' => isset($client['uplinkDeviceId']) ? $this->uuid($client['uplinkDeviceId']) : null],
+            $this->pages($connection, '/sites/'.$this->uuid($siteId).'/clients', $consoleId));
     }
 
     private function pages(#[\SensitiveParameter] UnifiConnection $connection, string $path, ?string $consoleId): array

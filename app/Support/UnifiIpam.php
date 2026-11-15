@@ -86,7 +86,7 @@ class UnifiIpam
                     : ['name' => $item['name'] ?? null, 'hostname_observed' => $item['name'] ?? null,
                         'mac' => MikrotikSnapshot::mac($kind === 'device' ? ($item['mac_address'] ?? null) : ($item['macAddress'] ?? null)),
                         'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip,
-                        ...($kind === 'device' ? ['state' => $item['state'] ?? null] : [])];
+                        ...($kind === 'device' ? ['state' => $item['state'] ?? null] : ['uplink_device_id' => $item['uplinkDeviceId'] ?? null])];
                 $observation = $this->record($source, $kind, $item['id'], $data);
                 $observation->address = ip2long($ip);
                 // Listed clients are connected, an adopted device is present only when online, and a

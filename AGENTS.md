@@ -67,6 +67,7 @@ Instructions for all coding agents. The Product Owner makes product decisions an
 7. **Only after owner approval**, execute minimal issue-relevant automated tests on a dedicated MariaDB testing database. If fixes change UI/UX, notify the owner and obtain renewed review. Fixes that leave the approved UI/UX unchanged do not require renewed approval; complete relevant checks and continue the already authorized workflow.
 8. After approval and successful relevant checks, push and create the PR; once its CI is green it is merged automatically (merge right away if already green, otherwise enable GitHub auto-merge), then close the linked issue. **Do not push/open PR/merge/close before approval** unless the Product Owner explicitly asks for GitHub publication as the task's outcome; in that case publish the branch only and do not infer merge approval.
 9. `main` accepts changes only through PRs with green CI (enforced by a GitHub ruleset). Never force-push or rewrite `main`.
+10. Keep branches clean: once a PR is merged, switch any checkout using its branch back to `main`, verify the branch is contained in `origin/main` (`git branch --merged origin/main`), then delete it locally and on `origin`. Never delete a branch that is not in `main`, has an open PR, or is checked out in another worktree; report it instead.
 
 ## 5. Proportional testing and minimal CI
 

@@ -107,7 +107,16 @@ export function useAppearance(): UseAppearanceReturn {
         // Store in cookie for SSR...
         setCookie('appearance', mode);
 
-        applyTheme(mode);
+        // Cross-fade the theme swap where the View Transitions API is available.
+        if (
+            document.startViewTransition &&
+            !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ) {
+            document.startViewTransition(() => applyTheme(mode));
+        } else {
+            applyTheme(mode);
+        }
+
         notify();
     };
 

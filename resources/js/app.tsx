@@ -8,6 +8,7 @@ import AppLayout from '@/layouts/app-layout';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
+import { pageTransitionOptions } from '@/lib/page-transition';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -26,6 +27,9 @@ void createInertiaApp({
         }
     },
     strictMode: true,
+    defaults: {
+        visitOptions: pageTransitionOptions,
+    },
     withApp(app) {
         return (
             <TooltipProvider>

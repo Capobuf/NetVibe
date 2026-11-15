@@ -55,6 +55,7 @@ export function CatalogForm({
         rack_height_u?: number | null;
         without_rack_ears?: boolean;
         is_infrastructure?: boolean;
+        show_in_topology?: boolean | null;
     };
     types?: ModelType[];
     deletionMessage?: string;
@@ -78,6 +79,7 @@ export function CatalogForm({
     const [classification, setClassification] = useState(
         item?.is_infrastructure ? 'infrastructure' : 'other',
     );
+    const [topology, setTopology] = useState(topologyChoice(item));
     const [creating, setCreating] = useState(false);
     const formAction =
         typeof action === 'function'
@@ -97,6 +99,7 @@ export function CatalogForm({
             setClassification(
                 item?.is_infrastructure ? 'infrastructure' : 'other',
             );
+            setTopology(topologyChoice(item));
         }
     }
     return (
@@ -149,10 +152,16 @@ export function CatalogForm({
                             ...(kind === 'type' && {
                                 is_infrastructure:
                                     classification === 'infrastructure',
+                                show_in_topology:
+                                    data.show_in_topology === '1',
                             }),
                             ...(types && {
                                 without_rack_ears:
                                     data.without_rack_ears === '1',
+                                show_in_topology:
+                                    topology === 'inherit'
+                                        ? null
+                                        : topology === 'show',
                             }),
                             ...(onCreated && { inline: true }),
                         })}
@@ -254,6 +263,35 @@ export function CatalogForm({
                                         />
                                     </Field>
                                 )}
+                                {kind === 'type' && (
+                                    <Field
+                                        data-invalid={!!errors.show_in_topology}
+                                    >
+                                        <Field orientation="horizontal">
+                                            <Checkbox
+                                                id={`${id}-topology`}
+                                                name="show_in_topology"
+                                                value="1"
+                                                defaultChecked={
+                                                    item?.show_in_topology ??
+                                                    true
+                                                }
+                                                disabled={processing}
+                                                aria-invalid={
+                                                    !!errors.show_in_topology
+                                                }
+                                            />
+                                            <FieldLabel
+                                                htmlFor={`${id}-topology`}
+                                            >
+                                                Mostra nella topologia di rete
+                                            </FieldLabel>
+                                        </Field>
+                                        <InputError
+                                            message={errors.show_in_topology}
+                                        />
+                                    </Field>
+                                )}
                                 {types && (
                                     <Field
                                         data-invalid={!!errors.model_type_id}
@@ -343,6 +381,51 @@ export function CatalogForm({
                                         />
                                     </Field>
                                 )}
+                                {types && (
+                                    <Field
+                                        data-invalid={!!errors.show_in_topology}
+                                    >
+                                        <FieldLabel id={`${id}-topology`}>
+                                            Topologia di rete
+                                        </FieldLabel>
+                                        <ToggleGroup
+                                            type="single"
+                                            variant="outline"
+                                            value={topology}
+                                            onValueChange={(value) => {
+                                                if (value) setTopology(value);
+                                            }}
+                                            disabled={processing || creating}
+                                            aria-labelledby={`${id}-topology`}
+                                            aria-invalid={
+                                                !!errors.show_in_topology
+                                            }
+                                            className="w-full"
+                                        >
+                                            <ToggleGroupItem
+                                                value="inherit"
+                                                className="flex-1"
+                                            >
+                                                Usa tipo
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="show"
+                                                className="flex-1"
+                                            >
+                                                Mostra
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="hide"
+                                                className="flex-1"
+                                            >
+                                                Nascondi
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+                                        <InputError
+                                            message={errors.show_in_topology}
+                                        />
+                                    </Field>
+                                )}
                                 <DialogFooter>
                                     {deletion && (
                                         <Button
@@ -377,4 +460,12 @@ export function CatalogForm({
             </DialogContent>
         </Dialog>
     );
+}
+
+function topologyChoice(item?: { show_in_topology?: boolean | null }) {
+    return item?.show_in_topology == null
+        ? 'inherit'
+        : item.show_in_topology
+          ? 'show'
+          : 'hide';
 }

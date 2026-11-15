@@ -447,6 +447,11 @@ function TypeTable({ types }: { types: ModelType[] }) {
                     label: 'Classificazione predefinita',
                     visible: true,
                 },
+                {
+                    id: 'show_in_topology',
+                    label: 'Topologia di rete',
+                    visible: true,
+                },
                 { id: 'models_count', label: 'Modelli', visible: true },
             ]}
             value={(type, column) =>
@@ -454,7 +459,11 @@ function TypeTable({ types }: { types: ModelType[] }) {
                     ? type.is_infrastructure
                         ? 'Infrastruttura'
                         : 'Altri dispositivi'
-                    : (type[column] ?? 0)
+                    : column === 'show_in_topology'
+                      ? type.show_in_topology
+                          ? 'Mostra'
+                          : 'Nascondi'
+                      : (type[column] ?? 0)
             }
             empty="Nessun tipo"
             bulkActions={(items, clearSelection) => (

@@ -246,6 +246,12 @@ class DeviceController extends Controller
             Storage::disk('local')->delete($previous);
         }
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Dispositivo salvato.']);
+        // Created from another workspace (the rack editor), which places it and stays open.
+        if (! $device && $request->boolean('inline')) {
+            Inertia::flash('createdDevice', $record->only('id', 'name'));
+
+            return back();
+        }
 
         return to_route('companies.sites.devices.show', [$company, $site, $record, 'view' => $request->query('view') === 'all' ? 'all' : 'infrastructure']);
     }

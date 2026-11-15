@@ -82,7 +82,15 @@ import {
     update,
 } from '@/routes/companies/sites/racks';
 import { labels as cableLabels } from '@/routes/companies/sites/racks/cables';
-import { show as showDevice } from '@/routes/companies/sites/devices';
+import {
+    show as showDevice,
+    store as storeDevice,
+} from '@/routes/companies/sites/devices';
+import {
+    QuickDeviceDialog,
+    type CatalogModel,
+    type QuickDeviceCallbacks,
+} from '@/components/racks/quick-device-dialog';
 import {
     isRackMounted,
     itemBounds,
@@ -102,6 +110,7 @@ type Props = {
     site: Site;
     rack: Rack;
     devices: RackDevice[];
+    models: CatalogModel[];
     cables: Cable[];
     cablingRevision: number;
     editing: boolean;
@@ -158,6 +167,15 @@ function draftOf(rack: Rack, cables: Cable[], cablingRevision: number): Draft {
     };
 }
 
+function mountLabel(
+    model: Pick<CatalogModel, 'rack_height_u' | 'without_rack_ears'> | null,
+) {
+    if (isRackMounted({ model })) return `${model!.rack_height_u}U`;
+    return model?.rack_height_u
+        ? `${model.rack_height_u}U · Da appoggiare`
+        : 'Da appoggiare';
+}
+
 export default function RackShow(props: Props) {
     return <RackEditor key={props.rack.id} {...props} />;
 }
@@ -166,6 +184,7 @@ function RackEditor({
     site,
     rack,
     devices,
+    models,
     cables,
     cablingRevision,
     editing: initialEditing,
@@ -221,6 +240,7 @@ function RackEditor({
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
     const [tab, setTab] = useState(linkedCable ? 'cables' : 'properties');
     const [search, setSearch] = useState('');
+    const [quickModel, setQuickModel] = useState<CatalogModel | null>(null);
     const [supportKey, setSupportKey] = useState('');
     const [error, setError] = useState('');
     const [imageError, setImageError] = useState('');
@@ -250,6 +270,7 @@ function RackEditor({
             !data.items.some((item) => item.device_id === device.id) &&
             (!device.rack_item || device.rack_item.rack_id === rack.id),
     );
+    const term = search.trim().toLocaleLowerCase();
     const matches = available.filter((device) =>
         [
             device.name,
@@ -259,7 +280,13 @@ function RackEditor({
         ]
             .join(' ')
             .toLocaleLowerCase()
-            .includes(search.trim().toLocaleLowerCase()),
+            .includes(term),
+    );
+    const modelMatches = models.filter((model) =>
+        [model.name, model.manufacturer.name, model.model_type?.name]
+            .join(' ')
+            .toLocaleLowerCase()
+            .includes(term),
     );
     const cableDevices = devices.map((device) => ({
         ...device,
@@ -319,16 +346,19 @@ function RackEditor({
                 ),
             );
     }
-    function add(kind: RackItem['kind'], device?: RackDevice) {
-        if (!editing || processing) return;
+    // Returns the first valid position for a new element, or why there is none.
+    function placement(
+        kind: RackItem['kind'],
+        device?: Pick<RackDevice, 'id'> & {
+            model: CatalogModel | RackDevice['model'];
+        },
+    ): RackItem | string {
         const support =
             device && !isRackMounted(device)
                 ? supports.find((item) => item.key === supportKey)
                 : null;
-        if (device && !isRackMounted(device) && !support) {
-            setError('Scegli un ripiano o un dispositivo come appoggio.');
-            return;
-        }
+        if (device && !isRackMounted(device) && !support)
+            return 'Scegli un ripiano o un dispositivo come appoggio.';
         const item: RackItem = {
             key: newId(),
             kind,
@@ -350,17 +380,65 @@ function RackEditor({
             };
             if (
                 !layoutError([...data.items, candidate], data.height_u, devices)
-            ) {
-                change([...data.items, candidate]);
-                select(candidate.key);
-                if (kind !== 'drawer') setSupportKey(candidate.key);
-                return;
-            }
+            )
+                return candidate;
         }
-        setError(
-            support
-                ? 'Spazio insufficiente sopra questo appoggio. Sposta gli elementi presenti o scegli un altro appoggio.'
-                : 'Nessuna posizione libera sufficiente. Sposta gli elementi presenti o aumenta l’altezza del rack.',
+        return support
+            ? 'Spazio insufficiente sopra questo appoggio. Sposta gli elementi presenti o scegli un altro appoggio.'
+            : 'Nessuna posizione libera sufficiente. Sposta gli elementi presenti o aumenta l’altezza del rack.';
+    }
+    function add(kind: RackItem['kind'], device?: RackDevice) {
+        if (!editing || processing) return;
+        const candidate = placement(kind, device);
+        if (typeof candidate === 'string') {
+            setError(candidate);
+            return;
+        }
+        change([...data.items, candidate]);
+        select(candidate.key);
+        if (kind !== 'drawer') setSupportKey(candidate.key);
+    }
+    function chooseModel(model: CatalogModel) {
+        if (!editing || processing) return;
+        // Never create a device that the current layout cannot hold.
+        const candidate = placement('device', { id: 0, model });
+        if (typeof candidate === 'string') {
+            setError(candidate);
+            return;
+        }
+        setError('');
+        setQuickModel(model);
+    }
+    function createDevice(
+        model: CatalogModel,
+        name: string,
+        { onError, onFinish }: QuickDeviceCallbacks,
+    ) {
+        // The rack draft stays open: this request only adds the device to the site.
+        allowLeave.current = true;
+        router.post(
+            storeDevice.url({ company: company.id, site: site.id }),
+            { name, device_model_id: model.id, inline: true },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                errorBag: 'quickDevice',
+                onSuccess: (page) => {
+                    const created = page.flash.createdDevice as
+                        | { id: number }
+                        | undefined;
+                    const device = (page.props.devices as RackDevice[]).find(
+                        (item) => item.id === created?.id,
+                    );
+                    setQuickModel(null);
+                    if (device) add('device', device);
+                },
+                onError: onError,
+                onFinish: () => {
+                    allowLeave.current = false;
+                    onFinish();
+                },
+            },
         );
     }
     function remove() {
@@ -1099,16 +1177,13 @@ function RackEditor({
                                     </Button>
                                 </div>
                                 <Separator />
-                                <h2 className="text-sm font-medium">
-                                    Dispositivi disponibili
-                                </h2>
                                 <InputGroup>
                                     <InputGroupAddon>
                                         <Search />
                                     </InputGroupAddon>
                                     <InputGroupInput
-                                        aria-label="Cerca dispositivi"
-                                        placeholder="Nome, modello o seriale…"
+                                        aria-label="Cerca dispositivi e modelli"
+                                        placeholder="Dispositivo, modello o seriale…"
                                         value={search}
                                         onChange={(event) =>
                                             setSearch(event.target.value)
@@ -1136,7 +1211,10 @@ function RackEditor({
                                         disabled={processing}
                                     />
                                 )}
-                                <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+                                <div className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto">
+                                    <h2 className="text-sm font-medium">
+                                        Dispositivi disponibili
+                                    </h2>
                                     {matches.map((device) => (
                                         <button
                                             type="button"
@@ -1158,12 +1236,7 @@ function RackEditor({
                                                 </span>
                                             </span>
                                             <Badge variant="outline">
-                                                {isRackMounted(device)
-                                                    ? `${device.model?.rack_height_u}U`
-                                                    : device.model
-                                                            ?.rack_height_u
-                                                      ? `${device.model.rack_height_u}U · Da appoggiare`
-                                                      : 'Da appoggiare'}
+                                                {mountLabel(device.model)}
                                             </Badge>
                                         </button>
                                     ))}
@@ -1173,6 +1246,46 @@ function RackEditor({
                                                 <EmptyTitle>
                                                     Nessun dispositivo
                                                     disponibile
+                                                </EmptyTitle>
+                                            </EmptyHeader>
+                                        </Empty>
+                                    )}
+                                    <h2 className="mt-2 text-sm font-medium">
+                                        Nuovo dispositivo da modello
+                                    </h2>
+                                    {modelMatches.map((model) => (
+                                        <button
+                                            type="button"
+                                            key={model.id}
+                                            disabled={processing}
+                                            onClick={() => chooseModel(model)}
+                                            aria-label={`Nuovo dispositivo ${model.manufacturer.name} ${model.name}`}
+                                            className="flex min-h-16 items-center gap-3 rounded-lg border border-dashed p-3 text-left hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50"
+                                        >
+                                            <Plus className="size-4 shrink-0 text-muted-foreground" />
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-medium">
+                                                    {model.name}
+                                                </span>
+                                                <span className="block truncate text-xs text-muted-foreground">
+                                                    {[
+                                                        model.manufacturer.name,
+                                                        model.model_type?.name,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' · ')}
+                                                </span>
+                                            </span>
+                                            <Badge variant="outline">
+                                                {mountLabel(model)}
+                                            </Badge>
+                                        </button>
+                                    ))}
+                                    {!modelMatches.length && (
+                                        <Empty className="p-4">
+                                            <EmptyHeader>
+                                                <EmptyTitle>
+                                                    Nessun modello trovato
                                                 </EmptyTitle>
                                             </EmptyHeader>
                                         </Empty>
@@ -1693,6 +1806,14 @@ function RackEditor({
                     onPrint={printCable}
                 />
             </div>
+            <QuickDeviceDialog
+                key={quickModel?.id ?? 'closed'}
+                model={quickModel}
+                onClose={() => setQuickModel(null)}
+                onCreate={(name, callbacks) =>
+                    quickModel && createDevice(quickModel, name, callbacks)
+                }
+            />
             {creatingCable !== null && (
                 <CableCreateDialog
                     id={creatingCable}

@@ -45,7 +45,7 @@ class DeviceModelController extends Controller
             'modelId' => $modelId,
             'types' => ModelType::query()->when($user->is_superadmin, fn ($query) => $query->withCount('models'))->orderBy('name')->get(),
             'manufacturers' => Manufacturer::query()->when($user->is_superadmin, fn ($query) => $query->withCount(['models', 'devices']))->orderBy('name')->get(),
-            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->withCount(['devices' => $visible])->orderBy('name')->get()
+            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name,show_in_topology'])->withCount(['devices' => $visible])->orderBy('name')->get()
                 ->map(fn ($model) => [...$model->toArray(), 'assetUrls' => $model->assetUrls()]),
             'modelDevices' => fn () => $modelId === null ? [] : $visible(Device::query()->where('device_model_id', $modelId))
                 ->with('site:id,name,company_id', 'site.company:id,name')->orderBy('name')->get(['id', 'name', 'site_id'])
@@ -66,9 +66,9 @@ class DeviceModelController extends Controller
     private function save(Request $request, Manufacturer $manufacturer, ?DeviceModel $model = null): RedirectResponse
     {
         $request->mergeIfMissing(['manufacturer_id' => $manufacturer->id]);
-        $data = $request->validate(['without_rack_ears' => ['sometimes', 'boolean'], 'rack_height_u' => ['nullable', 'integer', 'between:1,100'], 'manufacturer_id' => ['required', 'integer', 'exists:manufacturers,id'], 'model_type_id' => ['nullable', 'integer', 'exists:model_types,id'], 'name' => ['required', 'string', 'max:255',
+        $data = $request->validate(['show_in_topology' => ['sometimes', 'nullable', 'boolean'], 'without_rack_ears' => ['sometimes', 'boolean'], 'rack_height_u' => ['nullable', 'integer', 'between:1,100'], 'manufacturer_id' => ['required', 'integer', 'exists:manufacturers,id'], 'model_type_id' => ['nullable', 'integer', 'exists:model_types,id'], 'name' => ['required', 'string', 'max:255',
             Rule::unique('device_models')->where('manufacturer_id', $request->input('manufacturer_id'))->ignore($model),
-        ]], [], ['name' => 'nome', 'manufacturer_id' => 'produttore', 'model_type_id' => 'tipo', 'rack_height_u' => 'altezza rack', 'without_rack_ears' => 'senza staffe rack']);
+        ]], [], ['name' => 'nome', 'manufacturer_id' => 'produttore', 'model_type_id' => 'tipo', 'rack_height_u' => 'altezza rack', 'without_rack_ears' => 'senza staffe rack', 'show_in_topology' => 'topologia di rete']);
         try {
             $record = DB::transaction(function () use ($model, $data) {
                 if (! empty($data['model_type_id'])) {

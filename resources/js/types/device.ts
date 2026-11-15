@@ -9,6 +9,7 @@ export type Manufacturer = {
 export type DeviceView = 'infrastructure' | 'all';
 export type ModelType = {
     is_infrastructure: boolean;
+    show_in_topology: boolean;
     id: number;
     name: string;
     models_count?: number;
@@ -21,6 +22,7 @@ export type DeviceModel = {
     model_type_id: number | null;
     rack_height_u: number | null;
     without_rack_ears: boolean;
+    show_in_topology: boolean | null;
     model_type?: ModelType | null;
     panel: PanelDocument | null;
     panel_revision: number;

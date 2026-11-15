@@ -9,7 +9,7 @@ export type Manufacturer = {
 export type DeviceView = 'infrastructure' | 'all';
 export type ModelType = {
     is_infrastructure: boolean;
-    show_in_topology: boolean;
+    show_in_topology: boolean | null;
     id: number;
     name: string;
     models_count?: number;
@@ -23,6 +23,8 @@ export type DeviceModel = {
     rack_height_u: number | null;
     without_rack_ears: boolean;
     show_in_topology: boolean | null;
+    // Resolved visibility (model, type, then network ports); sent by the catalog page.
+    shows_in_topology?: boolean;
     model_type?: ModelType | null;
     panel: PanelDocument | null;
     panel_revision: number;

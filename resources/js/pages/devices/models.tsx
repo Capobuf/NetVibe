@@ -460,9 +460,11 @@ function TypeTable({ types }: { types: ModelType[] }) {
                         ? 'Infrastruttura'
                         : 'Altri dispositivi'
                     : column === 'show_in_topology'
-                      ? type.show_in_topology
-                          ? 'Mostra'
-                          : 'Nascondi'
+                      ? type.show_in_topology === null
+                          ? 'Automatica'
+                          : type.show_in_topology
+                            ? 'Mostra'
+                            : 'Nascondi'
                       : (type[column] ?? 0)
             }
             empty="Nessun tipo"

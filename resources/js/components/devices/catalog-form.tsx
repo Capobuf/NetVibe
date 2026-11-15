@@ -152,12 +152,12 @@ export function CatalogForm({
                             ...(kind === 'type' && {
                                 is_infrastructure:
                                     classification === 'infrastructure',
-                                show_in_topology:
-                                    data.show_in_topology === '1',
                             }),
                             ...(types && {
                                 without_rack_ears:
                                     data.without_rack_ears === '1',
+                            }),
+                            ...((types || kind === 'type') && {
                                 show_in_topology:
                                     topology === 'inherit'
                                         ? null
@@ -263,35 +263,6 @@ export function CatalogForm({
                                         />
                                     </Field>
                                 )}
-                                {kind === 'type' && (
-                                    <Field
-                                        data-invalid={!!errors.show_in_topology}
-                                    >
-                                        <Field orientation="horizontal">
-                                            <Checkbox
-                                                id={`${id}-topology`}
-                                                name="show_in_topology"
-                                                value="1"
-                                                defaultChecked={
-                                                    item?.show_in_topology ??
-                                                    true
-                                                }
-                                                disabled={processing}
-                                                aria-invalid={
-                                                    !!errors.show_in_topology
-                                                }
-                                            />
-                                            <FieldLabel
-                                                htmlFor={`${id}-topology`}
-                                            >
-                                                Mostra nella topologia di rete
-                                            </FieldLabel>
-                                        </Field>
-                                        <InputError
-                                            message={errors.show_in_topology}
-                                        />
-                                    </Field>
-                                )}
                                 {types && (
                                     <Field
                                         data-invalid={!!errors.model_type_id}
@@ -381,7 +352,7 @@ export function CatalogForm({
                                         />
                                     </Field>
                                 )}
-                                {types && (
+                                {(types || kind === 'type') && (
                                     <Field
                                         data-invalid={!!errors.show_in_topology}
                                     >
@@ -406,7 +377,9 @@ export function CatalogForm({
                                                 value="inherit"
                                                 className="flex-1"
                                             >
-                                                Usa tipo
+                                                {kind === 'type'
+                                                    ? 'Automatica'
+                                                    : 'Usa tipo'}
                                             </ToggleGroupItem>
                                             <ToggleGroupItem
                                                 value="show"

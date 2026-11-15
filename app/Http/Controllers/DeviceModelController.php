@@ -46,7 +46,7 @@ class DeviceModelController extends Controller
             'types' => ModelType::query()->when($user->is_superadmin, fn ($query) => $query->withCount('models'))->orderBy('name')->get(),
             'manufacturers' => Manufacturer::query()->when($user->is_superadmin, fn ($query) => $query->withCount(['models', 'devices']))->orderBy('name')->get(),
             'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name,show_in_topology'])->withCount(['devices' => $visible])->orderBy('name')->get()
-                ->map(fn ($model) => [...$model->toArray(), 'assetUrls' => $model->assetUrls()]),
+                ->map(fn ($model) => [...$model->toArray(), 'assetUrls' => $model->assetUrls(), 'shows_in_topology' => $model->showsInTopology()]),
             'modelDevices' => fn () => $modelId === null ? [] : $visible(Device::query()->where('device_model_id', $modelId))
                 ->with('site:id,name,company_id', 'site.company:id,name')->orderBy('name')->get(['id', 'name', 'site_id'])
                 ->map(fn (Device $device) => ['id' => $device->id, 'name' => $device->name, 'site' => $device->site->only('id', 'name'), 'company' => $device->site->company->only('id', 'name')]),

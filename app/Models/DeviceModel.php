@@ -29,7 +29,13 @@ class DeviceModel extends Model
 
     public function showsInTopology(): bool
     {
-        return $this->show_in_topology ?? $this->modelType?->show_in_topology ?? true;
+        return $this->show_in_topology ?? $this->modelType?->show_in_topology ?? $this->mayHaveNetworkPorts();
+    }
+
+    // Without a drawn panel the ports are unknown, so the model counts as a network device.
+    public function mayHaveNetworkPorts(): bool
+    {
+        return ! $this->panel || collect($this->connectors())->contains(fn ($port) => in_array($port['type'] ?? null, ['rj45', 'sfp', 'qsfp'], true));
     }
 
     /** @return BelongsTo<Manufacturer, $this> */

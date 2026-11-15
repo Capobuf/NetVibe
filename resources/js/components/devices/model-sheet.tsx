@@ -81,11 +81,7 @@ export function ModelSheet({
                                         ? `${model.rack_height_u} U`
                                         : 'Non rackmount'}
                                 </Badge>
-                                {!(
-                                    model.show_in_topology ??
-                                    model.model_type?.show_in_topology ??
-                                    true
-                                ) ? (
+                                {model.shows_in_topology === false ? (
                                     <Badge variant="outline">
                                         Nascosto in topologia
                                     </Badge>

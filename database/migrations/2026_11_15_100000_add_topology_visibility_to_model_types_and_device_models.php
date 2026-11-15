@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Null on both: the model inherits its type, the type decides from the model's network ports.
         Schema::table('model_types', function (Blueprint $table) {
-            $table->boolean('show_in_topology')->default(true);
+            $table->boolean('show_in_topology')->nullable();
         });
         Schema::table('device_models', function (Blueprint $table) {
-            // Null inherits the model type; true/false override it.
             $table->boolean('show_in_topology')->nullable();
         });
     }

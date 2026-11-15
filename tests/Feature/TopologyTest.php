@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Device;
 use App\Models\Manufacturer;
 use App\Models\MikrotikSource;
+use App\Models\ModelType;
 use App\Models\Site;
 use App\Models\User;
 use App\Support\MikrotikClient;
@@ -340,5 +341,40 @@ class TopologyTest extends TestCase
         $this->get($url)->assertInertia(fn (Assert $page) => $page
             ->where('topology.nodes.0.indirect.0.count', 3)
             ->where('topology.nodes.0.indirect.0.seen_at', '2026-01-01T12:00:00+00:00'));
+    }
+
+    public function test_model_visibility_hides_devices_and_their_edges_without_touching_cables(): void
+    {
+        $type = ModelType::create(['name' => 'Alimentazione passiva']);
+        $vendor = $this->local->manufacturer;
+        $panel = fn (string $type) => ['faces' => ['front' => ['ports' => [['id' => str_repeat('b', 32), 'label' => '1', 'type' => $type]]], 'rear' => ['ports' => []]]];
+        $strip = $vendor->models()->create(['name' => 'Strip', 'model_type_id' => $type->id, 'panel' => $panel('schuko')]);
+        $pdu = $vendor->models()->create(['name' => 'PDU', 'model_type_id' => $type->id, 'panel' => $panel('rj45')]);
+        $undrawn = $vendor->models()->create(['name' => 'Undrawn', 'model_type_id' => $type->id]);
+        $devices = collect([$strip, $pdu, $undrawn])->mapWithKeys(fn ($model) => [$model->name => $this->site->devices()->create(
+            ['name' => $model->name.'-1', 'manufacturer_id' => $vendor->id, 'device_model_id' => $model->id])]);
+        $cable = Cable::create(['site_id' => $this->site->id, 'type' => 'copper', 'color' => '#2563eb']);
+        $cable->ends()->createMany([
+            ['side' => 'a', 'device_id' => $this->local->id, 'connector_id' => str_repeat('a', 32)],
+            ['side' => 'b', 'device_id' => $devices['PDU']->id, 'connector_id' => str_repeat('b', 32)],
+        ]);
+        $graph = function () {
+            $graph = (new Topology)->forSite($this->site);
+            $nodes = array_column($graph['nodes'], 'id');
+            foreach ($graph['edges'] as $edge) {
+                $this->assertContains($edge['source'], $nodes);
+                $this->assertContains($edge['target'], $nodes);
+            }
+
+            return [array_column($graph['nodes'], 'label'), count($graph['edges'])];
+        };
+
+        // Automatic: only models with network ports, or not drawn yet, are shown.
+        $this->assertEquals([['local', 'PDU-1', 'remote', 'Undrawn-1'], 1], $graph());
+        $type->update(['show_in_topology' => false]);
+        $this->assertEquals([['local', 'remote'], 0], $graph());
+        $pdu->update(['show_in_topology' => true]);
+        $this->assertEquals([['local', 'PDU-1', 'remote'], 1], $graph());
+        $this->assertDatabaseCount('cables', 1);
     }
 }

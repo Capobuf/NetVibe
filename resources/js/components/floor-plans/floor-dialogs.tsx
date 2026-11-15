@@ -242,7 +242,8 @@ export function FloorPlansDialog({
         const index = submitted.indexOf(page.number);
         return index < 0
             ? undefined
-            : (errors[`pages.${index}.floor`] ?? errors[`pages.${index}.image`]);
+            : (errors[`pages.${index}.floor`] ??
+                  errors[`pages.${index}.image`]);
     }
     async function submit(event: FormEvent) {
         event.preventDefault();

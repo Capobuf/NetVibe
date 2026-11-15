@@ -295,9 +295,7 @@ function FloorDialogs({
                     floor={floor}
                 />
             )}
-            {floor && (
-                <FloorDeleteDialog {...props('delete')} floor={floor} />
-            )}
+            {floor && <FloorDeleteDialog {...props('delete')} floor={floor} />}
         </>
     );
 }
@@ -408,9 +406,7 @@ function FloorEditor({
     const [search, setSearch] = useState('');
     const [kinds, setKinds] = useState<Kind[]>(['device', 'rack']);
     const [labels, setLabels] = useState(true);
-    const [tab, setTab] = useState(
-        floor.items.length ? 'placed' : 'unplaced',
-    );
+    const [tab, setTab] = useState(floor.items.length ? 'placed' : 'unplaced');
     const [zoom, setZoom] = useState(1);
     const [error, setError] = useState('');
     const [discard, setDiscard] = useState(false);
@@ -485,7 +481,14 @@ function FloorEditor({
     const markers: FloorMarker[] = items.flatMap((item) => {
         const entry = byKey.get(itemKey(item));
         return entry && kinds.includes(entry.kind)
-            ? [{ ...item, key: entry.key, kind: entry.kind, label: entry.label }]
+            ? [
+                  {
+                      ...item,
+                      key: entry.key,
+                      kind: entry.kind,
+                      label: entry.label,
+                  },
+              ]
             : [];
     });
     const active = selected ? byKey.get(selected) : undefined;

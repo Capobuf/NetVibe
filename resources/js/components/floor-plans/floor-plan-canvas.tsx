@@ -1,5 +1,11 @@
 import type Konva from 'konva';
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import {
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState,
+    type Ref,
+} from 'react';
 import {
     Circle,
     Group,
@@ -241,7 +247,8 @@ export function FloorPlanCanvas({
                         onMove(
                             selectedMarker.key,
                             clamp(
-                                selectedMarker.x + (direction[0] * step) / width,
+                                selectedMarker.x +
+                                    (direction[0] * step) / width,
                             ),
                             clamp(
                                 selectedMarker.y +
@@ -472,7 +479,9 @@ export function FloorPlanCanvas({
                                             }
                                             fontSize={12}
                                             fontFamily="Instrument Sans, sans-serif"
-                                            fontStyle={active ? 'bold' : 'normal'}
+                                            fontStyle={
+                                                active ? 'bold' : 'normal'
+                                            }
                                             fill={colors.text}
                                             padding={5}
                                         />

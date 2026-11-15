@@ -30,7 +30,11 @@ export async function renderPdfPage(
     let blob = await toBlob(canvas, 'image/png');
     if (blob.size > 15 * 1024 * 1024) blob = await toBlob(canvas, 'image/jpeg');
     canvas.width = 0;
-    return { blob, width: Math.round(viewport.width), height: Math.round(viewport.height) };
+    return {
+        blob,
+        width: Math.round(viewport.width),
+        height: Math.round(viewport.height),
+    };
 }
 
 function toBlob(canvas: HTMLCanvasElement, type: string) {

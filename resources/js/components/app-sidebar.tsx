@@ -1,5 +1,6 @@
 import { index as labelIndex } from '@/routes/administration/labels';
 import { index as deviceIndex } from '@/routes/companies/sites/devices';
+import { index as floorIndex } from '@/routes/companies/sites/floors';
 import { index as rackIndex } from '@/routes/companies/sites/racks';
 import { index as topologyIndex } from '@/routes/companies/sites/topology';
 import { index as modelIndex } from '@/routes/device-models';
@@ -7,6 +8,7 @@ import { index as companyIndex } from '@/routes/companies';
 import { Link, usePage } from '@inertiajs/react';
 import {
     Layers3,
+    Map as MapIcon,
     Workflow,
     Server as RackIcon,
     Network,
@@ -154,6 +156,13 @@ export function AppSidebar() {
                                         href: rackIndex(networkContext),
                                         icon: RackIcon,
                                         isActive: component.startsWith('racks/'),
+                                    },
+                                    {
+                                        title: 'Planimetrie',
+                                        href: floorIndex(networkContext),
+                                        icon: MapIcon,
+                                        isActive:
+                                            component.startsWith('floors/'),
                                     },
                                     {
                                         title: 'Catalogo',

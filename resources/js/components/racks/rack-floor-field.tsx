@@ -5,13 +5,19 @@ import InputError from '@/components/input-error';
 
 export function RackFloorField({
     value,
+    defaultValue,
     onChange,
     disabled,
+    required,
+    autoFocus,
     error,
 }: {
     value?: string | null;
+    defaultValue?: string | null;
     onChange?: (value: string | null) => void;
     disabled?: boolean;
+    required?: boolean;
+    autoFocus?: boolean;
     error?: string;
 }) {
     const id = useId();
@@ -23,6 +29,7 @@ export function RackFloorField({
                 name="floor"
                 list={`${id}-floors`}
                 value={value === undefined ? undefined : (value ?? '')}
+                defaultValue={defaultValue ?? undefined}
                 onChange={
                     onChange
                         ? (event) => onChange(event.target.value || null)
@@ -32,6 +39,8 @@ export function RackFloorField({
                 pattern="PT|P-?[1-9][0-9]*"
                 placeholder="PT, P1, P2, P-1…"
                 disabled={disabled}
+                required={required}
+                autoFocus={autoFocus}
                 aria-invalid={!!error}
             />
             <datalist id={`${id}-floors`}>

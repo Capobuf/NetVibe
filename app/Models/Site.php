@@ -15,6 +15,12 @@ class Site extends Model
         return $this->hasMany(Rack::class);
     }
 
+    /** @return HasMany<Floor, $this> */
+    public function floors(): HasMany
+    {
+        return $this->hasMany(Floor::class);
+    }
+
     /** @return HasMany<Device, $this> */
     public function devices(): HasMany
     {

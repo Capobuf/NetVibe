@@ -89,7 +89,7 @@ function logoImage() {
     logo ??= (async () => {
         try {
             const image = new Image();
-            image.src = '/branding/logo-black.svg?v=branding-20261115';
+            image.src = '/branding/netvibe-logo-black.svg';
             await image.decode();
             const canvas = document.createElement('canvas');
             canvas.width = canvas.height = 480;

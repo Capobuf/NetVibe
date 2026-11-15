@@ -1,6 +1,6 @@
 import { index as labelIndex } from '@/routes/administration/labels';
 import { index as deviceIndex } from '@/routes/companies/sites/devices';
-import { index as floorPlanIndex } from '@/routes/companies/sites/floor-plans';
+import { index as floorIndex } from '@/routes/companies/sites/floors';
 import { index as rackIndex } from '@/routes/companies/sites/racks';
 import { index as topologyIndex } from '@/routes/companies/sites/topology';
 import { index as modelIndex } from '@/routes/device-models';
@@ -159,10 +159,10 @@ export function AppSidebar() {
                                     },
                                     {
                                         title: 'Planimetrie',
-                                        href: floorPlanIndex(networkContext),
+                                        href: floorIndex(networkContext),
                                         icon: MapIcon,
                                         isActive:
-                                            component.startsWith('floor-plans/'),
+                                            component.startsWith('floors/'),
                                     },
                                     {
                                         title: 'Catalogo',

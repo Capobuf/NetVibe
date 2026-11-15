@@ -8,13 +8,19 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'floor', 'image_width', 'image_height', 'revision'])]
+#[Fillable(['code', 'revision'])]
 #[Hidden(['image_path'])]
-class FloorPlan extends Model
+class Floor extends Model
 {
     protected function casts(): array
     {
         return ['image_width' => 'integer', 'image_height' => 'integer', 'revision' => 'integer'];
+    }
+
+    /** Sort key: basements below zero, PT zero, upper floors above. */
+    public function level(): int
+    {
+        return $this->code === 'PT' ? 0 : (int) substr($this->code, 1);
     }
 
     public function site(): BelongsTo
@@ -24,6 +30,6 @@ class FloorPlan extends Model
 
     public function items(): HasMany
     {
-        return $this->hasMany(FloorPlanItem::class);
+        return $this->hasMany(FloorItem::class);
     }
 }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['device_id', 'rack_id', 'x', 'y'])]
-class FloorPlanItem extends Model
+class FloorItem extends Model
 {
     public $timestamps = false;
 
@@ -16,8 +16,8 @@ class FloorPlanItem extends Model
         return ['x' => 'float', 'y' => 'float'];
     }
 
-    public function floorPlan(): BelongsTo
+    public function floor(): BelongsTo
     {
-        return $this->belongsTo(FloorPlan::class);
+        return $this->belongsTo(Floor::class);
     }
 }

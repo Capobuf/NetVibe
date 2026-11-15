@@ -7,6 +7,8 @@ use Illuminate\Validation\Rule;
 
 class RackRequest extends FormRequest
 {
+    public const FLOOR_PATTERN = '/\A(?:PT|P-?[1-9][0-9]*)\z/';
+
     public function rules(): array
     {
         return [
@@ -39,7 +41,7 @@ class RackRequest extends FormRequest
 
     public static function floorRules(): array
     {
-        return ['sometimes', 'nullable', 'string', 'max:12', 'regex:/\A(?:PT|P-?[1-9][0-9]*)\z/'];
+        return ['sometimes', 'nullable', 'string', 'max:12', 'regex:'.self::FLOOR_PATTERN];
     }
 
     public function attributes(): array

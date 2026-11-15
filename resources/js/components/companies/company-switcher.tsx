@@ -28,7 +28,7 @@ import { index as rackIndex } from '@/routes/companies/sites/racks';
 import { index as searchIndex } from '@/routes/companies/sites/search';
 import { index as subnetIndex } from '@/routes/companies/sites/subnets';
 import { index as topologyIndex } from '@/routes/companies/sites/topology';
-import { index as floorPlanIndex } from '@/routes/companies/sites/floor-plans';
+import { index as floorIndex } from '@/routes/companies/sites/floors';
 import { index as vlanIndex } from '@/routes/companies/sites/vlans';
 
 // Search only pays off once the list no longer fits at a glance.
@@ -67,8 +67,8 @@ export function CompanySwitcher() {
                   ? vlanIndex
                   : component.startsWith('topology/')
                     ? topologyIndex
-                    : component.startsWith('floor-plans/')
-                      ? floorPlanIndex
+                    : component.startsWith('floors/')
+                      ? floorIndex
                       : subnetIndex;
     function go(target: Parameters<typeof router.visit>[0]) {
         setOpen(false);

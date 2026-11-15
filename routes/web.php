@@ -10,7 +10,7 @@ use App\Http\Controllers\DeviceInterfaceController;
 use App\Http\Controllers\DeviceIpController;
 use App\Http\Controllers\DeviceModelController;
 use App\Http\Controllers\ExcludedRangeController;
-use App\Http\Controllers\FloorPlanController;
+use App\Http\Controllers\FloorController;
 use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpamExportController;
 use App\Http\Controllers\IpSearchController;
@@ -60,9 +60,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
         Route::get('companies/{company}/sites/{site}/topology', [TopologyController::class, 'index'])->name('companies.sites.topology.index');
-        Route::get('companies/{company}/sites/{site}/floor-plans/{floorPlan}/image', [FloorPlanController::class, 'image'])->name('companies.sites.floor-plans.image');
-        Route::put('companies/{company}/sites/{site}/floor-plans/{floorPlan}/layout', [FloorPlanController::class, 'layout'])->name('companies.sites.floor-plans.layout');
-        Route::resource('companies.sites.floor-plans', FloorPlanController::class)->parameters(['floor-plans' => 'floorPlan'])->only(['index', 'show', 'store', 'update', 'destroy']);
+        Route::get('companies/{company}/sites/{site}/floors/{floor}/image', [FloorController::class, 'image'])->name('companies.sites.floors.image');
+        Route::put('companies/{company}/sites/{site}/floors/{floor}/image', [FloorController::class, 'updateImage'])->name('companies.sites.floors.upload');
+        Route::put('companies/{company}/sites/{site}/floors/{floor}/layout', [FloorController::class, 'layout'])->name('companies.sites.floors.layout');
+        Route::resource('companies.sites.floors', FloorController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('companies/{company}/sites/{site}/racks/documentation/{rack?}', [RackDocumentController::class, 'show'])->name('companies.sites.racks.documentation');
         Route::get('companies/{company}/sites/{site}/racks/{rack}/cables/{cableId}/labels', [CableLabelController::class, 'show'])->whereNumber('cableId')->name('companies.sites.racks.cables.labels');
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);

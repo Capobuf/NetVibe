@@ -8,12 +8,16 @@ export function RackFloorField({
     defaultValue,
     onChange,
     disabled,
+    required,
+    autoFocus,
     error,
 }: {
     value?: string | null;
     defaultValue?: string | null;
     onChange?: (value: string | null) => void;
     disabled?: boolean;
+    required?: boolean;
+    autoFocus?: boolean;
     error?: string;
 }) {
     const id = useId();
@@ -35,6 +39,8 @@ export function RackFloorField({
                 pattern="PT|P-?[1-9][0-9]*"
                 placeholder="PT, P1, P2, P-1…"
                 disabled={disabled}
+                required={required}
+                autoFocus={autoFocus}
                 aria-invalid={!!error}
             />
             <datalist id={`${id}-floors`}>

@@ -127,10 +127,10 @@ class DeletionImpact
     }
 
     /** @param list<int> $siteIds */
-    public static function deleteFloorPlans(array $siteIds): void
+    public static function deleteFloors(array $siteIds): void
     {
-        $images = DB::table('floor_plans')->whereIn('site_id', $siteIds)->pluck('image_path')->all();
-        DB::table('floor_plans')->whereIn('site_id', $siteIds)->delete();
+        $images = DB::table('floors')->whereIn('site_id', $siteIds)->whereNotNull('image_path')->pluck('image_path')->all();
+        DB::table('floors')->whereIn('site_id', $siteIds)->delete();
         if ($images) {
             DB::afterCommit(fn () => Storage::disk('local')->delete($images));
         }

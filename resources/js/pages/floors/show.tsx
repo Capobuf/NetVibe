@@ -4,6 +4,8 @@ import {
     Ellipsis,
     Eye,
     GripVertical,
+    ImageUp,
+    Layers,
     Map as MapIcon,
     MapPinOff,
     MapPinPlus,
@@ -18,14 +20,17 @@ import {
     X,
 } from 'lucide-react';
 import { Fragment, useRef, useState, type ReactNode } from 'react';
-import { DeletionConfirmation } from '@/components/companies/deletion-confirmation';
 import { DeviceIps } from '@/components/devices/device-ips';
+import {
+    FloorDeleteDialog,
+    FloorDialog,
+    FloorImageDialog,
+} from '@/components/floor-plans/floor-dialogs';
 import {
     FLOOR_PLAN_DRAG_TYPE,
     FloorPlanCanvas,
     type FloorPlanCanvasApi,
 } from '@/components/floor-plans/floor-plan-canvas';
-import { FloorPlanForm } from '@/components/floor-plans/floor-plan-form';
 import { IconButton } from '@/components/icon-button';
 import { SaveButton } from '@/components/save-button';
 import TextLink from '@/components/text-link';
@@ -72,12 +77,7 @@ import {
     index as deviceIndex,
     show as deviceShow,
 } from '@/routes/companies/sites/devices';
-import {
-    destroy,
-    index,
-    layout,
-    show,
-} from '@/routes/companies/sites/floor-plans';
+import { index, layout, show } from '@/routes/companies/sites/floors';
 import {
     index as rackIndex,
     show as rackShow,
@@ -85,59 +85,59 @@ import {
 import type { Company, Site } from '@/types/company';
 import {
     itemKey,
-    type FloorPlan,
-    type FloorPlanDevice,
-    type FloorPlanItem,
-    type FloorPlanMarker,
-    type FloorPlanPlacement,
-    type FloorPlanRack,
-    type FloorPlanSummary,
-} from '@/types/floor-plan';
+    type Floor,
+    type FloorDevice,
+    type FloorImage,
+    type FloorItem,
+    type FloorMarker,
+    type FloorPlacement,
+    type FloorRack,
+    type FloorSummary,
+} from '@/types/floor';
 
 type Props = {
     company: Company;
     site: Site;
     editing: boolean;
-    plans: FloorPlanSummary[];
-    plan: FloorPlan | null;
-    elsewhere: FloorPlanPlacement[];
-    devices: FloorPlanDevice[];
-    racks: FloorPlanRack[];
+    floors: FloorSummary[];
+    floor: Floor | null;
+    elsewhere: FloorPlacement[];
+    devices: FloorDevice[];
+    racks: FloorRack[];
 };
+type FloorProps = Props & { floor: Floor };
+type Action = 'create' | 'edit' | 'image' | 'delete';
 
-type Kind = FloorPlanMarker['kind'];
+type Kind = FloorMarker['kind'];
 type Entry = {
     key: string;
     kind: Kind;
     label: string;
     detail: string;
     terms: string;
-    device?: FloorPlanDevice;
-    rack?: FloorPlanRack;
+    device?: FloorDevice;
+    rack?: FloorRack;
 };
 
-const planLabel = (plan: FloorPlanSummary) =>
-    plan.floor ? `${plan.name} · ${plan.floor}` : plan.name;
-
-export default function FloorPlans(props: Props) {
-    return props.plan ? (
-        <FloorPlanEditor
-            key={`${props.plan.id}:${props.plan.image_url}`}
+export default function Floors(props: Props) {
+    if (!props.floor) return <NoFloor {...props} />;
+    return props.floor.image ? (
+        <FloorEditor
+            key={`${props.floor.id}:${props.floor.image.url}`}
             {...props}
-            plan={props.plan}
+            floor={props.floor}
+            image={props.floor.image}
         />
     ) : (
-        <NoFloorPlan {...props} />
+        <FloorWithoutPlan key={props.floor.id} {...props} floor={props.floor} />
     );
 }
 
 function Header({
     context,
-    title,
     children,
 }: {
     context: string;
-    title: ReactNode;
     children?: ReactNode;
 }) {
     return (
@@ -151,7 +151,7 @@ function Header({
                         {context}
                     </p>
                     <h1 className="truncate text-2xl font-medium tracking-tight">
-                        {title}
+                        Planimetrie
                     </h1>
                 </div>
             </div>
@@ -160,15 +160,192 @@ function Header({
     );
 }
 
-function NoFloorPlan({ company, site }: Props) {
+/** Floor switcher and floor actions; the edit controls sit in between. */
+function FloorMenu({
+    company,
+    site,
+    floors,
+    floor,
+    editing = false,
+    onAction,
+    children,
+}: {
+    company: Company;
+    site: Site;
+    floors: FloorSummary[];
+    floor: Floor;
+    editing?: boolean;
+    onAction: (action: Action) => void;
+    children?: ReactNode;
+}) {
+    return (
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="outline"
+                        aria-label={`Piano ${floor.code}`}
+                    >
+                        <Layers className="text-muted-foreground" />
+                        <span className="text-muted-foreground">Piano</span>
+                        <span className="font-semibold">{floor.code}</span>
+                        <ChevronsUpDown className="text-muted-foreground" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuRadioGroup
+                        value={String(floor.id)}
+                        onValueChange={(value) =>
+                            router.visit(
+                                show({
+                                    company: company.id,
+                                    site: site.id,
+                                    floor: Number(value),
+                                }),
+                            )
+                        }
+                    >
+                        {floors.map((item) => (
+                            <DropdownMenuRadioItem
+                                key={item.id}
+                                value={String(item.id)}
+                            >
+                                {item.code}
+                            </DropdownMenuRadioItem>
+                        ))}
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                        <DropdownMenuItem
+                            disabled={editing}
+                            onSelect={() => onAction('create')}
+                        >
+                            <Plus />
+                            Nuovo piano
+                        </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                </DropdownMenuContent>
+            </DropdownMenu>
+            {children}
+            {!editing && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <IconButton label={`Azioni piano ${floor.code}`}>
+                            <Ellipsis />
+                        </IconButton>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => onAction('image')}>
+                            <ImageUp />
+                            {floor.image
+                                ? 'Sostituisci planimetria'
+                                : 'Carica planimetria'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => onAction('edit')}>
+                            <Pencil />
+                            Modifica piano
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => onAction('delete')}
+                        >
+                            <Trash2 />
+                            Elimina piano
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+        </>
+    );
+}
+
+function FloorDialogs({
+    company,
+    site,
+    floor,
+    action,
+    onClose,
+}: {
+    company: Company;
+    site: Site;
+    floor?: Floor;
+    action: Action | null;
+    onClose: () => void;
+}) {
+    const route = { company: company.id, site: site.id };
+    const props = (kind: Action) => ({
+        ...route,
+        open: action === kind,
+        onOpenChange: (open: boolean) => {
+            if (!open) onClose();
+        },
+    });
+    return (
+        <>
+            {action === 'create' && <FloorDialog {...props('create')} />}
+            {floor && action === 'edit' && (
+                <FloorDialog {...props('edit')} floor={floor} />
+            )}
+            {floor && action === 'image' && (
+                <FloorImageDialog {...props('image')} floor={floor} />
+            )}
+            {floor && (
+                <FloorDeleteDialog {...props('delete')} floor={floor} />
+            )}
+        </>
+    );
+}
+
+function NoFloor({ company, site }: Props) {
     const context = useSiteContext(company, site);
-    const [creating, setCreating] = useState(false);
+    const [action, setAction] = useState<Action | null>(null);
     return (
         <>
             <Head title={`Planimetrie · ${context}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
-                <Header context={context} title="Planimetrie" />
-                <Empty className="min-h-[60vh] rounded-xl border border-dashed">
+                <Header context={context} />
+                <Empty className="min-h-[60vh] rounded-xl border">
+                    <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                            <Layers />
+                        </EmptyMedia>
+                        <EmptyTitle>Nessun piano</EmptyTitle>
+                    </EmptyHeader>
+                    <EmptyContent>
+                        <Button onClick={() => setAction('create')}>
+                            <Plus />
+                            Nuovo piano
+                        </Button>
+                    </EmptyContent>
+                </Empty>
+            </div>
+            <FloorDialogs
+                company={company}
+                site={site}
+                action={action}
+                onClose={() => setAction(null)}
+            />
+        </>
+    );
+}
+
+function FloorWithoutPlan({ company, site, floors, floor }: FloorProps) {
+    const context = useSiteContext(company, site);
+    const [action, setAction] = useState<Action | null>(null);
+    return (
+        <>
+            <Head title={`${floor.code} · Planimetrie · ${context}`} />
+            <div className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
+                <Header context={context}>
+                    <FloorMenu
+                        company={company}
+                        site={site}
+                        floors={floors}
+                        floor={floor}
+                        onAction={setAction}
+                    />
+                </Header>
+                <Empty className="min-h-[60vh] rounded-xl border">
                     <EmptyHeader>
                         <EmptyMedia variant="icon">
                             <MapIcon />
@@ -176,36 +353,38 @@ function NoFloorPlan({ company, site }: Props) {
                         <EmptyTitle>Nessuna planimetria</EmptyTitle>
                     </EmptyHeader>
                     <EmptyContent>
-                        <Button onClick={() => setCreating(true)}>
-                            <Plus />
-                            Nuova planimetria
+                        <Button onClick={() => setAction('image')}>
+                            <ImageUp />
+                            Carica planimetria
                         </Button>
                     </EmptyContent>
                 </Empty>
             </div>
-            <FloorPlanForm
-                company={company.id}
-                site={site.id}
-                open={creating}
-                onOpenChange={setCreating}
+            <FloorDialogs
+                company={company}
+                site={site}
+                floor={floor}
+                action={action}
+                onClose={() => setAction(null)}
             />
         </>
     );
 }
 
-function FloorPlanEditor({
+function FloorEditor({
     company,
     site,
     editing: initialEditing,
-    plans,
-    plan,
+    floors,
+    floor,
+    image,
     elsewhere,
     devices,
     racks,
-}: Props & { plan: FloorPlan }) {
+}: FloorProps & { image: FloorImage }) {
     const route = { company: company.id, site: site.id };
     const context = useSiteContext(company, site);
-    const form = useForm<{ items: FloorPlanItem[] }>({ items: plan.items });
+    const form = useForm<{ items: FloorItem[] }>({ items: floor.items });
     const items = form.data.items;
     const processing = form.processing;
     const isDirty = form.isDirty;
@@ -215,13 +394,12 @@ function FloorPlanEditor({
     const [kinds, setKinds] = useState<Kind[]>(['device', 'rack']);
     const [labels, setLabels] = useState(true);
     const [tab, setTab] = useState(
-        initialEditing && !plan.items.length ? 'unplaced' : 'placed',
+        floor.items.length ? 'placed' : 'unplaced',
     );
     const [zoom, setZoom] = useState(1);
     const [error, setError] = useState('');
     const [discard, setDiscard] = useState(false);
-    const [formOpen, setFormOpen] = useState<'create' | 'edit' | null>(null);
-    const [deleting, setDeleting] = useState(false);
+    const [action, setAction] = useState<Action | null>(null);
     const canvas = useRef<FloorPlanCanvasApi>(null);
     const { leave, setLeave, allowLeave } = useLeaveGuard(isDirty);
 
@@ -229,9 +407,9 @@ function FloorPlanEditor({
     const others = new Map<string, string[]>();
     for (const placement of elsewhere) {
         const key = itemKey(placement);
-        others.set(key, [...(others.get(key) ?? []), placement.plan]);
+        others.set(key, [...(others.get(key) ?? []), placement.floor]);
     }
-    const rackDevices = new Map<number, FloorPlanDevice[]>();
+    const rackDevices = new Map<number, FloorDevice[]>();
     for (const device of devices)
         if (device.rack)
             rackDevices.set(device.rack.id, [
@@ -288,8 +466,8 @@ function FloorPlanEditor({
             entry.terms.toLocaleLowerCase().includes(term),
     );
     const unplaced = matches.filter((entry) => !placed.has(entry.key));
-    const onPlan = matches.filter((entry) => placed.has(entry.key));
-    const markers: FloorPlanMarker[] = items.flatMap((item) => {
+    const onFloor = matches.filter((entry) => placed.has(entry.key));
+    const markers: FloorMarker[] = items.flatMap((item) => {
         const entry = byKey.get(itemKey(item));
         return entry && kinds.includes(entry.kind)
             ? [{ ...item, key: entry.key, kind: entry.kind, label: entry.label }]
@@ -298,7 +476,7 @@ function FloorPlanEditor({
     const active = selected ? byKey.get(selected) : undefined;
     const feedback = error || Object.values(form.errors).join(' ');
 
-    function setItems(next: FloorPlanItem[]) {
+    function setItems(next: FloorItem[]) {
         setError('');
         form.clearErrors();
         form.setData('items', next);
@@ -347,7 +525,7 @@ function FloorPlanEditor({
         else setEditing(false);
     }
     function reset() {
-        form.setData('items', plan.items);
+        form.setData('items', floor.items);
         form.clearErrors();
         setError('');
         setSelected(null);
@@ -358,11 +536,11 @@ function FloorPlanEditor({
         if (processing) return;
         allowLeave.current = true;
         let succeeded = false;
-        form.transform((data) => ({ ...data, revision: plan.revision }));
-        form.put(layout.url({ ...route, floorPlan: plan.id }), {
+        form.transform((data) => ({ ...data, revision: floor.revision }));
+        form.put(layout.url({ ...route, floor: floor.id }), {
             preserveScroll: true,
             onSuccess: (page) => {
-                const saved = (page.props.plan as FloorPlan).items;
+                const saved = (page.props.floor as Floor).items;
                 form.setDefaults({ items: saved });
                 form.setData('items', saved);
                 setEditing(false);
@@ -375,9 +553,9 @@ function FloorPlanEditor({
         });
     }
 
-    function entryRow(entry: Entry, onPlanList: boolean) {
+    function entryRow(entry: Entry, onFloorList: boolean) {
         const Icon = entry.kind === 'rack' ? Server : Monitor;
-        const elsewhereNames = others.get(entry.key);
+        const elsewhereCodes = others.get(entry.key);
         const content = (
             <>
                 <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -387,12 +565,16 @@ function FloorPlanEditor({
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
                         {entry.detail}
-                        {elsewhereNames && ` · ${elsewhereNames.join(', ')}`}
                     </span>
                 </span>
+                {elsewhereCodes && (
+                    <Badge variant="outline" className="shrink-0">
+                        {elsewhereCodes.join(', ')}
+                    </Badge>
+                )}
             </>
         );
-        if (onPlanList)
+        if (onFloorList)
             return (
                 <li key={entry.key}>
                     <button
@@ -470,8 +652,8 @@ function FloorPlanEditor({
                       ),
                   ],
                   ['Altezza', active.rack && `${active.rack.height_u}U`],
-                  ['Piano', active.rack?.floor],
-                  ['Anche su', others.get(active.key)?.join(', ')],
+                  ['Piano del rack', active.rack?.floor],
+                  ['Anche sul piano', others.get(active.key)?.join(', ')],
               ] as [string, ReactNode][]
           ).filter(([, value]) => value)
         : [];
@@ -486,118 +668,53 @@ function FloorPlanEditor({
 
     return (
         <>
-            <Head title={`${plan.name} · Planimetrie · ${context}`} />
+            <Head title={`${floor.code} · Planimetrie · ${context}`} />
             <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
-                <Header context={context} title="Planimetrie">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="outline"
-                                className="max-w-64"
-                                aria-label={`Planimetria: ${planLabel(plan)}`}
-                            >
-                                <span className="truncate">{plan.name}</span>
-                                {plan.floor && (
-                                    <Badge variant="secondary">
-                                        {plan.floor}
-                                    </Badge>
-                                )}
-                                <ChevronsUpDown className="text-muted-foreground" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-64">
-                            <DropdownMenuRadioGroup
-                                value={String(plan.id)}
-                                onValueChange={(value) =>
-                                    router.visit(
-                                        show({
-                                            ...route,
-                                            floorPlan: Number(value),
-                                        }),
-                                    )
-                                }
-                            >
-                                {plans.map((item) => (
-                                    <DropdownMenuRadioItem
-                                        key={item.id}
-                                        value={String(item.id)}
-                                    >
-                                        <span className="truncate">
-                                            {planLabel(item)}
-                                        </span>
-                                    </DropdownMenuRadioItem>
-                                ))}
-                            </DropdownMenuRadioGroup>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem
-                                    disabled={editing}
-                                    onSelect={() => setFormOpen('create')}
-                                >
-                                    <Plus />
-                                    Nuova planimetria
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <ToggleGroup
-                        type="single"
-                        variant="outline"
-                        value={editing ? 'edit' : 'view'}
-                        onValueChange={changeMode}
-                        disabled={processing}
-                        aria-label="Modalità planimetria"
+                <Header context={context}>
+                    <FloorMenu
+                        company={company}
+                        site={site}
+                        floors={floors}
+                        floor={floor}
+                        editing={editing}
+                        onAction={setAction}
                     >
-                        <ToggleGroupItem value="view">
-                            <Eye />
-                            Esplora
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="edit">
-                            <Pencil />
-                            Modifica
-                        </ToggleGroupItem>
-                    </ToggleGroup>
-                    {editing ? (
-                        <>
-                            <Button
-                                variant="outline"
-                                disabled={processing}
-                                onClick={() => changeMode('view')}
-                            >
-                                <Undo2 />
-                                Annulla
-                            </Button>
-                            <SaveButton
-                                type="button"
-                                processing={processing}
-                                saved={!isDirty}
-                                onClick={() => save()}
-                            />
-                        </>
-                    ) : (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <IconButton label="Azioni planimetria">
-                                    <Ellipsis />
-                                </IconButton>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    onSelect={() => setFormOpen('edit')}
+                        <ToggleGroup
+                            type="single"
+                            variant="outline"
+                            value={editing ? 'edit' : 'view'}
+                            onValueChange={changeMode}
+                            disabled={processing}
+                            aria-label="Modalità planimetria"
+                        >
+                            <ToggleGroupItem value="view">
+                                <Eye />
+                                Esplora
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="edit">
+                                <Pencil />
+                                Modifica
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+                        {editing && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    disabled={processing}
+                                    onClick={() => changeMode('view')}
                                 >
-                                    <Pencil />
-                                    Modifica nome e immagine
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    variant="destructive"
-                                    onSelect={() => setDeleting(true)}
-                                >
-                                    <Trash2 />
-                                    Elimina planimetria
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
+                                    <Undo2 />
+                                    Annulla
+                                </Button>
+                                <SaveButton
+                                    type="button"
+                                    processing={processing}
+                                    saved={!isDirty}
+                                    onClick={() => save()}
+                                />
+                            </>
+                        )}
+                    </FloorMenu>
                 </Header>
                 {feedback && (
                     <Alert variant="destructive">
@@ -606,7 +723,7 @@ function FloorPlanEditor({
                 )}
                 <div className="grid min-w-0 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
                     <aside className="order-2 flex max-h-[72vh] min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background lg:order-1 lg:max-h-none lg:[contain:size]">
-                        <div className="flex flex-col gap-3 border-b p-3">
+                        <div className="border-b p-3">
                             <InputGroup>
                                 <InputGroupAddon>
                                     <Search />
@@ -646,14 +763,14 @@ function FloorPlanEditor({
                                             variant="secondary"
                                             className="tabular-nums"
                                         >
-                                            {onPlan.length}
+                                            {onFloor.length}
                                         </Badge>
                                     </TabsTrigger>
                                 </TabsList>
                                 {(
                                     [
                                         ['unplaced', unplaced],
-                                        ['placed', onPlan],
+                                        ['placed', onFloor],
                                     ] as const
                                 ).map(([value, list]) => (
                                     <TabsContent
@@ -715,7 +832,7 @@ function FloorPlanEditor({
                     </aside>
                     <section
                         className="relative order-1 flex min-w-0 flex-col overflow-hidden rounded-xl border bg-background lg:order-2"
-                        aria-label={`Planimetria ${plan.name}`}
+                        aria-label={`Planimetria del piano ${floor.code}`}
                     >
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b p-2">
                             <div className="flex items-center gap-2">
@@ -762,9 +879,9 @@ function FloorPlanEditor({
                         </div>
                         <div className="relative h-[72vh] min-h-[28rem]">
                             <FloorPlanCanvas
-                                imageUrl={plan.image_url}
-                                width={plan.image_width}
-                                height={plan.image_height}
+                                imageUrl={image.url}
+                                width={image.width}
+                                height={image.height}
                                 markers={markers}
                                 selected={selected}
                                 highlighted={
@@ -914,40 +1031,13 @@ function FloorPlanEditor({
                     </section>
                 </div>
             </div>
-            {formOpen && (
-                <FloorPlanForm
-                    company={company.id}
-                    site={site.id}
-                    plan={formOpen === 'edit' ? plan : undefined}
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setFormOpen(null);
-                    }}
-                />
-            )}
-            <Dialog open={deleting} onOpenChange={setDeleting}>
-                <DialogContent aria-describedby={undefined}>
-                    <DialogHeader>
-                        <DialogTitle>Elimina {plan.name}</DialogTitle>
-                    </DialogHeader>
-                    <DeletionConfirmation
-                        action={destroy.form({ ...route, floorPlan: plan.id })}
-                        onCancel={() => setDeleting(false)}
-                        onSuccess={() => setDeleting(false)}
-                        submitLabel="Elimina planimetria"
-                        fields={() => (
-                            <input
-                                type="hidden"
-                                name="revision"
-                                value={plan.revision}
-                            />
-                        )}
-                    >
-                        Verranno eliminate l’immagine e {plan.items.length}{' '}
-                        posizioni. Dispositivi e rack resteranno documentati.
-                    </DeletionConfirmation>
-                </DialogContent>
-            </Dialog>
+            <FloorDialogs
+                company={company}
+                site={site}
+                floor={floor}
+                action={action}
+                onClose={() => setAction(null)}
+            />
             <Dialog
                 open={!!leave || discard}
                 onOpenChange={(open) => {
@@ -994,20 +1084,20 @@ function FloorPlanEditor({
     );
 }
 
-FloorPlans.layout = ({ company, site, plan }: Props) => ({
+Floors.layout = ({ company, site, floor }: Props) => ({
     breadcrumbs: [
         {
             title: 'Planimetrie',
             href: index({ company: company.id, site: site.id }),
         },
-        ...(plan
+        ...(floor
             ? [
                   {
-                      title: plan.name,
+                      title: `Piano ${floor.code}`,
                       href: show({
                           company: company.id,
                           site: site.id,
-                          floorPlan: plan.id,
+                          floor: floor.id,
                       }),
                   },
               ]

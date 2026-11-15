@@ -1,26 +1,25 @@
-export type FloorPlanSummary = {
+export type FloorSummary = {
     id: number;
-    name: string;
-    floor: string | null;
+    code: string;
 };
 
-/** x and y are fractions of the image size (0–1). */
-export type FloorPlanItem = {
+/** x and y are fractions of the floor plan image size (0–1). */
+export type FloorItem = {
     device_id: number | null;
     rack_id: number | null;
     x: number;
     y: number;
 };
 
-export type FloorPlan = FloorPlanSummary & {
-    image_width: number;
-    image_height: number;
-    image_url: string;
+export type FloorImage = { url: string; width: number; height: number };
+
+export type Floor = FloorSummary & {
     revision: number;
-    items: FloorPlanItem[];
+    image: FloorImage | null;
+    items: FloorItem[];
 };
 
-export type FloorPlanDevice = {
+export type FloorDevice = {
     id: number;
     name: string;
     model: string | null;
@@ -29,7 +28,7 @@ export type FloorPlanDevice = {
     rack: { id: number; name: string } | null;
 };
 
-export type FloorPlanRack = {
+export type FloorRack = {
     id: number;
     name: string;
     floor: string | null;
@@ -37,13 +36,13 @@ export type FloorPlanRack = {
     devices_count: number;
 };
 
-export type FloorPlanPlacement = {
+export type FloorPlacement = {
     device_id: number | null;
     rack_id: number | null;
-    plan: string;
+    floor: string;
 };
 
-export type FloorPlanMarker = {
+export type FloorMarker = {
     key: string;
     kind: 'device' | 'rack';
     label: string;
@@ -51,5 +50,5 @@ export type FloorPlanMarker = {
     y: number;
 };
 
-export const itemKey = (item: Pick<FloorPlanItem, 'device_id' | 'rack_id'>) =>
+export const itemKey = (item: Pick<FloorItem, 'device_id' | 'rack_id'>) =>
     item.rack_id ? `r-${item.rack_id}` : `d-${item.device_id}`;

@@ -14,7 +14,7 @@ import {
 } from 'react-konva';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppearance } from '@/hooks/use-appearance';
-import type { FloorPlanMarker } from '@/types/floor-plan';
+import type { FloorMarker } from '@/types/floor';
 
 export const FLOOR_PLAN_DRAG_TYPE = 'application/x-netvibe-floor-plan';
 
@@ -48,7 +48,7 @@ export function FloorPlanCanvas({
     imageUrl: string;
     width: number;
     height: number;
-    markers: FloorPlanMarker[];
+    markers: FloorMarker[];
     selected: string | null;
     /** Markers matching the search; null when nothing is searched. */
     highlighted: Set<string> | null;

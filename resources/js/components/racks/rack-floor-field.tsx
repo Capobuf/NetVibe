@@ -5,11 +5,13 @@ import InputError from '@/components/input-error';
 
 export function RackFloorField({
     value,
+    defaultValue,
     onChange,
     disabled,
     error,
 }: {
     value?: string | null;
+    defaultValue?: string | null;
     onChange?: (value: string | null) => void;
     disabled?: boolean;
     error?: string;
@@ -23,6 +25,7 @@ export function RackFloorField({
                 name="floor"
                 list={`${id}-floors`}
                 value={value === undefined ? undefined : (value ?? '')}
+                defaultValue={defaultValue ?? undefined}
                 onChange={
                     onChange
                         ? (event) => onChange(event.target.value || null)

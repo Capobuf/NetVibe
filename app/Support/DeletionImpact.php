@@ -126,6 +126,16 @@ class DeletionImpact
         }
     }
 
+    /** @param list<int> $siteIds */
+    public static function deleteFloorPlans(array $siteIds): void
+    {
+        $images = DB::table('floor_plans')->whereIn('site_id', $siteIds)->pluck('image_path')->all();
+        DB::table('floor_plans')->whereIn('site_id', $siteIds)->delete();
+        if ($images) {
+            DB::afterCommit(fn () => Storage::disk('local')->delete($images));
+        }
+    }
+
     private static function cables(array $deviceIds): array
     {
         return Cable::query()->whereIn('id', CableEnd::query()->whereIn('device_id', $deviceIds)->select('cable_id'))

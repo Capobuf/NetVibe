@@ -61,7 +61,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('can:access-company,company')->scopeBindings()->group(function () {
         Route::get('companies/{company}/sites/{site}/topology', [TopologyController::class, 'index'])->name('companies.sites.topology.index');
         Route::get('companies/{company}/sites/{site}/floors/{floor}/image', [FloorController::class, 'image'])->name('companies.sites.floors.image');
-        Route::put('companies/{company}/sites/{site}/floors/{floor}/image', [FloorController::class, 'updateImage'])->name('companies.sites.floors.upload');
+        Route::post('companies/{company}/sites/{site}/floors/plans', [FloorController::class, 'plans'])->name('companies.sites.floors.plans');
         Route::put('companies/{company}/sites/{site}/floors/{floor}/layout', [FloorController::class, 'layout'])->name('companies.sites.floors.layout');
         Route::resource('companies.sites.floors', FloorController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('companies/{company}/sites/{site}/racks/documentation/{rack?}', [RackDocumentController::class, 'show'])->name('companies.sites.racks.documentation');

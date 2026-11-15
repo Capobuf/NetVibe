@@ -3,6 +3,12 @@ export type FloorSummary = {
     code: string;
 };
 
+/** A floor as listed in the switcher, with what an upload needs to know. */
+export type FloorListItem = FloorSummary & {
+    items_count: number;
+    image: { width: number; height: number } | null;
+};
+
 /** x and y are fractions of the floor plan image size (0–1). */
 export type FloorItem = {
     device_id: number | null;

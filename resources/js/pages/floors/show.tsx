@@ -24,7 +24,7 @@ import { DeviceIps } from '@/components/devices/device-ips';
 import {
     FloorDeleteDialog,
     FloorDialog,
-    FloorImageDialog,
+    FloorPlansDialog,
 } from '@/components/floor-plans/floor-dialogs';
 import {
     FLOOR_PLAN_DRAG_TYPE,
@@ -92,14 +92,14 @@ import {
     type FloorMarker,
     type FloorPlacement,
     type FloorRack,
-    type FloorSummary,
+    type FloorListItem,
 } from '@/types/floor';
 
 type Props = {
     company: Company;
     site: Site;
     editing: boolean;
-    floors: FloorSummary[];
+    floors: FloorListItem[];
     floor: Floor | null;
     elsewhere: FloorPlacement[];
     devices: FloorDevice[];
@@ -172,7 +172,7 @@ function FloorMenu({
 }: {
     company: Company;
     site: Site;
-    floors: FloorSummary[];
+    floors: FloorListItem[];
     floor: Floor;
     editing?: boolean;
     onAction: (action: Action) => void;
@@ -262,12 +262,14 @@ function FloorMenu({
 function FloorDialogs({
     company,
     site,
+    floors,
     floor,
     action,
     onClose,
 }: {
     company: Company;
     site: Site;
+    floors: FloorListItem[];
     floor?: Floor;
     action: Action | null;
     onClose: () => void;
@@ -286,8 +288,12 @@ function FloorDialogs({
             {floor && action === 'edit' && (
                 <FloorDialog {...props('edit')} floor={floor} />
             )}
-            {floor && action === 'image' && (
-                <FloorImageDialog {...props('image')} floor={floor} />
+            {action === 'image' && (
+                <FloorPlansDialog
+                    {...props('image')}
+                    floors={floors}
+                    floor={floor}
+                />
             )}
             {floor && (
                 <FloorDeleteDialog {...props('delete')} floor={floor} />
@@ -296,7 +302,7 @@ function FloorDialogs({
     );
 }
 
-function NoFloor({ company, site }: Props) {
+function NoFloor({ company, site, floors }: Props) {
     const context = useSiteContext(company, site);
     const [action, setAction] = useState<Action | null>(null);
     return (
@@ -311,10 +317,17 @@ function NoFloor({ company, site }: Props) {
                         </EmptyMedia>
                         <EmptyTitle>Nessun piano</EmptyTitle>
                     </EmptyHeader>
-                    <EmptyContent>
+                    <EmptyContent className="flex-row flex-wrap justify-center">
                         <Button onClick={() => setAction('create')}>
                             <Plus />
                             Nuovo piano
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => setAction('image')}
+                        >
+                            <ImageUp />
+                            Carica planimetrie
                         </Button>
                     </EmptyContent>
                 </Empty>
@@ -322,6 +335,7 @@ function NoFloor({ company, site }: Props) {
             <FloorDialogs
                 company={company}
                 site={site}
+                floors={floors}
                 action={action}
                 onClose={() => setAction(null)}
             />
@@ -363,6 +377,7 @@ function FloorWithoutPlan({ company, site, floors, floor }: FloorProps) {
             <FloorDialogs
                 company={company}
                 site={site}
+                floors={floors}
                 floor={floor}
                 action={action}
                 onClose={() => setAction(null)}
@@ -1034,6 +1049,7 @@ function FloorEditor({
             <FloorDialogs
                 company={company}
                 site={site}
+                floors={floors}
                 floor={floor}
                 action={action}
                 onClose={() => setAction(null)}

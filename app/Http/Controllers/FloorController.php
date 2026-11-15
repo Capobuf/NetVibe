@@ -73,48 +73,66 @@ class FloorController extends Controller
         return to_route('companies.sites.floors.show', [$company, $site, $floor]);
     }
 
-    public function updateImage(Request $request, Company $company, Site $site, Floor $floor): RedirectResponse
+    /** Uploads floor plans, one per page, onto existing floors or onto floors created on the fly. */
+    public function plans(Request $request, Company $company, Site $site): RedirectResponse
     {
         $data = $request->validate([
-            'image' => ['required', 'file', 'image', 'mimes:png,jpg,jpeg', 'max:20480', 'dimensions:min_width=200,min_height=200,max_width=8192,max_height=8192'],
+            'pages' => ['required', 'array', 'min:1', 'max:50'],
+            'pages.*' => ['array:floor,image'],
+            'pages.*.floor' => ['required', 'string', 'max:12', 'regex:'.RackRequest::FLOOR_PATTERN, 'distinct'],
+            'pages.*.image' => ['required', 'file', 'image', 'mimes:png,jpg,jpeg', 'max:20480', 'dimensions:min_width=200,min_height=200,max_width=8192,max_height=8192'],
             'positions' => ['nullable', 'in:keep,clear'],
-            'revision' => ['required', 'integer', 'min:0'],
-        ], [], ['image' => 'planimetria', 'positions' => 'posizioni']);
-        $size = getimagesize($request->file('image')->getRealPath());
-        $path = $request->file('image')->store('floors', 'local');
-        if (! $size || ! $path) {
-            throw new \RuntimeException('Impossibile salvare la planimetria.');
-        }
+        ], [
+            'pages.*.floor.distinct' => 'Ogni piano può ricevere una sola planimetria.',
+            'pages.*.floor.regex' => 'Usa PT, P1, P2… oppure P-1, P-2… per i piani interrati.',
+            'pages.*.image.max' => 'Ogni planimetria può pesare al massimo 20 MB.',
+            'pages.*.image.dimensions' => 'La planimetria deve misurare tra 200 e 8192 pixel per lato.',
+        ], ['pages.*.floor' => 'piano', 'pages.*.image' => 'planimetria', 'positions' => 'posizioni']);
+        $stored = [];
         try {
-            $previous = DB::transaction(function () use ($data, $company, $site, $floor, $path, $size) {
-                Company::query()->lockForUpdate()->findOrFail($company->id);
-                $floor = $this->lockFloor($site, $floor, $data['revision']);
-                if ($floor->items()->exists()) {
-                    // Positions are fractions of the image: they stay valid only for the same proportions.
-                    $sameShape = abs(($size[0] / $size[1]) / ($floor->image_width / $floor->image_height) - 1) <= 0.01;
-                    if (! $sameShape && ! ($data['positions'] ?? null)) {
-                        throw ValidationException::withMessages(['positions' => 'La nuova planimetria ha proporzioni diverse. Scegli se mantenere o rimuovere le posizioni.']);
-                    }
-                    if (! $sameShape && $data['positions'] === 'clear') {
-                        $floor->items()->delete();
-                    }
+            foreach ($request->file('pages') as $index => $page) {
+                $size = getimagesize($page['image']->getRealPath());
+                $path = $page['image']->store('floors', 'local');
+                if (! $size || ! $path) {
+                    throw new \RuntimeException('Impossibile salvare la planimetria.');
                 }
-                $previous = $floor->image_path;
-                $floor->forceFill(['image_path' => $path, 'image_width' => $size[0], 'image_height' => $size[1], 'revision' => $floor->revision + 1])->save();
+                $stored[] = ['floor' => $data['pages'][$index]['floor'], 'path' => $path, 'width' => $size[0], 'height' => $size[1]];
+            }
+            [$first, $previous] = DB::transaction(function () use ($data, $company, $site, $stored) {
+                Company::query()->lockForUpdate()->findOrFail($company->id);
+                $previous = [];
+                $floors = [];
+                foreach ($stored as $page) {
+                    $floor = $site->floors()->lockForUpdate()->firstWhere('code', $page['floor']) ?? $site->floors()->create(['code' => $page['floor']]);
+                    if ($floor->image_path && $floor->items()->exists()) {
+                        // Positions are fractions of the image: they stay valid only for the same proportions.
+                        $sameShape = abs(($page['width'] / $page['height']) / ($floor->image_width / $floor->image_height) - 1) <= 0.01;
+                        if (! $sameShape && ! ($data['positions'] ?? null)) {
+                            throw ValidationException::withMessages(['positions' => "La nuova planimetria del piano {$floor->code} ha proporzioni diverse. Scegli se mantenere o rimuovere le posizioni."]);
+                        }
+                        if (! $sameShape && $data['positions'] === 'clear') {
+                            $floor->items()->delete();
+                        }
+                    }
+                    $previous[] = $floor->image_path;
+                    $floor->forceFill(['image_path' => $page['path'], 'image_width' => $page['width'], 'image_height' => $page['height'], 'revision' => $floor->revision + 1])->save();
+                    $floors[] = $floor;
+                }
 
-                return $previous;
+                return [$floors[0], $previous];
             }, 3);
+        } catch (UniqueConstraintViolationException) {
+            Storage::disk('local')->delete(array_column($stored, 'path'));
+            throw ValidationException::withMessages(['pages' => 'Un piano è stato creato nel frattempo. Ricarica la pagina prima di riprovare.']);
         } catch (Throwable $error) {
-            Storage::disk('local')->delete($path);
+            Storage::disk('local')->delete(array_column($stored, 'path'));
             throw $error;
         }
-        if ($previous) {
-            Storage::disk('local')->delete($previous);
-        }
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Planimetria caricata.']);
+        Storage::disk('local')->delete(array_filter($previous));
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($stored) === 1 ? 'Planimetria caricata.' : count($stored).' planimetrie caricate.']);
 
-        // After the first upload the operator goes straight to placing elements.
-        return to_route('companies.sites.floors.show', [$company, $site, $floor, ...($previous ? [] : ['edit' => 1])]);
+        // After a first upload the operator goes straight to placing elements.
+        return to_route('companies.sites.floors.show', [$company, $site, $first, ...($previous[0] ? [] : ['edit' => 1])]);
     }
 
     public function layout(Request $request, Company $company, Site $site, Floor $floor): RedirectResponse
@@ -182,7 +200,10 @@ class FloorController extends Controller
         return Inertia::render('floors/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'editing' => request()->boolean('edit'),
-            'floors' => $floors->map->only('id', 'code')->values(),
+            'floors' => $floors->map(fn (Floor $item) => [
+                ...$item->only('id', 'code'), 'items_count' => $item->items_count,
+                'image' => $item->image_path ? ['width' => $item->image_width, 'height' => $item->image_height] : null,
+            ])->values(),
             'floor' => $floor ? [
                 ...$floor->only('id', 'code', 'revision'),
                 'image' => $floor->image_path ? [
@@ -210,7 +231,7 @@ class FloorController extends Controller
 
     private function floors(Site $site)
     {
-        return $site->floors()->get()->sortBy(fn (Floor $floor) => $floor->level())->values();
+        return $site->floors()->withCount('items')->get()->sortBy(fn (Floor $floor) => $floor->level())->values();
     }
 
     private function lockFloor(Site $site, Floor $floor, int $revision): Floor

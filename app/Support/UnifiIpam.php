@@ -48,7 +48,7 @@ class UnifiIpam
     }
 
     // The sync owns the transaction and locks the mapped site before publishing a complete snapshot.
-    public function capture(UnifiSite $source, ?array $networks, array $clients, array $devices = [], ?array $reservations = null): void
+    public function capture(UnifiSite $source, ?array $networks, array $clients, array $devices = [], ?array $reservations = null, ?array $wired = null): void
     {
         $site = Site::query()->lockForUpdate()->findOrFail($source->site_id);
         $cutoff = IpamEvidence::cutoff($site->id);
@@ -87,6 +87,9 @@ class UnifiIpam
                         'mac' => MikrotikSnapshot::mac($kind === 'device' ? ($item['mac_address'] ?? null) : ($item['macAddress'] ?? null)),
                         'type' => $item['type'] ?? 'DEVICE', 'ip' => $ip,
                         ...($kind === 'device' ? ['state' => $item['state'] ?? null] : ['uplink_device_id' => $item['uplinkDeviceId'] ?? null])];
+                if ($kind !== 'reservation') {
+                    $data['switch'] = $wired[$data['mac'] ?? ''] ?? null;
+                }
                 $observation = $this->record($source, $kind, $item['id'], $data);
                 $observation->address = ip2long($ip);
                 // Listed clients are connected, an adopted device is present only when online, and a

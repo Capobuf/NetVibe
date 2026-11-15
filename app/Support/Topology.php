@@ -346,9 +346,9 @@ class Topology
     }
 
     /**
-     * MACs seen beyond each port: MikroTik bridge hosts on their learning port and UniFi clients on their
-     * uplink device. They are observations to consult, never cables or links; a MAC names a device only
-     * when exactly one inventory device owns it, and a port only when every sighting agrees on it.
+     * MACs directly attached to each port: MikroTik bridge hosts on their learning port and UniFi clients and
+     * devices on the switch port the controller reports. They are observations to consult, never cables or links;
+     * a MAC names a device only when exactly one inventory device owns it, and a port only when every sighting agrees.
      */
     private function portObservations(Site $site, Collection $devices, Collection $interfaces, array $logicalInterfaces, array $ports,
         array $macs, Collection $unifi, Collection $byExternalId, \Closure $inGeneration): array
@@ -370,7 +370,7 @@ class Topology
                 $macs[$mac][] = $ip->device_id;
             }
         }
-        $clients = UnifiObservation::forSite($site->id)->where('kind', 'client')->where('state', 'current')
+        $clients = UnifiObservation::forSite($site->id)->whereIn('kind', ['client', 'device'])->where('state', 'current')
             ->with('unifiSite.unifiConnection')->orderBy('id')->get();
         $sightings = MikrotikSource::where('site_id', $site->id)->whereIn('device_id', $devices->keys())
             ->where('kind', 'observation')->where('state', 'current')->whereIn('data->menu', ['/ip/arp', '/ip/dhcp-server/lease'])
@@ -401,23 +401,57 @@ class Topology
             $found[$device->id][$mac][] = [$end, $reported, false, ['vendor' => 'mikrotik', 'source' => 'MikroTik',
                 'seen_at' => $source->seen_at?->toIso8601String(), 'stale' => $this->stale($source, $device)]];
         }
+        $byMac = $unifi->groupBy(fn ($source) => $source->unifi_site_id.':'.MikrotikSnapshot::mac($source->observed['mac_address'] ?? null));
         foreach ($clients as $client) {
             $mac = MikrotikSnapshot::mac($client->data['mac'] ?? null);
-            $parents = $byExternalId->get($client->unifi_site_id.':'.($client->data['uplink_device_id'] ?? ''), collect());
+            $switch = $client->data['switch'] ?? null;
+            // The Network application names the switch port; without it a client keeps only its uplink device.
+            $parents = $switch ? $byMac->get($client->unifi_site_id.':'.$switch['switch_mac'], collect())
+                : ($client->kind === 'client' ? $byExternalId->get($client->unifi_site_id.':'.($client->data['uplink_device_id'] ?? ''), collect()) : collect());
             if (! $mac || $parents->count() !== 1) {
                 continue;
             }
             $parent = $parents->first();
-            $found[$parent->device_id][$mac][] = [null, null, ($client->data['type'] ?? null) === 'WIRELESS', [
+            $end = $switch ? $this->unifiPortEnd($devices[$parent->device_id], $parent, $switch['switch_port'], $ports) : null;
+            $found[$parent->device_id][$mac][] = [$end, null, ! $switch && ($client->data['type'] ?? null) === 'WIRELESS', [
                 'vendor' => 'unifi', 'source' => 'UniFi · '.$client->unifiSite->name,
                 'seen_at' => $client->seen_at?->toIso8601String(), 'stale' => $client->stale() || $parent->stale()]];
         }
+        $resolved = [];
+        foreach ($found as $deviceId => $sightingsByMac) {
+            foreach ($sightingsByMac as $mac => $sightings) {
+                $ends = collect($sightings)->map(fn ($sighting) => $sighting[0])->unique(fn ($end) => $end['key'] ?? null);
+                $resolved[$deviceId][$mac] = $ends->count() === 1 ? ($ends->first()['key'] ?? null) : null;
+            }
+        }
+        $ownerOf = function (string $mac) use ($macs): ?int {
+            $owners = array_values(array_unique($macs[$mac] ?? []));
+
+            return count($owners) === 1 ? $owners[0] : null;
+        };
+        // Only directly attached hosts are kept: a MAC that a device seen on the same port reports on one of its
+        // own ports, other than the one facing back, lies behind that device.
+        $behind = [];
+        foreach ($resolved as $deviceId => $keys) {
+            foreach ($keys as $mac => $key) {
+                $other = $key ? $ownerOf($mac) : null;
+                if (! $other || $other === $deviceId || ! isset($resolved[$other])) {
+                    continue;
+                }
+                $facing = collect($resolved[$other])->filter(fn ($otherKey, $otherMac) => $otherKey && $ownerOf($otherMac) === $deviceId)->values()->all();
+                foreach ($resolved[$other] as $farMac => $farKey) {
+                    if ($farKey && ! in_array($farKey, $facing, true) && ($keys[$farMac] ?? null) === $key && $ownerOf($farMac) !== $other) {
+                        $behind[$deviceId][$farMac] = true;
+                    }
+                }
+            }
+        }
         $result = [];
-        foreach ($found as $deviceId => $byMac) {
+        foreach ($found as $deviceId => $sightingsByMac) {
             $rows = [];
-            foreach ($byMac as $mac => $sightings) {
+            foreach ($sightingsByMac as $mac => $sightings) {
                 $owners = array_values(array_unique($macs[$mac] ?? []));
-                if (in_array($deviceId, $owners, true)) {
+                if (in_array($deviceId, $owners, true) || isset($behind[$deviceId][$mac])) {
                     continue;
                 }
                 $ends = collect($sightings)->map(fn ($sighting) => $sighting[0])->unique(fn ($end) => $end['key'] ?? null);
@@ -452,12 +486,21 @@ class Topology
                 $rows[$key] = $row;
             }
             $rows = array_map(fn ($row) => [...$row, 'sources' => array_values($row['sources'])], array_values($rows));
-            usort($rows, fn ($a, $b) => [$a['port'] === null, $a['port'] ?? '', $a['name'] === null, $a['name'] ?? $a['macs'][0]]
-                <=> [$b['port'] === null, $b['port'] ?? '', $b['name'] === null, $b['name'] ?? $b['macs'][0]]);
+            usort($rows, fn ($a, $b) => ($a['port'] === null) <=> ($b['port'] === null)
+                ?: strnatcasecmp($a['port'] ?? '', $b['port'] ?? '') ?: strnatcasecmp($a['name'] ?? $a['macs'][0], $b['name'] ?? $b['macs'][0]));
             $result[$deviceId] = $rows;
         }
 
         return $result;
+    }
+
+    private function unifiPortEnd(Device $device, UnifiDevice $source, int $idx, array $ports): array
+    {
+        $port = collect($source->ports ?? [])->firstWhere('idx', $idx);
+        $interface = $device->interfaces->firstWhere('id', $port['device_interface_id'] ?? null);
+
+        return $interface ? $this->interfaceEnd($device, $interface, $ports) : ['device_id' => $device->id, 'interface_id' => null,
+            'connector_id' => null, 'label' => 'Porta '.$idx, 'key' => $device->id.':unifi-port:'.$idx, 'stale' => false];
     }
 
     private function stale(MikrotikSource $source, Device $device): bool

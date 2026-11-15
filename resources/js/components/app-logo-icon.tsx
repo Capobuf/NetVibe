@@ -8,13 +8,13 @@ export default function AppLogoIcon({
     return (
         <img
             {...props}
-            src="/branding/logo-black.svg"
+            src="/branding/logo-black.svg?v=branding-20261115"
             width={2000}
             height={2000}
             alt=""
             aria-hidden="true"
             className={cn(
-                'shrink-0 object-contain dark:content-[url(/branding/logo-white.svg)]',
+                'shrink-0 object-contain dark:content-[url(/branding/logo-white.svg?v=branding-20261115)]',
                 className,
             )}
         />

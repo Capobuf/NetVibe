@@ -471,7 +471,7 @@ function SettingSelect({
                     <TooltipTrigger asChild>
                         <FieldLabel
                             htmlFor={id}
-                            className="flex-none! cursor-help"
+                            className="flex-none!"
                         >
                             {label}
                         </FieldLabel>

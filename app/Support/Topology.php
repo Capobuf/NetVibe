@@ -60,7 +60,7 @@ class Topology
                 'model' => $device->model?->name, 'rack' => $rack?->only('id', 'name'), 'identity' => null, 'mac' => null,
                 'model_id' => $device->device_model_id,
                 'ips' => $device->ipAddresses->map(fn ($ip) => long2ip($ip->address))->all(), 'unifi' => null, 'observed' => [],
-                'indirect' =>$indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
+                'indirect' => $indirect->get($device->id, collect())->groupBy('menu')->map(fn ($items, $menu) => [
                     'menu' => $menu, 'count' => (int) $items->sum('total'), 'seen_at' => $items->first()->seen_at?->toIso8601String(),
                 ])->values()->all(),
             ];

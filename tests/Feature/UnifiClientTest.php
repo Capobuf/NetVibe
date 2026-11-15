@@ -189,6 +189,31 @@ class UnifiClientTest extends TestCase
         $this->client()->reservations($this->connection(), '../integration');
     }
 
+    public function test_wired_ports_are_read_only_from_the_network_application_statistics(): void
+    {
+        Http::preventStrayRequests();
+        $base = 'https://unifi.example.test:8443/proxy/network/api/s/default/';
+        Http::fake([
+            $base.'stat/sta' => Http::response(['meta' => ['rc' => 'ok'], 'data' => [
+                ['mac' => '02:00:00:00:00:61', 'is_wired' => true, 'sw_mac' => '02:00:00:00:00:a1', 'sw_port' => 6],
+                ['mac' => '02:00:00:00:00:62', 'is_wired' => false, 'sw_mac' => '02:00:00:00:00:a1', 'sw_port' => 7],
+                ['mac' => '02:00:00:00:00:63', 'is_wired' => true, 'sw_mac' => '02:00:00:00:00:a1', 'sw_port' => '8'],
+            ]]),
+            $base.'stat/device' => Http::response(['meta' => ['rc' => 'ok'], 'data' => [
+                ['mac' => '02:00:00:00:00:a1', 'uplink' => ['uplink_mac' => '02:00:00:00:00:b1', 'uplink_remote_port' => 1]],
+                ['mac' => '02:00:00:00:00:b1', 'uplink' => ['type' => 'wire']],
+            ]]),
+        ]);
+
+        // Wireless clients and malformed ports have no switch port to report.
+        $this->assertSame([
+            '02:00:00:00:00:61' => ['switch_mac' => '02:00:00:00:00:A1', 'switch_port' => 6],
+            '02:00:00:00:00:A1' => ['switch_mac' => '02:00:00:00:00:B1', 'switch_port' => 1],
+        ], $this->client()->wiredPorts($this->connection(), 'default'));
+        Http::assertSent(fn (Request $request) => $request->method() === 'GET' && $request->hasHeader('X-API-Key', 'synthetic-api-key'));
+        Http::assertSentCount(2);
+    }
+
     private function connection(): UnifiConnection
     {
         return new UnifiConnection([

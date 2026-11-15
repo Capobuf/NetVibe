@@ -147,6 +147,43 @@ class UnifiIpamTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_clients_and_devices_sit_on_the_reported_switch_port_or_only_on_their_uplink_device(): void
+    {
+        $source = $this->source();
+        $site = $source->site;
+        $manufacturer = Manufacturer::create(['name' => 'Ubiquiti']);
+        $catalog = ['manufacturer_id' => $manufacturer->id, 'device_model_id' => $manufacturer->models()->create(['name' => 'Synthetic model'])->id];
+        $gateway = $site->devices()->create(['name' => 'Gateway', ...$catalog]);
+        $switch = $site->devices()->create(['name' => 'Switch', ...$catalog]);
+        $port = $switch->interfaces()->create(['kind' => 'physical', 'name' => 'Porta 3']);
+        $switchId = (string) Str::uuid();
+        $source->unifiDevices()->create(['external_id' => (string) Str::uuid(), 'device_id' => $gateway->id, 'status' => 'linked', 'present' => true,
+            'observed' => ['name' => 'Gateway', 'mac_address' => '02:00:00:00:00:B1'], 'synced_at' => now()]);
+        $source->unifiDevices()->create(['external_id' => $switchId, 'device_id' => $switch->id, 'status' => 'linked', 'present' => true,
+            'observed' => ['name' => 'Switch', 'mac_address' => '02:00:00:00:00:A1'], 'synced_at' => now(),
+            'ports' => [['idx' => 3, 'device_interface_id' => $port->id]]]);
+        $observe = fn (UnifiSite $unifiSite, string $kind, string $mac, array $data) => UnifiObservation::create([
+            'unifi_site_id' => $unifiSite->id, 'site_id' => $unifiSite->site_id, 'kind' => $kind, 'source_key' => $mac, 'state' => 'current',
+            'seen_at' => now(), 'data' => ['mac' => $mac, 'name' => 'Host '.$mac, 'type' => 'WIRED', 'uplink_device_id' => $switchId, ...$data]]);
+        $observe($source, 'client', '02:00:00:00:00:01', ['switch' => ['switch_mac' => '02:00:00:00:00:A1', 'switch_port' => 3]]);
+        $observe($source, 'client', '02:00:00:00:00:02', []);
+        $observe($source, 'client', '02:00:00:00:00:03', ['type' => 'WIRELESS']);
+        $observe($source, 'device', '02:00:00:00:00:A1', ['switch' => ['switch_mac' => '02:00:00:00:00:B1', 'switch_port' => 1]]);
+        // The same uplink in another company's site never reaches this one.
+        $foreign = $this->source();
+        $observe($foreign, 'client', '02:00:00:00:00:09', ['switch' => ['switch_mac' => '02:00:00:00:00:A1', 'switch_port' => 3]]);
+
+        $rows = collect((new Topology)->observedOn($site, $switch))->keyBy(fn ($row) => $row['macs'][0]);
+        $this->assertSame(['02:00:00:00:00:01', '02:00:00:00:00:02', '02:00:00:00:00:03'], $rows->keys()->sort()->values()->all());
+        $this->assertSame(['Porta 3', $port->id], [$rows['02:00:00:00:00:01']['port'], $rows['02:00:00:00:00:01']['interface_id']]);
+        $this->assertSame([null, false], [$rows['02:00:00:00:00:02']['port'], $rows['02:00:00:00:00:02']['wireless']]);
+        $this->assertSame([null, true], [$rows['02:00:00:00:00:03']['port'], $rows['02:00:00:00:00:03']['wireless']]);
+        $uplink = (new Topology)->observedOn($site, $gateway);
+        $this->assertCount(1, $uplink);
+        $this->assertSame(['Porta 1', $switch->id, 'Switch'], [$uplink[0]['port'], $uplink[0]['device_id'], $uplink[0]['name']]);
+        $this->assertDatabaseCount('cables', 0);
+    }
+
     public function test_expected_mac_is_recognized_only_when_the_same_client_reports_it(): void
     {
         Http::preventStrayRequests();

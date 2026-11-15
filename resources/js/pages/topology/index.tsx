@@ -16,7 +16,6 @@ import {
     X,
 } from 'lucide-react';
 import { ZoomControls } from '@/components/zoom-controls';
-import { PortObservations } from '@/components/topology/port-observations';
 import { useSiteContext } from '@/hooks/use-site-context';
 import { IconButton } from '@/components/icon-button';
 import {
@@ -281,6 +280,20 @@ function TopologyView({ company, site, topology, racks }: Props) {
                   ],
                   ['MAC', selectedNode.mac ?? unifi?.mac_address],
                   ['Firmware', unifi?.firmware_version],
+                  [
+                      'Rilevati a valle',
+                      deviceHref && selectedNode.observed.length > 0 && (
+                          <TextLink
+                              href={deviceShow(
+                                  { ...route, device: selectedNode.device_id! },
+                                  { query: { tab: 'observed' } },
+                              )}
+                              className="tabular-nums"
+                          >
+                              {selectedNode.observed.length}
+                          </TextLink>
+                      ),
+                  ],
                   [
                       'Rack',
                       selectedNode.rack && (
@@ -1020,12 +1033,6 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 </p>
                                             )}
                                         </div>
-                                        {selectedNode.observed.length > 0 && (
-                                            <PortObservations
-                                                rows={selectedNode.observed}
-                                                route={route}
-                                            />
-                                        )}
                                     </div>
                                 )}
                                 {selectedEdge && (

@@ -32,6 +32,7 @@ export type TopologyObservation = {
     key: string;
     port: string | null;
     interface_id: number | null;
+    connector_id: string | null;
     reported_ports: string[];
     wireless: boolean;
     device_id: number | null;

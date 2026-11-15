@@ -16,6 +16,7 @@ use App\Models\SnipeItSync;
 use App\Support\DeletionImpact;
 use App\Support\NetworkExclusions;
 use App\Support\SnipeItSync as SnipeItSynchronizer;
+use App\Support\Topology;
 use App\Support\UnifiInventory;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -99,7 +100,7 @@ class DeviceController extends Controller
         $options = $request->validate([
             'view' => ['sometimes', 'in:infrastructure,all'],
             'interface' => ['sometimes', 'integer', 'min:1'],
-            'tab' => ['sometimes', 'in:interfaces,ips,mikrotik'],
+            'tab' => ['sometimes', 'in:interfaces,ips,observed,mikrotik'],
             'manage' => ['sometimes', 'in:general,mikrotik,snipe-it'],
         ]);
         $selectedInterface = isset($options['interface']) ? $device->interfaces()->findOrFail($options['interface']) : null;
@@ -126,7 +127,8 @@ class DeviceController extends Controller
                 ->where('generation', $device->mikrotikConnection()->value('source_generation'))
                 ->where('state', 'current')->whereNull('problem')->with('device.mikrotikConnection')->get()
                 ->map(fn ($source) => $source->interfaceDetails()),
-            'initialTab' => ($options['tab'] ?? null) === 'ips' ? 'ips' : 'interfaces',
+            'initialTab' => in_array($options['tab'] ?? null, ['ips', 'observed'], true) ? $options['tab'] : 'interfaces',
+            'observed' => (new Topology)->observedOn($site, $device),
             'initialManagementTab' => $options['manage'] ?? (($options['tab'] ?? null) === 'mikrotik' ? 'mikrotik' : null),
             'mikrotikSources' => $request->user()->is_superadmin
                 ? Inertia::optional(fn () => (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get())) : [],

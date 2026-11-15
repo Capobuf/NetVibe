@@ -14,6 +14,17 @@ use Illuminate\Support\Collection;
 
 class Topology
 {
+    /** Port observations of every site device, hidden models included, from the last forSite() call. */
+    private array $observed = [];
+
+    /** MACs seen beyond the ports of one device, also when its model is hidden from the topology. */
+    public function observedOn(Site $site, Device $device): array
+    {
+        $this->forSite($site);
+
+        return $this->observed[$device->id] ?? [];
+    }
+
     public function forSite(Site $site): array
     {
         $devices = $site->devices()->with([
@@ -238,7 +249,7 @@ class Topology
                 ]],
             ];
         }
-        $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
+        $this->observed = $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
         foreach ($observed as $deviceId => $rows) {
             $nodes['device:'.$deviceId]['observed'] = $rows;
         }
@@ -420,6 +431,7 @@ class Topology
                 $key = ($end['key'] ?? 'unknown').'|'.($owner ? 'device:'.$owner->id : 'mac:'.$mac);
                 $row = $rows[$key] ?? [
                     'key' => $key, 'port' => $end['label'] ?? null, 'interface_id' => $end['interface_id'] ?? null,
+                    'connector_id' => $end['connector_id'] ?? null,
                     'reported_ports' => [], 'wireless' => true, 'device_id' => $owner?->id, 'name' => $name,
                     'ips' => [], 'macs' => [], 'sources' => [],
                 ];

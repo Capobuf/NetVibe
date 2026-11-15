@@ -31,8 +31,8 @@
         </style>
 
         <link rel="icon" href="/favicon.ico?v=branding-20261115" sizes="any">
-        <link rel="icon" href="/branding/logo-black.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-        <link rel="icon" href="/branding/logo-white.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+        <link rel="icon" href="/branding/netvibe-logo-black.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+        <link rel="icon" href="/branding/netvibe-logo-white.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=branding-20261115">
 
         @fonts

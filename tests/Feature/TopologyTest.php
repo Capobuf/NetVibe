@@ -343,6 +343,44 @@ class TopologyTest extends TestCase
             ->where('topology.nodes.0.indirect.0.seen_at', '2026-01-01T12:00:00+00:00'));
     }
 
+    public function test_bridge_hosts_are_listed_on_their_learning_port_only_when_directly_attached(): void
+    {
+        $host = function (Device $device, string $mac, string $port, string $local = 'false'): void {
+            $source = $device->mikrotikSources()->make(['generation' => $device->mikrotikConnection->source_generation,
+                'kind' => 'observation', 'source_key' => 'interface/bridge/host:'.$mac.$port, 'state' => 'current', 'seen_at' => now(),
+                'anchor' => [], 'data' => ['menu' => '/interface/bridge/host', 'mac' => $mac, 'on-interface' => $port, 'local' => $local, 'bridge' => 'bridge']]);
+            $source->site_id = $device->site_id;
+            $source->save();
+        };
+        $host($this->local, '02:00:00:00:00:10', 'bridge', 'true');
+        $host($this->local, '02:00:00:00:00:11', 'ether1');
+        $host($this->local, '02:00:00:00:00:12', 'ether1');
+        $host($this->local, '02:00:00:00:00:13', 'wlan1');
+        $host($this->local, '02:00:00:00:00:02', 'ether1');
+        // A MAC documented in another company's site does not identify a host here.
+        $foreign = Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Milano']);
+        $foreign->devices()->create(['name' => 'Altro', 'manufacturer_id' => $this->local->manufacturer_id])
+            ->interfaces()->create(['kind' => 'physical', 'name' => 'eth0', 'mac_address' => '02:00:00:00:00:11']);
+
+        $rows = collect((new Topology)->observedOn($this->site, $this->local))->keyBy(fn ($row) => $row['macs'][0]);
+        $this->assertSame(['02:00:00:00:00:02', '02:00:00:00:00:11', '02:00:00:00:00:12', '02:00:00:00:00:13'], $rows->keys()->sort()->values()->all());
+        $this->assertSame(['ether1', str_repeat('a', 32), null], [$rows['02:00:00:00:00:11']['port'], $rows['02:00:00:00:00:11']['connector_id'], $rows['02:00:00:00:00:11']['device_id']]);
+        $this->assertSame(['ether1', $this->remote->id], [$rows['02:00:00:00:00:02']['port'], $rows['02:00:00:00:00:02']['device_id']]);
+        $this->assertSame([null, ['wlan1']], [$rows['02:00:00:00:00:13']['port'], $rows['02:00:00:00:00:13']['reported_ports']]);
+
+        // The remote device reports 02:..:12 on another of its own ports than the one facing back: it lies behind it.
+        $behind = $this->remote->interfaces()->create(['kind' => 'physical', 'name' => 'ether2']);
+        $host($this->remote, '02:00:00:00:00:01', 'ether1');
+        $host($this->remote, '02:00:00:00:00:12', 'ether2');
+        $this->assertSame(['02:00:00:00:00:02', '02:00:00:00:00:11', '02:00:00:00:00:13'],
+            collect((new Topology)->observedOn($this->site, $this->local))->pluck('macs.0')->sort()->values()->all());
+        $remote = (new Topology)->observedOn($this->site, $this->remote);
+        $this->assertSame([['ether1', $this->local->id], ['ether2', null]], array_map(fn ($row) => [$row['port'], $row['device_id']], $remote));
+        $this->assertSame($behind->id, $remote[1]['interface_id']);
+        $this->assertDatabaseCount('cables', 0);
+        $this->assertSame([], (new Topology)->forSite($this->site)['edges']);
+    }
+
     public function test_model_visibility_hides_devices_and_their_edges_without_touching_cables(): void
     {
         $type = ModelType::create(['name' => 'Alimentazione passiva']);

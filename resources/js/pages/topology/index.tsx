@@ -186,6 +186,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
                         node.identity,
                         node.mac,
                         node.rack?.name,
+                        // A MAC or name seen on a port finds the device that observes it.
+                        ...node.observed.flatMap((row) => [
+                            row.name,
+                            ...row.macs,
+                        ]),
                     ]
                         .join(' ')
                         .toLocaleLowerCase()
@@ -275,6 +280,20 @@ function TopologyView({ company, site, topology, racks }: Props) {
                   ],
                   ['MAC', selectedNode.mac ?? unifi?.mac_address],
                   ['Firmware', unifi?.firmware_version],
+                  [
+                      'Rilevati a valle',
+                      deviceHref && selectedNode.observed.length > 0 && (
+                          <TextLink
+                              href={deviceShow(
+                                  { ...route, device: selectedNode.device_id! },
+                                  { query: { tab: 'observed' } },
+                              )}
+                              className="tabular-nums"
+                          >
+                              {selectedNode.observed.length}
+                          </TextLink>
+                      ),
+                  ],
                   [
                       'Rack',
                       selectedNode.rack && (

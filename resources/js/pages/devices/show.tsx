@@ -21,6 +21,11 @@ import {
 import { NewIpMenu } from '@/components/devices/new-ip-menu';
 import { InterfaceDetails } from '@/components/devices/interface-details';
 import { InterfaceForm } from '@/components/devices/interface-form';
+import {
+    ObservedHostsList,
+    ObservedHostsTable,
+} from '@/components/devices/observed-hosts';
+import type { TopologyObservation } from '@/types/topology';
 import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-badge';
 import { AddIpForm, type AvailableIp } from '@/components/devices/add-ip-form';
 import IpAddressForm from '@/components/networks/ip-address-form';
@@ -87,6 +92,7 @@ type Props = {
     subnets: (Subnet & { excludedRanges: ExcludedRange[] })[];
     statuses: IpStatus[];
     tags: Tag[];
+    observed: TopologyObservation[];
 };
 export default function DeviceShow({
     view,
@@ -107,6 +113,7 @@ export default function DeviceShow({
     statuses,
     tags,
     initialInterfaceId,
+    observed,
 }: Props) {
     const page = usePage();
     const { auth } = page.props;
@@ -221,6 +228,9 @@ export default function DeviceShow({
               (observed) => observed.device_interface_id === selected.id,
           )
         : null;
+    const portObserved = port
+        ? observed.filter((row) => row.connector_id === port.id)
+        : [];
     const context = useSiteContext(company, site);
     const interfaceValue = (id: number | null) =>
         id
@@ -390,7 +400,10 @@ export default function DeviceShow({
                 ) : null}
                 <Tabs
                     value={
-                        tab === 'ips' && ips.length === 0 ? 'interfaces' : tab
+                        (tab === 'ips' && ips.length === 0) ||
+                        (tab === 'observed' && observed.length === 0)
+                            ? 'interfaces'
+                            : tab
                     }
                     onValueChange={setTab}
                     className="min-w-0"
@@ -409,6 +422,14 @@ export default function DeviceShow({
                                     className="flex-none px-3"
                                 >
                                     IP ({ips.length})
+                                </TabsTrigger>
+                            )}
+                            {observed.length > 0 && (
+                                <TabsTrigger
+                                    value="observed"
+                                    className="flex-none px-3"
+                                >
+                                    Rilevati a valle ({observed.length})
                                 </TabsTrigger>
                             )}
                         </TabsList>
@@ -569,6 +590,12 @@ export default function DeviceShow({
                                 </IconButton>
                             )}
                             empty="Nessun IP collegato."
+                        />
+                    </TabsContent>
+                    <TabsContent value="observed" className="pt-4">
+                        <ObservedHostsTable
+                            rows={observed}
+                            route={{ company: company.id, site: site.id }}
                         />
                     </TabsContent>
                 </Tabs>
@@ -778,6 +805,15 @@ export default function DeviceShow({
                                     </IconButton>
                                 )}
                             />
+                        )}
+                        {portObserved.length > 0 && (
+                            <>
+                                <Separator className="my-4" />
+                                <ObservedHostsList
+                                    rows={portObserved}
+                                    route={{ company: company.id, site: site.id }}
+                                />
+                            </>
                         )}
                     </div>
                     <PopoverArrow />

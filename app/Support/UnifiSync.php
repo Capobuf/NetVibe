@@ -73,7 +73,7 @@ class UnifiSync
                             // Occupation rules read the source health from the database: a recovered site must count as readable.
                             $site->update(['sync_status' => 'ok']);
                             app(UnifiInventory::class)->capture($site, $snapshots[$site->id]['devices']);
-                            app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices'], $snapshots[$site->id]['reservations']);
+                            app(UnifiIpam::class)->capture($site, $snapshots[$site->id]['networks'], $snapshots[$site->id]['clients'], $snapshots[$site->id]['devices'], $snapshots[$site->id]['reservations'], $snapshots[$site->id]['wired'] ?? null);
                             $site->last_synced_at = now();
                             $site->last_access = $accessed[$site->id];
                         }
@@ -134,6 +134,16 @@ class UnifiSync
             }
         }
 
-        return compact('devices', 'networks', 'clients', 'reservations');
+        $wired = null;
+        try {
+            $wired = $reference ? $client->wiredPorts($connection, $reference, $console) : null;
+        } catch (UnifiException $exception) {
+            // Without the Network application statistics clients keep only their uplink device.
+            if (! in_array($exception->status, ['not_found', 'unauthorized', 'forbidden'], true)) {
+                throw $exception;
+            }
+        }
+
+        return compact('devices', 'networks', 'clients', 'reservations', 'wired');
     }
 }

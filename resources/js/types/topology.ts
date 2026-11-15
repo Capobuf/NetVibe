@@ -25,6 +25,26 @@ export type TopologyNode = {
         synced_at: string | null;
     } | null;
     indirect:{ menu: string; count: number; seen_at: string | null }[];
+    observed: TopologyObservation[];
+};
+/** MACs seen beyond a port of the node: observations, never cables. */
+export type TopologyObservation = {
+    key: string;
+    port: string | null;
+    interface_id: number | null;
+    connector_id: string | null;
+    reported_ports: string[];
+    wireless: boolean;
+    device_id: number | null;
+    name: string | null;
+    ips: string[];
+    macs: string[];
+    sources: {
+        vendor: 'mikrotik' | 'unifi';
+        source: string;
+        seen_at: string | null;
+        stale: boolean;
+    }[];
 };
 export type TopologyEnd = {
     device_id: number;

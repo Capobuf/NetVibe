@@ -107,6 +107,32 @@ class UnifiClient
         return $reservations;
     }
 
+    /**
+     * Switch MAC and port of wired clients and adopted devices, keyed by their MAC. The official integration API
+     * names only the uplink device, so this reads the Network application statistics with the same API key (GET only).
+     */
+    public function wiredPorts(#[\SensitiveParameter] UnifiConnection $connection, string $reference, ?string $consoleId = null): array
+    {
+        $ports = [];
+        foreach (['stat/sta' => ['sw_mac', 'sw_port'], 'stat/device' => ['uplink.uplink_mac', 'uplink.uplink_remote_port']] as $path => [$switchField, $portField]) {
+            $page = $this->read($connection, '/api/s/'.$reference.'/'.$path, $consoleId);
+            if (($page['meta']['rc'] ?? null) !== 'ok') {
+                throw new UnifiException('format');
+            }
+            foreach ($this->rows($page) as $row) {
+                $mac = MikrotikSnapshot::mac($row['mac'] ?? null);
+                $switch = MikrotikSnapshot::mac(data_get($row, $switchField));
+                $port = data_get($row, $portField);
+                if ($mac && $switch && is_int($port) && $port >= 1 && $port <= 1024
+                    && ($path === 'stat/device' || ($row['is_wired'] ?? null) === true)) {
+                    $ports[$mac] = ['switch_mac' => $switch, 'switch_port' => $port];
+                }
+            }
+        }
+
+        return $ports;
+    }
+
     public function devices(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
     {
         return array_map(fn (array $device) => $this->deviceData($device),
@@ -237,9 +263,11 @@ class UnifiClient
 
     public function clients(#[\SensitiveParameter] UnifiConnection $connection, string $siteId, ?string $consoleId = null): array
     {
-        return array_map(fn ($client) => array_intersect_key($client, array_flip([
+        // uplinkDeviceId names the switch or access point only: the official API reports no client port.
+        return array_map(fn ($client) => [...array_intersect_key($client, array_flip([
             'id', 'type', 'name', 'ipAddress', 'macAddress', 'connectedAt', 'access',
-        ])), $this->pages($connection, '/sites/'.$this->uuid($siteId).'/clients', $consoleId));
+        ])), 'uplinkDeviceId' => isset($client['uplinkDeviceId']) ? $this->uuid($client['uplinkDeviceId']) : null],
+            $this->pages($connection, '/sites/'.$this->uuid($siteId).'/clients', $consoleId));
     }
 
     private function pages(#[\SensitiveParameter] UnifiConnection $connection, string $path, ?string $consoleId): array
@@ -283,7 +311,7 @@ class UnifiClient
         if (! $connection->enabled) {
             throw new UnifiException('suspended');
         }
-        $application = (bool) preg_match('~\A/api/s/[a-z0-9_-]{1,64}/rest/user\z~i', $path);
+        $application = (bool) preg_match('~\A/api/s/[a-z0-9_-]{1,64}/(?:rest/user|stat/sta|stat/device)\z~i', $path);
         if (! $application && ! preg_match('~\A(?:/v1/hosts|/info|/sites(?:/[a-f0-9-]{36}/(?:devices|networks|clients)(?:/[a-f0-9-]{36})?)?)\z~i', $path)) {
             throw new UnifiException('unsafe_url');
         }

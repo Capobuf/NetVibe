@@ -14,7 +14,12 @@ import {
     DialogTrigger,
     DialogClose,
 } from '@/components/ui/dialog';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+    Field,
+    FieldGroup,
+    FieldLabel,
+    FieldSeparator,
+} from '@/components/ui/field';
 import {
     CatalogCombobox,
     createCatalogItem,
@@ -22,7 +27,14 @@ import {
 import { store as storeManufacturer } from '@/routes/manufacturers';
 import { store as storeType } from '@/routes/model-types';
 import type { Manufacturer, ModelType, CreatedModel } from '@/types/device';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
@@ -115,7 +127,17 @@ export function CatalogForm({
                     )}
                 </DialogTrigger>
             )}
-            <DialogContent aria-describedby={undefined}>
+            <DialogContent
+                aria-describedby={undefined}
+                // Editing opens with the caret after the name instead of the whole name selected.
+                onOpenAutoFocus={(event) => {
+                    const name = document.getElementById(`${id}-name`);
+                    if (!item || !(name instanceof HTMLInputElement)) return;
+                    event.preventDefault();
+                    name.focus();
+                    name.setSelectionRange(name.value.length, name.value.length);
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {removing ? `Elimina ${item?.name}` : title}
@@ -220,48 +242,22 @@ export function CatalogForm({
                                     <InputError message={errors.name} />
                                 </Field>
                                 {kind === 'type' && (
-                                    <Field
-                                        data-invalid={
-                                            !!errors.is_infrastructure
-                                        }
-                                    >
-                                        <FieldLabel id={`${id}-classification`}>
-                                            Classificazione predefinita
-                                        </FieldLabel>
-                                        <ToggleGroup
-                                            type="single"
-                                            variant="outline"
+                                    <>
+                                        <FieldSeparator />
+                                        <SettingSelect
+                                            id={`${id}-classification`}
+                                            label="Classificazione"
                                             value={classification}
-                                            onValueChange={(value) => {
-                                                if (value)
-                                                    setClassification(value);
+                                            onChange={setClassification}
+                                            choices={{
+                                                infrastructure:
+                                                    'Infrastruttura',
+                                                other: 'Altri dispositivi',
                                             }}
                                             disabled={processing}
-                                            aria-labelledby={`${id}-classification`}
-                                            aria-invalid={
-                                                !!errors.is_infrastructure
-                                            }
-                                            aria-describedby={`${id}-classification-error`}
-                                            className="w-full"
-                                        >
-                                            <ToggleGroupItem
-                                                value="infrastructure"
-                                                className="flex-1"
-                                            >
-                                                Infrastruttura
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="other"
-                                                className="flex-1"
-                                            >
-                                                Altri dispositivi
-                                            </ToggleGroupItem>
-                                        </ToggleGroup>
-                                        <InputError
-                                            id={`${id}-classification-error`}
-                                            message={errors.is_infrastructure}
+                                            error={errors.is_infrastructure}
                                         />
-                                    </Field>
+                                    </>
                                 )}
                                 {types && (
                                     <Field
@@ -353,58 +349,29 @@ export function CatalogForm({
                                     </Field>
                                 )}
                                 {(types || kind === 'type') && (
-                                    <Field
-                                        data-invalid={!!errors.show_in_topology}
-                                    >
-                                        <FieldLabel id={`${id}-topology`}>
-                                            Topologia di rete
-                                        </FieldLabel>
-                                        <ToggleGroup
-                                            type="single"
-                                            variant="outline"
-                                            value={topology}
-                                            onValueChange={(value) => {
-                                                if (value) setTopology(value);
-                                            }}
-                                            disabled={processing || creating}
-                                            aria-labelledby={`${id}-topology`}
-                                            aria-invalid={
-                                                !!errors.show_in_topology
-                                            }
-                                            className="w-full"
-                                        >
-                                            <ToggleGroupItem
-                                                value="inherit"
-                                                className="flex-1"
-                                            >
-                                                {kind === 'type'
+                                    <SettingSelect
+                                        id={`${id}-topology`}
+                                        label="Topologia di rete"
+                                        value={topology}
+                                        onChange={setTopology}
+                                        choices={{
+                                            inherit:
+                                                kind === 'type'
                                                     ? 'Automatica'
-                                                    : 'Usa tipo'}
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="show"
-                                                className="flex-1"
-                                            >
-                                                Mostra
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="hide"
-                                                className="flex-1"
-                                            >
-                                                Nascondi
-                                            </ToggleGroupItem>
-                                        </ToggleGroup>
-                                        <InputError
-                                            message={errors.show_in_topology}
-                                        />
-                                    </Field>
+                                                    : 'Usa tipo',
+                                            show: 'Mostra',
+                                            hide: 'Nascondi',
+                                        }}
+                                        disabled={processing || creating}
+                                        error={errors.show_in_topology}
+                                    />
                                 )}
                                 <DialogFooter>
                                     {deletion && (
                                         <Button
                                             type="button"
-                                            variant="destructive"
-                                            className="sm:mr-auto"
+                                            variant="ghost"
+                                            className="text-destructive-foreground hover:bg-destructive/10 hover:text-destructive-foreground sm:mr-auto"
                                             onClick={() => setRemoving(true)}
                                             disabled={processing || creating}
                                         >
@@ -441,4 +408,50 @@ function topologyChoice(item?: { show_in_topology?: boolean | null }) {
         : item.show_in_topology
           ? 'show'
           : 'hide';
+}
+
+function SettingSelect({
+    id,
+    label,
+    value,
+    onChange,
+    choices,
+    disabled,
+    error,
+}: {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    choices: Record<string, string>;
+    disabled: boolean;
+    error?: string;
+}) {
+    return (
+        <div className="flex flex-col gap-2">
+            <Field orientation="horizontal" data-invalid={!!error}>
+                <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                <Select value={value} onValueChange={onChange}>
+                    <SelectTrigger
+                        id={id}
+                        className="w-48"
+                        disabled={disabled}
+                        aria-invalid={!!error}
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {Object.entries(choices).map(([key, text]) => (
+                                <SelectItem key={key} value={key}>
+                                    {text}
+                                </SelectItem>
+                            ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </Field>
+            <InputError message={error} />
+        </div>
+    );
 }

@@ -151,13 +151,13 @@ export function FloorPlansDialog({
                 .forEach((url) => URL.revokeObjectURL(url)),
         [previews],
     );
-    useEffect(() => () => void pdf.current?.destroy(), []);
+    useEffect(() => () => void pdf.current?.loadingTask.destroy(), []);
 
     async function choose(file: File | undefined) {
         setErrors({});
         setPositions('');
         setPages([]);
-        pdf.current?.destroy();
+        pdf.current?.loadingTask.destroy();
         pdf.current = null;
         if (!file) return;
         const first = floor?.code ?? '';

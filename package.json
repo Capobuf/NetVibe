@@ -45,6 +45,7 @@
         "konva": "10.9.0",
         "laravel-vite-plugin": "^3.0.0",
         "lucide-react": "^0.475.0",
+        "pdfjs-dist": "6.4.299",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "react-konva": "19.3.2",

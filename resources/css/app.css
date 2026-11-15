@@ -15,6 +15,11 @@
 
     --animate-led-breathe: led-breathe 5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 
+    /* Motion: every transition-* utility shares one quick, decelerating rhythm. */
+    --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+    --default-transition-duration: 180ms;
+    --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
     --radius-sm: calc(var(--radius) - 4px);
@@ -97,6 +102,12 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.556 0 0);
+
+    --motion-enter: 220ms;
+    --motion-exit: 140ms;
+    --motion-panel-enter: 380ms;
+    --motion-panel-exit: 240ms;
+    --motion-page: 340ms;
 }
 
 .dark {
@@ -147,6 +158,45 @@
         @apply rounded-sm outline-2 outline-offset-2 outline-ring;
     }
 
+    /*
+     * Floating surfaces share one enter/exit rhythm: a soft decelerating entrance
+     * and a shorter, accelerating exit. tw-animate-css reads --tw-duration and
+     * --tw-ease, so explicit duration-* / ease-* utilities still take precedence.
+     */
+    :where(
+        [data-slot='dialog-overlay'],
+        [data-slot='dialog-content'],
+        [data-slot='sheet-overlay'],
+        [data-slot='popover-content'],
+        [data-slot='dropdown-menu-content'],
+        [data-slot='dropdown-menu-sub-content'],
+        [data-slot='select-content'],
+        [data-slot='tooltip-content'],
+        [data-slot='context-menu-content'],
+        [data-slot='combobox-content'],
+        [data-slot='collapsible-content'],
+        [data-slot='tabs-content'],
+        [data-slot='checkbox-indicator']
+    ) {
+        --tw-duration: var(--motion-enter);
+        --tw-ease: var(--ease-out-quint);
+
+        &:is([data-state='closed'], [data-closed]) {
+            --tw-duration: var(--motion-exit);
+            --tw-ease: var(--ease-in);
+        }
+    }
+
+    :where([data-slot='sheet-content']) {
+        --tw-duration: var(--motion-panel-enter);
+        --tw-ease: var(--ease-out-quint);
+
+        &[data-state='closed'] {
+            --tw-duration: var(--motion-panel-exit);
+            --tw-ease: var(--ease-in);
+        }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         *,
         *::before,
@@ -156,6 +206,58 @@
             transition-duration: 0.01ms !important;
             scroll-behavior: auto !important;
         }
+
+        ::view-transition-group(*),
+        ::view-transition-old(*),
+        ::view-transition-new(*) {
+            animation: none !important;
+        }
+    }
+}
+
+/*
+ * Inertia page changes (lib/page-transition.ts): the shell stays still while the
+ * page region quickly fades out and the new page rises into place.
+ */
+html[data-page-transition]
+    :is([data-slot='sidebar-inset'], [data-slot='auth-card']) {
+    view-transition-name: page;
+}
+
+html[data-page-transition]::view-transition-old(root),
+html[data-page-transition]::view-transition-new(root) {
+    animation: none;
+}
+
+::view-transition-group(page) {
+    animation: none;
+}
+
+::view-transition-old(page) {
+    animation: page-exit var(--motion-exit) var(--ease-in) both;
+}
+
+::view-transition-new(page) {
+    animation: page-enter var(--motion-page) var(--ease-out-quint) 40ms both;
+}
+
+/* Theme switches cross-fade the whole window. */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 320ms;
+    animation-timing-function: var(--ease-out-quint);
+}
+
+@keyframes page-exit {
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
     }
 }
 
@@ -192,6 +294,11 @@
 .sidebar-active-indicator {
     transition-duration: 220ms;
     transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sidebar-nav-row {
+    transition: background-color var(--default-transition-duration)
+        var(--default-transition-timing-function);
 }
 
 .sidebar-nav-row:hover,

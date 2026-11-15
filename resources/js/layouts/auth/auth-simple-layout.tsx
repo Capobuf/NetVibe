@@ -10,7 +10,10 @@ export default function AuthSimpleLayout({
 }: AuthLayoutProps) {
     return (
         <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted/30 p-4 sm:p-8">
-            <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm sm:p-8">
+            <div
+                data-slot="auth-card"
+                className="w-full max-w-md animate-in rounded-xl border bg-card p-6 shadow-sm duration-500 ease-out-quint fade-in-0 slide-in-from-bottom-2 sm:p-8"
+            >
                 <div className="flex flex-col gap-8">
                     <div className="flex flex-col items-center gap-4">
                         <Link

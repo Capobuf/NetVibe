@@ -6,6 +6,7 @@ use App\Http\Requests\CableRequest;
 use App\Http\Requests\RackRequest;
 use App\Models\Cable;
 use App\Models\Company;
+use App\Models\DeviceModel;
 use App\Models\Rack;
 use App\Models\RackItem;
 use App\Models\Site;
@@ -61,6 +62,9 @@ class RackController extends Controller
 
                     return [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []];
                 }),
+            // Catalog models for creating a new device straight from the rack editor.
+            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')
+                ->get(['id', 'name', 'manufacturer_id', 'model_type_id', 'rack_height_u', 'without_rack_ears']),
         ]));
     }
 

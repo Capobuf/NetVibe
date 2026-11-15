@@ -15,7 +15,7 @@ class Topology
     public function forSite(Site $site): array
     {
         $devices = $site->devices()->with([
-            'model', 'rackItem.rack', 'mikrotikConnection',
+            'model.modelType', 'rackItem.rack', 'mikrotikConnection',
             'interfaces' => fn ($query) => $query->without('mikrotikSource'),
             'ipAddresses' => fn ($query) => $query->select('id', 'device_id', 'address')->orderBy('address'),
         ])->orderBy('name')->orderBy('id')->get()->keyBy('id');
@@ -314,10 +314,18 @@ class Topology
                 'status' => $source->unifiSite->sync_status];
         }
 
-        $models = $devices->pluck('model')->filter(fn ($model) => $model?->panel)->unique('id')
+        // Hidden models stay documented in racks and cabling; they are dropped only here, after
+        // matching and port checks, together with every edge that touches them.
+        $visible = $devices->filter(fn ($device) => $device->model?->showsInTopology() ?? true);
+        $hidden = $devices->diffKeys($visible)->keys()->mapWithKeys(fn ($id) => ['device:'.$id => true]);
+        $nodes = array_diff_key($nodes, $hidden->all());
+        $edges = array_filter($edges, fn ($edge) => ! isset($hidden[$edge['source']]) && ! isset($hidden[$edge['target']]));
+        $integrations = array_filter($integrations, fn ($integration) => $visible->has($integration['device_id']));
+
+        $models = $visible->pluck('model')->filter(fn ($model) => $model?->panel)->unique('id')
             ->mapWithKeys(fn ($model) => [$model->id => ['panel' => $model->panel, 'assetUrls' => $model->assetUrls()]])->all();
 
-        return ['nodes' => array_values($nodes), 'edges' => array_values($edges), 'integrations' => $integrations, 'models' => $models];
+        return ['nodes' => array_values($nodes), 'edges' => array_values($edges), 'integrations' => array_values($integrations), 'models' => $models];
     }
 
     private function stale(MikrotikSource $source, Device $device): bool

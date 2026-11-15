@@ -2,7 +2,17 @@ import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import {
+    Eye,
+    EyeOff,
+    Monitor,
+    Network,
+    Pencil,
+    Sparkles,
+    Tag,
+    Trash2,
+    type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/icon-button';
 import {
@@ -14,7 +24,12 @@ import {
     DialogTrigger,
     DialogClose,
 } from '@/components/ui/dialog';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+    Field,
+    FieldGroup,
+    FieldLabel,
+    FieldSeparator,
+} from '@/components/ui/field';
 import {
     CatalogCombobox,
     createCatalogItem,
@@ -22,7 +37,19 @@ import {
 import { store as storeManufacturer } from '@/routes/manufacturers';
 import { store as storeType } from '@/routes/model-types';
 import type { Manufacturer, ModelType, CreatedModel } from '@/types/device';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
@@ -55,6 +82,7 @@ export function CatalogForm({
         rack_height_u?: number | null;
         without_rack_ears?: boolean;
         is_infrastructure?: boolean;
+        show_in_topology?: boolean | null;
     };
     types?: ModelType[];
     deletionMessage?: string;
@@ -78,6 +106,7 @@ export function CatalogForm({
     const [classification, setClassification] = useState(
         item?.is_infrastructure ? 'infrastructure' : 'other',
     );
+    const [topology, setTopology] = useState(topologyChoice(item));
     const [creating, setCreating] = useState(false);
     const formAction =
         typeof action === 'function'
@@ -97,6 +126,7 @@ export function CatalogForm({
             setClassification(
                 item?.is_infrastructure ? 'infrastructure' : 'other',
             );
+            setTopology(topologyChoice(item));
         }
     }
     return (
@@ -112,7 +142,17 @@ export function CatalogForm({
                     )}
                 </DialogTrigger>
             )}
-            <DialogContent aria-describedby={undefined}>
+            <DialogContent
+                aria-describedby={undefined}
+                // Editing opens with the caret after the name instead of the whole name selected.
+                onOpenAutoFocus={(event) => {
+                    const name = document.getElementById(`${id}-name`);
+                    if (!item || !(name instanceof HTMLInputElement)) return;
+                    event.preventDefault();
+                    name.focus();
+                    name.setSelectionRange(name.value.length, name.value.length);
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {removing ? `Elimina ${item?.name}` : title}
@@ -153,6 +193,12 @@ export function CatalogForm({
                             ...(types && {
                                 without_rack_ears:
                                     data.without_rack_ears === '1',
+                            }),
+                            ...((types || kind === 'type') && {
+                                show_in_topology:
+                                    topology === 'inherit'
+                                        ? null
+                                        : topology === 'show',
                             }),
                             ...(onCreated && { inline: true }),
                         })}
@@ -211,48 +257,28 @@ export function CatalogForm({
                                     <InputError message={errors.name} />
                                 </Field>
                                 {kind === 'type' && (
-                                    <Field
-                                        data-invalid={
-                                            !!errors.is_infrastructure
-                                        }
-                                    >
-                                        <FieldLabel id={`${id}-classification`}>
-                                            Classificazione predefinita
-                                        </FieldLabel>
-                                        <ToggleGroup
-                                            type="single"
-                                            variant="outline"
+                                    <>
+                                        <FieldSeparator />
+                                        <SettingSelect
+                                            id={`${id}-classification`}
+                                            label="Classificazione"
+                                            hint="Vista dell’elenco Dispositivi in cui compaiono."
                                             value={classification}
-                                            onValueChange={(value) => {
-                                                if (value)
-                                                    setClassification(value);
+                                            onChange={setClassification}
+                                            choices={{
+                                                infrastructure: {
+                                                    label: 'Infrastruttura',
+                                                    icon: Network,
+                                                },
+                                                other: {
+                                                    label: 'Altri dispositivi',
+                                                    icon: Monitor,
+                                                },
                                             }}
                                             disabled={processing}
-                                            aria-labelledby={`${id}-classification`}
-                                            aria-invalid={
-                                                !!errors.is_infrastructure
-                                            }
-                                            aria-describedby={`${id}-classification-error`}
-                                            className="w-full"
-                                        >
-                                            <ToggleGroupItem
-                                                value="infrastructure"
-                                                className="flex-1"
-                                            >
-                                                Infrastruttura
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="other"
-                                                className="flex-1"
-                                            >
-                                                Altri dispositivi
-                                            </ToggleGroupItem>
-                                        </ToggleGroup>
-                                        <InputError
-                                            id={`${id}-classification-error`}
-                                            message={errors.is_infrastructure}
+                                            error={errors.is_infrastructure}
                                         />
-                                    </Field>
+                                    </>
                                 )}
                                 {types && (
                                     <Field
@@ -343,12 +369,44 @@ export function CatalogForm({
                                         />
                                     </Field>
                                 )}
+                                {(types || kind === 'type') && (
+                                    <SettingSelect
+                                        id={`${id}-topology`}
+                                        label="Topologia di rete"
+                                        hint={
+                                            kind === 'type'
+                                                ? 'Automatica: solo i modelli con porte di rete.'
+                                                : 'Usa tipo: segue l’impostazione del tipo.'
+                                        }
+                                        value={topology}
+                                        onChange={setTopology}
+                                        choices={{
+                                            inherit:
+                                                kind === 'type'
+                                                    ? {
+                                                          label: 'Automatica',
+                                                          icon: Sparkles,
+                                                      }
+                                                    : {
+                                                          label: 'Usa tipo',
+                                                          icon: Tag,
+                                                      },
+                                            show: { label: 'Mostra', icon: Eye },
+                                            hide: {
+                                                label: 'Nascondi',
+                                                icon: EyeOff,
+                                            },
+                                        }}
+                                        disabled={processing || creating}
+                                        error={errors.show_in_topology}
+                                    />
+                                )}
                                 <DialogFooter>
                                     {deletion && (
                                         <Button
                                             type="button"
-                                            variant="destructive"
-                                            className="sm:mr-auto"
+                                            variant="ghost"
+                                            className="text-destructive-foreground hover:bg-destructive/10 hover:text-destructive-foreground sm:mr-auto"
                                             onClick={() => setRemoving(true)}
                                             disabled={processing || creating}
                                         >
@@ -376,5 +434,74 @@ export function CatalogForm({
                 )}
             </DialogContent>
         </Dialog>
+    );
+}
+
+function topologyChoice(item?: { show_in_topology?: boolean | null }) {
+    return item?.show_in_topology == null
+        ? 'inherit'
+        : item.show_in_topology
+          ? 'show'
+          : 'hide';
+}
+
+function SettingSelect({
+    id,
+    label,
+    hint,
+    value,
+    onChange,
+    choices,
+    disabled,
+    error,
+}: {
+    id: string;
+    label: string;
+    hint: string;
+    value: string;
+    onChange: (value: string) => void;
+    choices: Record<string, { label: string; icon: LucideIcon }>;
+    disabled: boolean;
+    error?: string;
+}) {
+    return (
+        <div className="flex flex-col gap-2">
+            <Field orientation="horizontal" data-invalid={!!error}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <FieldLabel
+                            htmlFor={id}
+                            className="flex-none!"
+                        >
+                            {label}
+                        </FieldLabel>
+                    </TooltipTrigger>
+                    <TooltipContent>{hint}</TooltipContent>
+                </Tooltip>
+                <Select value={value} onValueChange={onChange}>
+                    <SelectTrigger
+                        id={id}
+                        className="ml-auto w-48"
+                        disabled={disabled}
+                        aria-invalid={!!error}
+                    >
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            {Object.entries(choices).map(
+                                ([key, { label: text, icon: Icon }]) => (
+                                    <SelectItem key={key} value={key}>
+                                        <Icon />
+                                        {text}
+                                    </SelectItem>
+                                ),
+                            )}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+            </Field>
+            <InputError message={error} />
+        </div>
     );
 }

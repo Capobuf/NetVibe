@@ -396,7 +396,7 @@ export default function Models({
                 >
                     <SheetContent
                         overlayClassName="bg-black/30"
-                        className="w-full gap-0 overflow-y-auto sm:max-w-2xl"
+                        className="w-full gap-0 overflow-y-auto sm:max-w-4xl"
                     >
                         <SheetHeader className="flex-row items-center justify-between gap-4 border-b px-6 py-4 pr-12">
                             <SheetTitle>
@@ -447,6 +447,11 @@ function TypeTable({ types }: { types: ModelType[] }) {
                     label: 'Classificazione predefinita',
                     visible: true,
                 },
+                {
+                    id: 'show_in_topology',
+                    label: 'Topologia di rete',
+                    visible: true,
+                },
                 { id: 'models_count', label: 'Modelli', visible: true },
             ]}
             value={(type, column) =>
@@ -454,7 +459,13 @@ function TypeTable({ types }: { types: ModelType[] }) {
                     ? type.is_infrastructure
                         ? 'Infrastruttura'
                         : 'Altri dispositivi'
-                    : (type[column] ?? 0)
+                    : column === 'show_in_topology'
+                      ? type.show_in_topology === null
+                          ? 'Automatica'
+                          : type.show_in_topology
+                            ? 'Mostra'
+                            : 'Nascondi'
+                      : (type[column] ?? 0)
             }
             empty="Nessun tipo"
             bulkActions={(items, clearSelection) => (

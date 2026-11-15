@@ -749,4 +749,23 @@ class DevicesTest extends TestCase
 
         return $panel;
     }
+
+    public function test_rack_editor_creates_a_device_inline_and_stays_on_the_rack(): void
+    {
+        $this->actingAs(User::factory()->create(['is_superadmin' => true]));
+        $company = Company::create(['name' => 'Alfa']);
+        $site = $company->sites()->create(['name' => 'Torino']);
+        $rack = $site->racks()->create(['name' => 'RK', 'height_u' => 24, 'numbering' => 'bottom-up']);
+        $model = Manufacturer::create(['name' => 'Generico'])->models()->create(['name' => 'Multipresa', 'rack_height_u' => 1]);
+        $context = route('companies.sites.racks.show', [$company, $site, $rack, 'edit' => 1]);
+        $store = route('companies.sites.devices.store', [$company, $site]);
+        $this->from($context)->post($store, ['name' => '', 'device_model_id' => $model->id, 'inline' => true])
+            ->assertRedirect($context)->assertSessionHasErrors('name');
+        $this->from($context)->post($store, ['name' => 'PDU-1', 'device_model_id' => $model->id, 'inline' => true])
+            ->assertRedirect($context)->assertSessionHasNoErrors()
+            ->assertInertiaFlash('createdDevice.name', 'PDU-1');
+        $device = $site->devices()->sole();
+        $this->assertSame($model->manufacturer_id, $device->manufacturer_id);
+        $this->assertDatabaseCount('rack_items', 0);
+    }
 }

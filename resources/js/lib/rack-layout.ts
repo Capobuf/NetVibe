@@ -1,6 +1,9 @@
+import type { DeviceModel } from '@/types/device';
 import type { Rack, RackDevice, RackItem } from '@/types/rack';
 
-export function isRackMounted(device: Pick<RackDevice, 'model'>) {
+export function isRackMounted(device: {
+    model: Pick<DeviceModel, 'rack_height_u' | 'without_rack_ears'> | null;
+}) {
     return !!device.model?.rack_height_u && !device.model.without_rack_ears;
 }
 

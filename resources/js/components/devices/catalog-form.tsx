@@ -2,7 +2,18 @@ import { SaveButton } from '@/components/save-button';
 import { NewItemButton } from '@/components/new-item-button';
 import { Form } from '@inertiajs/react';
 import { useId, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import {
+    Eye,
+    EyeOff,
+    Info,
+    Monitor,
+    Network,
+    Pencil,
+    Sparkles,
+    Tag,
+    Trash2,
+    type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/icon-button';
 import {
@@ -35,6 +46,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputError from '@/components/input-error';
@@ -247,12 +263,18 @@ export function CatalogForm({
                                         <SettingSelect
                                             id={`${id}-classification`}
                                             label="Classificazione"
+                                            hint="Indica se i dispositivi di questo tipo compaiono nella vista Infrastruttura dell’elenco Dispositivi. Ogni dispositivo può cambiarla."
                                             value={classification}
                                             onChange={setClassification}
                                             choices={{
-                                                infrastructure:
-                                                    'Infrastruttura',
-                                                other: 'Altri dispositivi',
+                                                infrastructure: {
+                                                    label: 'Infrastruttura',
+                                                    icon: Network,
+                                                },
+                                                other: {
+                                                    label: 'Altri dispositivi',
+                                                    icon: Monitor,
+                                                },
                                             }}
                                             disabled={processing}
                                             error={errors.is_infrastructure}
@@ -352,15 +374,29 @@ export function CatalogForm({
                                     <SettingSelect
                                         id={`${id}-topology`}
                                         label="Topologia di rete"
+                                        hint={
+                                            kind === 'type'
+                                                ? 'Automatica mostra solo i modelli con porte RJ45, SFP o QSFP, oppure senza pannello. Mostra e Nascondi valgono per tutti i modelli del tipo, salvo una scelta diversa sul modello. Rack, cablaggi e inventario non cambiano.'
+                                                : 'Usa tipo segue l’impostazione del tipo. Mostra e Nascondi valgono solo per questo modello. Rack, cablaggi e inventario non cambiano.'
+                                        }
                                         value={topology}
                                         onChange={setTopology}
                                         choices={{
                                             inherit:
                                                 kind === 'type'
-                                                    ? 'Automatica'
-                                                    : 'Usa tipo',
-                                            show: 'Mostra',
-                                            hide: 'Nascondi',
+                                                    ? {
+                                                          label: 'Automatica',
+                                                          icon: Sparkles,
+                                                      }
+                                                    : {
+                                                          label: 'Usa tipo',
+                                                          icon: Tag,
+                                                      },
+                                            show: { label: 'Mostra', icon: Eye },
+                                            hide: {
+                                                label: 'Nascondi',
+                                                icon: EyeOff,
+                                            },
                                         }}
                                         disabled={processing || creating}
                                         error={errors.show_in_topology}
@@ -413,6 +449,7 @@ function topologyChoice(item?: { show_in_topology?: boolean | null }) {
 function SettingSelect({
     id,
     label,
+    hint,
     value,
     onChange,
     choices,
@@ -421,16 +458,31 @@ function SettingSelect({
 }: {
     id: string;
     label: string;
+    hint: string;
     value: string;
     onChange: (value: string) => void;
-    choices: Record<string, string>;
+    choices: Record<string, { label: string; icon: LucideIcon }>;
     disabled: boolean;
     error?: string;
 }) {
     return (
         <div className="flex flex-col gap-2">
             <Field orientation="horizontal" data-invalid={!!error}>
-                <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                <div className="flex flex-auto items-center gap-1.5">
+                    <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label={`Informazioni su ${label}`}
+                                className="rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                            >
+                                <Info className="size-4" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-72">{hint}</TooltipContent>
+                    </Tooltip>
+                </div>
                 <Select value={value} onValueChange={onChange}>
                     <SelectTrigger
                         id={id}
@@ -442,11 +494,14 @@ function SettingSelect({
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            {Object.entries(choices).map(([key, text]) => (
-                                <SelectItem key={key} value={key}>
-                                    {text}
-                                </SelectItem>
-                            ))}
+                            {Object.entries(choices).map(
+                                ([key, { label: text, icon: Icon }]) => (
+                                    <SelectItem key={key} value={key}>
+                                        <Icon />
+                                        {text}
+                                    </SelectItem>
+                                ),
+                            )}
                         </SelectGroup>
                     </SelectContent>
                 </Select>

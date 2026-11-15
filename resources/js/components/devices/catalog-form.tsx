@@ -5,7 +5,6 @@ import { useId, useState } from 'react';
 import {
     Eye,
     EyeOff,
-    Info,
     Monitor,
     Network,
     Pencil,
@@ -263,7 +262,7 @@ export function CatalogForm({
                                         <SettingSelect
                                             id={`${id}-classification`}
                                             label="Classificazione"
-                                            hint="Indica se i dispositivi di questo tipo compaiono nella vista Infrastruttura dell’elenco Dispositivi. Ogni dispositivo può cambiarla."
+                                            hint="Vista dell’elenco Dispositivi in cui compaiono."
                                             value={classification}
                                             onChange={setClassification}
                                             choices={{
@@ -376,8 +375,8 @@ export function CatalogForm({
                                         label="Topologia di rete"
                                         hint={
                                             kind === 'type'
-                                                ? 'Automatica mostra solo i modelli con porte RJ45, SFP o QSFP, oppure senza pannello. Mostra e Nascondi valgono per tutti i modelli del tipo, salvo una scelta diversa sul modello. Rack, cablaggi e inventario non cambiano.'
-                                                : 'Usa tipo segue l’impostazione del tipo. Mostra e Nascondi valgono solo per questo modello. Rack, cablaggi e inventario non cambiano.'
+                                                ? 'Automatica: solo i modelli con porte di rete.'
+                                                : 'Usa tipo: segue l’impostazione del tipo.'
                                         }
                                         value={topology}
                                         onChange={setTopology}
@@ -468,25 +467,21 @@ function SettingSelect({
     return (
         <div className="flex flex-col gap-2">
             <Field orientation="horizontal" data-invalid={!!error}>
-                <div className="flex flex-auto items-center gap-1.5">
-                    <FieldLabel htmlFor={id}>{label}</FieldLabel>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                type="button"
-                                aria-label={`Informazioni su ${label}`}
-                                className="rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                                <Info className="size-4" />
-                            </button>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-72">{hint}</TooltipContent>
-                    </Tooltip>
-                </div>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <FieldLabel
+                            htmlFor={id}
+                            className="flex-none! cursor-help"
+                        >
+                            {label}
+                        </FieldLabel>
+                    </TooltipTrigger>
+                    <TooltipContent>{hint}</TooltipContent>
+                </Tooltip>
                 <Select value={value} onValueChange={onChange}>
                     <SelectTrigger
                         id={id}
-                        className="w-48"
+                        className="ml-auto w-48"
                         disabled={disabled}
                         aria-invalid={!!error}
                     >

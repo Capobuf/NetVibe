@@ -81,18 +81,21 @@ function ObservationRow({
     route: { company: number; site: number };
 }) {
     const title = row.name ?? row.macs[0];
+    const stale = row.sources.every((source) => source.stale);
     const details = [
         ...(row.name ? row.macs : row.macs.slice(1)),
-        ...row.ips,
         !row.port &&
             row.reported_ports.length > 0 &&
             `su ${row.reported_ports.join(', ')}`,
+        ...row.sources.map(
+            (source) =>
+                `${source.vendor === 'unifi' ? 'UniFi' : 'MikroTik'}${source.seen_at ? ` ${formatDateTime(source.seen_at)}` : ''}`,
+        ),
     ].filter(Boolean);
-    const stale = row.sources.every((source) => source.stale);
     return (
-        <li className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 pl-4">
-            <span className="min-w-0">
-                <span className="block truncate text-sm">
+        <li className="flex flex-col gap-0.5 rounded-md py-1.5 pr-2 pl-4">
+            <span className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate text-sm">
                     {row.device_id ? (
                         <TextLink
                             href={deviceShow({
@@ -106,25 +109,17 @@ function ObservationRow({
                         title
                     )}
                 </span>
-                {details.length > 0 && (
-                    <span className="block truncate font-mono text-xs text-muted-foreground">
-                        {details.join(' · ')}
+                {row.ips.length > 0 && (
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {row.ips.join(', ')}
                     </span>
                 )}
             </span>
-            <span className="flex shrink-0 items-start gap-1.5 text-right text-xs text-muted-foreground">
-                <span className="flex flex-col">
-                    {row.sources.map((source) => (
-                        <span key={source.source}>
-                            {source.vendor === 'unifi' ? 'UniFi' : 'MikroTik'}
-                            {source.seen_at &&
-                                ` · ${formatDateTime(source.seen_at)}`}
-                        </span>
-                    ))}
-                </span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+                <span className="min-w-0 truncate">{details.join(' · ')}</span>
                 {stale && (
                     <CircleAlert
-                        className="size-4 text-destructive"
+                        className="size-3.5 shrink-0 text-destructive"
                         aria-label="Non aggiornato"
                     />
                 )}

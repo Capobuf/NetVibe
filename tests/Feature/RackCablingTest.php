@@ -322,4 +322,32 @@ class RackCablingTest extends TestCase
         $this->get(route('companies.sites.racks.cables.labels', [$this->company, $this->site, $this->rack, $foreignCable->id]))->assertNotFound();
         $this->get(route('companies.sites.racks.cables.labels', [$this->company, $foreignSite, $this->rack, $cable->id]))->assertNotFound();
     }
+
+    public function test_site_cables_link_devices_outside_racks_within_the_site_and_current_revision(): void
+    {
+        $phone = $this->site->devices()->create(['name' => 'Telefono', 'manufacturer_id' => $this->model->manufacturer_id, 'device_model_id' => $this->model->id]);
+        $url = route('companies.sites.cables.store', [$this->company, $this->site]);
+        $cable = ['type' => 'copper', 'color' => '#2563eb', 'purpose' => null,
+            'a' => ['device_id' => $this->remote->id, 'connector_id' => str_repeat('a', 32)],
+            'b' => ['device_id' => $phone->id, 'connector_id' => str_repeat('a', 32)]];
+
+        $this->post($url, [...$cable, 'cabling_revision' => 0])->assertSessionHasNoErrors();
+        $created = Cable::query()->sole();
+        $this->assertSame(1, (int) $this->site->fresh()->cabling_revision);
+        $usb = [...$cable, 'type' => 'usb', 'a' => ['device_id' => $this->remote->id, 'connector_id' => str_repeat('b', 32)],
+            'b' => ['device_id' => $phone->id, 'connector_id' => str_repeat('b', 32)]];
+        $this->post($url, [...$usb, 'cabling_revision' => 0])->assertSessionHasErrors('cables');
+        $other = Company::create(['name' => 'Beta'])->sites()->create(['name' => 'Milano']);
+        $foreign = $other->devices()->create(['name' => 'Altro', 'manufacturer_id' => $this->model->manufacturer_id, 'device_model_id' => $this->model->id]);
+        $this->post($url, [...$usb, 'b' => ['device_id' => $foreign->id, 'connector_id' => str_repeat('b', 32)], 'cabling_revision' => 1])
+            ->assertSessionHasErrors('cables');
+        $this->assertSame([$created->id], Cable::query()->pluck('id')->all());
+
+        $this->delete(route('companies.sites.cables.destroy', [$other->company, $other, $created->id]), ['cabling_revision' => 0])->assertSessionHasErrors('cables');
+        $destroy = route('companies.sites.cables.destroy', [$this->company, $this->site, $created->id]);
+        $this->delete($destroy, ['cabling_revision' => 0])->assertSessionHasErrors('cables');
+        $this->delete($destroy, ['cabling_revision' => 1])->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('cables', 0);
+        $this->assertSame(2, (int) $this->site->fresh()->cabling_revision);
+    }
 }

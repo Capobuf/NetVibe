@@ -173,12 +173,12 @@ class UnifiIpamTest extends TestCase
         $foreign = $this->source();
         $observe($foreign, 'client', '02:00:00:00:00:09', ['switch' => ['switch_mac' => '02:00:00:00:00:A1', 'switch_port' => 3]]);
 
-        $rows = collect((new Topology)->observedOn($site, $switch))->keyBy(fn ($row) => $row['macs'][0]);
+        $rows = collect((new Topology)->portsOn($site, $switch)['observed'])->keyBy(fn ($row) => $row['macs'][0]);
         $this->assertSame(['02:00:00:00:00:01', '02:00:00:00:00:02', '02:00:00:00:00:03'], $rows->keys()->sort()->values()->all());
         $this->assertSame(['Porta 3', $port->id], [$rows['02:00:00:00:00:01']['port'], $rows['02:00:00:00:00:01']['interface_id']]);
         $this->assertSame([null, false], [$rows['02:00:00:00:00:02']['port'], $rows['02:00:00:00:00:02']['wireless']]);
         $this->assertSame([null, true], [$rows['02:00:00:00:00:03']['port'], $rows['02:00:00:00:00:03']['wireless']]);
-        $uplink = (new Topology)->observedOn($site, $gateway);
+        $uplink = (new Topology)->portsOn($site, $gateway)['observed'];
         $this->assertCount(1, $uplink);
         $this->assertSame(['Porta 1', $switch->id, 'Switch'], [$uplink[0]['port'], $uplink[0]['device_id'], $uplink[0]['name']]);
         $this->assertDatabaseCount('cables', 0);

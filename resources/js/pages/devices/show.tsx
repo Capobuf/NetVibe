@@ -1,6 +1,6 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
-import { ArrowLeft, Unlink, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Cable, Pencil, Unlink, Unplug, X, Zap } from 'lucide-react';
 import {
     UnifiDeviceSummary,
     UnifiPorts,
@@ -11,6 +11,11 @@ import { useSiteContext } from '@/hooks/use-site-context';
 import type { UnifiDeviceDetail } from '@/components/unifi/types';
 import { DeviceForm } from '@/components/devices/device-form';
 import { SnipeItMark } from '@/components/snipe-it-mark';
+import { MikrotikMark } from '@/components/mikrotik-mark';
+import { UnifiMark } from '@/components/unifi-mark';
+import { SourceAvatar } from '@/components/networks/source-avatar';
+import { AvatarGroup } from '@/components/ui/avatar';
+import { formatDateTime } from '@/lib/utils';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
 import { type SnipeDevice } from '@/components/devices/snipe-it-device';
 import { DataTable } from '@/components/data-table';
@@ -25,6 +30,17 @@ import {
     ObservedHostsList,
     ObservedHostsTable,
 } from '@/components/devices/observed-hosts';
+import {
+    PortLink,
+    PortLinkDialog,
+    UnlinkDialog,
+    portTitle,
+    adjacencySource,
+    type Adjacency,
+    type Cabling,
+    type DeviceLink,
+} from '@/components/devices/port-link';
+import { connectionTypes, type CableEnd } from '@/lib/rack-cabling';
 import type { TopologyObservation } from '@/types/topology';
 import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-badge';
 import { AddIpForm, type AvailableIp } from '@/components/devices/add-ip-form';
@@ -93,7 +109,22 @@ type Props = {
     statuses: IpStatus[];
     tags: Tag[];
     observed: TopologyObservation[];
+    links: DeviceLink[];
+    adjacent: Record<string, Adjacency>;
+    cablingRevision: number;
+    cabling?: Cabling;
+    sources: DeviceSource[];
 };
+type DeviceSource = {
+    vendor: 'snipe-it' | 'mikrotik' | 'unifi';
+    seen_at: string | null;
+    issue: string | null;
+};
+const sourceNames = {
+    'snipe-it': 'Snipe-IT',
+    mikrotik: 'MikroTik',
+    unifi: 'UniFi',
+} as const;
 export default function DeviceShow({
     view,
     company,
@@ -114,6 +145,11 @@ export default function DeviceShow({
     tags,
     initialInterfaceId,
     observed,
+    links,
+    adjacent,
+    cablingRevision,
+    cabling,
+    sources,
 }: Props) {
     const page = usePage();
     const { auth } = page.props;
@@ -133,6 +169,56 @@ export default function DeviceShow({
     const portAnchor = useRef<PortAnchor | null>(null);
     const portFocus = useRef<HTMLElement | null>(null);
     const portTitleId = useId();
+    const [linking, setLinking] = useState<{
+        port: Port;
+        destination?: CableEnd;
+        source?: string;
+        fromPopup: boolean;
+    } | null>(null);
+    const [cablingLoading, setCablingLoading] = useState(false);
+    const [unlinking, setUnlinking] = useState<{
+        link: DeviceLink;
+        port: Port;
+    } | null>(null);
+    // Dialogs opened from the popup return to its port; from a table, to the clicked action.
+    const linkFocus = useRef<HTMLElement | null>(null);
+    // LLDP or CDP prefill the device and port they report beyond this port, when they name both.
+    function documentLink(
+        port: Port,
+        trigger: HTMLElement,
+        destination?: CableEnd,
+    ) {
+        const reported = adjacent[port.id];
+        const prefill =
+            reported &&
+            (!destination || destination.device_id === reported.device_id)
+                ? reported
+                : undefined;
+        linkFocus.current = portOpen ? portFocus.current : trigger;
+        setLinking({
+            port,
+            destination: prefill
+                ? {
+                      device_id: prefill.device_id,
+                      connector_id: prefill.connector_id,
+                  }
+                : destination,
+            source: prefill ? adjacencySource(prefill) : undefined,
+            fromPopup: portOpen,
+        });
+        setPortOpen(false);
+        // Occupied ports and the device list must be current when the cable is chosen.
+        setCablingLoading(true);
+        router.reload({
+            only: ['cabling', 'cablingRevision'],
+            onFinish: () => setCablingLoading(false),
+        });
+    }
+    function unlink(link: DeviceLink, port: Port, trigger: HTMLElement) {
+        linkFocus.current = portOpen ? portFocus.current : trigger;
+        setUnlinking({ link, port });
+        setPortOpen(false);
+    }
     const initialInterface = device.interfaces.find(
         (item) => item.id === initialInterfaceId,
     );
@@ -183,6 +269,14 @@ export default function DeviceShow({
                 ),
         ),
     ];
+    const portOf = (row: InterfaceRow) =>
+        'connector_id' in row
+            ? ports.find((port) => port.id === row.connector_id)
+            : row;
+    const linkOn = (port?: Port) =>
+        port ? links.find((link) => link.connector_id === port.id) : undefined;
+    const cableable = (port?: Port): port is Port =>
+        !!port && connectionTypes(port.type).length > 0;
     function interfaceRowValue(row: InterfaceRow, column: string) {
         const item = 'connector_id' in row ? row : null;
         const connector =
@@ -204,6 +298,12 @@ export default function DeviceShow({
                       : '—';
             case 'kind':
                 return item?.kind === 'logical' ? 'Logica' : 'Fisica';
+            case 'link': {
+                const link = linkOn(portOf(row));
+                return link
+                    ? `${link.peer.name ?? 'Dispositivo'} · ${link.peer.port}`
+                    : null;
+            }
             case 'ips':
                 return item
                     ? ips
@@ -231,6 +331,63 @@ export default function DeviceShow({
     const portObserved = port
         ? observed.filter((row) => row.connector_id === port.id)
         : [];
+    const portLink = linkOn(port ?? undefined);
+    const siteRoute = { company: company.id, site: site.id };
+    const canLinkPort =
+        auth.canEditIpam && cableable(port ?? undefined) && !portLink;
+    // Quick action on an inventory device seen on a free port: prefilled, still confirmed in the dialog.
+    function observedLinkAction(row: TopologyObservation) {
+        const rowPort = row.connector_id
+            ? ports.find((item) => item.id === row.connector_id)
+            : undefined;
+        if (
+            !auth.canEditIpam ||
+            !row.device_id ||
+            !cableable(rowPort) ||
+            linkOn(rowPort)
+        )
+            return null;
+        const deviceId = row.device_id;
+        return (
+            <IconButton
+                label={`Collega a ${row.name ?? 'questo dispositivo'}`}
+                variant="ghost"
+                className="size-8"
+                onClick={(event) =>
+                    documentLink(rowPort, event.currentTarget, {
+                        device_id: deviceId,
+                        connector_id: '',
+                    })
+                }
+            >
+                <Cable />
+            </IconButton>
+        );
+    }
+    function portLinkAction(row: InterfaceRow) {
+        const rowPort = portOf(row);
+        if (!auth.canEditIpam || !cableable(rowPort)) return null;
+        const link = linkOn(rowPort);
+        return link ? (
+            <IconButton
+                label={`Scollega C-${link.id}`}
+                onClick={(event) =>
+                    unlink(link, rowPort, event.currentTarget)
+                }
+            >
+                <Unplug />
+            </IconButton>
+        ) : (
+            <IconButton
+                label="Documenta collegamento"
+                onClick={(event) =>
+                    documentLink(rowPort, event.currentTarget)
+                }
+            >
+                <Cable />
+            </IconButton>
+        );
+    }
     const context = useSiteContext(company, site);
     const interfaceValue = (id: number | null) =>
         id
@@ -263,26 +420,66 @@ export default function DeviceShow({
                                 {context}
                             </p>
                             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-                                <div className="flex min-w-0 items-center gap-3">
-                                    {snipeIt ? (
-                                        <span
-                                            className="shrink-0"
-                                            role="img"
-                                            aria-label="Collegato a Snipe-IT"
-                                        >
-                                            <SnipeItMark className="size-8" />
-                                        </span>
-                                    ) : null}
-                                    <h1 className="min-w-0 text-3xl font-semibold tracking-tight break-words">
-                                        {device.name}
-                                    </h1>
-                                </div>
+                                <h1 className="min-w-0 text-3xl font-semibold tracking-tight break-words">
+                                    {device.name}
+                                </h1>
                                 {device.model?.model_type?.name ? (
                                     <Badge variant="secondary">
                                         {device.model.model_type.name}
                                     </Badge>
                                 ) : null}
                             </div>
+                            {sources.length > 0 && (
+                                <AvatarGroup
+                                    aria-label={`Fonti per ${device.name}`}
+                                    className="py-1"
+                                >
+                                    {sources.map((source) => {
+                                        // Superadmins manage MikroTik and Snipe-IT from the device dialog.
+                                        const manage =
+                                            auth.user.is_superadmin &&
+                                            source.vendor !== 'unifi' &&
+                                            (source.vendor !== 'mikrotik' ||
+                                                !!mikrotik);
+                                        return (
+                                            <SourceAvatar
+                                                key={source.vendor}
+                                                label={[
+                                                    sourceNames[source.vendor],
+                                                    source.seen_at
+                                                        ? `Ultimo aggiornamento ${formatDateTime(source.seen_at)}`
+                                                        : 'Mai aggiornato',
+                                                    source.issue,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                                attention={!!source.issue}
+                                                interactive={manage}
+                                                onClick={() =>
+                                                    router.visit(
+                                                        show(route, {
+                                                            query: {
+                                                                view,
+                                                                manage: source.vendor,
+                                                            },
+                                                        }),
+                                                    )
+                                                }
+                                            >
+                                                {source.vendor ===
+                                                'snipe-it' ? (
+                                                    <SnipeItMark />
+                                                ) : source.vendor ===
+                                                  'mikrotik' ? (
+                                                    <MikrotikMark />
+                                                ) : (
+                                                    <UnifiMark />
+                                                )}
+                                            </SourceAvatar>
+                                        );
+                                    })}
+                                </AvatarGroup>
+                            )}
                             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
                                 <span className="text-muted-foreground">
                                     {device.manufacturer.name}
@@ -478,8 +675,14 @@ export default function DeviceShow({
                                     visible: true,
                                 },
                                 { id: 'ips', label: 'IPv4', visible: true },
+                                {
+                                    id: 'link',
+                                    label: 'Collegamento',
+                                    visible: true,
+                                },
                             ]}
                             value={interfaceRowValue}
+                            actions={portLinkAction}
                             hiddenColumns={
                                 new Set(
                                     interfaceRows.map((row) =>
@@ -492,6 +695,21 @@ export default function DeviceShow({
                             onRowClick={openInterfaceRow}
                             isRowClickable={(row) => 'connector_id' in row}
                             render={(row, column) => {
+                                if (column === 'link') {
+                                    const link = linkOn(portOf(row));
+                                    return link ? (
+                                        <TextLink
+                                            href={show({
+                                                ...siteRoute,
+                                                device: link.peer.device_id,
+                                            })}
+                                        >
+                                            {interfaceRowValue(row, column)}
+                                        </TextLink>
+                                    ) : (
+                                        '—'
+                                    );
+                                }
                                 if (column !== 'name')
                                     return (
                                         interfaceRowValue(row, column) || '—'
@@ -595,7 +813,9 @@ export default function DeviceShow({
                     <TabsContent value="observed" className="pt-4">
                         <ObservedHostsTable
                             rows={observed}
-                            route={{ company: company.id, site: site.id }}
+                            route={siteRoute}
+                            links={links}
+                            actions={observedLinkAction}
                         />
                     </TabsContent>
                 </Tabs>
@@ -713,20 +933,46 @@ export default function DeviceShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        if (!interfaceId && !documentingSubnet && !releasingIp)
+                        if (
+                            !interfaceId &&
+                            !documentingSubnet &&
+                            !releasingIp &&
+                            !linking &&
+                            !unlinking
+                        )
                             portFocus.current?.focus({ preventScroll: true });
                     }}
                 >
                     <PopoverHeader className="shrink-0 flex-row items-center justify-between gap-3 rounded-t-xl bg-muted/40 px-4 py-3">
-                        <PopoverTitle
-                            id={portTitleId}
-                            className="min-w-0 flex-1 break-words"
-                        >
-                            {port?.label ||
-                                (port
-                                    ? connectorTypes[port.type].name
-                                    : 'Porta')}
-                        </PopoverTitle>
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                            <PopoverTitle
+                                id={portTitleId}
+                                className="break-words"
+                            >
+                                {port ? portTitle(port) : 'Porta'}
+                            </PopoverTitle>
+                            {port && (
+                                <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                    {connectorTypes[port.type].name}
+                                    {port.poe && (
+                                        <Badge
+                                            variant="secondary"
+                                            className="h-5 px-1.5"
+                                        >
+                                            <Zap aria-hidden="true" />
+                                            PoE
+                                        </Badge>
+                                    )}
+                                </p>
+                            )}
+                        </div>
+                        {selected?.mikrotik && (
+                            <MikrotikInterfaceBadge
+                                iconOnly
+                                source={selected.mikrotik}
+                                manualMac={selected.mac_address}
+                            />
+                        )}
                         {device.unifi && unifiPort ? (
                             <UnifiPortInfo source={device.unifi} />
                         ) : null}
@@ -753,47 +999,17 @@ export default function DeviceShow({
                                 <Separator className="mt-4" />
                             </div>
                         ) : null}
-                        {port && (
+                        <div className="flex flex-col gap-4">
                             <InterfaceDetails
                                 company={company.id}
                                 site={site.id}
                                 item={selected}
                                 port={port}
+                                summary={false}
                                 ips={ips.filter(
                                     (ip) =>
                                         ip.device_interface_id === selected?.id,
                                 )}
-                                actions={
-                                    selected && (
-                                        <>
-                                            <IconButton
-                                                label="Modifica interfaccia"
-                                                className="size-8"
-                                                onClick={() => {
-                                                    setPortOpen(false);
-                                                    editInterface(
-                                                        selected.id,
-                                                        portFocus.current,
-                                                    );
-                                                }}
-                                            >
-                                                <Pencil />
-                                            </IconButton>
-                                            <NewIpMenu
-                                                subnets={subnets}
-                                                onSelect={(subnet) => {
-                                                    setDocumentingInterfaceId(
-                                                        selected.id,
-                                                    );
-                                                    setDocumentingSubnet(
-                                                        subnet,
-                                                    );
-                                                    setPortOpen(false);
-                                                }}
-                                            />
-                                        </>
-                                    )
-                                }
                                 ipActions={(ip) => (
                                     <IconButton
                                         label={`Scollega e libera ${ip.ip}`}
@@ -805,20 +1021,124 @@ export default function DeviceShow({
                                     </IconButton>
                                 )}
                             />
-                        )}
-                        {portObserved.length > 0 && (
-                            <>
-                                <Separator className="my-4" />
-                                <ObservedHostsList
-                                    rows={portObserved}
-                                    route={{ company: company.id, site: site.id }}
+                            {port && portLink && (
+                                <PortLink
+                                    route={siteRoute}
+                                    link={portLink}
+                                    canEdit={auth.canEditIpam}
+                                    onUnlink={(link) =>
+                                        unlink(link, port, portFocus.current!)
+                                    }
                                 />
-                            </>
-                        )}
+                            )}
+                            {port && portObserved.length > 0 && (
+                                <ObservedHostsList
+                                    key={port.id}
+                                    rows={portObserved}
+                                    route={siteRoute}
+                                    actions={
+                                        portLink
+                                            ? undefined
+                                            : observedLinkAction
+                                    }
+                                />
+                            )}
+                        </div>
                     </div>
+                    {port && (selected || canLinkPort) && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-3">
+                            {selected && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setPortOpen(false);
+                                        editInterface(
+                                            selected.id,
+                                            portFocus.current,
+                                        );
+                                    }}
+                                >
+                                    <Pencil data-icon="inline-start" />
+                                    Modifica
+                                </Button>
+                            )}
+                            {selected && (
+                                <NewIpMenu
+                                    subnets={subnets}
+                                    onSelect={(subnet) => {
+                                        setDocumentingInterfaceId(selected.id);
+                                        setDocumentingSubnet(subnet);
+                                        setPortOpen(false);
+                                    }}
+                                />
+                            )}
+                            {canLinkPort && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(event) =>
+                                        documentLink(port, event.currentTarget)
+                                    }
+                                >
+                                    <Cable data-icon="inline-start" />
+                                    Collega
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     <PopoverArrow />
                 </PopoverContent>
             </Popover>
+            {linking && (
+                <PortLinkDialog
+                    key={linking.port.id}
+                    route={siteRoute}
+                    device={device}
+                    port={linking.port}
+                    destination={linking.destination}
+                    source={linking.source}
+                    cabling={cablingLoading ? undefined : cabling}
+                    revision={cablingRevision}
+                    suggestedIds={[
+                        ...new Set(
+                            observed
+                                .filter(
+                                    (row) =>
+                                        row.connector_id === linking.port.id &&
+                                        row.device_id &&
+                                        row.device_id !== device.id,
+                                )
+                                .map((row) => row.device_id!),
+                        ),
+                    ]}
+                    onClose={() => setLinking(null)}
+                    onSaved={() => {
+                        // Back in the popup the technician sees the documented cable.
+                        if (linking.fromPopup) setPortOpen(true);
+                        setLinking(null);
+                    }}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        linkFocus.current?.focus({ preventScroll: true });
+                    }}
+                />
+            )}
+            {unlinking && (
+                <UnlinkDialog
+                    route={siteRoute}
+                    link={unlinking.link}
+                    local={`${device.name} · ${portTitle(unlinking.port)}`}
+                    revision={cablingRevision}
+                    onClose={() => setUnlinking(null)}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        linkFocus.current?.focus({ preventScroll: true });
+                    }}
+                />
+            )}
             {releasingIp && (
                 <ReleaseIp
                     {...route}

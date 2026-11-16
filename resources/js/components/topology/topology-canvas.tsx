@@ -9,6 +9,8 @@ import {
 } from 'react';
 import { Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import { toast } from 'sonner';
+import { Cable } from 'lucide-react';
+import { IconButton } from '@/components/icon-button';
 import { TopologyRacks } from '@/components/topology/topology-racks';
 import {
     topologyRackLayout,
@@ -41,6 +43,27 @@ import type {
     TopologyModel,
 } from '@/types/topology';
 
+// The point halfway along a cable route, where its action sits.
+function routeMiddle(path: Position[]): Position {
+    const lengths = path
+        .slice(1)
+        .map((point, index) =>
+            Math.hypot(point.x - path[index].x, point.y - path[index].y),
+        );
+    let remaining = lengths.reduce((total, length) => total + length, 0) / 2;
+    for (const [index, length] of lengths.entries()) {
+        if (remaining <= length && length > 0) {
+            const ratio = remaining / length;
+            return {
+                x: path[index].x + (path[index + 1].x - path[index].x) * ratio,
+                y: path[index].y + (path[index + 1].y - path[index].y) * ratio,
+            };
+        }
+        remaining -= length;
+    }
+    return path[0];
+}
+
 export type TopologyCanvasApi = {
     fit: () => void;
     zoom: (factor: number) => void;
@@ -59,6 +82,7 @@ export function TopologyCanvas({
     api,
     onZoom,
     endpoints = true,
+    onDocument,
 }: {
     nodes: TopologyNode[];
     models: Record<number, TopologyModel>;
@@ -70,6 +94,8 @@ export function TopologyCanvas({
     api: Ref<TopologyCanvasApi>;
     onZoom: (zoom: number) => void;
     endpoints?: boolean;
+    // Turns an observed link of the selection into a documented cable; undefined when it cannot.
+    onDocument?: (edge: TopologyEdge) => (() => void) | undefined;
 }) {
     const container = useRef<HTMLDivElement>(null);
     const stage = useRef<Konva.Stage>(null);
@@ -803,6 +829,35 @@ export function TopologyCanvas({
                                 )}
                             </PopoverContent>
                         </Popover>
+                    );
+                })}
+            {onDocument &&
+                edges.map((edge) => {
+                    const path = routes[edge.id];
+                    const action =
+                        path &&
+                        ((selection?.kind === 'edge' &&
+                            selection.id === edge.id) ||
+                            (selection?.kind === 'node' &&
+                                (edge.source === selection.id ||
+                                    edge.target === selection.id)))
+                            ? onDocument(edge)
+                            : undefined;
+                    if (!action) return null;
+                    const middle = routeMiddle(path);
+                    return (
+                        <IconButton
+                            key={`document-${edge.id}`}
+                            label="Documenta collegamento"
+                            className="absolute size-8 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-md motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90"
+                            style={{
+                                left: view.x + middle.x * view.scale,
+                                top: view.y + middle.y * view.scale,
+                            }}
+                            onClick={action}
+                        >
+                            <Cable />
+                        </IconButton>
                     );
                 })}
             {Object.keys(routes).length < edges.length && (

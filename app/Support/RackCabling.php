@@ -4,7 +4,10 @@ namespace App\Support;
 
 use App\Models\Cable;
 use App\Models\CableEnd;
+use App\Models\Device;
+use App\Models\DeviceModel;
 use App\Models\Site;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 class RackCabling
@@ -75,6 +78,93 @@ class RackCabling
         if ($changed->isNotEmpty() || $removed->isNotEmpty()) {
             $site->increment('cabling_revision');
         }
+    }
+
+    /** Site devices with the ports the cabling editors connect. */
+    public static function devices(Site $site): Collection
+    {
+        return $site->devices()->with([
+            'model', 'manufacturer:id,name', 'rackItem.rack:id,name',
+            'interfaces' => fn ($query) => $query->without('mikrotikSource'),
+        ])->orderBy('name')->get()
+            ->map(function ($device) {
+                // Ports use documented aliases, not MikroTik diagnostics.
+                $device->interfaces->each->setAppends([]);
+
+                return [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []];
+            });
+    }
+
+    /** What the link dialog needs: site cables, devices with their ports, and catalog models that take a cable. */
+    public static function workspace(Site $site): array
+    {
+        return [
+            'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
+            'devices' => self::devices($site),
+            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')->get()
+                ->map(fn ($model) => [
+                    ...$model->only('id', 'name'), 'manufacturer' => $model->manufacturer->only('id', 'name'),
+                    'model_type' => $model->modelType?->only('id', 'name'),
+                    'cable_types' => collect($model->connectors())->flatMap(fn ($port) => self::connectionTypes($port['type'] ?? ''))->unique()->values(),
+                ])->filter(fn ($model) => $model['cable_types']->isNotEmpty())->values(),
+        ];
+    }
+
+    /** Documented cables on the ports of one device, each with the port at its other end. */
+    public static function deviceLinks(Site $site, Device $device): array
+    {
+        $cables = Cable::query()->where('site_id', $site->id)->whereHas('ends', fn ($query) => $query->where('device_id', $device->id))
+            ->with('ends')->orderBy('id')->get();
+        $peers = $site->devices()->whereKey($cables->flatMap->ends->pluck('device_id')->unique())
+            ->with(['model', 'interfaces' => fn ($query) => $query->without('mikrotikSource')])->get()->keyBy('id');
+        $links = [];
+        foreach ($cables as $cable) {
+            foreach ($cable->ends->where('device_id', $device->id) as $end) {
+                $other = $cable->ends->firstWhere('side', $end->side === 'a' ? 'b' : 'a');
+                $peer = $peers->get($other->device_id);
+                $interface = $peer?->interfaces->firstWhere('connector_id', $other->connector_id);
+                $port = collect($peer?->model?->connectors() ?? [])->firstWhere('id', $other->connector_id);
+                $links[] = [
+                    ...$cable->only('id', 'type', 'color', 'name'), 'connector_id' => $end->connector_id,
+                    'peer' => ['device_id' => $other->device_id, 'name' => $peer?->name, 'interface_id' => $interface?->id,
+                        'port' => $interface?->name ?: (($port['label'] ?? '') ?: substr($other->connector_id, 0, 8))],
+                ];
+            }
+        }
+
+        return $links;
+    }
+
+    /** Adds one cable, committing only the explicit disconnections it needs. Called under the company lock. */
+    public static function add(Site $site, array $data): void
+    {
+        $site = Site::query()->lockForUpdate()->findOrFail($site->id);
+        $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData();
+        $newCable = ['id' => -1, ...collect($data)->except(['cabling_revision', 'removed_cable_ids'])->all()];
+        // Leave unrelated drafts alone.
+        $removed = $cables->whereIn('id', $data['removed_cable_ids'] ?? [])
+            ->filter(fn ($cable) => collect([$cable['a'], $cable['b']])->contains(
+                fn ($end) => $end == $newCable['a'] || $end == $newCable['b']
+            ))->pluck('id');
+        self::save($site, [
+            'cabling_revision' => $data['cabling_revision'],
+            'removed_cable_ids' => $removed->all(),
+            'cables' => [...$cables->whereNotIn('id', $removed)->values()->all(), $newCable],
+        ]);
+    }
+
+    /** Removes one documented cable of the site. Called under the company lock. */
+    public static function remove(Site $site, int $cableId, int $revision): void
+    {
+        $site = Site::query()->lockForUpdate()->findOrFail($site->id);
+        $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData();
+        if (! $cables->contains('id', $cableId)) {
+            self::fail('Il collegamento non è più disponibile. Ricarica la pagina.');
+        }
+        self::save($site, [
+            'cabling_revision' => $revision, 'removed_cable_ids' => [$cableId],
+            'cables' => $cables->where('id', '!=', $cableId)->values()->all(),
+        ]);
     }
 
     private static function fail(string $message): never

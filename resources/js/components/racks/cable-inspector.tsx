@@ -9,10 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Combobox,
+    ComboboxCollection,
     ComboboxContent,
     ComboboxEmpty,
+    ComboboxGroup,
     ComboboxInput,
     ComboboxItem,
+    ComboboxLabel,
     ComboboxList,
 } from '@/components/ui/combobox';
 import {
@@ -39,6 +42,7 @@ export function EndpointPicker({
     disabled,
     otherEnd,
     allowedDeviceIds,
+    suggested,
     onChange,
 }: {
     label: string;
@@ -49,6 +53,8 @@ export function EndpointPicker({
     disabled: boolean;
     otherEnd?: CableEnd;
     allowedDeviceIds?: number[];
+    // Devices listed first under their own heading; the choice stays the operator's.
+    suggested?: { label: string; ids: number[] };
     onChange: (end: CableEnd) => void;
 }) {
     const id = useId();
@@ -60,6 +66,22 @@ export function EndpointPicker({
         (d) =>
             devicePorts(d).length > 0 &&
             (!allowedDeviceIds || allowedDeviceIds.includes(d.id)),
+    );
+    const groups = [
+        {
+            value: suggested?.label ?? '',
+            items: options.filter((d) => suggested?.ids.includes(d.id)),
+        },
+        {
+            value: 'Altri dispositivi',
+            items: options.filter((d) => !suggested?.ids.includes(d.id)),
+        },
+    ].filter((group) => group.items.length);
+    const grouped = groups.length > 1;
+    const deviceItem = (d: RackDevice) => (
+        <ComboboxItem key={d.id} value={d}>
+            {d.name} · {d.rack_item?.rack.name ?? 'Fuori rack'}
+        </ComboboxItem>
     );
     const otherPort =
         otherEnd &&
@@ -73,7 +95,7 @@ export function EndpointPicker({
                     {label} · Dispositivo
                 </FieldLabel>
                 <Combobox
-                    items={options}
+                    items={grouped ? groups : options}
                     value={device ?? null}
                     disabled={disabled}
                     openOnInputClick
@@ -94,12 +116,22 @@ export function EndpointPicker({
                     <ComboboxContent container={popupContainer}>
                         <ComboboxEmpty>Nessun dispositivo</ComboboxEmpty>
                         <ComboboxList>
-                            {(d: RackDevice) => (
-                                <ComboboxItem key={d.id} value={d}>
-                                    {d.name} ·{' '}
-                                    {d.rack_item?.rack.name ?? 'Fuori rack'}
-                                </ComboboxItem>
-                            )}
+                            {grouped
+                                ? (group: (typeof groups)[number]) => (
+                                      <ComboboxGroup
+                                          key={group.value}
+                                          items={group.items}
+                                          className="not-first:mt-1 not-first:border-t not-first:pt-1"
+                                      >
+                                          <ComboboxLabel>
+                                              {group.value}
+                                          </ComboboxLabel>
+                                          <ComboboxCollection>
+                                              {deviceItem}
+                                          </ComboboxCollection>
+                                      </ComboboxGroup>
+                                  )
+                                : deviceItem}
                         </ComboboxList>
                     </ComboboxContent>
                 </Combobox>

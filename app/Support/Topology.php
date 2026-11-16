@@ -17,12 +17,18 @@ class Topology
     /** Port observations of every site device, hidden models included, from the last forSite() call. */
     private array $observed = [];
 
-    /** MACs seen beyond the ports of one device, also when its model is hidden from the topology. */
-    public function observedOn(Site $site, Device $device): array
+    /** Remote device and port that LLDP or CDP report beyond each port, from the last forSite() call. */
+    private array $adjacent = [];
+
+    /**
+     * What integrations report on the ports of one device, also when its model is hidden from the topology:
+     * the MACs seen beyond each port, and the device and port facing it when LLDP or CDP name both.
+     */
+    public function portsOn(Site $site, Device $device): array
     {
         $this->forSite($site);
 
-        return $this->observed[$device->id] ?? [];
+        return ['observed' => $this->observed[$device->id] ?? [], 'adjacent' => (object) ($this->adjacent[$device->id] ?? [])];
     }
 
     public function forSite(Site $site): array
@@ -249,10 +255,7 @@ class Topology
                 ]],
             ];
         }
-        $this->observed = $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
-        foreach ($observed as $deviceId => $rows) {
-            $nodes['device:'.$deviceId]['observed'] = $rows;
-        }
+        $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
         $peers = [];
         foreach ($edges as $edge) {
             if ($edge['kind'] === 'discovered' && ! $edge['stale']) {
@@ -318,6 +321,22 @@ class Topology
             }
         }
         unset($edge);
+        // LLDP or CDP name the remote port; a MAC alone never does. Ports already documented are merged above.
+        $this->adjacent = [];
+        foreach ($edges as $edge) {
+            if ($edge['kind'] === 'discovered' && ! $edge['issues'] && $edge['a']['connector_id'] && $edge['b']['connector_id']) {
+                foreach ([[$edge['a'], $edge['b']], [$edge['b'], $edge['a']]] as [$local, $remote]) {
+                    $this->adjacent[$local['device_id']][$local['connector_id']] = [
+                        'device_id' => $remote['device_id'], 'connector_id' => $remote['connector_id'],
+                        'protocols' => $edge['protocols'], 'stale' => $edge['stale'],
+                    ];
+                }
+            }
+        }
+        $this->observed = $observed;
+        foreach ($observed as $deviceId => $rows) {
+            $nodes['device:'.$deviceId]['observed'] = $rows;
+        }
         $integrations = $devices->filter(fn ($device) => $device->mikrotikConnection)->map(function ($device) {
             $connection = $device->mikrotikConnection;
 

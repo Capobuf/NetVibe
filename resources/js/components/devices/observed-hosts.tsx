@@ -1,40 +1,59 @@
-import { CircleAlert } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { DataTable } from '@/components/data-table';
 import TextLink from '@/components/text-link';
 import { Badge } from '@/components/ui/badge';
-import { formatDateTime } from '@/lib/utils';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import type { DeviceLink } from '@/components/devices/port-link';
+import { cn, formatDateTime } from '@/lib/utils';
 import { show as deviceShow } from '@/routes/companies/sites/devices';
 import type { TopologyObservation } from '@/types/topology';
 
 type Route = { company: number; site: number };
-type Column = 'port' | 'name' | 'ip' | 'mac' | 'source' | 'seen_at';
+type Column =
+    | 'port'
+    | 'name'
+    | 'documented'
+    | 'ip'
+    | 'mac'
+    | 'source'
+    | 'seen_at';
 
 export function observedPort(row: TopologyObservation): string {
     return row.port ?? (row.wireless ? 'Wi-Fi' : 'Porta non determinabile');
 }
 
-const sourceNames = (row: TopologyObservation) =>
+const sourceNames = (rows: TopologyObservation[]) =>
     [
         ...new Set(
-            row.sources.map((source) =>
-                source.vendor === 'unifi' ? 'UniFi' : 'MikroTik',
+            rows.flatMap((row) =>
+                row.sources.map((source) =>
+                    source.vendor === 'unifi' ? 'UniFi' : 'MikroTik',
+                ),
             ),
         ),
     ].join(', ');
 
-const lastSeen = (row: TopologyObservation) =>
-    row.sources
-        .map((source) => source.seen_at)
+const lastSeen = (rows: TopologyObservation[]) =>
+    rows
+        .flatMap((row) => row.sources.map((source) => source.seen_at))
         .filter((value): value is string => !!value)
         .sort()
         .at(-1) ?? null;
+
+// An unidentified host is named by its MAC.
+const hostName = (row: TopologyObservation) => row.name ?? row.macs[0];
 
 const isStale = (row: TopologyObservation) =>
     row.sources.every((source) => source.stale);
 
 function HostName({ row, route }: { row: TopologyObservation; route: Route }) {
     if (!row.name)
-        return <span className="text-muted-foreground">Non identificato</span>;
+        return <span className="tabular-nums">{hostName(row)}</span>;
     return row.device_id ? (
         <TextLink href={deviceShow({ ...route, device: row.device_id })}>
             {row.name}
@@ -47,24 +66,38 @@ function HostName({ row, route }: { row: TopologyObservation; route: Route }) {
 export function ObservedHostsTable({
     rows,
     route,
+    links,
+    actions,
 }: {
     rows: TopologyObservation[];
     route: Route;
+    links: DeviceLink[];
+    actions?: (row: TopologyObservation) => ReactNode;
 }) {
+    const linkOf = (row: TopologyObservation) =>
+        row.connector_id
+            ? links.find((link) => link.connector_id === row.connector_id)
+            : undefined;
     const value = (row: TopologyObservation, column: Column) => {
         switch (column) {
             case 'port':
                 return observedPort(row);
             case 'name':
-                return row.name;
+                return hostName(row);
+            case 'documented': {
+                const link = linkOf(row);
+                return link
+                    ? `${link.peer.name ?? 'Dispositivo'} · ${link.peer.port}`
+                    : null;
+            }
             case 'ip':
                 return row.ips.join(', ');
             case 'mac':
                 return row.macs.join(', ');
             case 'source':
-                return sourceNames(row);
+                return sourceNames([row]);
             default:
-                return lastSeen(row);
+                return lastSeen([row]);
         }
     };
     return (
@@ -75,12 +108,18 @@ export function ObservedHostsTable({
             columns={[
                 { id: 'port', label: 'Porta', visible: true },
                 { id: 'name', label: 'Dispositivo', visible: true },
+                {
+                    id: 'documented',
+                    label: 'Collegamento documentato',
+                    visible: true,
+                },
                 { id: 'ip', label: 'IPv4', visible: true },
                 { id: 'mac', label: 'MAC', visible: true },
                 { id: 'source', label: 'Fonte', visible: true },
                 { id: 'seen_at', label: 'Ultima lettura', visible: true },
             ]}
             value={value}
+            actions={actions}
             render={(row, column) => {
                 switch (column) {
                     case 'port':
@@ -95,6 +134,21 @@ export function ObservedHostsTable({
                         );
                     case 'name':
                         return <HostName row={row} route={route} />;
+                    case 'documented': {
+                        const link = linkOf(row);
+                        return link ? (
+                            <TextLink
+                                href={deviceShow({
+                                    ...route,
+                                    device: link.peer.device_id,
+                                })}
+                            >
+                                {value(row, column)}
+                            </TextLink>
+                        ) : (
+                            '—'
+                        );
+                    }
                     case 'ip':
                     case 'mac':
                         return (
@@ -103,7 +157,7 @@ export function ObservedHostsTable({
                             </span>
                         );
                     case 'seen_at': {
-                        const seen = lastSeen(row);
+                        const seen = lastSeen([row]);
                         return (
                             <span className="flex items-center gap-2 tabular-nums">
                                 {seen ? formatDateTime(seen) : '—'}
@@ -124,58 +178,110 @@ export function ObservedHostsTable({
     );
 }
 
-/** Compact list for one port, sized for the port popover. */
+// Inventory devices first, then hosts known by name, then bare MACs.
+const rank = (row: TopologyObservation) =>
+    row.device_id ? 0 : row.name ? 1 : 2;
+
+/** Hosts seen on one port, collapsed in the port popup until the technician opens them. */
 export function ObservedHostsList({
     rows,
     route,
+    actions,
 }: {
     rows: TopologyObservation[];
     route: Route;
+    actions?: (row: TopologyObservation) => ReactNode;
 }) {
+    const [open, setOpen] = useState(false);
+    // Every host on a port is read by the same sources at the same time: show it once.
+    const seen = lastSeen(rows);
+    const stale = rows.every(isStale);
+    // Several MACs prove neither a switch nor how many ports it has.
+    const several = rows.reduce((total, row) => total + row.macs.length, 0) > 1;
     return (
-        <section
-            aria-label="Rilevati su questa porta"
-            className="flex flex-col gap-3"
+        <Collapsible
+            open={open}
+            onOpenChange={setOpen}
+            className="rounded-lg border"
         >
-            <h3 className="text-sm font-medium">
-                Rilevati su questa porta ({rows.length})
-            </h3>
-            <ul className="divide-y rounded-lg border">
-                {rows.map((row) => {
-                    const seen = lastSeen(row);
-                    return (
-                        <li
-                            key={row.key}
-                            className="flex flex-col gap-0.5 px-3 py-2"
-                        >
-                            <span className="flex items-baseline justify-between gap-3 text-sm">
-                                <span className="min-w-0 truncate">
-                                    <HostName row={row} route={route} />
-                                </span>
-                                {row.ips.length > 0 && (
-                                    <span className="shrink-0 text-muted-foreground tabular-nums">
-                                        {row.ips.join(', ')}
+            <CollapsibleTrigger className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <ChevronRight
+                    aria-hidden
+                    className={cn(
+                        'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
+                        open && 'rotate-90',
+                    )}
+                />
+                <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
+                        Rilevati su questa porta{' '}
+                        <span className="font-normal text-muted-foreground tabular-nums">
+                            {rows.length}
+                        </span>
+                    </span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
+                        {sourceNames(rows)}
+                        {seen && ` · ${formatDateTime(seen)}`}
+                    </span>
+                </span>
+                {stale && (
+                    <Badge variant="outline" className="shrink-0">
+                        Non aggiornato
+                    </Badge>
+                )}
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                {several && (
+                    <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                        Possibili spiegazioni: switch non gestito, telefono IP
+                        con PC in cascata, access point o bridge, macchine
+                        virtuali o altro.
+                    </p>
+                )}
+                <ul className="divide-y border-t">
+                    {[...rows]
+                        .sort((a, b) => rank(a) - rank(b))
+                        .map((row) => {
+                            const macs = row.name
+                                ? row.macs
+                                : row.macs.slice(1);
+                            const action = actions?.(row);
+                            return (
+                                <li
+                                    key={row.key}
+                                    className="flex min-h-12 items-center justify-between gap-3 px-3 py-2"
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-sm">
+                                            <HostName row={row} route={route} />
+                                        </span>
+                                        {(macs.length > 0 ||
+                                            (!stale && isStale(row))) && (
+                                            <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                                {[
+                                                    macs.join(', '),
+                                                    !stale &&
+                                                        isStale(row) &&
+                                                        'Non aggiornato',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                            </span>
+                                        )}
                                     </span>
-                                )}
-                            </span>
-                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
-                                <span className="min-w-0 truncate">
-                                    {[
-                                        row.macs.join(', '),
-                                        `${sourceNames(row)}${seen ? ` ${formatDateTime(seen)}` : ''}`,
-                                    ].join(' · ')}
-                                </span>
-                                {isStale(row) && (
-                                    <CircleAlert
-                                        className="size-3.5 shrink-0 text-destructive"
-                                        aria-label="Non aggiornato"
-                                    />
-                                )}
-                            </span>
-                        </li>
-                    );
-                })}
-            </ul>
-        </section>
+                                    <span className="flex shrink-0 items-center gap-2">
+                                        {row.ips.length > 0 && (
+                                            <span className="text-sm text-muted-foreground tabular-nums">
+                                                {row.ips.join(', ')}
+                                            </span>
+                                        )}
+                                        {action}
+                                    </span>
+                                </li>
+                            );
+                        })}
+                </ul>
+            </CollapsibleContent>
+        </Collapsible>
     );
 }

@@ -362,7 +362,7 @@ class TopologyTest extends TestCase
         $foreign->devices()->create(['name' => 'Altro', 'manufacturer_id' => $this->local->manufacturer_id])
             ->interfaces()->create(['kind' => 'physical', 'name' => 'eth0', 'mac_address' => '02:00:00:00:00:11']);
 
-        $rows = collect((new Topology)->observedOn($this->site, $this->local))->keyBy(fn ($row) => $row['macs'][0]);
+        $rows = collect((new Topology)->portsOn($this->site, $this->local)['observed'])->keyBy(fn ($row) => $row['macs'][0]);
         $this->assertSame(['02:00:00:00:00:02', '02:00:00:00:00:11', '02:00:00:00:00:12', '02:00:00:00:00:13'], $rows->keys()->sort()->values()->all());
         $this->assertSame(['ether1', str_repeat('a', 32), null], [$rows['02:00:00:00:00:11']['port'], $rows['02:00:00:00:00:11']['connector_id'], $rows['02:00:00:00:00:11']['device_id']]);
         $this->assertSame(['ether1', $this->remote->id], [$rows['02:00:00:00:00:02']['port'], $rows['02:00:00:00:00:02']['device_id']]);
@@ -373,12 +373,36 @@ class TopologyTest extends TestCase
         $host($this->remote, '02:00:00:00:00:01', 'ether1');
         $host($this->remote, '02:00:00:00:00:12', 'ether2');
         $this->assertSame(['02:00:00:00:00:02', '02:00:00:00:00:11', '02:00:00:00:00:13'],
-            collect((new Topology)->observedOn($this->site, $this->local))->pluck('macs.0')->sort()->values()->all());
-        $remote = (new Topology)->observedOn($this->site, $this->remote);
+            collect((new Topology)->portsOn($this->site, $this->local)['observed'])->pluck('macs.0')->sort()->values()->all());
+        $remote = (new Topology)->portsOn($this->site, $this->remote)['observed'];
         $this->assertSame([['ether1', $this->local->id], ['ether2', null]], array_map(fn ($row) => [$row['port'], $row['device_id']], $remote));
         $this->assertSame($behind->id, $remote[1]['interface_id']);
         $this->assertDatabaseCount('cables', 0);
         $this->assertSame([], (new Topology)->forSite($this->site)['edges']);
+    }
+
+    public function test_only_lldp_or_cdp_naming_both_ports_prefill_a_cable_never_a_mac_alone(): void
+    {
+        // A MAC learnt on the port names the device, not the port it uses.
+        $source = $this->local->mikrotikSources()->make(['generation' => $this->local->mikrotikConnection->source_generation,
+            'kind' => 'observation', 'source_key' => 'interface/bridge/host:remote', 'state' => 'current', 'seen_at' => now(),
+            'anchor' => [], 'data' => ['menu' => '/interface/bridge/host', 'mac' => '02:00:00:00:00:02', 'on-interface' => 'ether1', 'local' => 'false']]);
+        $source->site_id = $this->site->id;
+        $source->save();
+        $this->assertSame([], (array) (new Topology)->portsOn($this->site, $this->local)['adjacent']);
+
+        $this->neighbor($this->local, $this->remote);
+        $this->assertSame([str_repeat('a', 32) => ['device_id' => $this->remote->id, 'connector_id' => str_repeat('a', 32), 'protocols' => ['lldp'], 'stale' => false]],
+            (array) (new Topology)->portsOn($this->site, $this->local)['adjacent']);
+
+        // A cable documented on the remote port contradicts the observation: nothing is prefilled.
+        $other = $this->site->devices()->create(['name' => 'other', 'manufacturer_id' => $this->remote->manufacturer_id, 'device_model_id' => $this->remote->device_model_id]);
+        Cable::create(['site_id' => $this->site->id, 'type' => 'copper', 'color' => '#2563eb'])->ends()->createMany([
+            ['side' => 'a', 'device_id' => $this->remote->id, 'connector_id' => str_repeat('a', 32)],
+            ['side' => 'b', 'device_id' => $other->id, 'connector_id' => str_repeat('a', 32)],
+        ]);
+        $this->assertSame([], (array) (new Topology)->portsOn($this->site, $this->local)['adjacent']);
+        $this->assertDatabaseCount('cables', 1);
     }
 
     public function test_model_visibility_hides_devices_and_their_edges_without_touching_cables(): void

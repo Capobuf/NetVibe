@@ -1,9 +1,15 @@
-import { CircleAlert } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { DataTable } from '@/components/data-table';
 import TextLink from '@/components/text-link';
 import { Badge } from '@/components/ui/badge';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import type { DeviceLink } from '@/components/devices/port-link';
-import { formatDateTime } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import { show as deviceShow } from '@/routes/companies/sites/devices';
 import type { TopologyObservation } from '@/types/topology';
 
@@ -21,28 +27,33 @@ export function observedPort(row: TopologyObservation): string {
     return row.port ?? (row.wireless ? 'Wi-Fi' : 'Porta non determinabile');
 }
 
-const sourceNames = (row: TopologyObservation) =>
+const sourceNames = (rows: TopologyObservation[]) =>
     [
         ...new Set(
-            row.sources.map((source) =>
-                source.vendor === 'unifi' ? 'UniFi' : 'MikroTik',
+            rows.flatMap((row) =>
+                row.sources.map((source) =>
+                    source.vendor === 'unifi' ? 'UniFi' : 'MikroTik',
+                ),
             ),
         ),
     ].join(', ');
 
-const lastSeen = (row: TopologyObservation) =>
-    row.sources
-        .map((source) => source.seen_at)
+const lastSeen = (rows: TopologyObservation[]) =>
+    rows
+        .flatMap((row) => row.sources.map((source) => source.seen_at))
         .filter((value): value is string => !!value)
         .sort()
         .at(-1) ?? null;
+
+// An unidentified host is named by its MAC.
+const hostName = (row: TopologyObservation) => row.name ?? row.macs[0];
 
 const isStale = (row: TopologyObservation) =>
     row.sources.every((source) => source.stale);
 
 function HostName({ row, route }: { row: TopologyObservation; route: Route }) {
     if (!row.name)
-        return <span className="text-muted-foreground">Non identificato</span>;
+        return <span className="tabular-nums">{hostName(row)}</span>;
     return row.device_id ? (
         <TextLink href={deviceShow({ ...route, device: row.device_id })}>
             {row.name}
@@ -70,7 +81,7 @@ export function ObservedHostsTable({
             case 'port':
                 return observedPort(row);
             case 'name':
-                return row.name;
+                return hostName(row);
             case 'documented': {
                 const link = linkOf(row);
                 return link
@@ -82,9 +93,9 @@ export function ObservedHostsTable({
             case 'mac':
                 return row.macs.join(', ');
             case 'source':
-                return sourceNames(row);
+                return sourceNames([row]);
             default:
-                return lastSeen(row);
+                return lastSeen([row]);
         }
     };
     return (
@@ -143,7 +154,7 @@ export function ObservedHostsTable({
                             </span>
                         );
                     case 'seen_at': {
-                        const seen = lastSeen(row);
+                        const seen = lastSeen([row]);
                         return (
                             <span className="flex items-center gap-2 tabular-nums">
                                 {seen ? formatDateTime(seen) : '—'}
@@ -164,6 +175,18 @@ export function ObservedHostsTable({
     );
 }
 
+const explanations = [
+    'Switch non gestito',
+    'Telefono IP con PC in cascata',
+    'Access point o bridge',
+    'Macchine virtuali',
+    'Altro apparato non documentato',
+];
+
+// Inventory devices first, then hosts known by name, then bare MACs.
+const rank = (row: TopologyObservation) =>
+    row.device_id ? 0 : row.name ? 1 : 2;
+
 /** Compact list for one port, sized for the port popover. */
 export function ObservedHostsList({
     rows,
@@ -172,57 +195,92 @@ export function ObservedHostsList({
     rows: TopologyObservation[];
     route: Route;
 }) {
+    const [explained, setExplained] = useState(false);
+    // Every host on a port is read by the same sources at the same time: show it once.
+    const seen = lastSeen(rows);
+    const stale = rows.every(isStale);
+    // Several MACs prove neither a switch nor how many ports it has.
+    const several = rows.reduce((total, row) => total + row.macs.length, 0) > 1;
     return (
         <section
             aria-label="Rilevati su questa porta"
             className="flex flex-col gap-3"
         >
-            <div className="flex flex-col gap-1">
-                <h3 className="text-sm font-medium">
-                    Rilevati su questa porta ({rows.length})
-                </h3>
-                {/* Several MACs prove neither a switch nor how many ports it has. */}
-                {rows.reduce((total, row) => total + row.macs.length, 0) >
-                    1 && (
-                    <p className="text-xs text-muted-foreground">
-                        Possibili spiegazioni: switch non gestito, telefono IP
-                        con PC in cascata, access point o bridge, macchine
-                        virtuali o altro.
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h3 className="text-sm font-medium">
+                        Rilevati su questa porta{' '}
+                        <span className="font-normal text-muted-foreground tabular-nums">
+                            {rows.length}
+                        </span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                        {sourceNames(rows)}
+                        {seen && ` · ${formatDateTime(seen)}`}
                     </p>
+                </div>
+                {stale && (
+                    <Badge variant="outline" className="shrink-0">
+                        Non aggiornato
+                    </Badge>
                 )}
             </div>
+            {several && (
+                <Collapsible
+                    open={explained}
+                    onOpenChange={setExplained}
+                    className="rounded-lg bg-muted/50"
+                >
+                    <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                        Possibili spiegazioni
+                        <ChevronDown
+                            aria-hidden
+                            className={cn(
+                                'size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
+                                explained && 'rotate-180',
+                            )}
+                        />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <ul className="flex list-disc flex-col gap-1 px-3 pt-1 pb-3 pl-7 text-sm text-muted-foreground">
+                            {explanations.map((item) => (
+                                <li key={item}>{item}</li>
+                            ))}
+                        </ul>
+                    </CollapsibleContent>
+                </Collapsible>
+            )}
             <ul className="divide-y rounded-lg border">
-                {rows.map((row) => {
-                    const seen = lastSeen(row);
+                {[...rows].sort((a, b) => rank(a) - rank(b)).map((row) => {
+                    const macs = row.name ? row.macs : row.macs.slice(1);
                     return (
                         <li
                             key={row.key}
-                            className="flex flex-col gap-0.5 px-3 py-2"
+                            className="flex items-baseline justify-between gap-3 px-3 py-2"
                         >
-                            <span className="flex items-baseline justify-between gap-3 text-sm">
-                                <span className="min-w-0 truncate">
+                            <span className="min-w-0">
+                                <span className="block truncate text-sm">
                                     <HostName row={row} route={route} />
                                 </span>
-                                {row.ips.length > 0 && (
-                                    <span className="shrink-0 text-muted-foreground tabular-nums">
-                                        {row.ips.join(', ')}
+                                {(macs.length > 0 ||
+                                    (!stale && isStale(row))) && (
+                                    <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                        {[
+                                            macs.join(', '),
+                                            !stale &&
+                                                isStale(row) &&
+                                                'Non aggiornato',
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ')}
                                     </span>
                                 )}
                             </span>
-                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
-                                <span className="min-w-0 truncate">
-                                    {[
-                                        row.macs.join(', '),
-                                        `${sourceNames(row)}${seen ? ` ${formatDateTime(seen)}` : ''}`,
-                                    ].join(' · ')}
+                            {row.ips.length > 0 && (
+                                <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                                    {row.ips.join(', ')}
                                 </span>
-                                {isStale(row) && (
-                                    <CircleAlert
-                                        className="size-3.5 shrink-0 text-destructive"
-                                        aria-label="Non aggiornato"
-                                    />
-                                )}
-                            </span>
+                            )}
                         </li>
                     );
                 })}

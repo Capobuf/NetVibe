@@ -2,18 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\MikrotikException;
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\DeviceRequest;
-use App\Models\Cable;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
 use App\Models\IpAddress;
 use App\Models\IpStatus;
 use App\Models\Manufacturer;
+use App\Models\MikrotikConnection;
 use App\Models\ModelType;
 use App\Models\Site;
+use App\Models\SnipeItAsset;
 use App\Models\SnipeItSync;
+use App\Models\UnifiDevice;
 use App\Support\DeletionImpact;
 use App\Support\NetworkExclusions;
 use App\Support\RackCabling;
@@ -120,6 +123,7 @@ class DeviceController extends Controller
             $unifi['revision'] = null;
         }
         $device->setAttribute('unifi', $unifi);
+        $ports = (new Topology)->portsOn($site, $device);
 
         return Inertia::render('devices/show', [
             'view' => $options['view'] ?? 'infrastructure',
@@ -130,21 +134,12 @@ class DeviceController extends Controller
                 ->where('state', 'current')->whereNull('problem')->with('device.mikrotikConnection')->get()
                 ->map(fn ($source) => $source->interfaceDetails()),
             'initialTab' => in_array($options['tab'] ?? null, ['ips', 'observed'], true) ? $options['tab'] : 'interfaces',
-            'observed' => (new Topology)->observedOn($site, $device),
+            ...$ports,
             'links' => RackCabling::deviceLinks($site, $device),
             'cablingRevision' => (int) $site->cabling_revision,
-            // Loaded when a link is documented from a port: every site device with its ports, and the
-            // catalog models that can take a cable, for creating the device at the other end.
-            'cabling' => Inertia::optional(fn () => [
-                'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
-                'devices' => RackCabling::devices($site),
-                'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')->get()
-                    ->map(fn ($model) => [
-                        ...$model->only('id', 'name'), 'manufacturer' => $model->manufacturer->only('id', 'name'),
-                        'model_type' => $model->modelType?->only('id', 'name'),
-                        'cable_types' => collect($model->connectors())->flatMap(fn ($port) => RackCabling::connectionTypes($port['type'] ?? ''))->unique()->values(),
-                    ])->filter(fn ($model) => $model['cable_types']->isNotEmpty())->values(),
-            ]),
+            // Loaded when a link is documented from a port.
+            'cabling' => Inertia::optional(fn () => RackCabling::workspace($site)),
+            'sources' => $this->sources($asset, $device->mikrotikConnection()->first(), $unifiSource),
             'initialManagementTab' => $options['manage'] ?? (($options['tab'] ?? null) === 'mikrotik' ? 'mikrotik' : null),
             'mikrotikSources' => $request->user()->is_superadmin
                 ? Inertia::optional(fn () => (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get())) : [],
@@ -177,6 +172,29 @@ class DeviceController extends Controller
             'statuses' => IpStatus::query()->orderBy('name')->get(['id', 'name']),
             'tags' => $company->tags()->orderBy('name')->get(['id', 'name', 'color']),
         ]);
+    }
+
+    /** Integrations that document or observe the device, each with what needs attention, if anything. */
+    private function sources(?SnipeItAsset $asset, ?MikrotikConnection $connection, ?UnifiDevice $unifi): array
+    {
+        return array_values(array_filter([
+            $asset ? ['vendor' => 'snipe-it', 'seen_at' => $asset->sync->synced_at?->toIso8601String(),
+                'issue' => $asset->problem ?: match (true) {
+                    ! $asset->present => 'Asset non più presente in Snipe-IT.',
+                    (bool) $asset->sync->error => 'Ultima sincronizzazione non riuscita.',
+                    ! $asset->sync->isActive() => 'Sincronizzazione non attiva.',
+                    default => null,
+                }] : null,
+            $connection ? ['vendor' => 'mikrotik', 'seen_at' => $connection->synced_at?->toIso8601String(),
+                'issue' => match (true) {
+                    ! $connection->activated_at => 'Integrazione non attiva.',
+                    ! $connection->sync_status => 'Mai sincronizzata.',
+                    $connection->sync_status !== 'ok' => MikrotikException::messageFor($connection->sync_status),
+                    default => null,
+                }] : null,
+            $unifi ? ['vendor' => 'unifi', 'seen_at' => $unifi->synced_at?->toIso8601String(),
+                'issue' => $unifi->stale() ? 'Dati non aggiornati.' : null] : null,
+        ]));
     }
 
     public function image(Company $company, Site $site, Device $device): StreamedResponse

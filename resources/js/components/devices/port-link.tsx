@@ -14,6 +14,7 @@ import InputError from '@/components/input-error';
 import { SaveButton } from '@/components/save-button';
 import TextLink from '@/components/text-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Combobox,
@@ -63,6 +64,13 @@ export type DeviceLink = {
         port: string;
     };
 };
+/** The device and port that LLDP or CDP report beyond a local port. */
+export type Adjacency = CableEnd & { protocols: string[]; stale: boolean };
+export const adjacencySource = (adjacency: Adjacency) =>
+    `Rilevato con ${adjacency.protocols
+        .filter((protocol) => protocol !== 'mndp')
+        .map((protocol) => protocol.toUpperCase())
+        .join(' e ')}${adjacency.stale ? ' · non aggiornato' : ''}`;
 export type LinkModel = {
     id: number;
     name: string;
@@ -237,6 +245,8 @@ export function PortLinkDialog({
     revision,
     suggestedIds,
     destination,
+    source,
+    reload = ['links', 'cablingRevision', 'cabling'],
     onClose,
     onSaved,
     onCloseAutoFocus,
@@ -247,8 +257,12 @@ export function PortLinkDialog({
     cabling?: Cabling;
     revision: number;
     suggestedIds: number[];
-    // Prefilled from an observed device; still confirmed by the operator.
+    // Prefilled from what integrations report; still confirmed by the operator.
     destination?: CableEnd;
+    // Where the prefilled destination comes from, shown while it is kept.
+    source?: string;
+    // Page props that change once the cable is saved.
+    reload?: string[];
     onClose: () => void;
     onSaved: () => void;
     onCloseAutoFocus?: CloseFocus;
@@ -308,7 +322,7 @@ export function PortLinkDialog({
         }
         form.transform((data) => ({ ...data, cabling_revision: revision }));
         form.post(storeCable.url(route), {
-            only: ['links', 'cablingRevision', 'cabling'],
+            only: reload,
             preserveScroll: true,
             onSuccess: onSaved,
         });
@@ -376,10 +390,24 @@ export function PortLinkDialog({
                         <div className="flex min-w-0 flex-col gap-5">
                             <section className="min-w-0 space-y-4 rounded-xl border bg-muted/20 p-4">
                                 <div className="flex min-h-8 items-center justify-between gap-3">
-                                    <h3 className="text-base font-medium">
+                                    <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-base font-medium">
                                         {creating
                                             ? 'Nuovo dispositivo'
                                             : 'Destinazione'}
+                                        {!creating &&
+                                            source &&
+                                            destination &&
+                                            form.data.b.device_id ===
+                                                destination.device_id &&
+                                            form.data.b.connector_id ===
+                                                destination.connector_id && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="font-normal"
+                                                >
+                                                    {source}
+                                                </Badge>
+                                            )}
                                     </h3>
                                     {!creating && models.length > 0 && (
                                         <Button

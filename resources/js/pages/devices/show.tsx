@@ -11,6 +11,11 @@ import { useSiteContext } from '@/hooks/use-site-context';
 import type { UnifiDeviceDetail } from '@/components/unifi/types';
 import { DeviceForm } from '@/components/devices/device-form';
 import { SnipeItMark } from '@/components/snipe-it-mark';
+import { MikrotikMark } from '@/components/mikrotik-mark';
+import { UnifiMark } from '@/components/unifi-mark';
+import { SourceAvatar } from '@/components/networks/source-avatar';
+import { AvatarGroup } from '@/components/ui/avatar';
+import { formatDateTime } from '@/lib/utils';
 import type { MikrotikConnection } from '@/components/devices/mikrotik-device';
 import { type SnipeDevice } from '@/components/devices/snipe-it-device';
 import { DataTable } from '@/components/data-table';
@@ -30,6 +35,8 @@ import {
     PortLinkDialog,
     UnlinkDialog,
     portTitle,
+    adjacencySource,
+    type Adjacency,
     type Cabling,
     type DeviceLink,
 } from '@/components/devices/port-link';
@@ -103,9 +110,21 @@ type Props = {
     tags: Tag[];
     observed: TopologyObservation[];
     links: DeviceLink[];
+    adjacent: Record<string, Adjacency>;
     cablingRevision: number;
     cabling?: Cabling;
+    sources: DeviceSource[];
 };
+type DeviceSource = {
+    vendor: 'snipe-it' | 'mikrotik' | 'unifi';
+    seen_at: string | null;
+    issue: string | null;
+};
+const sourceNames = {
+    'snipe-it': 'Snipe-IT',
+    mikrotik: 'MikroTik',
+    unifi: 'UniFi',
+} as const;
 export default function DeviceShow({
     view,
     company,
@@ -127,8 +146,10 @@ export default function DeviceShow({
     initialInterfaceId,
     observed,
     links,
+    adjacent,
     cablingRevision,
     cabling,
+    sources,
 }: Props) {
     const page = usePage();
     const { auth } = page.props;
@@ -151,6 +172,7 @@ export default function DeviceShow({
     const [linking, setLinking] = useState<{
         port: Port;
         destination?: CableEnd;
+        source?: string;
         fromPopup: boolean;
     } | null>(null);
     const [cablingLoading, setCablingLoading] = useState(false);
@@ -160,13 +182,30 @@ export default function DeviceShow({
     } | null>(null);
     // Dialogs opened from the popup return to its port; from a table, to the clicked action.
     const linkFocus = useRef<HTMLElement | null>(null);
+    // LLDP or CDP prefill the device and port they report beyond this port, when they name both.
     function documentLink(
         port: Port,
         trigger: HTMLElement,
         destination?: CableEnd,
     ) {
+        const reported = adjacent[port.id];
+        const prefill =
+            reported &&
+            (!destination || destination.device_id === reported.device_id)
+                ? reported
+                : undefined;
         linkFocus.current = portOpen ? portFocus.current : trigger;
-        setLinking({ port, destination, fromPopup: portOpen });
+        setLinking({
+            port,
+            destination: prefill
+                ? {
+                      device_id: prefill.device_id,
+                      connector_id: prefill.connector_id,
+                  }
+                : destination,
+            source: prefill ? adjacencySource(prefill) : undefined,
+            fromPopup: portOpen,
+        });
         setPortOpen(false);
         // Occupied ports and the device list must be current when the cable is chosen.
         setCablingLoading(true);
@@ -317,7 +356,7 @@ export default function DeviceShow({
                 onClick={(event) =>
                     documentLink(rowPort, event.currentTarget, {
                         device_id: deviceId,
-                        connector_id: row.peer_connector_id ?? '',
+                        connector_id: '',
                     })
                 }
             >
@@ -381,26 +420,66 @@ export default function DeviceShow({
                                 {context}
                             </p>
                             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-                                <div className="flex min-w-0 items-center gap-3">
-                                    {snipeIt ? (
-                                        <span
-                                            className="shrink-0"
-                                            role="img"
-                                            aria-label="Collegato a Snipe-IT"
-                                        >
-                                            <SnipeItMark className="size-8" />
-                                        </span>
-                                    ) : null}
-                                    <h1 className="min-w-0 text-3xl font-semibold tracking-tight break-words">
-                                        {device.name}
-                                    </h1>
-                                </div>
+                                <h1 className="min-w-0 text-3xl font-semibold tracking-tight break-words">
+                                    {device.name}
+                                </h1>
                                 {device.model?.model_type?.name ? (
                                     <Badge variant="secondary">
                                         {device.model.model_type.name}
                                     </Badge>
                                 ) : null}
                             </div>
+                            {sources.length > 0 && (
+                                <AvatarGroup
+                                    aria-label={`Fonti per ${device.name}`}
+                                    className="py-1"
+                                >
+                                    {sources.map((source) => {
+                                        // Superadmins manage MikroTik and Snipe-IT from the device dialog.
+                                        const manage =
+                                            auth.user.is_superadmin &&
+                                            source.vendor !== 'unifi' &&
+                                            (source.vendor !== 'mikrotik' ||
+                                                !!mikrotik);
+                                        return (
+                                            <SourceAvatar
+                                                key={source.vendor}
+                                                label={[
+                                                    sourceNames[source.vendor],
+                                                    source.seen_at
+                                                        ? `Ultimo aggiornamento ${formatDateTime(source.seen_at)}`
+                                                        : 'Mai aggiornato',
+                                                    source.issue,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                                attention={!!source.issue}
+                                                interactive={manage}
+                                                onClick={() =>
+                                                    router.visit(
+                                                        show(route, {
+                                                            query: {
+                                                                view,
+                                                                manage: source.vendor,
+                                                            },
+                                                        }),
+                                                    )
+                                                }
+                                            >
+                                                {source.vendor ===
+                                                'snipe-it' ? (
+                                                    <SnipeItMark />
+                                                ) : source.vendor ===
+                                                  'mikrotik' ? (
+                                                    <MikrotikMark />
+                                                ) : (
+                                                    <UnifiMark />
+                                                )}
+                                            </SourceAvatar>
+                                        );
+                                    })}
+                                </AvatarGroup>
+                            )}
                             <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
                                 <span className="text-muted-foreground">
                                     {device.manufacturer.name}
@@ -1020,6 +1099,7 @@ export default function DeviceShow({
                     device={device}
                     port={linking.port}
                     destination={linking.destination}
+                    source={linking.source}
                     cabling={cablingLoading ? undefined : cabling}
                     revision={cablingRevision}
                     suggestedIds={[

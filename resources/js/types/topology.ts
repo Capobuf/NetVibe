@@ -36,8 +36,6 @@ export type TopologyObservation = {
     reported_ports: string[];
     wireless: boolean;
     device_id: number | null;
-    // The observed device's port facing this one, only when LLDP or CDP report it.
-    peer_connector_id: string | null;
     name: string | null;
     ips: string[];
     macs: string[];

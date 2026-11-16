@@ -78,6 +78,11 @@ import {
 import { show as rackShow } from '@/routes/companies/sites/racks';
 import type { Company, Site } from '@/types/company';
 import {
+    PortLinkDialog,
+    adjacencySource,
+    type Cabling,
+} from '@/components/devices/port-link';
+import {
     linkKinds,
     topologyPortLabel,
     topologyPortMessage,
@@ -91,6 +96,8 @@ type Props = {
     site: Site;
     topology: TopologyData;
     racks: TopologyRack[];
+    cablingRevision: number;
+    cabling?: Cabling;
 };
 
 function LinkSwatch({
@@ -134,7 +141,14 @@ function LinkSwatch({
 export default function TopologyIndex(props: Props) {
     return <TopologyView key={props.site.id} {...props} />;
 }
-function TopologyView({ company, site, topology, racks }: Props) {
+function TopologyView({
+    company,
+    site,
+    topology,
+    racks,
+    cablingRevision,
+    cabling,
+}: Props) {
     const { auth } = usePage().props;
     const route = { company: company.id, site: site.id };
     const [search, setSearch] = useState('');
@@ -149,6 +163,8 @@ function TopologyView({ company, site, topology, racks }: Props) {
     const [refreshing, setRefreshing] = useState(false);
     const [refreshError, setRefreshError] = useState('');
     const canvas = useRef<TopologyCanvasApi>(null);
+    const [linking, setLinking] = useState<TopologyEdge | null>(null);
+    const [cablingLoading, setCablingLoading] = useState(false);
     const popupAnchor = useRef<PortAnchor | null>(null);
     const popupContent = useRef<HTMLDivElement>(null);
     const diagram = useRef<HTMLElement>(null);
@@ -230,15 +246,45 @@ function TopologyView({ company, site, topology, racks }: Props) {
         ? (byId.get(selectedEdge.source)?.rack?.id ??
           byId.get(selectedEdge.target)?.rack?.id)
         : undefined;
-    // An observed link without a cable is documented from the device port, also outside racks.
+    const portOf = (deviceId: number, connectorId: string | null) => {
+        const node = byId.get(`device:${deviceId}`);
+        const model = node?.model_id ? topology.models[node.model_id] : undefined;
+        return model
+            ? Object.values(model.panel.faces)
+                  .flatMap((face) => face.ports)
+                  .find((port) => port.id === connectorId)
+            : undefined;
+    };
+    // LLDP or CDP name both ports and nothing documented contradicts them: the link becomes a cable in one step.
+    const documentable = (edge: TopologyEdge) =>
+        auth.canEditIpam &&
+        edge.kind === 'discovered' &&
+        !edge.issues.length &&
+        !edge.cable_ids.length &&
+        !!edge.a?.connector_id &&
+        !!edge.b?.connector_id &&
+        !!portOf(edge.a.device_id, edge.a.connector_id);
+    function documentEdge(edge: TopologyEdge) {
+        setLinking(edge);
+        // Occupied ports and the device list must be current when the cable is confirmed.
+        setCablingLoading(true);
+        router.reload({
+            only: ['cabling', 'cablingRevision'],
+            onFinish: () => setCablingLoading(false),
+        });
+    }
+    // A partial observation names one port only: it is documented from that device port.
     const documentEnd =
         selectedEdge &&
         selectedEdge.kind !== 'documented' &&
         selectedEdge.kind !== 'logical' &&
+        !documentable(selectedEdge) &&
         !selectedEdge.suggestion &&
         !selectedEdge.cable_ids.length
             ? [selectedEdge.a, selectedEdge.b].find((end) => end?.interface_id)
             : undefined;
+    const linkingPort =
+        linking?.a && portOf(linking.a.device_id, linking.a.connector_id);
     const connected = selectedNode
         ? edges.filter(
               (edge) =>
@@ -647,6 +693,11 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                     onZoom={setZoom}
                                     // The details card already lists both ends; one popup at a time.
                                     endpoints={!panelOpen}
+                                    onDocument={(edge) =>
+                                        documentable(edge)
+                                            ? () => documentEdge(edge)
+                                            : undefined
+                                    }
                                 />
                             ) : (
                                 <Empty className="h-full min-h-96">
@@ -1186,9 +1237,19 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                 )}
                                             </p>
                                         )}
+                                        {documentable(selectedEdge) && (
+                                            <Button
+                                                onClick={() =>
+                                                    documentEdge(selectedEdge)
+                                                }
+                                            >
+                                                <Cable data-icon="inline-start" />
+                                                Documenta collegamento
+                                            </Button>
+                                        )}
                                         {selectedEdge.suggestion &&
                                             auth.canEditIpam && (
-                                                <Button asChild>
+                                                <Button variant="outline" asChild>
                                                     <Link
                                                         href={rackShow(
                                                             {
@@ -1355,6 +1416,38 @@ function TopologyView({ company, site, topology, racks }: Props) {
                     </PopoverContent>
                 </Popover>
             </div>
+            {linking?.a && linking.b?.connector_id && linkingPort && (
+                <PortLinkDialog
+                    key={linking.id}
+                    route={route}
+                    device={{
+                        id: linking.a.device_id,
+                        name: byId.get(linking.source)?.label ?? 'Dispositivo',
+                    }}
+                    port={linkingPort}
+                    cabling={cablingLoading ? undefined : cabling}
+                    revision={cablingRevision}
+                    suggestedIds={[linking.b.device_id]}
+                    destination={{
+                        device_id: linking.b.device_id,
+                        connector_id: linking.b.connector_id,
+                    }}
+                    source={adjacencySource({
+                        device_id: linking.b.device_id,
+                        connector_id: linking.b.connector_id,
+                        protocols: linking.protocols,
+                        stale: linking.stale,
+                    })}
+                    reload={['topology', 'cablingRevision', 'cabling']}
+                    onClose={() => setLinking(null)}
+                    onSaved={() => {
+                        // The observed link is now a documented cable with its own id.
+                        setLinking(null);
+                        setSelection(null);
+                        setPanelOpen(false);
+                    }}
+                />
+            )}
         </>
     );
 }

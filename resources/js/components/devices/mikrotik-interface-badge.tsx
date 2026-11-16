@@ -1,4 +1,4 @@
-import { cn, formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import {
     Tooltip,
@@ -37,15 +37,7 @@ export function MikrotikInterfaceBadge({
                     aria-label={
                         label === 'MikroTik' ? label : `MikroTik: ${label}`
                     }
-                    className={cn(
-                        'inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-ring',
-                        // The icon alone carries the state: yellow when it needs attention.
-                        iconOnly &&
-                            'size-7 shrink-0 items-center justify-center',
-                        iconOnly &&
-                            label !== 'MikroTik' &&
-                            'bg-amber-200/80 dark:bg-amber-400/25',
-                    )}
+                    className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-ring"
                 >
                     {iconOnly ? (
                         <MikrotikMark />

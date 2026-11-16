@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Cable;
 use App\Models\CableEnd;
 use App\Models\Device;
+use App\Models\DeviceModel;
 use App\Models\Site;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -92,6 +93,21 @@ class RackCabling
 
                 return [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []];
             });
+    }
+
+    /** What the link dialog needs: site cables, devices with their ports, and catalog models that take a cable. */
+    public static function workspace(Site $site): array
+    {
+        return [
+            'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
+            'devices' => self::devices($site),
+            'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')->get()
+                ->map(fn ($model) => [
+                    ...$model->only('id', 'name'), 'manufacturer' => $model->manufacturer->only('id', 'name'),
+                    'model_type' => $model->modelType?->only('id', 'name'),
+                    'cable_types' => collect($model->connectors())->flatMap(fn ($port) => self::connectionTypes($port['type'] ?? ''))->unique()->values(),
+                ])->filter(fn ($model) => $model['cable_types']->isNotEmpty())->values(),
+        ];
     }
 
     /** Documented cables on the ports of one device, each with the port at its other end. */

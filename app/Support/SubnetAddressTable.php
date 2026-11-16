@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class SubnetAddressTable
 {
-    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page, int $perPage = 25, bool $hideFree = false, ?int $focusAddress = null): LengthAwarePaginator
+    public static function paginate(Subnet $subnet, string $search, ?string $sort, string $direction, int $page, int $perPage = 50, bool $hideFree = false, ?int $focusAddress = null): LengthAwarePaginator
     {
         [$first, $last] = Ipv4Ranges::usableBounds($subnet->network_address, $subnet->broadcast_address);
         $matcher = new Ipv4Search($search);

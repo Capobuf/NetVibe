@@ -156,7 +156,7 @@ class IpAddressesTest extends TestCase
         $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->has('ipAddresses.data', 25)->where('ipAddresses.per_page', 25));
+            ->has('ipAddresses.data', 50)->where('ipAddresses.per_page', 50));
         $this->get($show.'?search=10.0.0.&sort=ip&direction=desc&per_page=10&page=2')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('ipAddresses.data', 10)->where('ipAddresses.total', 254)
@@ -239,12 +239,12 @@ class IpAddressesTest extends TestCase
 
         $this->get($show.'?hide_free=1')->assertOk();
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->where('query.hide_free', 1)->where('auth.user.subnet_table_separators', true));
+            ->where('query.hide_free', 1)->where('auth.user.subnet_table_separators', false));
 
-        $this->from($show)->patch(route('preferences.update'), ['subnet_table_separators' => false])
+        $this->from($show)->patch(route('preferences.update'), ['subnet_table_separators' => true])
             ->assertRedirect($show)->assertSessionHasNoErrors();
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->where('auth.user.subnet_table_separators', false)->where('auth.user.subnet_hide_free', true));
+            ->where('auth.user.subnet_table_separators', true)->where('auth.user.subnet_hide_free', true));
 
         $this->actingAs(User::factory()->create(['is_superadmin' => true]))
             ->get($show)->assertInertia(fn (Assert $page) => $page->where('query.hide_free', 0));

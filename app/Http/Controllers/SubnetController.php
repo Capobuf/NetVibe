@@ -86,7 +86,7 @@ class SubnetController extends Controller
         $focusAddress = isset($options['focus_ip'])
             ? $subnet->ipAddresses()->where('address', ip2long($options['focus_ip']))->value('address') : null;
         $page = (int) ($options['page'] ?? 1);
-        $perPage = (int) ($options['per_page'] ?? 25);
+        $perPage = (int) ($options['per_page'] ?? 50);
         $ipAddresses = SubnetAddressTable::paginate($subnet, $search, $sort, $direction, $page, $perPage, $hideFree, $focusAddress);
         if ($focusAddress !== null && $search !== '' && ! $ipAddresses->getCollection()->contains('ip', $options['focus_ip'])) {
             $search = '';

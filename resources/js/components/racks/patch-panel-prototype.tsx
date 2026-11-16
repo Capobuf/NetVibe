@@ -161,7 +161,7 @@ function DestinationField({
         (option) =>
             option.label.toLocaleLowerCase() === typed.toLocaleLowerCase(),
     );
-    const items = typed && !known ? [textOption(typed), ...options] : options;
+    const items = typed && !known ? [...options, textOption(typed)] : options;
     return (
         <Field>
             <FieldLabel htmlFor={id}>Destinazione lato impianto</FieldLabel>

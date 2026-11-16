@@ -28,6 +28,14 @@ import { CableInspector } from '@/components/racks/cable-inspector';
 import { CableCreateDialog } from '@/components/racks/cable-create-dialog';
 import { DevicePortsList } from '@/components/racks/device-ports-list';
 import {
+    PatchPanelInspector,
+    frontPositions,
+    isPatchPanel,
+    moduleOverrides,
+    type Destination,
+    type KeystoneModule,
+} from '@/components/racks/patch-panel-prototype';
+import {
     cableCode,
     cableError,
     bundleKey,
@@ -210,6 +218,12 @@ function RackEditor({
     );
     const [cableDraft, setCableDraft] = useState<Cable | null>(null);
     const [selectedPort, setSelectedPort] = useState<CableEnd | null>(null);
+    // #165 prototype: patch panel positions, modules and destinations are never saved.
+    const [positions, setPositions] = useState<CableEnd[]>([]);
+    const [modules, setModules] = useState<Record<string, KeystoneModule>>({});
+    const [destinations, setDestinations] = useState<
+        Record<string, Destination>
+    >({});
     const [disconnecting, setDisconnecting] = useState<Cable | null>(null);
     const [creatingCable, setCreatingCable] = useState<number | null>(
         topologySuggestion ? -1 : null,
@@ -296,6 +310,16 @@ function RackEditor({
               ? null
               : device.rack_item,
     }));
+    const positionDevice = cableDevices.find(
+        (device) => device.id === positions[0]?.device_id,
+    );
+    function isPosition(end: CableEnd) {
+        const device = devices.find((d) => d.id === end.device_id);
+        return (
+            isPatchPanel(device, models) &&
+            frontPositions(device!).some((port) => port.id === end.connector_id)
+        );
+    }
     const feedback =
         error ||
         Object.values(errors).join(' ') ||
@@ -307,6 +331,7 @@ function RackEditor({
         setSelectedCableId(null);
         setFocusedBundle(null);
         setSelectedPort(null);
+        setPositions([]);
         setSelectedKey(key);
         setTab('properties');
     }
@@ -527,11 +552,13 @@ function RackEditor({
         setSelectedCableId(cable.id);
         setFocusedBundle(bundleKey(cable));
         setSelectedPort(null);
+        setPositions([]);
         setTab('cables');
     }
     function selectBundle(key: string | null) {
         if (cableDraft) return;
         setSelectedKey(null);
+        setPositions([]);
         setFocusedBundle(key);
         setSelectedCableId(null);
         setTab('cables');
@@ -559,6 +586,7 @@ function RackEditor({
         setCableDraft(draft);
         setSelectedCableId(null);
         setSelectedPort(null);
+        setPositions([]);
         setFocusedBundle(null);
         setTab('cables');
         setError('');
@@ -588,7 +616,7 @@ function RackEditor({
         setError('');
         return true;
     }
-    function pickPort(end: CableEnd) {
+    function pickPort(end: CableEnd, additive = false) {
         if (processing) return;
         setSelectedKey(null);
         if (cableDraft && editing) {
@@ -618,7 +646,23 @@ function RackEditor({
             }
             setCableDraft(next);
             setError('');
+        } else if (isPosition(end)) {
+            setSelectedCableId(null);
+            setFocusedBundle(null);
+            setSelectedPort(null);
+            setTab('cables');
+            // Shift, Ctrl or Cmd adds or removes positions of the same panel.
+            setPositions((current) =>
+                !additive || current[0]?.device_id !== end.device_id
+                    ? [end]
+                    : current.some((e) => endKey(e) === endKey(end))
+                      ? current.length > 1
+                          ? current.filter((e) => endKey(e) !== endKey(end))
+                          : current
+                      : [...current, end],
+            );
         } else {
+            setPositions([]);
             const cable = data.cables.find((c) =>
                 [c.a, c.b].some((e) => endKey(e) === endKey(end)),
             );
@@ -655,6 +699,7 @@ function RackEditor({
             setFocusedBundle(null);
             setSelectedCableId(null);
             setSelectedPort(null);
+            setPositions([]);
         };
         window.addEventListener('keydown', escape);
         return () => window.removeEventListener('keydown', escape);
@@ -949,6 +994,11 @@ function RackEditor({
                                         editing ? null : selectedCableId
                                     }
                                     pendingCable={cableDraft}
+                                    selectedPorts={positions}
+                                    portOverrides={moduleOverrides(
+                                        devices,
+                                        modules,
+                                    )}
                                     onPort={pickPort}
                                     onConnect={startCable}
                                     onBundle={selectBundle}
@@ -1060,6 +1110,45 @@ function RackEditor({
                                                 selectedCable ?? null,
                                             )
                                         }
+                                    />
+                                ) : positionDevice ? (
+                                    <PatchPanelInspector
+                                        device={positionDevice}
+                                        positions={positions}
+                                        devices={cableDevices}
+                                        cables={data.cables}
+                                        modules={modules}
+                                        destinations={destinations}
+                                        editing={editing}
+                                        disabled={processing}
+                                        onSelect={setPositions}
+                                        onModule={(module) =>
+                                            setModules((current) => ({
+                                                ...current,
+                                                ...Object.fromEntries(
+                                                    positions.map((end) => [
+                                                        endKey(end),
+                                                        module,
+                                                    ]),
+                                                ),
+                                            }))
+                                        }
+                                        onDestination={(end, destination) =>
+                                            setDestinations((current) => {
+                                                const next = { ...current };
+                                                if (destination)
+                                                    next[endKey(end)] =
+                                                        destination;
+                                                else delete next[endKey(end)];
+                                                return next;
+                                            })
+                                        }
+                                        onCable={selectCable}
+                                        onConnect={(end) => startCable(end)}
+                                        onReset={() => {
+                                            setModules({});
+                                            setDestinations({});
+                                        }}
                                     />
                                 ) : (
                                     <div className="flex flex-col gap-3 p-4">

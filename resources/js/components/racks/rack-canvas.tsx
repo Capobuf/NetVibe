@@ -19,6 +19,7 @@ import {
     type CableEnd,
 } from '@/lib/rack-cabling';
 import { PanelScene } from '@/components/hardware-editor/panel-scene';
+import type { PortOverride } from '@/components/hardware-editor/port-symbol';
 import { useAppearance } from '@/hooks/use-appearance';
 import {
     RACK_UNIT_HEIGHT as U,
@@ -47,6 +48,7 @@ export function DeviceDrawing({
     dark,
     zoom,
     onError,
+    overrides,
 }: {
     device: RackDevice;
     face: Face;
@@ -55,6 +57,7 @@ export function DeviceDrawing({
     dark: boolean;
     zoom: number;
     onError: (message: string) => void;
+    overrides?: Map<string, PortOverride>;
 }) {
     const [images, setImages] = useState<Record<string, HTMLImageElement>>({});
     const assetKey = JSON.stringify(device.assetUrls);
@@ -108,6 +111,7 @@ export function DeviceDrawing({
                 images={images}
                 dark={dark}
                 zoom={scale * zoom}
+                overrides={overrides}
             />
         </Group>
     );
@@ -120,6 +124,7 @@ function ItemDrawing({
     dark,
     zoom,
     onError,
+    portOverrides,
 }: {
     item: RackItem;
     devices: RackDevice[];
@@ -127,6 +132,7 @@ function ItemDrawing({
     dark: boolean;
     zoom: number;
     onError: (message: string) => void;
+    portOverrides?: Map<number, Map<string, PortOverride>>;
 }) {
     const width = (WIDTH * item.width) / 100;
     const height = U * item.height;
@@ -170,6 +176,7 @@ function ItemDrawing({
                         dark={dark}
                         zoom={zoom}
                         onError={onError}
+                        overrides={portOverrides?.get(device.id)}
                     />
                 ) : (
                     <>
@@ -220,7 +227,11 @@ export function RackCanvas({
     onBundle,
     onCable,
     onReconnect,
+    selectedPorts,
+    portOverrides,
 }: {
+    selectedPorts?: CableEnd[];
+    portOverrides?: Map<number, Map<string, PortOverride>>;
     pan: boolean;
     cables: Cable[];
     allCables: Cable[];
@@ -228,7 +239,7 @@ export function RackCanvas({
     selectedCable: number | null;
     focusedCable: number | null;
     pendingCable: Cable | null;
-    onPort: (end: CableEnd) => void;
+    onPort: (end: CableEnd, additive: boolean) => void;
     onConnect: (a: CableEnd, b: CableEnd) => void;
     onBundle: (key: string | null) => void;
     onCable: (cable: Cable) => void;
@@ -462,6 +473,7 @@ export function RackCanvas({
                             dark={dark}
                             zoom={scale}
                             onError={onError}
+                            portOverrides={portOverrides}
                         />
                     </Group>
                 )}
@@ -750,6 +762,7 @@ export function RackCanvas({
                         focusedBundle={focusedBundle}
                         selectedCable={selectedCable}
                         pendingCable={pendingCable}
+                        selectedPorts={selectedPorts}
                         editing={!disabled}
                         onPort={onPort}
                         onConnect={onConnect}

@@ -41,8 +41,9 @@ type Props = {
     focusedBundle: string | null;
     selectedCable: number | null;
     pendingCable: Cable | null;
+    selectedPorts?: CableEnd[];
     editing: boolean;
-    onPort: (end: CableEnd) => void;
+    onPort: (end: CableEnd, additive: boolean) => void;
     onConnect: (a: CableEnd, b: CableEnd) => void;
     onConnectionChange: (deviceId: number | null) => void;
     onBundle: (key: string | null) => void;
@@ -63,6 +64,7 @@ export function RackCables({
     focusedBundle,
     selectedCable,
     pendingCable,
+    selectedPorts,
     editing,
     onPort,
     onConnect,
@@ -631,7 +633,8 @@ export function RackCables({
                     (pendingCable &&
                         [pendingCable.a, pendingCable.b].some(
                             (e) => endKey(e) === key,
-                        ));
+                        )) ||
+                    selectedPorts?.some((e) => endKey(e) === key);
                 const selectable = canConnect(anchor);
                 return (
                     <Group key={key}>
@@ -731,17 +734,25 @@ export function RackCables({
                             onTouchStart={(event) => {
                                 event.cancelBubble = true;
                             }}
-                            onClick={() =>
-                                onPort({
-                                    device_id: anchor.device_id,
-                                    connector_id: anchor.connector_id,
-                                })
+                            onClick={(event) =>
+                                onPort(
+                                    {
+                                        device_id: anchor.device_id,
+                                        connector_id: anchor.connector_id,
+                                    },
+                                    event.evt.shiftKey ||
+                                        event.evt.ctrlKey ||
+                                        event.evt.metaKey,
+                                )
                             }
                             onTap={() =>
-                                onPort({
-                                    device_id: anchor.device_id,
-                                    connector_id: anchor.connector_id,
-                                })
+                                onPort(
+                                    {
+                                        device_id: anchor.device_id,
+                                        connector_id: anchor.connector_id,
+                                    },
+                                    false,
+                                )
                             }
                             onMouseEnter={() => {
                                 setHover({

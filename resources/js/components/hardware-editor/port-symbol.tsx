@@ -8,18 +8,24 @@ import {
     type Port,
 } from '@/lib/hardware-editor/document';
 
+export type PortOverride = { outline: string; detail?: string; color: string };
+
 export function PortSymbol({
     port,
     selected,
     preview,
     zoom,
+    override,
 }: {
     port: Port;
     selected: boolean;
     preview?: string;
     zoom: number;
+    // Draws another insert in the same slot; bounds stay those of the port type.
+    override?: PortOverride;
 }) {
-    const shape = connectorShapes[port.type];
+    const shape = override ?? connectorShapes[port.type];
+    const color = override?.color ?? port.borderColor;
     const b = portBounds(port);
     const label = preview ?? port.label;
     const layout = portLabelLayout(port, label);
@@ -47,7 +53,7 @@ export function PortSymbol({
                 <Path
                     data={shape.outline}
                     fill="#17202c"
-                    stroke={port.borderColor}
+                    stroke={color}
                     strokeWidth={1.5}
                     lineJoin="round"
                 />
@@ -55,13 +61,12 @@ export function PortSymbol({
                     <Path
                         data={shape.detail}
                         fill={
-                            ['dc', 'ac', 'acC19', 'schuko'].includes(
-                                port.type,
-                            )
-                                ? port.borderColor
+                            !override &&
+                            ['dc', 'ac', 'acC19', 'schuko'].includes(port.type)
+                                ? color
                                 : undefined
                         }
-                        stroke={port.borderColor}
+                        stroke={color}
                         strokeWidth={1.5}
                         lineJoin="round"
                     />
@@ -90,11 +95,11 @@ export function PortSymbol({
                             align="center"
                             verticalAlign="middle"
                             wrap="none"
-                            fill={port.borderColor}
+                            fill={color}
                         />
                     </Group>
                 )}
-            {ethernet && port.poe && (
+            {ethernet && port.poe && !override && (
                 <Line
                     listening={false}
                     opacity={port.opacity}

@@ -7,7 +7,7 @@ import {
     type Face,
     type Point,
 } from '@/lib/hardware-editor/document';
-import { PortSymbol } from './port-symbol';
+import { PortSymbol, type PortOverride } from './port-symbol';
 
 export function PanelScene({
     shell,
@@ -21,6 +21,7 @@ export function PanelScene({
     imageOpacity,
     preview,
     selectedPortId,
+    overrides,
 }: {
     shell: PanelDocument['shell'];
     face: PanelDocument['faces'][Face];
@@ -33,6 +34,7 @@ export function PanelScene({
     imageOpacity?: number;
     preview?: Map<string, string>;
     selectedPortId?: string;
+    overrides?: Map<string, PortOverride>;
 }) {
     const image = face.image;
     const selected = face.ports.find((port) => port.id === selectedPortId);
@@ -87,6 +89,7 @@ export function PanelScene({
                                     selected={false}
                                     preview={preview?.get(port.id)}
                                     zoom={zoom}
+                                    override={overrides?.get(port.id)}
                                 />
                             ))}
                     </Group>

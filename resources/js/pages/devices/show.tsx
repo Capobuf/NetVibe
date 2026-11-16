@@ -1,4 +1,4 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
 import { ArrowLeft, Unlink, Pencil, X } from 'lucide-react';
 import {
@@ -25,6 +25,15 @@ import {
     ObservedHostsList,
     ObservedHostsTable,
 } from '@/components/devices/observed-hosts';
+import {
+    PortLink,
+    PortLinkDialog,
+    UnlinkDialog,
+    portName,
+    type Cabling,
+    type DeviceLink,
+} from '@/components/devices/port-link';
+import { connectionTypes } from '@/lib/rack-cabling';
 import type { TopologyObservation } from '@/types/topology';
 import { MikrotikInterfaceBadge } from '@/components/devices/mikrotik-interface-badge';
 import { AddIpForm, type AvailableIp } from '@/components/devices/add-ip-form';
@@ -93,6 +102,9 @@ type Props = {
     statuses: IpStatus[];
     tags: Tag[];
     observed: TopologyObservation[];
+    links: DeviceLink[];
+    cablingRevision: number;
+    cabling?: Cabling;
 };
 export default function DeviceShow({
     view,
@@ -114,6 +126,9 @@ export default function DeviceShow({
     tags,
     initialInterfaceId,
     observed,
+    links,
+    cablingRevision,
+    cabling,
 }: Props) {
     const page = usePage();
     const { auth } = page.props;
@@ -133,6 +148,19 @@ export default function DeviceShow({
     const portAnchor = useRef<PortAnchor | null>(null);
     const portFocus = useRef<HTMLElement | null>(null);
     const portTitleId = useId();
+    const [linking, setLinking] = useState<Port | null>(null);
+    const [cablingLoading, setCablingLoading] = useState(false);
+    const [unlinking, setUnlinking] = useState<DeviceLink | null>(null);
+    function documentLink(port: Port) {
+        setLinking(port);
+        setPortOpen(false);
+        // Occupied ports and the device list must be current when the cable is chosen.
+        setCablingLoading(true);
+        router.reload({
+            only: ['cabling', 'cablingRevision'],
+            onFinish: () => setCablingLoading(false),
+        });
+    }
     const initialInterface = device.interfaces.find(
         (item) => item.id === initialInterfaceId,
     );
@@ -231,6 +259,10 @@ export default function DeviceShow({
     const portObserved = port
         ? observed.filter((row) => row.connector_id === port.id)
         : [];
+    const portLink = port
+        ? links.find((link) => link.connector_id === port.id)
+        : undefined;
+    const siteRoute = { company: company.id, site: site.id };
     const context = useSiteContext(company, site);
     const interfaceValue = (id: number | null) =>
         id
@@ -595,7 +627,8 @@ export default function DeviceShow({
                     <TabsContent value="observed" className="pt-4">
                         <ObservedHostsTable
                             rows={observed}
-                            route={{ company: company.id, site: site.id }}
+                            route={siteRoute}
+                            links={links}
                         />
                     </TabsContent>
                 </Tabs>
@@ -713,7 +746,13 @@ export default function DeviceShow({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        if (!interfaceId && !documentingSubnet && !releasingIp)
+                        if (
+                            !interfaceId &&
+                            !documentingSubnet &&
+                            !releasingIp &&
+                            !linking &&
+                            !unlinking
+                        )
                             portFocus.current?.focus({ preventScroll: true });
                     }}
                 >
@@ -806,12 +845,29 @@ export default function DeviceShow({
                                 )}
                             />
                         )}
+                        {port &&
+                            connectionTypes(port.type).length > 0 &&
+                            (portLink || auth.canEditIpam) && (
+                                <>
+                                    <Separator className="my-4" />
+                                    <PortLink
+                                        route={siteRoute}
+                                        link={portLink}
+                                        canDocument={auth.canEditIpam}
+                                        onDocument={() => documentLink(port)}
+                                        onUnlink={(link) => {
+                                            setUnlinking(link);
+                                            setPortOpen(false);
+                                        }}
+                                    />
+                                </>
+                            )}
                         {portObserved.length > 0 && (
                             <>
                                 <Separator className="my-4" />
                                 <ObservedHostsList
                                     rows={portObserved}
-                                    route={{ company: company.id, site: site.id }}
+                                    route={siteRoute}
                                 />
                             </>
                         )}
@@ -819,6 +875,50 @@ export default function DeviceShow({
                     <PopoverArrow />
                 </PopoverContent>
             </Popover>
+            {linking && (
+                <PortLinkDialog
+                    key={linking.id}
+                    route={siteRoute}
+                    device={device}
+                    port={linking}
+                    cabling={cablingLoading ? undefined : cabling}
+                    revision={cablingRevision}
+                    suggestedIds={[
+                        ...new Set(
+                            observed
+                                .filter(
+                                    (row) =>
+                                        row.connector_id === linking.id &&
+                                        row.device_id &&
+                                        row.device_id !== device.id,
+                                )
+                                .map((row) => row.device_id!),
+                        ),
+                    ]}
+                    onClose={() => setLinking(null)}
+                    onSaved={() => {
+                        setLinking(null);
+                        setPortOpen(true);
+                    }}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        portFocus.current?.focus({ preventScroll: true });
+                    }}
+                />
+            )}
+            {unlinking && (
+                <UnlinkDialog
+                    route={siteRoute}
+                    link={unlinking}
+                    local={`${device.name} · ${port ? portName(port) : 'Porta'}`}
+                    revision={cablingRevision}
+                    onClose={() => setUnlinking(null)}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        portFocus.current?.focus({ preventScroll: true });
+                    }}
+                />
+            )}
             {releasingIp && (
                 <ReleaseIp
                     {...route}

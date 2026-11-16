@@ -2,12 +2,20 @@ import { CircleAlert } from 'lucide-react';
 import { DataTable } from '@/components/data-table';
 import TextLink from '@/components/text-link';
 import { Badge } from '@/components/ui/badge';
+import type { DeviceLink } from '@/components/devices/port-link';
 import { formatDateTime } from '@/lib/utils';
 import { show as deviceShow } from '@/routes/companies/sites/devices';
 import type { TopologyObservation } from '@/types/topology';
 
 type Route = { company: number; site: number };
-type Column = 'port' | 'name' | 'ip' | 'mac' | 'source' | 'seen_at';
+type Column =
+    | 'port'
+    | 'name'
+    | 'documented'
+    | 'ip'
+    | 'mac'
+    | 'source'
+    | 'seen_at';
 
 export function observedPort(row: TopologyObservation): string {
     return row.port ?? (row.wireless ? 'Wi-Fi' : 'Porta non determinabile');
@@ -47,16 +55,28 @@ function HostName({ row, route }: { row: TopologyObservation; route: Route }) {
 export function ObservedHostsTable({
     rows,
     route,
+    links,
 }: {
     rows: TopologyObservation[];
     route: Route;
+    links: DeviceLink[];
 }) {
+    const linkOf = (row: TopologyObservation) =>
+        row.connector_id
+            ? links.find((link) => link.connector_id === row.connector_id)
+            : undefined;
     const value = (row: TopologyObservation, column: Column) => {
         switch (column) {
             case 'port':
                 return observedPort(row);
             case 'name':
                 return row.name;
+            case 'documented': {
+                const link = linkOf(row);
+                return link
+                    ? `${link.peer.name ?? 'Dispositivo'} · ${link.peer.port}`
+                    : null;
+            }
             case 'ip':
                 return row.ips.join(', ');
             case 'mac':
@@ -75,6 +95,11 @@ export function ObservedHostsTable({
             columns={[
                 { id: 'port', label: 'Porta', visible: true },
                 { id: 'name', label: 'Dispositivo', visible: true },
+                {
+                    id: 'documented',
+                    label: 'Collegamento documentato',
+                    visible: true,
+                },
                 { id: 'ip', label: 'IPv4', visible: true },
                 { id: 'mac', label: 'MAC', visible: true },
                 { id: 'source', label: 'Fonte', visible: true },
@@ -95,6 +120,21 @@ export function ObservedHostsTable({
                         );
                     case 'name':
                         return <HostName row={row} route={route} />;
+                    case 'documented': {
+                        const link = linkOf(row);
+                        return link ? (
+                            <TextLink
+                                href={deviceShow({
+                                    ...route,
+                                    device: link.peer.device_id,
+                                })}
+                            >
+                                {value(row, column)}
+                            </TextLink>
+                        ) : (
+                            '—'
+                        );
+                    }
                     case 'ip':
                     case 'mac':
                         return (
@@ -137,9 +177,20 @@ export function ObservedHostsList({
             aria-label="Rilevati su questa porta"
             className="flex flex-col gap-3"
         >
-            <h3 className="text-sm font-medium">
-                Rilevati su questa porta ({rows.length})
-            </h3>
+            <div className="flex flex-col gap-1">
+                <h3 className="text-sm font-medium">
+                    Rilevati su questa porta ({rows.length})
+                </h3>
+                {/* Several MACs prove neither a switch nor how many ports it has. */}
+                {rows.reduce((total, row) => total + row.macs.length, 0) >
+                    1 && (
+                    <p className="text-xs text-muted-foreground">
+                        Possibili spiegazioni: switch non gestito, telefono IP
+                        con PC in cascata, access point o bridge, macchine
+                        virtuali o altro.
+                    </p>
+                )}
+            </div>
             <ul className="divide-y rounded-lg border">
                 {rows.map((row) => {
                     const seen = lastSeen(row);

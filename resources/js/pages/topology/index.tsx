@@ -230,6 +230,15 @@ function TopologyView({ company, site, topology, racks }: Props) {
         ? (byId.get(selectedEdge.source)?.rack?.id ??
           byId.get(selectedEdge.target)?.rack?.id)
         : undefined;
+    // An observed link without a cable is documented from the device port, also outside racks.
+    const documentEnd =
+        selectedEdge &&
+        selectedEdge.kind !== 'documented' &&
+        selectedEdge.kind !== 'logical' &&
+        !selectedEdge.suggestion &&
+        !selectedEdge.cable_ids.length
+            ? [selectedEdge.a, selectedEdge.b].find((end) => end?.interface_id)
+            : undefined;
     const connected = selectedNode
         ? edges.filter(
               (edge) =>
@@ -1198,6 +1207,31 @@ function TopologyView({ company, site, topology, racks }: Props) {
                                                     >
                                                         <Cable data-icon="inline-start" />
                                                         Verifica nel Rack
+                                                    </Link>
+                                                </Button>
+                                            )}
+                                        {documentEnd?.interface_id &&
+                                            auth.canEditIpam && (
+                                                <Button
+                                                    variant="outline"
+                                                    asChild
+                                                >
+                                                    <Link
+                                                        href={deviceShow(
+                                                            {
+                                                                ...route,
+                                                                device: documentEnd.device_id,
+                                                            },
+                                                            {
+                                                                query: {
+                                                                    interface:
+                                                                        documentEnd.interface_id,
+                                                                },
+                                                            },
+                                                        )}
+                                                    >
+                                                        <Cable data-icon="inline-start" />
+                                                        Documenta dalla porta
                                                     </Link>
                                                 </Button>
                                             )}

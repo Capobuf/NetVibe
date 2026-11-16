@@ -52,16 +52,7 @@ class RackController extends Controller
             'cablingRevision' => (int) $site->fresh()->cabling_revision,
             'selectedCable' => $request->integer('cable') ?: null,
             'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
-            'devices' => $site->devices()->with([
-                'model', 'manufacturer:id,name', 'rackItem.rack:id,name',
-                'interfaces' => fn ($query) => $query->without('mikrotikSource'),
-            ])->orderBy('name')->get()
-                ->map(function ($device) {
-                    // Rack ports use documented aliases, not MikroTik diagnostics.
-                    $device->interfaces->each->setAppends([]);
-
-                    return [...$device->toArray(), 'assetUrls' => $device->model?->assetUrls() ?? []];
-                }),
+            'devices' => RackCabling::devices($site),
             // Catalog models for creating a new device straight from the rack editor.
             'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')
                 ->get(['id', 'name', 'manufacturer_id', 'model_type_id', 'rack_height_u', 'without_rack_ears']),
@@ -128,19 +119,7 @@ class RackController extends Controller
                 if (! $rack->items()->whereIn('device_id', [$request->integer('a.device_id'), $request->integer('b.device_id')])->exists()) {
                     throw ValidationException::withMessages(['cables' => 'Almeno un’estremità deve appartenere al rack aperto.']);
                 }
-                $site = Site::query()->lockForUpdate()->findOrFail($site->id);
-                $cables = Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->lockForUpdate()->get()->map->workspaceData();
-                $newCable = ['id' => -1, ...$request->safe()->except(['cabling_revision', 'removed_cable_ids'])];
-                // Commit only explicit disconnections needed by the new cable; leave unrelated drafts alone.
-                $removed = $cables->whereIn('id', $request->validated('removed_cable_ids', []))
-                    ->filter(fn ($cable) => collect([$cable['a'], $cable['b']])->contains(
-                        fn ($end) => $end == $newCable['a'] || $end == $newCable['b']
-                    ))->pluck('id');
-                RackCabling::save($site, [
-                    'cabling_revision' => $request->integer('cabling_revision'),
-                    'removed_cable_ids' => $removed->all(),
-                    'cables' => [...$cables->whereNotIn('id', $removed)->values()->all(), $newCable],
-                ]);
+                RackCabling::add($site, $request->validated());
             }, 3);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['cables' => 'Una porta è già occupata. Ricarica la pagina prima di riprovare.']);

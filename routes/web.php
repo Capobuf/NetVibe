@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CableController;
 use App\Http\Controllers\CableLabelController;
 use App\Http\Controllers\CableLabelTemplateController;
 use App\Http\Controllers\CompanyController;
@@ -68,6 +69,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/sites/{site}/racks/{rack}/cables/{cableId}/labels', [CableLabelController::class, 'show'])->whereNumber('cableId')->name('companies.sites.racks.cables.labels');
         Route::resource('companies.sites.racks', RackController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::post('companies/{company}/sites/{site}/racks/{rack}/cables', [RackController::class, 'storeCable'])->name('companies.sites.racks.cables.store');
+        Route::post('companies/{company}/sites/{site}/cables', [CableController::class, 'store'])->name('companies.sites.cables.store');
+        Route::delete('companies/{company}/sites/{site}/cables/{cableId}', [CableController::class, 'destroy'])->whereNumber('cableId')->name('companies.sites.cables.destroy');
         Route::get('companies/{company}/sites/{site}/devices/{device}/deletion-impact', [DeviceController::class, 'deletionImpact'])->name('companies.sites.devices.deletion-impact');
         Route::get('companies/{company}/sites/{site}/devices/{device}/integrations', [DeviceController::class, 'integrations'])->name('companies.sites.devices.integrations');
         Route::get('companies/{company}/sites/{site}/devices/{device}/image', [DeviceController::class, 'image'])->name('companies.sites.devices.image');

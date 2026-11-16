@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ConfirmDeletionRequest;
 use App\Http\Requests\DeviceRequest;
+use App\Models\Cable;
 use App\Models\Company;
 use App\Models\Device;
 use App\Models\DeviceModel;
@@ -15,6 +16,7 @@ use App\Models\Site;
 use App\Models\SnipeItSync;
 use App\Support\DeletionImpact;
 use App\Support\NetworkExclusions;
+use App\Support\RackCabling;
 use App\Support\SnipeItSync as SnipeItSynchronizer;
 use App\Support\Topology;
 use App\Support\UnifiInventory;
@@ -129,6 +131,20 @@ class DeviceController extends Controller
                 ->map(fn ($source) => $source->interfaceDetails()),
             'initialTab' => in_array($options['tab'] ?? null, ['ips', 'observed'], true) ? $options['tab'] : 'interfaces',
             'observed' => (new Topology)->observedOn($site, $device),
+            'links' => RackCabling::deviceLinks($site, $device),
+            'cablingRevision' => (int) $site->cabling_revision,
+            // Loaded when a link is documented from a port: every site device with its ports, and the
+            // catalog models that can take a cable, for creating the device at the other end.
+            'cabling' => Inertia::optional(fn () => [
+                'cables' => Cable::query()->where('site_id', $site->id)->with('ends')->orderBy('id')->get()->map->workspaceData(),
+                'devices' => RackCabling::devices($site),
+                'models' => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')->get()
+                    ->map(fn ($model) => [
+                        ...$model->only('id', 'name'), 'manufacturer' => $model->manufacturer->only('id', 'name'),
+                        'model_type' => $model->modelType?->only('id', 'name'),
+                        'cable_types' => collect($model->connectors())->flatMap(fn ($port) => RackCabling::connectionTypes($port['type'] ?? ''))->unique()->values(),
+                    ])->filter(fn ($model) => $model['cable_types']->isNotEmpty())->values(),
+            ]),
             'initialManagementTab' => $options['manage'] ?? (($options['tab'] ?? null) === 'mikrotik' ? 'mikrotik' : null),
             'mikrotikSources' => $request->user()->is_superadmin
                 ? Inertia::optional(fn () => (new NetworkExclusions($site->id))->display($device->mikrotikSources()->with('device.mikrotikConnection')->orderByDesc('seen_at')->get())) : [],

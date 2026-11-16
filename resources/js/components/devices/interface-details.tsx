@@ -24,6 +24,7 @@ export function InterfaceDetails({
     ips,
     actions,
     ipActions,
+    summary = true,
 }: {
     company: number;
     site: number;
@@ -32,13 +33,16 @@ export function InterfaceDetails({
     ips: InterfaceIp[];
     actions?: ReactNode;
     ipActions?: (ip: InterfaceIp) => ReactNode;
+    // Off where the surrounding header already shows the port type, PoE and MikroTik state.
+    summary?: boolean;
 }) {
     const name =
         item?.name || (!item?.mikrotik?.problem && item?.mikrotik?.name);
     const mac = item ? interfaceMac(item) : null;
+    if (!summary && !item) return null;
     return (
         <div className="flex flex-col gap-4">
-            {item?.mikrotik && (
+            {summary && item?.mikrotik && (
                 <div>
                     <MikrotikInterfaceBadge
                         source={item.mikrotik}
@@ -47,15 +51,19 @@ export function InterfaceDetails({
                 </div>
             )}
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-3 text-sm">
-                <dt className="text-muted-foreground">Tipo</dt>
-                <dd className="min-w-0 font-medium break-words">
-                    {port
-                        ? connectorTypes[port.type].name
-                        : item?.kind === 'logical'
-                          ? 'Logica'
-                          : 'Fisica'}
-                </dd>
-                {port?.poe && (
+                {summary && (
+                    <>
+                        <dt className="text-muted-foreground">Tipo</dt>
+                        <dd className="min-w-0 font-medium break-words">
+                            {port
+                                ? connectorTypes[port.type].name
+                                : item?.kind === 'logical'
+                                  ? 'Logica'
+                                  : 'Fisica'}
+                        </dd>
+                    </>
+                )}
+                {summary && port?.poe && (
                     <>
                         <dt className="text-muted-foreground">Capacità</dt>
                         <dd>

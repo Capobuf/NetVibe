@@ -249,10 +249,7 @@ class Topology
                 ]],
             ];
         }
-        $this->observed = $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
-        foreach ($observed as $deviceId => $rows) {
-            $nodes['device:'.$deviceId]['observed'] = $rows;
-        }
+        $observed = $this->portObservations($site, $devices, $interfaces, $logicalInterfaces, $ports, $macs, $unifi, $byExternalId, $inGeneration);
         $peers = [];
         foreach ($edges as $edge) {
             if ($edge['kind'] === 'discovered' && ! $edge['stale']) {
@@ -318,6 +315,21 @@ class Topology
             }
         }
         unset($edge);
+        // LLDP or CDP name the remote port of an observed device; a MAC alone never does.
+        $adjacent = [];
+        foreach ($edges as $edge) {
+            if ($edge['kind'] === 'discovered' && ! $edge['issues'] && $edge['a']['connector_id'] && $edge['b']['connector_id']) {
+                $adjacent[$edge['a']['device_id'].':'.$edge['a']['connector_id']][$edge['b']['device_id']] = $edge['b']['connector_id'];
+                $adjacent[$edge['b']['device_id'].':'.$edge['b']['connector_id']][$edge['a']['device_id']] = $edge['a']['connector_id'];
+            }
+        }
+        $this->observed = [];
+        foreach ($observed as $deviceId => $rows) {
+            $rows = array_map(fn ($row) => [...$row, 'peer_connector_id' => $row['device_id'] && $row['connector_id']
+                ? ($adjacent[$deviceId.':'.$row['connector_id']][$row['device_id']] ?? null) : null], $rows);
+            $this->observed[$deviceId] = $rows;
+            $nodes['device:'.$deviceId]['observed'] = $rows;
+        }
         $integrations = $devices->filter(fn ($device) => $device->mikrotikConnection)->map(function ($device) {
             $connection = $device->mikrotikConnection;
 

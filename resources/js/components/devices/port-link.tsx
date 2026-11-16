@@ -6,7 +6,7 @@ import {
     type ComponentProps,
     type FormEvent,
 } from 'react';
-import { Cable as CableIcon, Plus, Unplug } from 'lucide-react';
+import { Plus, Unplug } from 'lucide-react';
 import { CableFields, EndpointPicker } from '@/components/racks/cable-inspector';
 import { CablePreview } from '@/components/racks/cable-preview';
 import { IconButton } from '@/components/icon-button';
@@ -78,36 +78,26 @@ export type Cabling = {
 type Route = { company: number; site: number };
 type CloseFocus = ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
 
-export const portName = (port: Port) =>
-    port.label || connectorTypes[port.type].name;
+// A bare number reads as a position on the panel.
+export const portTitle = (port: Port) =>
+    port.label
+        ? /^\d+$/.test(port.label)
+            ? `Porta ${port.label}`
+            : port.label
+        : connectorTypes[port.type].name;
 
-/** The documented side of a port, next to what the integrations observe on it. */
+/** The documented cable on a port, next to what the integrations observe on it. */
 export function PortLink({
     route,
     link,
-    canDocument,
-    onDocument,
+    canEdit,
     onUnlink,
 }: {
     route: Route;
-    link?: DeviceLink;
-    canDocument: boolean;
-    onDocument: () => void;
+    link: DeviceLink;
+    canEdit: boolean;
     onUnlink: (link: DeviceLink) => void;
 }) {
-    if (!link)
-        return canDocument ? (
-            <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="self-start"
-                onClick={onDocument}
-            >
-                <CableIcon data-icon="inline-start" />
-                Documenta collegamento
-            </Button>
-        ) : null;
     return (
         <section
             aria-label="Collegamento documentato"
@@ -146,7 +136,7 @@ export function PortLink({
                         </span>
                     </span>
                 </span>
-                {canDocument && (
+                {canEdit && (
                     <IconButton
                         label={`Scollega C-${link.id}`}
                         variant="ghost"
@@ -246,6 +236,7 @@ export function PortLinkDialog({
     cabling,
     revision,
     suggestedIds,
+    destination,
     onClose,
     onSaved,
     onCloseAutoFocus,
@@ -256,6 +247,8 @@ export function PortLinkDialog({
     cabling?: Cabling;
     revision: number;
     suggestedIds: number[];
+    // Prefilled from an observed device; still confirmed by the operator.
+    destination?: CableEnd;
     onClose: () => void;
     onSaved: () => void;
     onCloseAutoFocus?: CloseFocus;
@@ -265,7 +258,7 @@ export function PortLinkDialog({
     const form = useForm<Cable>({
         id: -1,
         a: { device_id: device.id, connector_id: port.id },
-        b: { device_id: 0, connector_id: '' },
+        b: destination ?? { device_id: 0, connector_id: '' },
         type: types[0] ?? 'copper',
         color: '#2563eb',
         purpose: null,
@@ -368,7 +361,7 @@ export function PortLinkDialog({
                     <DialogHeader className="border-b pb-4">
                         <DialogTitle>Documenta collegamento</DialogTitle>
                         <DialogDescription>
-                            {device.name} · {portName(port)}
+                            {device.name} · {portTitle(port)}
                         </DialogDescription>
                     </DialogHeader>
                     {!cabling ? (

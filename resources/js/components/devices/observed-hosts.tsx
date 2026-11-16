@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { DataTable } from '@/components/data-table';
 import TextLink from '@/components/text-link';
 import { Badge } from '@/components/ui/badge';
@@ -67,10 +67,12 @@ export function ObservedHostsTable({
     rows,
     route,
     links,
+    actions,
 }: {
     rows: TopologyObservation[];
     route: Route;
     links: DeviceLink[];
+    actions?: (row: TopologyObservation) => ReactNode;
 }) {
     const linkOf = (row: TopologyObservation) =>
         row.connector_id
@@ -117,6 +119,7 @@ export function ObservedHostsTable({
                 { id: 'seen_at', label: 'Ultima lettura', visible: true },
             ]}
             value={value}
+            actions={actions}
             render={(row, column) => {
                 switch (column) {
                     case 'port':
@@ -175,116 +178,110 @@ export function ObservedHostsTable({
     );
 }
 
-const explanations = [
-    'Switch non gestito',
-    'Telefono IP con PC in cascata',
-    'Access point o bridge',
-    'Macchine virtuali',
-    'Altro apparato non documentato',
-];
-
 // Inventory devices first, then hosts known by name, then bare MACs.
 const rank = (row: TopologyObservation) =>
     row.device_id ? 0 : row.name ? 1 : 2;
 
-/** Compact list for one port, sized for the port popover. */
+/** Hosts seen on one port, collapsed in the port popup until the technician opens them. */
 export function ObservedHostsList({
     rows,
     route,
+    actions,
 }: {
     rows: TopologyObservation[];
     route: Route;
+    actions?: (row: TopologyObservation) => ReactNode;
 }) {
-    const [explained, setExplained] = useState(false);
+    const [open, setOpen] = useState(false);
     // Every host on a port is read by the same sources at the same time: show it once.
     const seen = lastSeen(rows);
     const stale = rows.every(isStale);
     // Several MACs prove neither a switch nor how many ports it has.
     const several = rows.reduce((total, row) => total + row.macs.length, 0) > 1;
     return (
-        <section
-            aria-label="Rilevati su questa porta"
-            className="flex flex-col gap-3"
+        <Collapsible
+            open={open}
+            onOpenChange={setOpen}
+            className="rounded-lg border"
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h3 className="text-sm font-medium">
+            <CollapsibleTrigger className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <ChevronRight
+                    aria-hidden
+                    className={cn(
+                        'mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
+                        open && 'rotate-90',
+                    )}
+                />
+                <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">
                         Rilevati su questa porta{' '}
                         <span className="font-normal text-muted-foreground tabular-nums">
                             {rows.length}
                         </span>
-                    </h3>
-                    <p className="text-xs text-muted-foreground tabular-nums">
+                    </span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">
                         {sourceNames(rows)}
                         {seen && ` · ${formatDateTime(seen)}`}
-                    </p>
-                </div>
+                    </span>
+                </span>
                 {stale && (
                     <Badge variant="outline" className="shrink-0">
                         Non aggiornato
                     </Badge>
                 )}
-            </div>
-            {several && (
-                <Collapsible
-                    open={explained}
-                    onOpenChange={setExplained}
-                    className="rounded-lg bg-muted/50"
-                >
-                    <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                        Possibili spiegazioni
-                        <ChevronDown
-                            aria-hidden
-                            className={cn(
-                                'size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
-                                explained && 'rotate-180',
-                            )}
-                        />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <ul className="flex list-disc flex-col gap-1 px-3 pt-1 pb-3 pl-7 text-sm text-muted-foreground">
-                            {explanations.map((item) => (
-                                <li key={item}>{item}</li>
-                            ))}
-                        </ul>
-                    </CollapsibleContent>
-                </Collapsible>
-            )}
-            <ul className="divide-y rounded-lg border">
-                {[...rows].sort((a, b) => rank(a) - rank(b)).map((row) => {
-                    const macs = row.name ? row.macs : row.macs.slice(1);
-                    return (
-                        <li
-                            key={row.key}
-                            className="flex items-baseline justify-between gap-3 px-3 py-2"
-                        >
-                            <span className="min-w-0">
-                                <span className="block truncate text-sm">
-                                    <HostName row={row} route={route} />
-                                </span>
-                                {(macs.length > 0 ||
-                                    (!stale && isStale(row))) && (
-                                    <span className="block truncate text-xs text-muted-foreground tabular-nums">
-                                        {[
-                                            macs.join(', '),
-                                            !stale &&
-                                                isStale(row) &&
-                                                'Non aggiornato',
-                                        ]
-                                            .filter(Boolean)
-                                            .join(' · ')}
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                {several && (
+                    <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                        Possibili spiegazioni: switch non gestito, telefono IP
+                        con PC in cascata, access point o bridge, macchine
+                        virtuali o altro.
+                    </p>
+                )}
+                <ul className="divide-y border-t">
+                    {[...rows]
+                        .sort((a, b) => rank(a) - rank(b))
+                        .map((row) => {
+                            const macs = row.name
+                                ? row.macs
+                                : row.macs.slice(1);
+                            const action = actions?.(row);
+                            return (
+                                <li
+                                    key={row.key}
+                                    className="flex min-h-12 items-center justify-between gap-3 px-3 py-2"
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-sm">
+                                            <HostName row={row} route={route} />
+                                        </span>
+                                        {(macs.length > 0 ||
+                                            (!stale && isStale(row))) && (
+                                            <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                                                {[
+                                                    macs.join(', '),
+                                                    !stale &&
+                                                        isStale(row) &&
+                                                        'Non aggiornato',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                            </span>
+                                        )}
                                     </span>
-                                )}
-                            </span>
-                            {row.ips.length > 0 && (
-                                <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-                                    {row.ips.join(', ')}
-                                </span>
-                            )}
-                        </li>
-                    );
-                })}
-            </ul>
-        </section>
+                                    <span className="flex shrink-0 items-center gap-2">
+                                        {row.ips.length > 0 && (
+                                            <span className="text-sm text-muted-foreground tabular-nums">
+                                                {row.ips.join(', ')}
+                                            </span>
+                                        )}
+                                        {action}
+                                    </span>
+                                </li>
+                            );
+                        })}
+                </ul>
+            </CollapsibleContent>
+        </Collapsible>
     );
 }

@@ -156,7 +156,7 @@ class IpAddressesTest extends TestCase
         $show = route('companies.sites.subnets.show', [$company, $site, $subnet]);
 
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->has('ipAddresses.data', 25)->where('ipAddresses.per_page', 25));
+            ->has('ipAddresses.data', 50)->where('ipAddresses.per_page', 50));
         $this->get($show.'?search=10.0.0.&sort=ip&direction=desc&per_page=10&page=2')
             ->assertInertia(fn (Assert $page) => $page
                 ->has('ipAddresses.data', 10)->where('ipAddresses.total', 254)
@@ -208,11 +208,11 @@ class IpAddressesTest extends TestCase
         ])->assertRedirect($show)->assertSessionHasNoErrors();
 
         foreach ([
-            ['sort=ip&direction=asc', 8, 24],
-            ['sort=ip&direction=desc', 3, 4],
-            ['sort=hostname&direction=asc', 11, 3],
+            ['sort=ip&direction=asc', 4, 49],
+            ['sort=ip&direction=desc', 2, 4],
+            ['sort=hostname&direction=asc', 6, 3],
             ['sort=hostname&direction=desc', 1, 0],
-            ['sort=hostname&direction=asc&hide_free=1&search=node', 2, 5],
+            ['sort=hostname&direction=asc&hide_free=1&search=node', 1, 30],
         ] as [$query, $number, $index]) {
             $this->get($show.'?focus_ip=10.0.0.200&'.$query)->assertInertia(fn (Assert $page) => $page
                 ->where('ipAddresses.current_page', $number)
@@ -239,12 +239,12 @@ class IpAddressesTest extends TestCase
 
         $this->get($show.'?hide_free=1')->assertOk();
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->where('query.hide_free', 1)->where('auth.user.subnet_table_separators', true));
+            ->where('query.hide_free', 1)->where('auth.user.subnet_table_separators', false));
 
-        $this->from($show)->patch(route('preferences.update'), ['subnet_table_separators' => false])
+        $this->from($show)->patch(route('preferences.update'), ['subnet_table_separators' => true])
             ->assertRedirect($show)->assertSessionHasNoErrors();
         $this->get($show)->assertInertia(fn (Assert $page) => $page
-            ->where('auth.user.subnet_table_separators', false)->where('auth.user.subnet_hide_free', true));
+            ->where('auth.user.subnet_table_separators', true)->where('auth.user.subnet_hide_free', true));
 
         $this->actingAs(User::factory()->create(['is_superadmin' => true]))
             ->get($show)->assertInertia(fn (Assert $page) => $page->where('query.hide_free', 0));

@@ -4,9 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\RackRequest;
 use App\Models\Company;
+use App\Models\DeviceModel;
 use App\Models\Floor;
 use App\Models\FloorItem;
+use App\Models\Manufacturer;
+use App\Models\ModelType;
 use App\Models\Site;
+use App\Models\SnipeItSync;
+use App\Support\SnipeItSync as SnipeItSynchronizer;
 use App\Support\Topology;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -105,9 +110,9 @@ class FloorController extends Controller
                 $floors = [];
                 foreach ($stored as $page) {
                     $floor = $site->floors()->lockForUpdate()->firstWhere('code', $page['floor']) ?? $site->floors()->create(['code' => $page['floor']]);
+                    // Positions and crop are fractions of the image: they stay valid only for the same proportions.
+                    $sameShape = $floor->image_path && abs(($page['width'] / $page['height']) / ($floor->image_width / $floor->image_height) - 1) <= 0.01;
                     if ($floor->image_path && $floor->items()->exists()) {
-                        // Positions are fractions of the image: they stay valid only for the same proportions.
-                        $sameShape = abs(($page['width'] / $page['height']) / ($floor->image_width / $floor->image_height) - 1) <= 0.01;
                         if (! $sameShape && ! ($data['positions'] ?? null)) {
                             throw ValidationException::withMessages(['positions' => "La nuova planimetria del piano {$floor->code} ha proporzioni diverse. Scegli se mantenere o rimuovere le posizioni."]);
                         }
@@ -116,7 +121,12 @@ class FloorController extends Controller
                         }
                     }
                     $previous[] = $floor->image_path;
-                    $floor->forceFill(['image_path' => $page['path'], 'image_width' => $page['width'], 'image_height' => $page['height'], 'revision' => $floor->revision + 1])->save();
+                    $floor->forceFill([
+                        // The same drawing at another resolution keeps its crop; the scale follows the pixels.
+                        ...($sameShape ? ['scale' => $floor->scale ? $floor->scale * $page['width'] / $floor->image_width : null]
+                            : ['crop_x' => null, 'crop_y' => null, 'crop_width' => null, 'crop_height' => null, 'scale' => null]),
+                        'image_path' => $page['path'], 'image_width' => $page['width'], 'image_height' => $page['height'], 'revision' => $floor->revision + 1,
+                    ])->save();
                     $floors[] = $floor;
                 }
 
@@ -141,21 +151,37 @@ class FloorController extends Controller
         $data = $request->validate([
             'revision' => ['required', 'integer', 'min:0'],
             'items' => ['present', 'array', 'max:2000'],
-            'items.*' => ['array:device_id,rack_id,x,y'],
+            'items.*' => ['array:device_id,rack_id,x,y,hidden,locked,width,height'],
             'items.*.device_id' => ['nullable', 'integer', 'min:1', 'required_without:items.*.rack_id', 'prohibits:items.*.rack_id'],
             'items.*.rack_id' => ['nullable', 'integer', 'min:1'],
             'items.*.x' => ['required', 'numeric', 'between:0,1'],
             'items.*.y' => ['required', 'numeric', 'between:0,1'],
-        ], [], ['items' => 'posizioni']);
+            'items.*.hidden' => ['sometimes', 'boolean'],
+            'items.*.locked' => ['sometimes', 'boolean'],
+            'items.*.width' => ['nullable', 'numeric', 'between:0.1,500', 'required_with:items.*.height'],
+            'items.*.height' => ['nullable', 'numeric', 'between:0.1,500', 'required_with:items.*.width'],
+            'crop' => ['sometimes', 'nullable', 'array:x,y,width,height'],
+            'crop.x' => ['required_with:crop', 'numeric', 'between:0,1'],
+            'crop.y' => ['required_with:crop', 'numeric', 'between:0,1'],
+            'crop.width' => ['required_with:crop', 'numeric', 'between:0.05,1'],
+            'crop.height' => ['required_with:crop', 'numeric', 'between:0.05,1'],
+            'scale' => ['sometimes', 'nullable', 'numeric', 'gt:0', 'max:100000'],
+        ], [], ['items' => 'posizioni', 'items.*.width' => 'larghezza', 'items.*.height' => 'profondità', 'crop' => 'ritaglio', 'scale' => 'scala']);
+        $crop = $data['crop'] ?? null;
+        if ($crop && ($crop['x'] + $crop['width'] > 1.0001 || $crop['y'] + $crop['height'] > 1.0001)) {
+            throw ValidationException::withMessages(['crop' => 'Il ritaglio deve restare dentro la planimetria.']);
+        }
         $items = collect($data['items'])->map(fn ($item) => [
             'device_id' => $item['device_id'] ?? null, 'rack_id' => $item['rack_id'] ?? null,
             'x' => (float) $item['x'], 'y' => (float) $item['y'],
+            'hidden' => (bool) ($item['hidden'] ?? false), 'locked' => (bool) ($item['locked'] ?? false),
+            'width' => isset($item['width']) ? (float) $item['width'] : null, 'height' => isset($item['height']) ? (float) $item['height'] : null,
         ]);
         if ($items->pluck('device_id')->filter()->duplicates()->isNotEmpty() || $items->pluck('rack_id')->filter()->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages(['items' => 'Ogni elemento può avere una sola posizione sul piano.']);
         }
         try {
-            DB::transaction(function () use ($data, $items, $company, $site, $floor) {
+            DB::transaction(function () use ($data, $items, $crop, $company, $site, $floor) {
                 Company::query()->lockForUpdate()->findOrFail($company->id);
                 $floor = $this->lockFloor($site, $floor, $data['revision']);
                 if (! $floor->image_path && $items->isNotEmpty()) {
@@ -168,9 +194,21 @@ class FloorController extends Controller
                     || $site->racks()->whereKey($racks)->sharedLock()->count() !== $racks->count()) {
                     throw ValidationException::withMessages(['items' => 'Alcuni elementi non esistono più nella sede. Ricarica il piano prima di salvare.']);
                 }
+                if (array_key_exists('crop', $data)) {
+                    $floor->forceFill(['crop_x' => $crop['x'] ?? null, 'crop_y' => $crop['y'] ?? null,
+                        'crop_width' => $crop['width'] ?? null, 'crop_height' => $crop['height'] ?? null]);
+                }
+                if (array_key_exists('scale', $data)) {
+                    $floor->forceFill(['scale' => $data['scale']]);
+                }
+                // Footprints are real sizes: without a scale they cannot be drawn.
+                if (! $floor->scale && $items->whereNotNull('width')->isNotEmpty()) {
+                    throw ValidationException::withMessages(['scale' => 'Imposta la scala del piano prima di disegnare gli ingombri.']);
+                }
+                // The order of the list is the stacking order: later items are drawn above.
                 $floor->items()->delete();
                 $floor->items()->createMany($items->all());
-                $floor->update(['revision' => $floor->revision + 1]);
+                $floor->forceFill(['revision' => $floor->revision + 1])->save();
             }, 3);
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['items' => 'Un elemento è già posizionato su questo piano. Ricarica la pagina prima di riprovare.']);
@@ -198,6 +236,10 @@ class FloorController extends Controller
 
     private function render(Company $company, Site $site, $floors, ?Floor $floor = null, ?Topology $topology = null): Response
     {
+        // Same access as the import on the device list.
+        $snipeIt = request()->user()->is_superadmin ? SnipeItSync::current($company) : null;
+        $snipeIt = $snipeIt?->isActive() ? $snipeIt : null;
+
         return Inertia::render('floors/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'editing' => request()->boolean('edit'),
@@ -211,27 +253,39 @@ class FloorController extends Controller
                 'image' => $item->image_path ? ['width' => $item->image_width, 'height' => $item->image_height] : null,
             ])->values(),
             'floor' => $floor ? [
-                ...$floor->only('id', 'code', 'revision'),
+                ...$floor->only('id', 'code', 'revision', 'scale'),
+                'crop' => $floor->crop(),
                 'image' => $floor->image_path ? [
                     // The stored file name changes with every upload, so the URL busts cached copies.
                     'url' => route('companies.sites.floors.image', [$company, $site, $floor, 'v' => substr(md5($floor->image_path), 0, 8)]),
                     'width' => $floor->image_width, 'height' => $floor->image_height,
                 ] : null,
-                'items' => $floor->items()->orderBy('id')->get(['device_id', 'rack_id', 'x', 'y']),
+                'items' => $floor->items()->orderBy('id')->get(['device_id', 'rack_id', 'x', 'y', 'hidden', 'locked', 'width', 'height']),
             ] : null,
             // Positions on the site's other floors, to show where an element already is.
             'elsewhere' => FloorItem::query()->join('floors', 'floors.id', '=', 'floor_items.floor_id')
                 ->where('floors.site_id', $site->id)->when($floor, fn ($query) => $query->where('floors.id', '!=', $floor->id))
                 ->get(['floor_items.device_id', 'floor_items.rack_id', 'floors.code as floor']),
-            'devices' => $site->devices()->with(['model:id,name', 'manufacturer:id,name', 'ipAddresses:id,device_id,address', 'rackItem.rack:id,name'])
+            'devices' => $site->devices()->with(['model:id,name,model_type_id', 'model.modelType:id,name', 'manufacturer:id,name', 'ipAddresses:id,device_id,address', 'rackItem.rack:id,name'])
                 ->orderBy('name')->get()->map(fn ($device) => [
                     ...$device->only('id', 'name'),
+                    'model_id' => $device->device_model_id, 'type' => $device->model?->modelType?->name,
                     'model' => $device->model?->name, 'manufacturer' => $device->manufacturer?->name,
                     'ips' => $device->ipAddresses->sortBy('address')->map(fn ($ip) => long2ip($ip->address))->values(),
                     'rack' => $device->rackItem?->rack?->only('id', 'name'),
                 ]),
             'racks' => $site->racks()->withCount(['items as devices_count' => fn ($query) => $query->whereNotNull('device_id')])
                 ->orderBy('name')->get(['id', 'name', 'floor', 'height_u']),
+            // What new elements are made of: catalog models, and what a new model needs.
+            'models' => fn () => DeviceModel::query()->with(['manufacturer:id,name', 'modelType:id,name'])->orderBy('name')
+                ->get(['id', 'name', 'manufacturer_id', 'model_type_id'])->map(fn ($model) => [
+                    ...$model->only('id', 'name'), 'manufacturer' => $model->manufacturer->only('id', 'name'),
+                    'model_type' => $model->modelType?->only('id', 'name'),
+                ]),
+            'manufacturers' => fn () => Manufacturer::query()->orderBy('name')->get(['id', 'name']),
+            'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name', 'is_infrastructure', 'show_in_topology']),
+            'snipeIt' => $snipeIt !== null,
+            'snipeItImport' => Inertia::optional(fn () => $snipeIt ? app(SnipeItSynchronizer::class)->importList($snipeIt) : null),
         ]);
     }
 

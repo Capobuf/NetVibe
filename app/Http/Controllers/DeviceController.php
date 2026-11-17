@@ -56,7 +56,7 @@ class DeviceController extends Controller
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'manufacturers' => $this->catalog(),
             'snipeIt' => $sync !== null,
-            'snipeItImport' => Inertia::optional(fn () => $sync ? $this->snipeItImport($sync) : null),
+            'snipeItImport' => Inertia::optional(fn () => $sync ? app(SnipeItSynchronizer::class)->importList($sync) : null),
             'types' => fn () => ModelType::query()->orderBy('name')->get(['id', 'name']),
             'devices' => $site->devices()
                 ->select(['id', 'site_id', 'name', 'manufacturer_id', 'device_model_id', 'infrastructure_override', 'image_path'])
@@ -79,27 +79,6 @@ class DeviceController extends Controller
     }
 
     /** Snipe-IT assets not yet in NetVibe, offered for import from the device list. */
-    private function snipeItImport(SnipeItSync $sync): array
-    {
-        $synchronizer = app(SnipeItSynchronizer::class);
-        $assets = $sync->assets()->where('state', '!=', 'excluded')->where('present', true)->whereNull('device_id')
-            ->with('externalModel')->orderByDesc('id')->get()->each->setRelation('sync', $sync);
-        // Same matching rules as the Snipe-IT asset page, batched in one query.
-        $candidates = $assets->map(fn ($asset) => $synchronizer->deviceCandidates($asset)->whereDoesntHave('snipeItAsset')
-            ->select('devices.id', 'devices.name')->selectRaw('? as candidate_asset_id', [$asset->id]))
-            ->reduce(fn ($union, $query) => $union ? $union->unionAll($query) : $query)?->get()->groupBy('candidate_asset_id') ?? collect();
-        $ambiguous = $assets->pluck('externalModel')->filter()->unique('id')
-            ->filter(fn ($external) => ! $external->device_model_id && $synchronizer->modelCandidates($external)->count() > 1)->pluck('id');
-
-        return ['sync' => $sync->only('id', 'revision'), 'assets' => $assets->map(fn ($asset) => [
-            'id' => $asset->id, 'name' => $asset->snapshot['name'] ?? $asset->snapshot['asset_tag'] ?? null,
-            'serial' => $asset->snapshot['serial'] ?? null, 'ip' => $asset->snapshot['network']['ip'] ?? null,
-            'model' => $asset->externalModel ? trim(($asset->externalModel->snapshot['manufacturer'] ?? '').' '.($asset->externalModel->snapshot['name'] ?? '')) : null,
-            'problem' => $asset->problem, 'model_ambiguous' => $ambiguous->contains($asset->snipe_it_model_id),
-            'candidates' => $candidates->get($asset->id, collect())->map->only('id', 'name')->values(),
-        ])->values()];
-    }
-
     public function show(Request $request, Company $company, Site $site, Device $device): Response
     {
         $options = $request->validate([

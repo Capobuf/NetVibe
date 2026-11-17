@@ -11,18 +11,28 @@ export type FloorListItem = FloorSummary & {
     image: { width: number; height: number } | null;
 };
 
-/** x and y are fractions of the floor plan image size (0–1). */
+/** x and y are fractions of the floor plan image size (0–1); width and height are a footprint in metres. */
 export type FloorItem = {
     device_id: number | null;
     rack_id: number | null;
     x: number;
     y: number;
+    hidden: boolean;
+    locked: boolean;
+    width: number | null;
+    height: number | null;
 };
+
+/** Visible part of the plan, as fractions of the uploaded image. */
+export type FloorCrop = { x: number; y: number; width: number; height: number };
 
 export type FloorImage = { url: string; width: number; height: number };
 
 export type Floor = FloorSummary & {
     revision: number;
+    /** Image pixels per metre, when a known distance has been measured. */
+    scale: number | null;
+    crop: FloorCrop | null;
     image: FloorImage | null;
     items: FloorItem[];
 };
@@ -30,6 +40,9 @@ export type Floor = FloorSummary & {
 export type FloorDevice = {
     id: number;
     name: string;
+    model_id: number | null;
+    /** Model type, which groups the layers. */
+    type: string | null;
     model: string | null;
     manufacturer: string | null;
     ips: string[];
@@ -56,6 +69,17 @@ export type FloorMarker = {
     label: string;
     x: number;
     y: number;
+    locked: boolean;
+    /** Footprint in image pixels, when the item has one and the floor a scale. */
+    footprint: { width: number; height: number } | null;
+};
+
+/** A catalog model a new element can be made of. */
+export type FloorModel = {
+    id: number;
+    name: string;
+    manufacturer: { id: number; name: string };
+    model_type: { id: number; name: string } | null;
 };
 
 /** The site's documented cables and observations, as the topology computes them, hidden models included. */

@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { AlertTriangle, Link2, Search } from 'lucide-react';
 import { SnipeItMark } from '@/components/snipe-it-mark';
 import { useSiteContext } from '@/hooks/use-site-context';
@@ -67,10 +67,14 @@ export function SnipeItImport({
     company,
     site,
     data,
+    label = 'Sincronizza',
+    size,
 }: {
     company: Company;
     site: Site;
     data?: SnipeItImportData | null;
+    label?: string;
+    size?: ComponentProps<typeof Button>['size'];
 }) {
     const context = useSiteContext(company, site);
     const [open, setOpen] = useState(false);
@@ -195,11 +199,12 @@ export function SnipeItImport({
         <>
             <Button
                 variant="outline"
+                size={size}
                 disabled={syncing || importing}
                 onClick={synchronize}
             >
                 {syncing ? <Spinner /> : <SnipeItMark className="size-4" />}
-                Sincronizza
+                {label}
             </Button>
             <Sheet
                 open={open}

@@ -24,6 +24,15 @@ import type { FloorMarker } from '@/types/floor';
 
 export const FLOOR_PLAN_DRAG_TYPE = 'application/x-netvibe-floor-plan';
 
+/** A relation drawn between two markers: solid when documented, dashed when only reported by integrations. */
+export type FloorPlanLine = {
+    key: string;
+    from: string;
+    to: string;
+    documented: boolean;
+    stale: boolean;
+};
+
 export type FloorPlanCanvasApi = {
     fit: () => void;
     zoom: (factor: number) => void;
@@ -41,6 +50,7 @@ export function FloorPlanCanvas({
     markers,
     selected,
     highlighted,
+    lines = [],
     labels,
     editing,
     onSelect,
@@ -58,6 +68,7 @@ export function FloorPlanCanvas({
     selected: string | null;
     /** Markers matching the search; null when nothing is searched. */
     highlighted: Set<string> | null;
+    lines?: FloorPlanLine[];
     labels: boolean;
     editing: boolean;
     onSelect: (key: string | null) => void;
@@ -193,6 +204,7 @@ export function FloorPlanCanvas({
         if (container.current) container.current.style.cursor = cursor;
     }
     const selectedMarker = markers.find((marker) => marker.key === selected);
+    const markerByKey = new Map(markers.map((marker) => [marker.key, marker]));
 
     return (
         <div
@@ -334,6 +346,44 @@ export function FloorPlanCanvas({
                         strokeWidth={1 / view.scale}
                         listening={false}
                     />
+                    {lines.map((line) => {
+                        const from = markerByKey.get(line.from);
+                        const to = markerByKey.get(line.to);
+                        if (!from || !to) return null;
+                        const points = [
+                            from.x * width,
+                            from.y * height,
+                            to.x * width,
+                            to.y * height,
+                        ];
+                        return (
+                            <Group
+                                key={line.key}
+                                listening={false}
+                                opacity={line.stale ? 0.5 : 1}
+                            >
+                                {/* The halo keeps the line readable over any drawing. */}
+                                <Line
+                                    points={points}
+                                    stroke={colors.halo}
+                                    strokeWidth={6 / view.scale}
+                                    lineCap="round"
+                                    opacity={0.8}
+                                />
+                                <Line
+                                    points={points}
+                                    stroke={colors.accent}
+                                    strokeWidth={2.5 / view.scale}
+                                    lineCap="round"
+                                    dash={
+                                        line.documented
+                                            ? undefined
+                                            : [10 / view.scale, 6 / view.scale]
+                                    }
+                                />
+                            </Group>
+                        );
+                    })}
                     {markers.map((marker) => {
                         const active = marker.key === selected;
                         const dimmed =

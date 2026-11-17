@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Floor;
 use App\Models\FloorItem;
 use App\Models\Site;
+use App\Support\Topology;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,9 +33,9 @@ class FloorController extends Controller
             : $this->render($company, $site, $floors);
     }
 
-    public function show(Company $company, Site $site, Floor $floor): Response
+    public function show(Company $company, Site $site, Floor $floor, Topology $topology): Response
     {
-        return $this->render($company, $site, $this->floors($site), $floor);
+        return $this->render($company, $site, $this->floors($site), $floor, $topology);
     }
 
     public function image(Company $company, Site $site, Floor $floor): StreamedResponse
@@ -195,11 +196,16 @@ class FloorController extends Controller
         return to_route('companies.sites.floors.index', [$company, $site]);
     }
 
-    private function render(Company $company, Site $site, $floors, ?Floor $floor = null): Response
+    private function render(Company $company, Site $site, $floors, ?Floor $floor = null, ?Topology $topology = null): Response
     {
         return Inertia::render('floors/show', [
             'company' => $company->only('id', 'name'), 'site' => $site->only('id', 'name'),
             'editing' => request()->boolean('edit'),
+            // Opened from another floor's links: the element to select, and whether its links stay drawn.
+            'select' => request()->string('select')->value() ?: null,
+            'showLinks' => request()->boolean('links'),
+            // Same documented cables and observations as the topology, hidden models included: the floor plan has its own visibility.
+            'links' => $floor?->image_path && $topology ? Inertia::defer(fn () => self::links($topology->forSite($site, true))) : null,
             'floors' => $floors->map(fn (Floor $item) => [
                 ...$item->only('id', 'code'), 'items_count' => $item->items_count,
                 'image' => $item->image_path ? ['width' => $item->image_width, 'height' => $item->image_height] : null,
@@ -227,6 +233,19 @@ class FloorController extends Controller
             'racks' => $site->racks()->withCount(['items as devices_count' => fn ($query) => $query->whereNotNull('device_id')])
                 ->orderBy('name')->get(['id', 'name', 'floor', 'height_u']),
         ]);
+    }
+
+    private static function links(array $topology): array
+    {
+        $nodes = collect($topology['nodes']);
+
+        return [
+            'edges' => $topology['edges'],
+            // Neighbors that integrations report but the inventory does not hold.
+            'neighbors' => (object) $nodes->whereNull('device_id')->pluck('label', 'id')->all(),
+            'observed' => (object) $nodes->whereNotNull('device_id')->filter(fn ($node) => $node['observed'])
+                ->mapWithKeys(fn ($node) => [$node['device_id'] => $node['observed']])->all(),
+        ];
     }
 
     private function floors(Site $site)

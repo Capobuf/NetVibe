@@ -6,6 +6,7 @@ import {
     GripVertical,
     ImageUp,
     Layers,
+    LocateFixed,
     Map as MapIcon,
     MapPinOff,
     MapPinPlus,
@@ -17,6 +18,7 @@ import {
     Tag,
     Trash2,
     Undo2,
+    Waypoints,
     X,
 } from 'lucide-react';
 import { Fragment, useRef, useState, type ReactNode } from 'react';
@@ -30,10 +32,12 @@ import {
     FLOOR_PLAN_DRAG_TYPE,
     FloorPlanCanvas,
     type FloorPlanCanvasApi,
+    type FloorPlanLine,
 } from '@/components/floor-plans/floor-plan-canvas';
 import { IconButton } from '@/components/icon-button';
 import { SaveButton } from '@/components/save-button';
 import TextLink from '@/components/text-link';
+import { LinkSwatch } from '@/components/topology/link-swatch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,13 +70,15 @@ import {
     InputGroupAddon,
     InputGroupInput,
 } from '@/components/ui/input-group';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ZoomControls } from '@/components/zoom-controls';
 import { useLeaveGuard } from '@/hooks/use-leave-guard';
 import { useSiteContext } from '@/hooks/use-site-context';
-import { cn } from '@/lib/utils';
+import { floorLinks, type FloorLinkRow } from '@/lib/floor-links';
+import { cn, formatDateTime } from '@/lib/utils';
 import {
     index as deviceIndex,
     show as deviceShow,
@@ -89,6 +95,7 @@ import {
     type FloorDevice,
     type FloorImage,
     type FloorItem,
+    type FloorLinks,
     type FloorMarker,
     type FloorPlacement,
     type FloorRack,
@@ -99,11 +106,15 @@ type Props = {
     company: Company;
     site: Site;
     editing: boolean;
+    select: string | null;
+    showLinks: boolean;
     floors: FloorListItem[];
     floor: Floor | null;
     elsewhere: FloorPlacement[];
     devices: FloorDevice[];
     racks: FloorRack[];
+    /** Deferred: undefined while loading, null for a floor without plan. */
+    links?: FloorLinks | null;
 };
 type FloorProps = Props & { floor: Floor };
 type Action = 'create' | 'edit' | 'image' | 'delete';
@@ -388,12 +399,15 @@ function FloorEditor({
     company,
     site,
     editing: initialEditing,
+    select,
+    showLinks: initialShowLinks,
     floors,
     floor,
     image,
     elsewhere,
     devices,
     racks,
+    links,
 }: FloorProps & { image: FloorImage }) {
     const route = { company: company.id, site: site.id };
     const context = useSiteContext(company, site);
@@ -402,7 +416,8 @@ function FloorEditor({
     const processing = form.processing;
     const isDirty = form.isDirty;
     const [editing, setEditing] = useState(initialEditing);
-    const [selected, setSelected] = useState<string | null>(null);
+    const [selected, setSelected] = useState<string | null>(select);
+    const [showLinks, setShowLinks] = useState(initialShowLinks);
     const [search, setSearch] = useState('');
     const [kinds, setKinds] = useState<Kind[]>(['device', 'rack']);
     const [labels, setLabels] = useState(true);
@@ -493,6 +508,62 @@ function FloorEditor({
     });
     const active = selected ? byKey.get(selected) : undefined;
     const feedback = error || Object.values(form.errors).join(' ');
+
+    const deviceById = new Map(devices.map((device) => [device.id, device]));
+    const floorIds = new Map(floors.map((item) => [item.code, item.id]));
+    /** The marker that locates a device on this floor: its own, or its rack's. */
+    function markerOf(id: number): string | null {
+        if (placed.has(`d-${id}`)) return `d-${id}`;
+        const rack = deviceById.get(id)?.rack;
+        return rack && placed.has(`r-${rack.id}`) ? `r-${rack.id}` : null;
+    }
+    /** Another floor holding the device or its rack, with the key to select there. */
+    function elsewhereOf(id: number): { code: string; key: string } | null {
+        const own = others.get(`d-${id}`)?.[0];
+        if (own) return { code: own, key: `d-${id}` };
+        const rack = deviceById.get(id)?.rack;
+        const code = rack && others.get(`r-${rack.id}`)?.[0];
+        return code ? { code, key: `r-${rack.id}` } : null;
+    }
+    // A rack speaks for its devices that have no position of their own on this floor.
+    const activeIds = new Set(
+        active?.device
+            ? [active.device.id]
+            : active?.rack
+              ? (rackDevices.get(active.rack.id) ?? [])
+                    .filter((device) => !placed.has(`d-${device.id}`))
+                    .map((device) => device.id)
+              : [],
+    );
+    const linked =
+        links && active && placed.has(active.key)
+            ? floorLinks(links, activeIds)
+            : null;
+    const lines = new Map<string, FloorPlanLine>();
+    if (active && linked && showLinks) {
+        for (const row of linked.rows) {
+            const to =
+                row.peer.device_id !== null
+                    ? markerOf(row.peer.device_id)
+                    : null;
+            if (!to || to === active.key) continue;
+            const current = lines.get(to);
+            lines.set(to, {
+                key: to,
+                from: active.key,
+                to,
+                documented:
+                    !!current?.documented || row.kind === 'documented',
+                stale: (current?.stale ?? true) && row.stale,
+            });
+        }
+    }
+    const highlighted =
+        active && linked && showLinks
+            ? new Set([active.key, ...lines.keys()])
+            : term
+              ? new Set(matches.map((entry) => entry.key))
+              : null;
 
     function setItems(next: FloorItem[]) {
         setError('');
@@ -639,6 +710,126 @@ function FloorEditor({
                 >
                     <MapPinPlus />
                 </IconButton>
+            </li>
+        );
+    }
+
+    const rowClass =
+        'flex w-full items-start gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring';
+    function linkRow(row: FloorLinkRow) {
+        const peerId = row.peer.device_id;
+        const peerName =
+            peerId !== null
+                ? (deviceById.get(peerId)?.name ?? 'Dispositivo')
+                : row.peer.label || 'Neighbor non identificato';
+        const local = [
+            active?.rack ? deviceById.get(row.local.device_id)?.name : null,
+            row.local.port,
+        ]
+            .filter(Boolean)
+            .join(' · ');
+        const sources = [
+            ...new Map(row.sources.map((item) => [item.source, item])).values(),
+        ].map((item) =>
+            item.seen_at
+                ? `${item.source} ${formatDateTime(item.seen_at)}`
+                : item.source,
+        );
+        const detail = [
+            local,
+            row.kind === 'documented' ? 'Documentato' : 'Rilevato',
+            row.basis,
+            sources.length &&
+                (row.kind === 'documented'
+                    ? `confermato da ${sources.join(', ')}`
+                    : sources.join(', ')),
+            row.stale && 'Non aggiornato',
+        ]
+            .filter(Boolean)
+            .join(' · ');
+        const here = peerId !== null ? markerOf(peerId) : null;
+        const away = peerId !== null && !here ? elsewhereOf(peerId) : null;
+        const content = (
+            <>
+                <LinkSwatch kind={row.kind} className="mt-1.5 shrink-0" />
+                <span className="min-w-0 flex-1">
+                    <span className="block text-sm break-words">
+                        {peerName}
+                        {row.peer.port && (
+                            <span className="text-muted-foreground">
+                                {' · '}
+                                {row.peer.port}
+                            </span>
+                        )}
+                    </span>
+                    <span className="block text-xs break-words text-muted-foreground">
+                        {detail}
+                    </span>
+                    {row.issues.map((issue) => (
+                        <span
+                            key={issue}
+                            className="block text-xs break-words text-destructive"
+                        >
+                            {issue}
+                        </span>
+                    ))}
+                </span>
+                {here ? (
+                    <span className="mt-0.5 shrink-0 text-muted-foreground">
+                        <LocateFixed className="size-4" aria-hidden />
+                        <span className="sr-only">Sul piano</span>
+                    </span>
+                ) : away ? (
+                    <Badge variant="outline" className="shrink-0">
+                        {away.code}
+                    </Badge>
+                ) : peerId !== null ? (
+                    <Badge variant="secondary" className="shrink-0">
+                        Non posizionato
+                    </Badge>
+                ) : null}
+            </>
+        );
+        return (
+            <li key={row.id}>
+                {here ? (
+                    <button
+                        type="button"
+                        className={rowClass}
+                        onClick={() => {
+                            const entry = byKey.get(here);
+                            if (entry) locate(entry);
+                        }}
+                    >
+                        {content}
+                    </button>
+                ) : away ? (
+                    <Link
+                        className={rowClass}
+                        href={show(
+                            { ...route, floor: floorIds.get(away.code)! },
+                            {
+                                query: {
+                                    select: away.key,
+                                    ...(showLinks ? { links: 1 } : {}),
+                                },
+                            },
+                        )}
+                    >
+                        {content}
+                    </Link>
+                ) : peerId !== null ? (
+                    <Link
+                        className={rowClass}
+                        href={deviceShow({ ...route, device: peerId })}
+                    >
+                        {content}
+                    </Link>
+                ) : (
+                    <div className="flex items-start gap-3 px-2 py-2">
+                        {content}
+                    </div>
+                )}
             </li>
         );
     }
@@ -902,13 +1093,8 @@ function FloorEditor({
                                 height={image.height}
                                 markers={markers}
                                 selected={selected}
-                                highlighted={
-                                    term
-                                        ? new Set(
-                                              matches.map((entry) => entry.key),
-                                          )
-                                        : null
-                                }
+                                highlighted={highlighted}
+                                lines={[...lines.values()]}
                                 labels={labels}
                                 editing={editing && !processing}
                                 onSelect={setSelected}
@@ -1027,6 +1213,103 @@ function FloorEditor({
                                                 )}
                                             </div>
                                         )}
+                                        <section
+                                            className="flex flex-col gap-1 border-t p-2"
+                                            aria-label="Collegamenti"
+                                        >
+                                            <div className="flex items-center justify-between gap-2 px-2 py-1">
+                                                <h3 className="text-sm font-medium">
+                                                    Collegamenti
+                                                </h3>
+                                                <Toggle
+                                                    variant="outline"
+                                                    size="sm"
+                                                    pressed={showLinks}
+                                                    onPressedChange={
+                                                        setShowLinks
+                                                    }
+                                                    disabled={
+                                                        !linked?.rows.length
+                                                    }
+                                                >
+                                                    <Waypoints />
+                                                    Mostra collegamenti
+                                                </Toggle>
+                                            </div>
+                                            {!linked ? (
+                                                <div className="flex flex-col gap-2 px-2 pb-2">
+                                                    <Skeleton className="h-10" />
+                                                    <Skeleton className="h-10" />
+                                                </div>
+                                            ) : linked.rows.length ||
+                                              linked.hosts.length ? (
+                                                <ul>
+                                                    {linked.rows.map(linkRow)}
+                                                    {linked.hosts.map(
+                                                        (host) => (
+                                                            <li
+                                                                key={`${host.device_id}:${host.port}:${host.wireless}`}
+                                                            >
+                                                                <Link
+                                                                    className={
+                                                                        rowClass
+                                                                    }
+                                                                    href={deviceShow(
+                                                                        {
+                                                                            ...route,
+                                                                            device: host.device_id,
+                                                                        },
+                                                                        {
+                                                                            query: {
+                                                                                tab: 'observed',
+                                                                            },
+                                                                        },
+                                                                    )}
+                                                                >
+                                                                    <LinkSwatch
+                                                                        kind="partial"
+                                                                        className="mt-1.5 shrink-0"
+                                                                    />
+                                                                    <span className="min-w-0 flex-1">
+                                                                        <span className="block text-sm">
+                                                                            {host.count ===
+                                                                            1
+                                                                                ? '1 MAC non censito'
+                                                                                : `${host.count} MAC non censiti`}
+                                                                        </span>
+                                                                        <span className="block text-xs break-words text-muted-foreground">
+                                                                            {[
+                                                                                active.rack
+                                                                                    ? deviceById.get(
+                                                                                          host.device_id,
+                                                                                      )
+                                                                                          ?.name
+                                                                                    : null,
+                                                                                host.port ??
+                                                                                    (host.wireless
+                                                                                        ? 'Wi-Fi'
+                                                                                        : 'Porta non riconosciuta'),
+                                                                                'Rilevato',
+                                                                            ]
+                                                                                .filter(
+                                                                                    Boolean,
+                                                                                )
+                                                                                .join(
+                                                                                    ' · ',
+                                                                                )}
+                                                                        </span>
+                                                                    </span>
+                                                                </Link>
+                                                            </li>
+                                                        ),
+                                                    )}
+                                                </ul>
+                                            ) : (
+                                                <p className="px-2 pb-2 text-sm text-muted-foreground">
+                                                    Nessun collegamento
+                                                </p>
+                                            )}
+                                        </section>
                                     </div>
                                     {editing && (
                                         <div className="border-t p-3">

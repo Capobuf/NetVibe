@@ -1,3 +1,5 @@
+import type { TopologyEdge, TopologyObservation } from '@/types/topology';
+
 export type FloorSummary = {
     id: number;
     code: string;
@@ -54,6 +56,15 @@ export type FloorMarker = {
     label: string;
     x: number;
     y: number;
+};
+
+/** The site's documented cables and observations, as the topology computes them, hidden models included. */
+export type FloorLinks = {
+    edges: TopologyEdge[];
+    /** Labels of neighbors that integrations report but the inventory does not hold. */
+    neighbors: Record<string, string>;
+    /** MACs seen beyond the ports of each device. */
+    observed: Record<number, TopologyObservation[]>;
 };
 
 export const itemKey = (item: Pick<FloorItem, 'device_id' | 'rack_id'>) =>

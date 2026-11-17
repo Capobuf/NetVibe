@@ -31,7 +31,8 @@ class Topology
         return ['observed' => $this->observed[$device->id] ?? [], 'adjacent' => (object) ($this->adjacent[$device->id] ?? [])];
     }
 
-    public function forSite(Site $site): array
+    /** @param bool $withHidden Keep models hidden from the topology view, for views with their own visibility (floor plans). */
+    public function forSite(Site $site, bool $withHidden = false): array
     {
         $devices = $site->devices()->with([
             'model.modelType', 'rackItem.rack', 'mikrotikConnection',
@@ -352,7 +353,7 @@ class Topology
 
         // Hidden models stay documented in racks and cabling; they are dropped only here, after
         // matching and port checks, together with every edge that touches them.
-        $visible = $devices->filter(fn ($device) => $device->model?->showsInTopology() ?? true);
+        $visible = $devices->filter(fn ($device) => $withHidden || ($device->model?->showsInTopology() ?? true));
         $hidden = $devices->diffKeys($visible)->keys()->mapWithKeys(fn ($id) => ['device:'.$id => true]);
         $nodes = array_diff_key($nodes, $hidden->all());
         $edges = array_filter($edges, fn ($edge) => ! isset($hidden[$edge['source']]) && ! isset($hidden[$edge['target']]));

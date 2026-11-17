@@ -115,7 +115,7 @@ export const linkKinds = {
 
 export function topologyPortLabel(
     edge: TopologyEdge,
-    node: TopologyNode,
+    node: Pick<TopologyNode, 'id' | 'device_id'>,
     markReported = true,
 ): string | null {
     const end = edge.source === node.id ? edge.a : edge.b;

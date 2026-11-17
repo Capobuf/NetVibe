@@ -21,11 +21,11 @@ export type FloorLinkRow = {
     issues: string[];
 };
 
-/** MACs seen on a port that no inventory device owns: an observation to consult, never a device. */
+/** MACs seen on the ports of a device that no inventory device owns: an observation to consult, never a device. */
 export type FloorHosts = {
     device_id: number;
-    port: string | null;
-    wireless: boolean;
+    /** Ports where they were seen; Wi-Fi clients without a port are listed as null. */
+    ports: (string | null)[];
     count: number;
 };
 
@@ -43,14 +43,14 @@ function basis(edge: TopologyEdge): string {
 /**
  * Relations between the given devices and everything else: documented cables, LLDP/CDP adjacencies,
  * UniFi uplinks and inventory devices seen directly on a port. Relations among the given devices
- * (inside the same rack) are left out. A sighting that confirms a documented cable joins it.
+ * (inside the same rack) are left out. A sighting that confirms a cable or an adjacency joins it.
  */
 export function floorLinks(
     links: FloorLinks,
     ids: Set<number>,
 ): { rows: FloorLinkRow[]; hosts: FloorHosts[] } {
     const rows: FloorLinkRow[] = [];
-    const documented = new Map<string, FloorLinkRow>();
+    const known = new Map<string, FloorLinkRow>();
     for (const edge of links.edges) {
         const source = deviceId(edge.source);
         const target = deviceId(edge.target);
@@ -88,15 +88,18 @@ export function floorLinks(
             issues: edge.issues,
         };
         rows.push(row);
-        if (edge.kind === 'documented' && edge.a && edge.b) {
-            documented.set(
-                `${edge.a.device_id}:${edge.a.connector_id}|${edge.b.device_id}`,
-                row,
-            );
-            documented.set(
-                `${edge.b.device_id}:${edge.b.connector_id}|${edge.a.device_id}`,
-                row,
-            );
+        // Port by port, so a MAC sighting on the same port joins the cable or adjacency it confirms.
+        for (const [end, peerId] of [
+            [edge.a, target],
+            [edge.b, source],
+        ] as const) {
+            if (!end || peerId === null) continue;
+            known.set(`${end.device_id}|${end.label}|${peerId}`, row);
+            if (end.connector_id)
+                known.set(
+                    `${end.device_id}:${end.connector_id}|${peerId}`,
+                    row,
+                );
         }
     }
     const hosts: FloorHosts[] = [];
@@ -109,29 +112,27 @@ export function floorLinks(
             const owner = observation.device_id;
             if (owner === null) {
                 if (!ids.has(seenBy)) continue;
-                const { port, wireless } = observation;
-                const group = hosts.find(
-                    (item) =>
-                        item.device_id === seenBy &&
-                        item.port === port &&
-                        item.wireless === wireless,
-                );
-                if (group) group.count += observation.macs.length;
-                else
+                const group = hosts.find((item) => item.device_id === seenBy);
+                if (group) {
+                    group.count += observation.macs.length;
+                    if (!group.ports.includes(observation.port))
+                        group.ports.push(observation.port);
+                } else
                     hosts.push({
                         device_id: seenBy,
-                        port,
-                        wireless,
+                        ports: [observation.port],
                         count: observation.macs.length,
                     });
                 continue;
             }
             if (ids.has(seenBy) === ids.has(owner)) continue;
-            const confirmed = documented.get(
-                `${seenBy}:${observation.connector_id}|${owner}`,
-            );
+            const confirmed =
+                known.get(`${seenBy}:${observation.connector_id}|${owner}`) ??
+                known.get(`${seenBy}|${observation.port}|${owner}`);
             if (confirmed) {
                 confirmed.sources.push(...sources);
+                if (confirmed.kind !== 'documented')
+                    confirmed.stale &&= sources.every((item) => item.stale);
                 continue;
             }
             const port = observation.port;

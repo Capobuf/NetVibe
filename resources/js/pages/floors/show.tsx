@@ -727,21 +727,26 @@ function FloorEditor({
         ]
             .filter(Boolean)
             .join(' · ');
-        const sources = [
-            ...new Map(row.sources.map((item) => [item.source, item])).values(),
-        ].map((item) =>
-            item.seen_at
-                ? `${item.source} ${formatDateTime(item.seen_at)}`
-                : item.source,
-        );
+        // Who reported it, and when it was last seen.
+        const names = [...new Set(row.sources.map((item) => item.source))];
+        const seen = row.sources
+            .map((item) => item.seen_at)
+            .filter((value): value is string => !!value)
+            .sort()
+            .at(-1);
+        const sources = names.length
+            ? [names.join(', '), seen && formatDateTime(seen)]
+                  .filter(Boolean)
+                  .join(' · ')
+            : '';
         const detail = [
             local,
             row.kind === 'documented' ? 'Documentato' : 'Rilevato',
             row.basis,
-            sources.length &&
+            sources &&
                 (row.kind === 'documented'
-                    ? `confermato da ${sources.join(', ')}`
-                    : sources.join(', ')),
+                    ? `confermato da ${sources}`
+                    : sources),
             row.stale && 'Non aggiornato',
         ]
             .filter(Boolean)
@@ -1247,7 +1252,9 @@ function FloorEditor({
                                                     {linked.hosts.map(
                                                         (host) => (
                                                             <li
-                                                                key={`${host.device_id}:${host.port}:${host.wireless}`}
+                                                                key={
+                                                                    host.device_id
+                                                                }
                                                             >
                                                                 <Link
                                                                     className={
@@ -1284,10 +1291,14 @@ function FloorEditor({
                                                                                       )
                                                                                           ?.name
                                                                                     : null,
-                                                                                host.port ??
-                                                                                    (host.wireless
-                                                                                        ? 'Wi-Fi'
-                                                                                        : 'Porta non riconosciuta'),
+                                                                                host
+                                                                                    .ports
+                                                                                    .length ===
+                                                                                1
+                                                                                    ? (host
+                                                                                          .ports[0] ??
+                                                                                      'Wi-Fi')
+                                                                                    : `${host.ports.length} porte`,
                                                                                 'Rilevato',
                                                                             ]
                                                                                 .filter(

@@ -552,8 +552,7 @@ function FloorEditor({
                 key: to,
                 from: active.key,
                 to,
-                documented:
-                    !!current?.documented || row.kind === 'documented',
+                documented: !!current?.documented || row.kind === 'documented',
                 stale: (current?.stale ?? true) && row.stale,
             });
         }

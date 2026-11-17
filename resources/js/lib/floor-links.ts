@@ -147,7 +147,9 @@ export function floorLinks(
             rows.push({
                 id: `observed:${seenBy}:${observation.key}`,
                 kind: 'partial',
-                basis: observation.wireless ? 'Client Wi-Fi' : 'MAC sulla porta',
+                basis: observation.wireless
+                    ? 'Client Wi-Fi'
+                    : 'MAC sulla porta',
                 local,
                 peer,
                 sources,

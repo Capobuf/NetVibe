@@ -28,9 +28,13 @@ export type Cable = {
     purpose: string | null;
     name: string | null;
 };
-export const RACK_LEFT = 104;
+// Free space beside each face, outside the unit numbers, reserved for cables.
+export const CABLE_MARGIN = 112;
+export const RACK_LEFT = 88 + CABLE_MARGIN;
 export const RACK_TOP = 48;
 export const FACE_WIDTH = RACK_WIDTH + RACK_LEFT * 2;
+// Side-by-side faces share the cable margin between them.
+export const FACE_PITCH = FACE_WIDTH - CABLE_MARGIN;
 export type PortAnchor = CableEnd &
     Point & { face: Face; type: ConnectorType; width: number; height: number };
 export const endKey = (end: CableEnd) => `${end.device_id}:${end.connector_id}`;
@@ -148,6 +152,25 @@ export function panelTransform(
         scale,
     };
 }
+export function itemBox(
+    item: RackItem,
+    items: RackItem[],
+    height: number,
+    face: Face,
+    faceIndex: number,
+) {
+    return {
+        x:
+            RACK_LEFT +
+            faceIndex * FACE_PITCH +
+            (RACK_WIDTH *
+                (face === 'rear' ? 100 - item.x - item.width : item.x)) /
+                100,
+        y: RACK_TOP + (height - itemBounds(item, items).top) * RACK_UNIT_HEIGHT,
+        width: (RACK_WIDTH * item.width) / 100,
+        height: RACK_UNIT_HEIGHT * item.height,
+    };
+}
 export function portAnchors(
     items: RackItem[],
     devices: RackDevice[],
@@ -161,18 +184,13 @@ export function portAnchors(
                 ? byDevice.get(item.device_id)
                 : undefined;
             if (!device) return [];
-            const width = (RACK_WIDTH * item.width) / 100;
-            const itemHeight = RACK_UNIT_HEIGHT * item.height;
+            const {
+                x: left,
+                y: top,
+                width,
+                height: itemHeight,
+            } = itemBox(item, items, height, face, index);
             const transform = panelTransform(device, face, width, itemHeight);
-            const left =
-                RACK_LEFT +
-                index * FACE_WIDTH +
-                (RACK_WIDTH *
-                    (face === 'rear' ? 100 - item.x - item.width : item.x)) /
-                    100;
-            const top =
-                RACK_TOP +
-                (height - itemBounds(item, items).top) * RACK_UNIT_HEIGHT;
             return devicePorts(device)
                 .filter((p) => p.face === face && !p.hidden)
                 .flatMap((p) => {
@@ -196,44 +214,4 @@ export function portAnchors(
                 });
         }),
     );
-}
-
-export function cableCurve(a: Point, b: Point, lane: number): number[] {
-    if (Math.abs(b.y - a.y) < 20) {
-        const top = Math.min(a.y, b.y) - 24;
-        return [
-            a.x,
-            a.y,
-            lane,
-            a.y,
-            lane,
-            top,
-            lane,
-            top,
-            lane,
-            top,
-            lane,
-            b.y,
-            b.x,
-            b.y,
-        ];
-    }
-    const bend = Math.min(22, Math.abs(b.y - a.y) / 3);
-    const direction = b.y >= a.y ? 1 : -1;
-    return [
-        a.x,
-        a.y,
-        lane,
-        a.y,
-        lane,
-        a.y,
-        lane,
-        a.y + direction * bend,
-        lane,
-        b.y - direction * bend,
-        lane,
-        b.y,
-        b.x,
-        b.y,
-    ];
 }

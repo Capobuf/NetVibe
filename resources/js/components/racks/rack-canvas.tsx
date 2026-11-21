@@ -14,6 +14,7 @@ import {
     panelTransform,
     RACK_LEFT as LEFT,
     RACK_TOP as TOP,
+    FACE_PITCH,
     FACE_WIDTH,
     type Cable,
     type CableEnd,
@@ -275,7 +276,7 @@ export function RackCanvas({
         return () => observer.disconnect();
     }, []);
     const faces: Face[] = face === 'both' ? ['front', 'rear'] : [face];
-    const totalWidth = FACE_WIDTH * faces.length;
+    const totalWidth = FACE_WIDTH + FACE_PITCH * (faces.length - 1);
     const totalHeight = rack.height_u * U + TOP * 2;
     const fit = Math.max(
         0.05,
@@ -608,7 +609,7 @@ export function RackCanvas({
             >
                 <Layer listening={!pan}>
                     {faces.map((side, faceIndex) => (
-                        <Group key={side} x={faceIndex * FACE_WIDTH}>
+                        <Group key={side} x={faceIndex * FACE_PITCH}>
                             <Text
                                 text={side === 'front' ? 'FRONTE' : 'RETRO'}
                                 x={LEFT}
@@ -642,16 +643,6 @@ export function RackCanvas({
                                     { length: rack.height_u },
                                     (_, row) => {
                                         const y = TOP + row * U;
-                                        const label = String(
-                                            unitLabel(
-                                                rack.height_u - row - 1,
-                                                rack,
-                                            ),
-                                        );
-                                        const labelSize = Math.min(
-                                            36,
-                                            Math.max(16, 11 / scale),
-                                        );
                                         return (
                                             <Group key={row}>
                                                 <Line
@@ -667,39 +658,6 @@ export function RackCanvas({
                                                             : '#cbd5e1'
                                                     }
                                                     dash={[4, 4]}
-                                                />
-                                                <Text
-                                                    text={label}
-                                                    x={2}
-                                                    y={
-                                                        y +
-                                                        U / 2 -
-                                                        labelSize / 2
-                                                    }
-                                                    width={LEFT - 42}
-                                                    align="right"
-                                                    fontSize={labelSize}
-                                                    fill={
-                                                        dark
-                                                            ? '#cbd5e1'
-                                                            : '#475569'
-                                                    }
-                                                />
-                                                <Text
-                                                    text={label}
-                                                    x={LEFT + WIDTH + 36}
-                                                    y={
-                                                        y +
-                                                        U / 2 -
-                                                        labelSize / 2
-                                                    }
-                                                    width={38}
-                                                    fontSize={labelSize}
-                                                    fill={
-                                                        dark
-                                                            ? '#cbd5e1'
-                                                            : '#475569'
-                                                    }
                                                 />
                                             </Group>
                                         );
@@ -757,6 +715,78 @@ export function RackCanvas({
                         onBundle={onBundle}
                         onCable={onCable}
                         onReconnect={onReconnect}
+                        overlay={faces.map((side, faceIndex) => (
+                            <Group
+                                key={side}
+                                x={faceIndex * FACE_PITCH}
+                                listening={false}
+                            >
+                                {Array.from(
+                                    { length: rack.height_u },
+                                    (_, row) => {
+                                        const y = TOP + row * U;
+                                        const label = String(
+                                            unitLabel(
+                                                rack.height_u - row - 1,
+                                                rack,
+                                            ),
+                                        );
+                                        const labelSize = Math.min(
+                                            36,
+                                            Math.max(16, 11 / scale),
+                                        );
+                                        // The halo lets cables pass behind the numbers instead of striking them.
+                                        const halo = {
+                                            stroke: dark
+                                                ? '#0f172a'
+                                                : '#ffffff',
+                                            strokeWidth: 5 / scale,
+                                            lineJoin: 'round' as const,
+                                            fillAfterStrokeEnabled: true,
+                                        };
+                                        return (
+                                            <Group key={row}>
+                                                <Text
+                                                    {...halo}
+                                                    text={label}
+                                                    x={2}
+                                                    y={
+                                                        y +
+                                                        U / 2 -
+                                                        labelSize / 2
+                                                    }
+                                                    width={LEFT - 42}
+                                                    align="right"
+                                                    fontSize={labelSize}
+                                                    fill={
+                                                        dark
+                                                            ? '#cbd5e1'
+                                                            : '#475569'
+                                                    }
+                                                />
+                                                <Text
+                                                    {...halo}
+                                                    text={label}
+                                                    x={LEFT + WIDTH + 36}
+                                                    y={
+                                                        y +
+                                                        U / 2 -
+                                                        labelSize / 2
+                                                    }
+                                                    width={38}
+                                                    fontSize={labelSize}
+                                                    fill={
+                                                        dark
+                                                            ? '#cbd5e1'
+                                                            : '#475569'
+                                                    }
+                                                />
+                                            </Group>
+                                        );
+                                    },
+                                )}
+                            </Group>
+                        ))}
                     />
                 </Layer>
             </Stage>

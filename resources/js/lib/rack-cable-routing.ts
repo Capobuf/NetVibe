@@ -7,6 +7,8 @@ export function cableLead(
     ports: PortAnchor[],
     slot: number,
     gap: number,
+    // Preferred heights for the horizontal run; with them a path is always returned.
+    preferred?: number[],
 ): Point[] | null {
     const obstacles = ports
         .filter(
@@ -36,7 +38,7 @@ export function cableLead(
     const offset = gap * (slot + 1);
     const below = port.y + port.height / 2 + offset;
     const above = port.y - port.height / 2 - offset;
-    const levels = [
+    const levels = preferred ?? [
         below,
         ...obstacles
             .map((box) => box.bottom + offset)
@@ -53,24 +55,66 @@ export function cableLead(
         port.x - port.width / 2 - gap,
         port.x + port.width / 2 + gap,
     ];
+    const pathTo = (x: number, y: number) =>
+        [port, { x, y: port.y }, { x, y }, { x: lane, y }].filter(
+            (p, i, points) =>
+                i === 0 || p.x !== points[i - 1].x || p.y !== points[i - 1].y,
+        );
     // Keep routing local to the port rows and the existing side corridor.
     for (const x of exits) {
         for (const y of levels) {
-            const path = [
-                port,
-                { x, y: port.y },
-                { x, y },
-                { x: lane, y },
-            ].filter(
-                (p, i, points) =>
-                    i === 0 ||
-                    p.x !== points[i - 1].x ||
-                    p.y !== points[i - 1].y,
-            );
+            const path = pathTo(x, y);
             if (path.slice(1).every((p, i) => clear(path[i], p))) return path;
         }
     }
-    return null;
+    return preferred ? pathTo(port.x, preferred[0]) : null;
+}
+
+// Assigns a vertical lane to each bundle. Bundles whose spans overlap get different lanes, shorter
+// spans closer to their rack (zone -1 hugs the left edge, 1 the right one, 0 crosses between them),
+// so nested bundles do not cross.
+export function trunkLanes(
+    spans: { top: number; bottom: number; zone: -1 | 0 | 1 }[],
+    left: number,
+    right: number,
+    spacing: number,
+): number[] {
+    const tracks = ([-1, 0, 1] as const).flatMap((zone) => {
+        const zoneTracks: number[][] = [];
+        spans
+            .map((_, index) => index)
+            .filter((index) => spans[index].zone === zone)
+            .sort(
+                (a, b) =>
+                    spans[a].bottom -
+                    spans[a].top -
+                    (spans[b].bottom - spans[b].top),
+            )
+            .forEach((index) => {
+                const free = zoneTracks.find((track) =>
+                    track.every(
+                        (other) =>
+                            spans[index].top > spans[other].bottom + spacing ||
+                            spans[other].top > spans[index].bottom + spacing,
+                    ),
+                );
+                if (free) free.push(index);
+                else zoneTracks.push([index]);
+            });
+        return zone === 1 ? zoneTracks.reverse() : zoneTracks;
+    });
+    const step = Math.min(
+        spacing,
+        (right - left) / Math.max(1, tracks.length - 1),
+    );
+    const lanes: number[] = [];
+    tracks.forEach((track, position) => {
+        for (const index of track)
+            lanes[index] =
+                (left + right) / 2 +
+                (position - (tracks.length - 1) / 2) * step;
+    });
+    return lanes;
 }
 
 export function roundedCablePath(points: Point[], radius: number): number[] {

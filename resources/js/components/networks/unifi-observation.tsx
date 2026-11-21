@@ -9,9 +9,13 @@ import { CircleAlert, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { update } from '@/actions/App/Http/Controllers/UnifiIpamController';
 import { MacConflictAlert } from '@/components/networks/mikrotik-source';
+import {
+    collectFacts,
+    FactSheet,
+    focusPanel,
+} from '@/components/networks/source-facts';
 import { UnifiMark } from '@/components/unifi-mark';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Sheet,
@@ -20,8 +24,6 @@ import {
     SheetTitle,
     SheetTrigger,
 } from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
-import { formatDateTime } from '@/lib/utils';
 
 export type UnifiObservation = {
     id: number;
@@ -66,6 +68,10 @@ export type UnifiObservation = {
         hostname_observed?: string | null;
         type?: string | null;
         state?: string | null;
+        switch?: {
+            switch_mac?: string | null;
+            switch_port?: number | null;
+        } | null;
         dns?: string | null;
         alias?: string | null;
     };
@@ -132,6 +138,7 @@ export function UnifiObservationIndicator({
             <SheetContent
                 className="w-full overflow-y-auto sm:max-w-xl"
                 aria-describedby={undefined}
+                onOpenAutoFocus={focusPanel}
                 onClick={(event) => event.stopPropagation()}
             >
                 <SheetHeader>
@@ -150,18 +157,18 @@ export function UnifiObservationIndicator({
                         </dl>
                     ) : null}
                     <MacConflictAlert macs={macConflict} />
-                    {observations.map((observation, index) => (
-                        <div
-                            key={observation.id}
-                            className="flex flex-col gap-5"
-                        >
-                            {index > 0 ? <Separator /> : null}
-                            <ObservationDetails
-                                observation={observation}
-                                company={company}
-                                site={site}
-                            />
-                        </div>
+                    {[
+                        ...Map.groupBy(
+                            observations,
+                            (observation) => observation.source,
+                        ).values(),
+                    ].map((group) => (
+                        <UnifiFacts
+                            key={group[0].source}
+                            observations={group}
+                            company={company}
+                            site={site}
+                        />
                     ))}
                 </div>
             </SheetContent>
@@ -169,12 +176,196 @@ export function UnifiObservationIndicator({
     );
 }
 
-const deviceStates: Record<string, string> = {
-    ONLINE: 'Online',
-    OFFLINE: 'Offline',
+const connections: Record<string, string> = {
+    WIRED: 'Cablata',
+    WIRELESS: 'Wi-Fi',
 };
 
-function ObservationDetails({
+const dhcpModes: Record<string, string> = {
+    SERVER: 'Server attivo',
+    RELAY: 'Relay',
+    NONE: 'Disattivato',
+};
+
+const kindLabels: Record<UnifiObservation['kind'], string> = {
+    network: 'Rete',
+    client: 'Client',
+    device: 'Dispositivo',
+    reservation: 'Prenotazione',
+};
+
+const factsOrder = [
+    'Nome',
+    'Alias',
+    'Nome DNS',
+    'Rete',
+    'VLAN',
+    'Subnet',
+    'IPv4',
+    'IP configurato',
+    'MAC',
+    'Stato',
+    'DHCP',
+    'Intervallo DHCP',
+    'Gateway DHCP',
+    'DNS',
+    'Server DHCP relay',
+    'Connessione',
+    'Porta switch',
+];
+
+/** One sheet per UniFi site: every distinct value once, actions kept per observation. */
+function UnifiFacts({
+    observations: all,
+    company,
+    site,
+}: {
+    observations: UnifiObservation[];
+    company: number;
+    site: number;
+}) {
+    // Observations UniFi no longer reports describe the past: show them only when nothing current exists.
+    const current = all.filter(
+        (observation) => observation.state !== 'missing',
+    );
+    const observations = current.length ? current : all;
+    const { facts, add: addFact } = collectFacts();
+    const add = (
+        label: string,
+        value: Parameters<typeof addFact>[1],
+        observation: UnifiObservation,
+        extra?: Parameters<typeof addFact>[3],
+    ) => addFact(label, value, kindLabels[observation.kind], extra);
+
+    for (const observation of observations) {
+        const data = observation.data;
+        add(
+            'Nome',
+            data.hostname_observed ??
+                (observation.kind === 'network' ? null : data.name),
+            observation,
+            { copy: true },
+        );
+        add('Alias', data.alias, observation);
+        add('Nome DNS', data.dns, observation, { copy: true });
+        // A network's address is already shown as its configured IP.
+        if (observation.kind !== 'network')
+            add('IPv4', observation.ip, observation, { copy: true });
+        add('MAC', data.mac?.toUpperCase(), observation, { copy: true });
+        const presence =
+            observation.presence ??
+            (data.state === 'ONLINE'
+                ? 'online'
+                : data.state === 'OFFLINE'
+                  ? 'offline'
+                  : null);
+        if (presence)
+            add(
+                'Stato',
+                presence === 'online' ? 'Online' : 'Offline',
+                observation,
+                { tone: presence },
+            );
+        if (observation.kind === 'reservation')
+            add('DHCP', 'Prenotazione IP fissa', observation);
+        add('Connessione', connections[data.type ?? ''], observation);
+        add('Porta switch', data.switch?.switch_port, observation);
+        if (observation.kind === 'network') {
+            add('Rete', data.name, observation);
+            add(
+                'VLAN',
+                data.default ? 'Rete predefinita' : data.tag,
+                observation,
+            );
+            add('Subnet', data.cidr, observation);
+            add(
+                'Gestione',
+                data.management === 'GATEWAY' ? 'Gateway' : data.management,
+                observation,
+            );
+            add('IP configurato', data.host_ip, observation);
+            add(
+                'DHCP',
+                data.dhcp?.mode
+                    ? (dhcpModes[data.dhcp.mode] ?? data.dhcp.mode)
+                    : null,
+                observation,
+            );
+            add(
+                'Intervallo DHCP',
+                data.dhcp?.start && data.dhcp.stop
+                    ? `${data.dhcp.start} – ${data.dhcp.stop}`
+                    : null,
+                observation,
+            );
+            add('Gateway DHCP', data.dhcp?.gateway, observation);
+            add('DNS', data.dhcp?.dns?.join(', '), observation);
+            add(
+                'Server DHCP relay',
+                data.dhcp?.servers?.join(', '),
+                observation,
+            );
+        }
+    }
+    const readAt = observations
+        .map((observation) => observation.read_at ?? observation.present_at)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1);
+    // Only states that change what the technician can trust or what the next sync will do.
+    const flags = [
+        ...new Set(
+            observations.flatMap((observation) =>
+                [
+                    observation.edit_mode === 'manual'
+                        ? 'Valore manuale mantenuto'
+                        : observation.edit_mode
+                          ? observation.matched_at
+                              ? 'Modifica prevista riscontrata'
+                              : 'Modifica prevista'
+                          : null,
+                    observation.decision === 'keep'
+                        ? 'Dato NetVibe mantenuto'
+                        : null,
+                ].filter((flag): flag is string => Boolean(flag)),
+            ),
+        ),
+    ];
+
+    return (
+        <FactSheet
+            mark={<UnifiMark />}
+            title={
+                <span className="min-w-0 truncate font-medium">
+                    {/* The UniFi mark already names the system. */}
+                    {observations[0].source.replace(/^UniFi · /, '')}
+                </span>
+            }
+            flags={flags}
+            readAt={readAt}
+            stale={observations.every((observation) => observation.stale)}
+            facts={facts}
+            order={factsOrder}
+        >
+            {observations
+                .filter(
+                    (observation) =>
+                        observation.problem || observation.can_update,
+                )
+                .map((observation) => (
+                    <ObservationReview
+                        key={observation.id}
+                        observation={observation}
+                        company={company}
+                        site={site}
+                    />
+                ))}
+        </FactSheet>
+    );
+}
+
+/** The VLAN difference with its update/keep decision, for one observation. */
+function ObservationReview({
     observation,
     company,
     site,
@@ -189,94 +380,16 @@ function ObservationDetails({
     const differs =
         observation.problem === 'Nome VLAN diverso dalla fonte.' ||
         observation.problem === 'VLAN documentata diversa dalla fonte.';
-    const title =
-        observation.kind === 'network'
-            ? (data.name ?? data.cidr ?? 'Rete')
-            : (data.hostname_observed ?? observation.ip ?? 'Osservazione');
-    const facts = [
-        ['IPv4', observation.ip],
-        ['MAC', data.mac],
-        ['Nome', data.hostname_observed],
-        ['Alias', data.alias],
-        ['Nome DNS', data.dns],
-        ['Tipo', observation.kind === 'reservation' ? null : data.type],
-        [
-            'Stato',
-            data.state ? (deviceStates[data.state] ?? data.state) : null,
-        ],
-        ['Gestione', data.management],
-        ['VLAN', data.default ? 'Rete predefinita' : data.tag],
-        ['Subnet', data.cidr],
-        ['IP configurato', data.host_ip],
-        ['DHCP', data.dhcp?.mode],
-        [
-            'Intervallo DHCP',
-            data.dhcp?.start && data.dhcp.stop
-                ? `${data.dhcp.start} – ${data.dhcp.stop}`
-                : null,
-        ],
-        ['Gateway DHCP', data.dhcp?.gateway],
-        ['DNS', data.dhcp?.dns?.join(', ')],
-        ['Server DHCP relay', data.dhcp?.servers?.join(', ')],
-    ];
+    const submit = (decision: 'update' | 'keep') => {
+        form.transform(() => ({ decision }));
+        form.submit(update({ company, site, observation: observation.id }), {
+            preserveScroll: true,
+        });
+    };
     return (
-        <section className="flex flex-col gap-3 text-sm">
-            <header className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium break-words">{title}</h3>
-                {observation.kind === 'reservation' ? (
-                    <Badge variant="secondary">Prenotazione IP fissa</Badge>
-                ) : null}
-                {observation.presence === 'online' ? (
-                    <Badge variant="secondary">
-                        {observation.kind === 'client' ? 'Connesso' : 'Online'}
-                    </Badge>
-                ) : observation.presence === 'offline' ? (
-                    <Badge variant="outline">
-                        {observation.kind === 'client'
-                            ? 'Non rilevato'
-                            : 'Offline'}
-                    </Badge>
-                ) : observation.state === 'missing' ? (
-                    <Badge variant="outline">Non osservato</Badge>
-                ) : observation.stale ? (
-                    <Badge variant="outline">Non aggiornato</Badge>
-                ) : null}
-            </header>
-            <dl className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4 gap-y-2">
-                {facts
-                    .filter(
-                        ([, value]) =>
-                            value !== undefined &&
-                            value !== null &&
-                            value !== '',
-                    )
-                    .map(([label, value]) => (
-                        <div key={label} className="contents">
-                            <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="break-words">{value}</dd>
-                        </div>
-                    ))}
-                <dt className="text-muted-foreground">Fonte</dt>
-                <dd className="break-words">{observation.source}</dd>
-                {observation.present_at ? (
-                    <>
-                        <dt className="text-muted-foreground">
-                            Ultimo avvistamento
-                        </dt>
-                        <dd>{formatDateTime(observation.present_at)}</dd>
-                    </>
-                ) : null}
-                <dt className="text-muted-foreground">
-                    Ultima lettura riuscita
-                </dt>
-                <dd>
-                    {observation.read_at
-                        ? formatDateTime(observation.read_at)
-                        : '—'}
-                </dd>
-            </dl>
+        <div className="flex flex-col gap-3 border-t px-4 py-3">
             {differs ? (
-                <dl className="grid grid-cols-2 gap-2 rounded-lg border p-3">
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1">
                     <dt className="text-muted-foreground">Dato NetVibe</dt>
                     <dd>
                         {observation.problem ===
@@ -296,44 +409,18 @@ function ObservationDetails({
                               : `VLAN ${data.tag}`}
                     </dd>
                 </dl>
-            ) : null}
-            {observation.edit_mode ? (
-                <p className="text-xs text-muted-foreground">
-                    {observation.edit_mode === 'manual'
-                        ? 'Valore manuale mantenuto'
-                        : observation.matched_at
-                          ? 'Modifica prevista riscontrata'
-                          : 'Modifica prevista'}
-                </p>
-            ) : null}
-            {observation.problem ? (
+            ) : observation.problem ? (
                 <Alert>
+                    <TriangleAlert />
                     <AlertDescription>{observation.problem}</AlertDescription>
                 </Alert>
-            ) : null}
-            {observation.decision === 'keep' ? (
-                <p className="text-xs text-muted-foreground">
-                    Dato NetVibe mantenuto
-                </p>
             ) : null}
             {auth.canEditIpam && observation.can_update ? (
                 <div className="flex flex-wrap gap-2">
                     <Button
                         size="sm"
                         disabled={form.processing || observation.stale}
-                        onClick={() => {
-                            form.transform(() => ({ decision: 'update' }));
-                            form.submit(
-                                update({
-                                    company,
-                                    site,
-                                    observation: observation.id,
-                                }),
-                                {
-                                    preserveScroll: true,
-                                },
-                            );
-                        }}
+                        onClick={() => submit('update')}
                     >
                         Aggiorna
                     </Button>
@@ -342,17 +429,7 @@ function ObservationDetails({
                             variant="outline"
                             size="sm"
                             disabled={form.processing}
-                            onClick={() => {
-                                form.transform(() => ({ decision: 'keep' }));
-                                form.submit(
-                                    update({
-                                        company,
-                                        site,
-                                        observation: observation.id,
-                                    }),
-                                    { preserveScroll: true },
-                                );
-                            }}
+                            onClick={() => submit('keep')}
                         >
                             Mantieni
                         </Button>
@@ -366,7 +443,7 @@ function ObservationDetails({
                     </AlertDescription>
                 </Alert>
             ) : null}
-        </section>
+        </div>
     );
 }
 

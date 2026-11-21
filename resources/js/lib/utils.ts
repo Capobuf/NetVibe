@@ -20,3 +20,16 @@ export function formatDateTime(value: string): string {
         minute: '2-digit',
     });
 }
+
+const relativeTime = new Intl.RelativeTimeFormat('it-IT', { numeric: 'auto' });
+
+export function timeAgo(value: string): string {
+    const minutes = Math.round(
+        (new Date(value).getTime() - Date.now()) / 60000,
+    );
+    if (minutes === 0) return 'adesso';
+    if (Math.abs(minutes) < 60) return relativeTime.format(minutes, 'minute');
+    const hours = Math.round(minutes / 60);
+    if (Math.abs(hours) < 24) return relativeTime.format(hours, 'hour');
+    return relativeTime.format(Math.round(hours / 24), 'day');
+}

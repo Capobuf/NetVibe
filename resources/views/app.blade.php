@@ -30,9 +30,9 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico?v=branding-20261115" sizes="any">
-        <link rel="icon" href="/branding/netvibe-logo-black.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-        <link rel="icon" href="/branding/netvibe-logo-white.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+        {{-- sizes="32x32", not "any": with "any" Chrome picks the black .ico over the adaptive SVG. --}}
+        <link rel="icon" href="/favicon.ico?v=branding-20261115" sizes="32x32">
+        <link rel="icon" href="/favicon.svg?v=branding-20261121" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=branding-20261115">
 
         @fonts
@@ -40,7 +40,7 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         <x-inertia::head>
-            <title>{{ config('app.name', 'Laravel') }}</title>
+            <title>{{ config('app.name', 'NetVibe') }}</title>
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">

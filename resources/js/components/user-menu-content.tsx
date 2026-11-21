@@ -1,9 +1,7 @@
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import {
-    DropdownMenuGroup,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
@@ -26,24 +24,17 @@ export function UserMenuContent({ user }: Props) {
 
     return (
         <>
-            <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+            {/* The user card itself opens the personal settings. */}
+            <DropdownMenuItem asChild>
+                <Link
+                    className="flex w-full cursor-pointer items-center gap-2 px-1 py-1.5 text-left text-sm"
+                    href={edit()}
+                    onClick={cleanup}
+                    aria-label={`Impostazioni di ${user.name}`}
+                >
                     <UserInfo user={user} showEmail={true} />
-                </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                    <Link
-                        className="block w-full cursor-pointer"
-                        href={edit()}
-                        onClick={cleanup}
-                    >
-                        <Settings className="mr-2" />
-                        Impostazioni
-                    </Link>
-                </DropdownMenuItem>
-            </DropdownMenuGroup>
+                </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
                 <Link

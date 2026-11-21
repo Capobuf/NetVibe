@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Exceptions\UnifiException;
+use App\Support\SyncNotifier;
 use App\Support\UnifiInventory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +14,19 @@ use Illuminate\Support\Collection;
 #[Fillable(['console_id', 'console_name', 'external_site_id', 'name', 'version', 'available', 'preview', 'discovered_at', 'site_id', 'confirmed_at', 'mapped_site_uuid', 'inventory_activated_at', 'last_synced_at', 'sync_status', 'last_access'])]
 class UnifiSite extends Model
 {
+    protected static function booted(): void
+    {
+        static::updated(function (self $unifiSite) {
+            if (! $unifiSite->wasChanged('sync_status') || ! $site = $unifiSite->site()->with('company')->first()) {
+                return;
+            }
+            $failing = fn (?string $status) => ! in_array($status, [null, 'ok'], true);
+            SyncNotifier::transition('unifi', $failing($unifiSite->getOriginal('sync_status')), $failing($unifiSite->sync_status), $unifiSite->sync_status === 'ok',
+                $site->company, implode(' · ', array_filter([$site->company->name, $site->name])), route('companies.settings.integrations.unifi.index', $site->company),
+                $failing($unifiSite->sync_status) ? UnifiException::messageFor($unifiSite->sync_status) : null);
+        });
+    }
+
     protected function casts(): array
     {
         return ['available' => 'boolean', 'preview' => 'array', 'discovered_at' => 'datetime', 'confirmed_at' => 'datetime', 'inventory_activated_at' => 'datetime', 'last_synced_at' => 'datetime'];

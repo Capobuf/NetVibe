@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SyncNotifier;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['company_id', 'connection_id', 'external_company_id', 'activated_at', 'synced_at', 'error', 'revision'])]
 class SnipeItSync extends Model
 {
+    protected static function booted(): void
+    {
+        static::updated(function (self $sync) {
+            if ($sync->wasChanged('error')) {
+                SyncNotifier::transition('snipe_it', $sync->getOriginal('error') !== null, $sync->error !== null, $sync->error === null,
+                    $sync->company, $sync->company->name, route('companies.settings.integrations.show', $sync->company), $sync->error);
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return ['activated_at' => 'datetime', 'synced_at' => 'datetime', 'external_company_id' => 'integer', 'revision' => 'integer'];

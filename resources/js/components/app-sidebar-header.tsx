@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { CompanySwitcher } from '@/components/companies/company-switcher';
 import { GlobalSearch } from '@/components/global-search';
+import { NotificationBell } from '@/components/notification-bell';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
@@ -21,7 +22,10 @@ export function AppSidebarHeader({
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center xl:ml-auto xl:w-auto">
                 {navigationArea !== 'administration' && <GlobalSearch />}
-                <CompanySwitcher />
+                <div className="flex items-center gap-3">
+                    <CompanySwitcher />
+                    <NotificationBell />
+                </div>
             </div>
         </header>
     );

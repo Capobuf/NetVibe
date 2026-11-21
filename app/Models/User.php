@@ -22,6 +22,9 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property bool $is_superadmin
  * @property bool $subnet_hide_free
  * @property bool $subnet_table_separators
+ * @property bool $notify_snipe_it
+ * @property bool $notify_mikrotik
+ * @property bool $notify_unifi
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -42,6 +45,9 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     protected $attributes = [
         'subnet_hide_free' => false,
         'subnet_table_separators' => false,
+        'notify_snipe_it' => true,
+        'notify_mikrotik' => true,
+        'notify_unifi' => true,
     ];
 
     /** @return BelongsToMany<Company, $this> */
@@ -61,6 +67,9 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'is_superadmin' => 'boolean',
             'subnet_hide_free' => 'boolean',
             'subnet_table_separators' => 'boolean',
+            'notify_snipe_it' => 'boolean',
+            'notify_mikrotik' => 'boolean',
+            'notify_unifi' => 'boolean',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',

@@ -70,6 +70,13 @@ class HandleInertiaRequests extends Middleware
                     ? $site->id
                     : null,
             ] : null,
+            'notifications' => fn () => $request->user() ? [
+                'unread' => $request->user()->unreadNotifications()->count(),
+                // Recent and unread lists are merged so older unread items are never hidden by newer read ones.
+                'latest' => $request->user()->unreadNotifications()->limit(15)->get(['id', 'data', 'read_at', 'created_at'])
+                    ->merge($request->user()->notifications()->limit(15)->get(['id', 'data', 'read_at', 'created_at']))
+                    ->unique('id')->sortByDesc('created_at')->values(),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

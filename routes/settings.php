@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -25,6 +26,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+
+    Route::inertia('settings/notifications', 'settings/notifications')->name('notifications.edit');
+    Route::patch('settings/notifications', [NotificationController::class, 'preferences'])->name('notifications.preferences');
+    Route::post('notifications/read', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::delete('notifications/read', [NotificationController::class, 'destroyRead'])->name('notifications.destroy-read');
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])->whereUuid('notification')->name('notifications.read');
+    Route::patch('notifications/{notification}', [NotificationController::class, 'mark'])->whereUuid('notification')->name('notifications.mark');
+    Route::delete('notifications/{notification}', [NotificationController::class, 'destroy'])->whereUuid('notification')->name('notifications.destroy');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

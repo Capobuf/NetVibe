@@ -87,7 +87,8 @@ class UnifiSync
                 DB::transaction(function () use ($connection, $sites, $status) {
                     $current = UnifiConnection::lockForUpdate()->findOrFail($connection->id);
                     if ($current->revision === $connection->revision) {
-                        $current->unifiSites()->whereKey($sites->modelKeys())->update(['sync_status' => $status]);
+                        // Per-model updates so failure notifications fire.
+                        $current->unifiSites()->whereKey($sites->modelKeys())->get()->each->update(['sync_status' => $status]);
                         $current->update(['revision' => (string) Str::uuid()]);
                     }
                 });

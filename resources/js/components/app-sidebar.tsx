@@ -24,6 +24,7 @@ import {
     UserRound,
     ShieldCheck,
     Palette,
+    Bell,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -41,6 +42,7 @@ import {
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
 import { edit as appearanceSettings } from '@/routes/appearance';
+import { edit as notificationSettings } from '@/routes/notifications';
 import { edit as profileSettings } from '@/routes/profile';
 import { edit as securitySettings } from '@/routes/security';
 import { index as administration } from '@/routes/administration';
@@ -117,6 +119,11 @@ export function AppSidebar() {
                                     title: 'Aspetto',
                                     href: appearanceSettings(),
                                     icon: Palette,
+                                },
+                                {
+                                    title: 'Notifiche',
+                                    href: notificationSettings(),
+                                    icon: Bell,
                                 },
                             ]}
                         />

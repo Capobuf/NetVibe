@@ -1,4 +1,10 @@
 import { SourceAvatar } from '@/components/networks/source-avatar';
+import {
+    collectFacts,
+    FactSheet,
+    focusPanel,
+    type FactTone,
+} from '@/components/networks/source-facts';
 import { usePage } from '@inertiajs/react';
 import TextLink from '@/components/text-link';
 import { show as deviceShow } from '@/routes/companies/sites/devices';
@@ -7,9 +13,8 @@ import {
     TooltipTrigger,
     TooltipContent,
 } from '@/components/ui/tooltip';
-import { formatDateTime } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
-import { ChevronDown, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { MikrotikMark } from '@/components/mikrotik-mark';
 import {
     Dialog,
@@ -20,15 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { CopyValue } from '@/components/copy-value';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Separator } from '@/components/ui/separator';
 import {
     Sheet,
     SheetContent,
@@ -94,20 +91,6 @@ export type MikrotikSource = {
     };
 };
 
-const statusLabels: Record<string, string> = {
-    bound: 'Lease attiva',
-    waiting: 'In attesa',
-    offered: 'Offerta',
-    busy: 'Occupato',
-    reachable: 'Raggiungibile',
-    stale: 'Stale',
-    delay: 'Delay',
-    probe: 'Probe',
-    permanent: 'Statico',
-    failed: 'Non risolto',
-    incomplete: 'Incompleto',
-};
-
 export function sourceIsDynamic(source: MikrotikSource) {
     return [true, 'true', 'yes', 1, '1'].includes(source.data.dynamic ?? false);
 }
@@ -150,221 +133,206 @@ export function sourceLabel(source: MikrotikSource) {
     return labels[source.kind] ?? source.kind;
 }
 
-export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
+// ARP states translated into what a technician needs: is the host online right now?
+const reachability: Record<string, [string, FactTone | undefined]> = {
+    reachable: ['Online', 'online'],
+    stale: ['Visto di recente', 'idle'],
+    delay: ['Visto di recente', 'idle'],
+    probe: ['In verifica', 'idle'],
+    failed: ['Offline', 'offline'],
+    incomplete: ['Offline', 'offline'],
+    permanent: ['Voce ARP statica', undefined],
+};
+
+const leaseStates: Record<string, string> = {
+    bound: 'in uso',
+    waiting: 'non in uso',
+    offered: 'offerta in corso',
+    busy: 'indirizzo occupato',
+};
+
+const factsOrder = ['Hostname', 'IPv4', 'MAC', 'Stato', 'DHCP', 'Server DHCP'];
+
+function isDhcpObservation(source: MikrotikSource) {
+    return (
+        source.kind === 'observation' &&
+        source.data.menu === '/ip/dhcp-server/lease'
+    );
+}
+
+// Only states that change what the technician can trust or what the next sync will do.
+function sourceFlags(source: MikrotikSource) {
+    return [
+        source.exclusion
+            ? source.exclusion.kind === 'source'
+                ? 'Ignorata nelle sincronizzazioni'
+                : `Esclusa · ${source.exclusion.label}`
+            : null,
+        source.edit_mode === 'manual'
+            ? 'Valore manuale mantenuto'
+            : source.edit_mode
+              ? source.matched_at
+                  ? 'Modifica prevista riscontrata'
+                  : 'Modifica prevista'
+              : null,
+    ].filter((flag): flag is string => Boolean(flag));
+}
+
+/** One sheet per router: every distinct value once, with the records it came from. */
+function RouterFacts({ sources: all }: { sources: MikrotikSource[] }) {
+    // Records the router no longer has describe the past: show them only when nothing current exists.
+    const current = all.filter((source) => source.state !== 'missing');
+    const sources = current.length ? current : all;
     const { companyNavigation } = usePage().props;
     const companyId = companyNavigation?.currentCompanyId;
+    const { facts, add: addFact } = collectFacts();
+    const add = (
+        label: string,
+        value: Parameters<typeof addFact>[1],
+        source: MikrotikSource,
+        extra?: Parameters<typeof addFact>[3],
+    ) => addFact(label, value, sourceLabel(source), extra);
+
+    const leases = sources.filter(
+        (source) => source.kind === 'lease' || isDhcpObservation(source),
+    );
+    for (const source of sources) {
+        const data = source.data;
+        add('Hostname', data.hostname_observed, source, { copy: true });
+        add('IPv4', source.ip, source, { copy: true });
+        add('MAC', (data.mac ?? data.mac_address)?.toUpperCase(), source, {
+            copy: true,
+        });
+        if (data.menu === '/ip/arp' && data.status) {
+            const [label, tone] = reachability[data.status] ?? [data.status];
+            add('Stato', label, source, {
+                tone,
+                hint: `Stato ARP RouterOS: ${data.status}`,
+            });
+        } else if (source.presence === 'online')
+            add('Stato', 'Online', source, { tone: 'online' });
+        const iface = data.interface ?? data['on-interface'];
+        add('Interfaccia', iface, source);
+        if (data.context !== iface)
+            add('Interfaccia di base', data.context, source);
+        add('Porta', data.default_name, source);
+        add('Subnet', data.cidr, source);
+        add('Indirizzo', data.address, source);
+        add('Bridge', data.bridge, source);
+        add('Lista', data.list, source);
+        add('VLAN', data.tag, source);
+        add('Oggetto', data.name, source);
+        add('Tagged', data.tagged, source);
+        add('Untagged', data.untagged, source);
+        add('Tagged attuali', data['current-tagged'], source);
+        add('Untagged attuali', data['current-untagged'], source);
+    }
+    if (leases.length) {
+        const reservation = leases.find((source) => source.kind === 'lease');
+        const status =
+            leases.find((source) => source.data.status === 'bound')?.data
+                .status ??
+            leases.find((source) => source.data.status)?.data.status;
+        const type = reservation
+            ? reservation.data.fixed
+                ? 'Prenotazione fissa'
+                : 'Lease senza IPv4 fisso'
+            : 'Lease dinamica';
+        add(
+            'DHCP',
+            status ? `${type}, ${leaseStates[status] ?? status}` : type,
+            leases[0],
+        );
+        for (const lease of leases)
+            add('Server DHCP', lease.data.server, lease);
+    }
+    // The hostname still identifies the device after its lease is gone.
+    if (!facts.has('Hostname'))
+        for (const source of all)
+            add('Hostname', source.data.hostname_observed, source, {
+                copy: true,
+            });
+    const hostnames = [...(facts.get('Hostname')?.keys() ?? [])].map((value) =>
+        value.toLowerCase(),
+    );
+    for (const source of sources)
+        if (
+            source.data.comment &&
+            !hostnames.includes(source.data.comment.toLowerCase())
+        )
+            add('Commento', source.data.comment, source);
+
+    const readAt = sources
+        .map((source) => source.read_at ?? source.present_at)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1);
+    const notes = [
+        ...new Set(
+            sources.flatMap((source) =>
+                [source.problem, source.import_note].filter(
+                    (note): note is string => Boolean(note),
+                ),
+            ),
+        ),
+    ];
+    const first = sources[0];
+    const flags = [...new Set(sources.flatMap(sourceFlags))];
+    const stale = sources.every((source) => source.stale);
+
+    return (
+        <FactSheet
+            mark={<MikrotikMark />}
+            title={
+                companyId ? (
+                    <TextLink
+                        href={deviceShow({
+                            company: companyId,
+                            site: first.site_id,
+                            device: first.device_id,
+                        })}
+                        className="min-w-0 truncate font-medium"
+                    >
+                        {first.source}
+                    </TextLink>
+                ) : (
+                    <span className="min-w-0 truncate font-medium">
+                        {first.source}
+                    </span>
+                )
+            }
+            flags={flags}
+            readAt={readAt}
+            stale={stale}
+            facts={facts}
+            order={factsOrder}
+        >
+            {notes.map((note) => (
+                <Alert key={note} className="mx-4 mb-3 w-auto">
+                    <TriangleAlert />
+                    <AlertDescription>
+                        <p>{note}</p>
+                    </AlertDescription>
+                </Alert>
+            ))}
+        </FactSheet>
+    );
+}
+
+export function SourceDetails({ sources }: { sources: MikrotikSource[] }) {
+    const routers = new Map<number, MikrotikSource[]>();
+    for (const source of sources)
+        routers.set(source.device_id, [
+            ...(routers.get(source.device_id) ?? []),
+            source,
+        ]);
     return (
         <div className="flex flex-col gap-3">
-            {sources.map((source) => (
-                <Card key={source.id} className="gap-5 py-5">
-                    <CardHeader className="gap-3 px-5">
-                        <CardTitle>{sourceLabel(source)}</CardTitle>
-                        <div className="flex flex-wrap gap-2">
-                            {source.presence === 'online' ? (
-                                <Badge variant="secondary">Online</Badge>
-                            ) : null}
-                            {sourceIsDynamic(source) ? (
-                                <Badge variant="secondary">Dinamico</Badge>
-                            ) : null}
-                            {source.exclusion ? (
-                                <Badge variant="outline">
-                                    {source.exclusion.kind === 'source'
-                                        ? 'Ignorata nelle sincronizzazioni'
-                                        : `Esclusa · ${source.exclusion.label}`}
-                                </Badge>
-                            ) : null}
-                            {source.edit_mode ? (
-                                <Badge variant="outline">
-                                    {source.edit_mode === 'manual'
-                                        ? 'Valore manuale mantenuto'
-                                        : source.matched_at
-                                          ? 'Modifica prevista riscontrata'
-                                          : 'Modifica prevista'}
-                                </Badge>
-                            ) : null}
-                            {source.state === 'missing' ? (
-                                <Badge variant="outline">
-                                    Non più presente nella fonte
-                                </Badge>
-                            ) : null}
-                            {source.stale ? (
-                                <Badge variant="outline">Non aggiornato</Badge>
-                            ) : null}
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-5 px-5 text-sm">
-                        {source.data.hostname_observed ? (
-                            <dl>
-                                <dt className="mb-1 text-muted-foreground">
-                                    Hostname riportato
-                                </dt>
-                                <dd className="text-xl font-semibold break-words">
-                                    {source.data.hostname_observed}
-                                </dd>
-                            </dl>
-                        ) : null}
-                        <dl className="grid gap-4 sm:grid-cols-2">
-                            {Object.entries({
-                                IPv4: source.ip,
-                                MAC: source.data.mac ?? source.data.mac_address,
-                                Stato: source.data.status
-                                    ? (statusLabels[source.data.status] ??
-                                      source.data.status)
-                                    : null,
-                            })
-                                .filter(([, value]) => value)
-                                .map(([label, value]) => (
-                                    <div key={label} className="min-w-0">
-                                        <dt className="text-muted-foreground">
-                                            {label}
-                                        </dt>
-                                        <dd className="-ml-2 tabular-nums">
-                                            <CopyValue value={value!} />
-                                        </dd>
-                                    </div>
-                                ))}
-                        </dl>
-                        {source.data.comment ? (
-                            <dl>
-                                <dt className="mb-1 text-muted-foreground">
-                                    Commento in MikroTik
-                                </dt>
-                                <dd className="break-words whitespace-pre-wrap">
-                                    {source.data.comment}
-                                </dd>
-                            </dl>
-                        ) : null}
-                        <Separator />
-                        <dl className="grid gap-4 sm:grid-cols-2">
-                            <div className="min-w-0">
-                                <dt className="mb-1 text-muted-foreground">
-                                    Letto da
-                                </dt>
-                                <dd className="flex items-start gap-2">
-                                    <MikrotikMark />
-                                    {companyId ? (
-                                        <TextLink
-                                            href={deviceShow({
-                                                company: companyId,
-                                                site: source.site_id,
-                                                device: source.device_id,
-                                            })}
-                                            className="min-w-0 break-words"
-                                        >
-                                            {source.source}
-                                        </TextLink>
-                                    ) : (
-                                        <span className="min-w-0 break-words">
-                                            {source.source}
-                                        </span>
-                                    )}
-                                </dd>
-                            </div>
-                            {source.present_at ? (
-                                <div>
-                                    <dt className="mb-1 text-muted-foreground">
-                                        Ultimo avvistamento
-                                    </dt>
-                                    <dd>
-                                        <time dateTime={source.present_at}>
-                                            {formatDateTime(source.present_at)}
-                                        </time>
-                                    </dd>
-                                </div>
-                            ) : null}
-                            <div>
-                                <dt className="mb-1 text-muted-foreground">
-                                    Ultima lettura riuscita
-                                </dt>
-                                <dd>
-                                    {source.read_at ? (
-                                        <time dateTime={source.read_at}>
-                                            {formatDateTime(source.read_at)}
-                                        </time>
-                                    ) : (
-                                        '—'
-                                    )}
-                                </dd>
-                            </div>
-                        </dl>
-                        <Collapsible>
-                            <CollapsibleTrigger asChild>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full justify-between [&[data-state=open]>svg]:rotate-180"
-                                >
-                                    Dettagli di rete
-                                    <ChevronDown data-icon="inline-end" />
-                                </Button>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                                <dl className="grid gap-4 pt-4 sm:grid-cols-2">
-                                    {Object.entries({
-                                        'Server DHCP': source.data.server,
-                                        'Porta RouterOS':
-                                            source.data.default_name,
-                                        Subnet: source.data.cidr,
-                                        Indirizzo: source.data.address,
-                                        Bridge: source.data.bridge,
-                                        Lista: source.data.list,
-                                        VLAN: source.data.tag,
-                                        Oggetto: source.data.name,
-                                        'Interfaccia di base':
-                                            source.data.context !==
-                                            (source.data.interface ??
-                                                source.data['on-interface'])
-                                                ? source.data.context
-                                                : null,
-                                        'Interfaccia RouterOS':
-                                            source.data.interface ??
-                                            source.data['on-interface'],
-                                        Tagged: source.data.tagged,
-                                        Untagged: source.data.untagged,
-                                        'Tagged attuali':
-                                            source.data['current-tagged'],
-                                        'Untagged attuali':
-                                            source.data['current-untagged'],
-                                        'Menu RouterOS': source.data.menu,
-                                    })
-                                        .filter(
-                                            ([, value]) =>
-                                                value !== undefined &&
-                                                value !== null &&
-                                                value !== '',
-                                        )
-                                        .map(([label, value]) => (
-                                            <div
-                                                key={label}
-                                                className="min-w-0"
-                                            >
-                                                <dt className="mb-1 text-muted-foreground">
-                                                    {label}
-                                                </dt>
-                                                <dd className="break-words whitespace-pre-wrap">
-                                                    {String(value)}
-                                                </dd>
-                                            </div>
-                                        ))}
-                                </dl>
-                            </CollapsibleContent>
-                        </Collapsible>
-                        {source.import_note ? (
-                            <p className="text-muted-foreground">
-                                {source.import_note}
-                            </p>
-                        ) : null}
-                        {source.problem ? (
-                            <Alert>
-                                <TriangleAlert />
-                                <AlertDescription>
-                                    <p>{source.problem}</p>
-                                </AlertDescription>
-                            </Alert>
-                        ) : null}
-                    </CardContent>
-                </Card>
+            {[...routers.values()].map((routerSources) => (
+                <RouterFacts
+                    key={routerSources[0].device_id}
+                    sources={routerSources}
+                />
             ))}
         </div>
     );
@@ -384,7 +352,11 @@ export function MikrotikSourcesDialog({
                     Fonti MikroTik
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
+            <DialogContent
+                className="sm:max-w-xl"
+                aria-describedby={undefined}
+                onOpenAutoFocus={focusPanel}
+            >
                 <DialogHeader>
                     <DialogTitle>Fonti MikroTik</DialogTitle>
                 </DialogHeader>
@@ -490,6 +462,7 @@ export function MikrotikIndicator({
             <SheetContent
                 className="w-full gap-5 overflow-y-auto sm:max-w-xl"
                 aria-describedby={undefined}
+                onOpenAutoFocus={focusPanel}
                 onClick={(event) => event.stopPropagation()}
             >
                 <SheetHeader className="px-5 pt-6 pr-12">

@@ -39,7 +39,7 @@ class CableLabelController extends Controller
                 'rack' => $rack->only('id', 'name'),
                 'cable' => $cable->only('name', 'type', 'color'),
                 'ends' => $ends,
-                'templates' => CableLabelTemplate::query()->where('cable_type', $cable->type)->get(),
+                'templates' => CableLabelTemplate::query()->where('cable_type', $cable->type)->orderBy('name')->orderBy('id')->get(),
             ]);
         });
     }

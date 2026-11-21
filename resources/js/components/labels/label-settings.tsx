@@ -1,9 +1,14 @@
 import { useId } from 'react';
 import { Choice } from '@/components/hardware-editor/editor-fields';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import type { LabelSettings } from '@/lib/cable-labels';
+import type { LabelError, LabelSettings } from '@/lib/cable-labels';
 
 export function Millimetres({
     label,
@@ -52,9 +57,11 @@ export function Millimetres({
 }
 export function LabelPhysicalSettings({
     settings,
+    errors,
     onChange,
 }: {
     settings: LabelSettings;
+    errors?: LabelError[];
     onChange: (settings: LabelSettings) => void;
 }) {
     return (
@@ -88,6 +95,7 @@ export function LabelPhysicalSettings({
                 max={160}
                 onChange={(wrap) => onChange({ ...settings, wrap })}
             />
+            <FieldError errors={errors} />
         </FieldGroup>
     );
 }
@@ -95,10 +103,12 @@ export function LabelPhysicalSettings({
 export function LabelLengthSettings({
     settings,
     faceLength,
+    errors,
     onChange,
 }: {
     settings: LabelSettings;
     faceLength: number;
+    errors?: LabelError[];
     onChange: (settings: LabelSettings) => void;
 }) {
     return (
@@ -135,6 +145,7 @@ export function LabelLengthSettings({
                     onChange({ ...settings, face_length, length_mode: 'fixed' })
                 }
             />
+            <FieldError errors={errors} />
             {settings.length_mode === 'fixed' && (
                 <Choice
                     label="Se il testo non entra"

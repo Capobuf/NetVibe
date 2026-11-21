@@ -1,18 +1,13 @@
 import { useId, useState, type ReactNode } from 'react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
-    layoutLabel,
     minimumWrap,
     labelPrintSides,
-    type CableType,
-    type LabelData,
     type LabelLayout,
     type LabelPrintMode,
     type LabelSettings,
     type LabelText,
-    type LabelWidth,
     type MeasureText,
 } from '@/lib/cable-labels';
 
@@ -29,9 +24,26 @@ export function createLabelMeasure(): MeasureText {
     };
 }
 
-function FaceText({ texts }: { texts: LabelText[] }) {
+export function ErrorDot() {
     return (
-        <g fill="black" fontFamily="Arial, sans-serif">
+        <>
+            <span
+                aria-hidden
+                className="size-1.5 shrink-0 rounded-full bg-destructive"
+            />
+            <span className="sr-only">con errori</span>
+        </>
+    );
+}
+
+function FaceText({ texts, clip }: { texts: LabelText[]; clip: string }) {
+    return (
+        // Clip to the face so overflowing text never spills onto the wrap or the other face.
+        <g
+            fill="black"
+            fontFamily="Arial, sans-serif"
+            clipPath={`url(#${clip})`}
+        >
             {texts.map((text, index) => (
                 <text
                     key={index}
@@ -67,6 +79,12 @@ export function LabelPreview({
 }) {
     const [back, setBack] = useState(false);
     const jacket = useId().replaceAll(':', '');
+    const clip = `${jacket}-face`;
+    const faceClip = (
+        <clipPath id={clip}>
+            <rect width={layout.faceLength} height={layout.width} />
+        </clipPath>
+    );
     const { faceLength: face, width, wrap, length } = layout;
     const diameter = settings.diameter;
     const cableWidth = diameter * (settings.profile === 'duplex' ? 2 : 1);
@@ -95,6 +113,7 @@ export function LabelPreview({
                         className="mx-auto h-full w-full max-w-none tabular-nums"
                         style={{ minWidth: (length + 2) * 4 }}
                     >
+                        <defs>{faceClip}</defs>
                         <rect
                             width={length}
                             height={width}
@@ -114,7 +133,21 @@ export function LabelPreview({
                             strokeWidth="0.2"
                             strokeDasharray="1 1"
                         />
-                        <FaceText texts={layout.faces[0]} />
+                        <FaceText texts={layout.faces[0]} clip={clip} />
+                        {layout.overflow.map(
+                            (overflow, index) =>
+                                overflow && (
+                                    <rect
+                                        key={index}
+                                        x={index * (face + wrap)}
+                                        width={face}
+                                        height={width}
+                                        fill="none"
+                                        strokeWidth="0.5"
+                                        className="stroke-destructive"
+                                    />
+                                ),
+                        )}
                         <g transform={`translate(${face + wrap} 0)`}>
                             <g
                                 transform={
@@ -123,7 +156,7 @@ export function LabelPreview({
                                         : undefined
                                 }
                             >
-                                <FaceText texts={layout.faces[1]} />
+                                <FaceText texts={layout.faces[1]} clip={clip} />
                             </g>
                         </g>
                         <g
@@ -131,13 +164,29 @@ export function LabelPreview({
                             fontSize="2.5"
                             textAnchor="middle"
                         >
-                            <text x={face / 2} y="-2">
+                            <text
+                                x={face / 2}
+                                y="-2"
+                                className={
+                                    layout.overflow[0]
+                                        ? 'fill-destructive'
+                                        : undefined
+                                }
+                            >
                                 Faccia 1
                             </text>
                             <text x={face + wrap / 2} y="-2">
                                 Avv.
                             </text>
-                            <text x={face + wrap + face / 2} y="-2">
+                            <text
+                                x={face + wrap + face / 2}
+                                y="-2"
+                                className={
+                                    layout.overflow[1]
+                                        ? 'fill-destructive'
+                                        : undefined
+                                }
+                            >
                                 Faccia 2
                             </text>
                             <text x={face / 2} y={width + 5}>
@@ -181,6 +230,7 @@ export function LabelPreview({
                         style={{ minWidth: (flagY + face + 4) * 4 }}
                     >
                         <defs>
+                            {faceClip}
                             <linearGradient
                                 id={jacket}
                                 x1="0"
@@ -270,7 +320,16 @@ export function LabelPreview({
                                     height={width}
                                     fill="white"
                                     stroke="#94a3b8"
-                                    strokeWidth="0.2"
+                                    strokeWidth={
+                                        layout.overflow[back ? 1 : 0]
+                                            ? 0.5
+                                            : 0.2
+                                    }
+                                    className={
+                                        layout.overflow[back ? 1 : 0]
+                                            ? 'stroke-destructive'
+                                            : undefined
+                                    }
                                 />
                                 <g
                                     transform={
@@ -281,6 +340,7 @@ export function LabelPreview({
                                 >
                                     <FaceText
                                         texts={layout.faces[back ? 1 : 0]}
+                                        clip={clip}
                                     />
                                 </g>
                             </g>
@@ -291,17 +351,6 @@ export function LabelPreview({
                     Circonferenza totale: {circumference.toFixed(1)} mm
                 </p>
             </section>
-            {layout.errors.length > 0 && (
-                <Alert variant="destructive">
-                    <AlertDescription>
-                        <ul className="list-disc pl-4">
-                            {layout.errors.map((error) => (
-                                <li key={error}>{error}</li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
-                </Alert>
-            )}
         </div>
     );
 }
@@ -320,11 +369,6 @@ export function LabelPreviews({
     const [selected, setSelected] = useState('0');
     const index = layouts.length === 1 ? 0 : Number(selected);
     const sides = labelPrintSides(printMode);
-    const otherErrors = [
-        ...new Set(
-            layouts.flatMap((layout, i) => (i !== index ? layout.errors : [])),
-        ),
-    ];
     return (
         <div className="@container flex min-w-0 flex-col gap-4">
             <LabelPreview
@@ -343,12 +387,12 @@ export function LabelPreviews({
                                 if (value) setSelected(value);
                             }}
                         >
-                            <ToggleGroupItem value="0">
-                                Estremità A
-                            </ToggleGroupItem>
-                            <ToggleGroupItem value="1">
-                                Estremità B
-                            </ToggleGroupItem>
+                            {layouts.map((layout, i) => (
+                                <ToggleGroupItem key={i} value={String(i)}>
+                                    Estremità {sides[i].toUpperCase()}
+                                    {layout.errors.length > 0 && <ErrorDot />}
+                                </ToggleGroupItem>
+                            ))}
                         </ToggleGroup>
                     ) : (
                         <span className="text-sm text-muted-foreground">
@@ -359,43 +403,6 @@ export function LabelPreviews({
                     )
                 }
             />
-            {otherErrors.length > 0 && (
-                <Alert variant="destructive">
-                    <AlertDescription>
-                        <p>Altra etichetta:</p>
-                        <ul className="list-disc pl-4">
-                            {otherErrors.map((error) => (
-                                <li key={error}>{error}</li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
-                </Alert>
-            )}
         </div>
-    );
-}
-
-export function SampleLabelPreview({
-    settings,
-    width,
-    data,
-    cableType,
-}: {
-    settings: LabelSettings;
-    width: LabelWidth;
-    data: LabelData;
-    cableType: CableType;
-}) {
-    const [measure] = useState(createLabelMeasure);
-    const layouts = labelPrintSides('both').map((side) =>
-        layoutLabel(settings, width, data, side, measure),
-    );
-    return (
-        <LabelPreviews
-            layouts={layouts}
-            printMode="both"
-            settings={settings}
-            color={cableType === 'fiber' ? '#facc15' : undefined}
-        />
     );
 }

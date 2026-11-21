@@ -5,10 +5,12 @@ import {
     defaultLabelSettings,
     labelPreset,
     labelPrintSides,
+    labelProblems,
     layoutLabel,
     minimumWrap,
     resolveLabelText,
     sampleLabelData,
+    scaleLabelSettings,
 } from '../../resources/js/lib/cable-labels.ts';
 
 const measure = (text: string, size: number) => [...text].length * size * 0.6;
@@ -89,7 +91,7 @@ test('optional names remove their block and adjacent separators, while blank lab
             { ...sampleLabelData, name: null },
             'a',
             measure,
-        ).errors.some((error) => error.includes('vuota')),
+        ).errors.some((error) => error.message.includes('vuota')),
     );
 });
 
@@ -117,7 +119,7 @@ test('long text grows the face without truncation; wrap and both face compositio
             data,
             'a',
             measure,
-        ).errors.some((error) => error.includes('non entra')),
+        ).errors.some((error) => error.message.includes('non entra')),
     );
     assert.ok(minimumWrap(2, 'duplex') > minimumWrap(2, 'round'));
     assert.ok(
@@ -127,7 +129,7 @@ test('long text grows the face without truncation; wrap and both face compositio
             sampleLabelData,
             'a',
             measure,
-        ).errors.some((error) => error.includes('Avvolgimento')),
+        ).errors.some((error) => error.message.includes('Avvolgimento')),
     );
     const opposite = layoutLabel(
         { ...settings, back_mode: 'opposite' },
@@ -197,4 +199,48 @@ test('automatic faces keep the complete 12 mm identification on one line and fix
     assert.deepEqual(labelPrintSides('single'), ['a']);
     assert.deepEqual(labelPrintSides('both'), ['a', 'b']);
     assert.deepEqual(labelPrintSides('b'), ['b']);
+});
+
+test('a profile scales its text to the tape chosen at print time and reports each problem once per end', () => {
+    const settings = defaultLabelSettings(12, 'copper');
+    const scaled = scaleLabelSettings(settings, 12, 24);
+    assert.equal(scaled.front[0].blocks[0].size, 6);
+    assert.equal(
+        scaleLabelSettings(scaled, 24, 12).front[0].blocks[0].size,
+        settings.front[0].blocks[0].size,
+    );
+    assert.equal(
+        scaleLabelSettings(
+            { ...settings, front: labelPreset(12, 'links') },
+            24,
+            12,
+        ).front[0].blocks[0].size,
+        2,
+    );
+    assert.deepEqual(
+        layoutLabel(scaled, 24, sampleLabelData, 'a', measure).errors,
+        [],
+    );
+    const data = {
+        ...sampleLabelData,
+        b: { ...sampleLabelData.b, piano: null },
+    };
+    const sides = labelPrintSides('both');
+    const problems = labelProblems(
+        sides.map((side) =>
+            layoutLabel(
+                { ...settings, back_mode: 'opposite' },
+                12,
+                data,
+                side,
+                measure,
+            ),
+        ),
+        sides,
+    );
+    assert.deepEqual(
+        problems.map((problem) => problem.message),
+        ['Estremità B: manca piano.'],
+    );
+    assert.equal(problems[0].at, 'text');
 });

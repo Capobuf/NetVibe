@@ -48,7 +48,18 @@ export type LabelLayout = {
     wrap: number;
     rotation: 0 | 180;
     faces: [LabelText[], LabelText[]];
-    errors: string[];
+    // Faces whose content exceeds the printable area.
+    overflow: [boolean, boolean];
+    errors: LabelError[];
+};
+// `at` names the setting group that causes the problem, so the UI can show it there.
+export type LabelError = {
+    message: string;
+    at: 'text' | 'length' | 'cable';
+    rows?: 'front' | 'back';
+    row?: number;
+    block?: number;
+    end?: 'a' | 'b';
 };
 export type MeasureText = (text: string, size: number) => number;
 
@@ -156,8 +167,8 @@ export function resolveLabelText(
     side: 'a' | 'b',
     endpointFormat: string,
     endpointOnly = false,
-): { text: string; errors: string[] } {
-    const errors: string[] = [];
+): { text: string; errors: Pick<LabelError, 'message' | 'end'>[] } {
+    const errors: Pick<LabelError, 'message' | 'end'>[] = [];
     let populated = false;
     let tokens = 0;
     const text = format.replace(/\{\{(.*?)\}\}/gs, (_, macro: string) => {
@@ -166,9 +177,7 @@ export function resolveLabelText(
             (!endpointOnly && !Object.hasOwn(labelMacros, macro)) ||
             (endpointOnly && !Object.hasOwn(endpointFields, macro))
         ) {
-            errors.push(
-                `Segnaposto non valido: ${macro}. Sostituiscilo con una macro disponibile.`,
-            );
+            errors.push({ message: `Segnaposto non valido: ${macro}.` });
             return '';
         }
         if (macro === 'nome_cavo') {
@@ -196,16 +205,18 @@ export function resolveLabelText(
         const field = (explicit ? macro.slice(2) : macro) as keyof LabelEnd;
         const value = data[target][field];
         if (value === null || !value.trim()) {
-            errors.push(
-                `Estremità ${target.toUpperCase()}: manca ${endpointFields[field].toLocaleLowerCase()}. Completa il dato nel rack/dispositivo oppure rimuovi la macro dal template.`,
-            );
+            errors.push({
+                message: `Manca ${endpointFields[field].toLocaleLowerCase()}.`,
+                end: target,
+            });
         } else populated = true;
         return value ?? '';
     });
     if (/\{\{|\}\}/.test(format.replace(/\{\{(.*?)\}\}/gs, '')))
-        errors.push(
-            'Segnaposto incompleto: chiudi le doppie parentesi graffe.',
-        );
+        errors.push({
+            message:
+                'Segnaposto incompleto: chiudi le doppie parentesi graffe.',
+        });
     // Omit an optional name block together with its literal prefix/suffix.
     return { text: tokens && !populated ? '' : text, errors };
 }
@@ -244,21 +255,24 @@ export function layoutLabel(
     side: 'a' | 'b',
     measure: MeasureText,
 ): LabelLayout {
-    const errors: string[] = [];
+    const errors: LabelError[] = [];
+    const within = (value: number, min: number, max: number) =>
+        Number.isFinite(value) && value >= min && value <= max;
+    if (!within(settings.diameter, 0.5, 30) || !within(settings.wrap, 2, 160))
+        errors.push({
+            message: 'Diametro 0,5–30 mm, avvolgimento 2–160 mm.',
+            at: 'cable',
+        });
     if (
-        !Number.isFinite(settings.diameter) ||
-        settings.diameter < 0.5 ||
-        settings.diameter > 30 ||
-        !Number.isFinite(settings.wrap) ||
-        settings.wrap < 2 ||
-        settings.wrap > 160 ||
-        !Number.isFinite(settings.max_length) ||
-        settings.max_length < 8 ||
-        settings.max_length > 150 ||
-        !Number.isFinite(settings.face_length) ||
-        settings.face_length < 8 ||
-        settings.face_length > settings.max_length
-    ) {
+        !within(settings.max_length, 8, 150) ||
+        !within(settings.face_length, 8, settings.max_length)
+    )
+        errors.push({
+            message:
+                'Lunghezza della faccia 8–150 mm, entro il limite massimo.',
+            at: 'length',
+        });
+    if (errors.length) {
         return {
             width,
             length: 60,
@@ -266,19 +280,19 @@ export function layoutLabel(
             wrap: 20,
             rotation: settings.back_rotation,
             faces: [[], []],
-            errors: [
-                'Correggi le dimensioni: diametro 0,5–30 mm, avvolgimento 2–160 mm, lunghezza faccia 8–150 mm entro il limite massimo.',
-            ],
+            overflow: [false, false],
+            errors,
         };
     }
-    const faces = [
-        settings.front,
-        settings.back_mode === 'custom' ? settings.back : settings.front,
-    ].map((rows, face) =>
-        rows
-            .map((row) => ({
+    const sources = [
+        'front',
+        settings.back_mode === 'custom' ? 'back' : 'front',
+    ] as const;
+    const faces = sources.map((source, face) =>
+        settings[source]
+            .map((row, rowIndex) => ({
                 separator: row.separator ?? '',
-                blocks: row.blocks.flatMap((block) => {
+                blocks: row.blocks.flatMap((block, blockIndex) => {
                     const current =
                         face === 1 && settings.back_mode === 'opposite'
                             ? side === 'a'
@@ -291,7 +305,15 @@ export function layoutLabel(
                         current,
                         settings.endpoint_format,
                     );
-                    errors.push(...resolved.errors);
+                    errors.push(
+                        ...resolved.errors.map((error) => ({
+                            ...error,
+                            at: 'text' as const,
+                            rows: source,
+                            row: rowIndex,
+                            block: blockIndex,
+                        })),
+                    );
                     return resolved.text.trim()
                         ? [{ ...block, text: resolved.text }]
                         : [];
@@ -301,13 +323,18 @@ export function layoutLabel(
     );
     const minimum = minimumWrap(settings.diameter, settings.profile);
     if (settings.wrap < minimum)
-        errors.push(
-            `Avvolgimento insufficiente: imposta almeno ${(Math.ceil(minimum * 10) / 10).toFixed(1)} mm per il profilo e il diametro selezionati.`,
-        );
-    if (faces.some((face) => !face.length))
-        errors.push(
-            'Una faccia è vuota. Inserisci il nome del cavo o scegli un template con collegamenti.',
-        );
+        errors.push({
+            message: `Avvolgimento minimo: ${(Math.ceil(minimum * 10) / 10).toFixed(1)} mm.`,
+            at: 'cable',
+        });
+    faces.forEach((face, index) => {
+        if (!face.length)
+            errors.push({
+                message: `La faccia ${index + 1} è vuota.`,
+                at: 'text',
+                rows: sources[index],
+            });
+    });
 
     function fitFace(rows: (typeof faces)[number], length: number, scale = 1) {
         const texts: LabelText[] = [];
@@ -401,7 +428,8 @@ export function layoutLabel(
         const height = Math.max(0, y - 0.5);
         const offset = (width - height) / 2;
         return {
-            fits: fits && height <= width - 2,
+            fits,
+            tall: height > width - 2,
             texts: texts.map((text) => ({ ...text, y: text.y + offset })),
         };
     }
@@ -445,7 +473,7 @@ export function layoutLabel(
         // Keep every block at or above the same readable minimum used by the editor.
         for (
             let percent = 99;
-            percent >= 0 && placed.some((face) => !face.fits);
+            percent >= 0 && placed.some((face) => !face.fits || face.tall);
             percent--
         ) {
             placed = faces.map((rows) =>
@@ -454,9 +482,18 @@ export function layoutLabel(
         }
     }
     if (placed.some((face) => !face.fits))
-        errors.push(
-            'Il contenuto non entra: aumenta la lunghezza della faccia o il limite massimo, scegli un nastro più alto oppure modifica l’adattamento del testo (minimo 2 mm).',
-        );
+        errors.push({
+            message: 'Il testo non entra nella lunghezza della faccia.',
+            at: 'length',
+        });
+    placed.forEach((face, index) => {
+        if (face.tall)
+            errors.push({
+                message: `Faccia ${index + 1}: il testo supera l’altezza del nastro.`,
+                at: 'text',
+                rows: sources[index],
+            });
+    });
     return {
         width,
         length: faceLength * 2 + settings.wrap,
@@ -464,7 +501,71 @@ export function layoutLabel(
         wrap: settings.wrap,
         rotation: settings.back_rotation,
         faces: [placed[0].texts, placed[1].texts],
-        errors: [...new Set(errors)],
+        overflow: [
+            !placed[0].fits || placed[0].tall,
+            !placed[1].fits || placed[1].tall,
+        ],
+        errors: uniqueErrors(errors),
+    };
+}
+
+function uniqueErrors(errors: LabelError[]): LabelError[] {
+    return [
+        ...new Map(
+            errors.map((error) => [JSON.stringify(error), error]),
+        ).values(),
+    ];
+}
+
+// One list for all printed labels: each problem appears once and names the end it concerns.
+export function labelProblems(
+    layouts: LabelLayout[],
+    sides: ('a' | 'b')[],
+): LabelError[] {
+    const found = new Map<string, { error: LabelError; sides: string[] }>();
+    layouts.forEach((layout, index) =>
+        layout.errors.forEach((error) => {
+            const key = JSON.stringify(error);
+            const entry = found.get(key) ?? { error, sides: [] };
+            entry.sides.push(sides[index]);
+            found.set(key, entry);
+        }),
+    );
+    return [...found.values()].map(({ error, sides: affected }) => {
+        const end =
+            error.end ??
+            (affected.length < layouts.length ? affected[0] : null);
+        return end
+            ? {
+                  ...error,
+                  message: `Estremità ${end.toUpperCase()}: ${error.message[0].toLocaleLowerCase()}${error.message.slice(1)}`,
+              }
+            : error;
+    });
+}
+
+// Profiles are designed on their reference tape; text follows the tape chosen when printing.
+export function scaleLabelSettings(
+    settings: LabelSettings,
+    from: LabelWidth,
+    to: LabelWidth,
+): LabelSettings {
+    if (from === to) return settings;
+    const scale = (rows: LabelRow[]) =>
+        rows.map((row) => ({
+            ...row,
+            blocks: row.blocks.map((block) => ({
+                ...block,
+                size: Math.max(
+                    2,
+                    Math.round((block.size * to * 10) / from) / 10,
+                ),
+            })),
+        }));
+    return {
+        ...settings,
+        front: scale(settings.front),
+        back: scale(settings.back),
     };
 }
 

@@ -9,11 +9,21 @@ import {
 } from '@/components/labels/label-editor';
 import {
     createLabelMeasure,
-    SampleLabelPreview,
+    LabelPreviews,
 } from '@/components/labels/label-preview';
 import { Choice } from '@/components/hardware-editor/editor-fields';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import {
+    Combobox,
+    ComboboxCollection,
+    ComboboxContent,
+    ComboboxGroup,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxLabel,
+    ComboboxList,
+} from '@/components/ui/combobox';
 import {
     Dialog,
     DialogContent,
@@ -32,12 +42,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     defaultLabelSettings,
     endpointFields,
     labelPreset,
     labelCompositions,
+    labelPrintSides,
+    labelProblems,
     layoutLabel,
     sampleLabelData,
     type CableType,
@@ -47,6 +58,14 @@ import {
 import { cableTypes } from '@/lib/rack-cabling';
 import { destroy, index, store, update } from '@/routes/administration/labels';
 import { index as administration } from '@/routes/administration';
+
+type ProfileOption = Pick<LabelTemplate, 'id' | 'name' | 'cable_type'>;
+// Sentinel list entry: choosing it opens the creation dialog instead of a profile.
+const newProfileOption: ProfileOption = {
+    id: -1,
+    name: 'Nuovo profilo',
+    cable_type: 'copper',
+};
 
 function emptyProfile(width: LabelWidth = 12): LabelTemplate {
     return {
@@ -71,7 +90,8 @@ export default function Labels({
         templates[0];
     const form = useForm<LabelTemplate>(initial ?? emptyProfile());
     const [active, setActive] = useState(!!initial);
-    const [query, setQuery] = useState('');
+    // null while the profile picker is not being used to search.
+    const [search, setSearch] = useState<string | null>(null);
     const [sample, setSample] = useState(sampleLabelData);
     const [measure] = useState(createLabelMeasure);
     const [creating, setCreating] = useState(false);
@@ -99,356 +119,272 @@ export default function Labels({
         else change();
     }
     const saved = !!form.data.id && !form.isDirty;
-    const visible = templates.filter((template) =>
-        `${template.name} ${template.width} mm ${cableTypes[template.cable_type]}`
-            .toLocaleLowerCase()
-            .includes(query.toLocaleLowerCase()),
+    const current: ProfileOption | null = active
+        ? {
+              id: form.data.id,
+              name: form.data.name || 'Nuovo profilo',
+              cable_type: form.data.cable_type,
+          }
+        : null;
+    const options: ProfileOption[] = [
+        ...templates,
+        ...(current && !current.id ? [current] : []),
+    ];
+    const groups = [
+        ...Object.entries(cableTypes).map(([type, label]) => ({
+            value: label,
+            items: options.filter((option) => option.cable_type === type),
+        })),
+        { value: '', items: [newProfileOption] },
+    ].filter((group) => group.items.length);
+    const sides = labelPrintSides('both');
+    const layouts = sides.map((side) =>
+        layoutLabel(form.data.settings, form.data.width, sample, side, measure),
     );
-    const profileTab = active ? String(form.data.id ?? 'draft') : 'empty';
-    const faceLength = layoutLabel(
-        form.data.settings,
-        form.data.width,
-        sample,
-        'a',
-        measure,
-    ).faceLength;
+    function editMetadata() {
+        setMetadata({
+            name: form.data.name,
+            width: form.data.width,
+            cable_type: form.data.cable_type,
+        });
+    }
     return (
         <>
             <Head title="Etichette · Amministrazione" />
             <div className="flex min-w-0 flex-col gap-5 p-4 md:p-6">
-                <header className="flex flex-wrap items-center justify-between gap-3">
-                    <h1 className="text-2xl font-medium tracking-tight">
-                        Etichette
-                    </h1>
-                </header>
-                <Tabs defaultValue="cables" className="gap-5">
-                    <TabsList>
-                        <TabsTrigger value="cables">Cavi</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="cables">
-                        <Tabs
-                            value={profileTab}
-                            activationMode="manual"
-                            className="min-w-0 gap-5"
-                            onValueChange={(value) => {
-                                const next = templates.find(
-                                    (template) => String(template.id) === value,
+                <h1 className="text-2xl font-medium tracking-tight">
+                    Etichette
+                </h1>
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 bg-background py-2">
+                    <Combobox
+                        items={groups}
+                        value={current}
+                        inputValue={search ?? current?.name ?? ''}
+                        disabled={form.processing}
+                        autoHighlight
+                        openOnInputClick
+                        itemToStringLabel={(option) => option.name}
+                        isItemEqualToValue={(a, b) => a.id === b.id}
+                        // Until the user types, the input shows the open profile and the list stays complete.
+                        filter={(option, query) =>
+                            search === null ||
+                            option === newProfileOption ||
+                            `${option.name} ${cableTypes[option.cable_type]}`
+                                .toLocaleLowerCase()
+                                .includes(query.trim().toLocaleLowerCase())
+                        }
+                        onInputValueChange={setSearch}
+                        onOpenChangeComplete={(open) => {
+                            if (!open) setSearch(null);
+                        }}
+                        onValueChange={(option) => {
+                            if (option === newProfileOption)
+                                guard(() => {
+                                    setNewWidth(form.data.width);
+                                    setNewName('');
+                                    setCreating(true);
+                                });
+                            else if (option?.id && option.id !== form.data.id)
+                                guard(() =>
+                                    load(
+                                        templates.find(
+                                            (template) =>
+                                                template.id === option.id,
+                                        )!,
+                                    ),
                                 );
-                                if (next && next.id !== form.data.id)
-                                    guard(() => load(next));
-                            }}
-                        >
-                            <div className="flex min-w-0 flex-wrap items-center gap-3">
-                                <div className="min-w-0 basis-full overflow-x-auto p-1 xl:flex-1 xl:basis-auto">
-                                    <TabsList aria-label="Profili etichette">
-                                        {visible.map((template) => (
-                                            <TabsTrigger
-                                                key={template.id}
-                                                value={String(template.id)}
-                                                disabled={form.processing}
-                                                className="shrink-0 px-3"
-                                            >
-                                                {template.name}
-                                            </TabsTrigger>
-                                        ))}
-                                        {active && !form.data.id && (
-                                            <TabsTrigger
-                                                value="draft"
-                                                disabled={form.processing}
-                                                className="shrink-0 px-3"
-                                            >
-                                                Nuovo profilo
-                                            </TabsTrigger>
+                        }}
+                    >
+                        <ComboboxInput
+                            aria-label="Profilo"
+                            placeholder="Scegli un profilo…"
+                            className="w-full sm:w-80"
+                            disabled={form.processing}
+                        />
+                        <ComboboxContent>
+                            <ComboboxList>
+                                {(group: (typeof groups)[number]) => (
+                                    <ComboboxGroup
+                                        key={group.value}
+                                        items={group.items}
+                                        className="not-first:mt-1 not-first:border-t not-first:pt-1"
+                                    >
+                                        {group.value && (
+                                            <ComboboxLabel>
+                                                {group.value}
+                                            </ComboboxLabel>
                                         )}
-                                    </TabsList>
-                                </div>
-                                <Input
-                                    aria-label="Cerca profili"
-                                    placeholder="Cerca profili…"
-                                    className="w-48"
-                                    value={query}
-                                    onChange={(event) =>
-                                        setQuery(event.target.value)
-                                    }
-                                />
-                                <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                        guard(() => {
-                                            setNewWidth(form.data.width);
-                                            setNewName('');
-                                            setCreating(true);
-                                        })
-                                    }
-                                    disabled={form.processing}
-                                >
-                                    <Plus />
-                                    Nuovo profilo
-                                </Button>
-                            </div>
-                            {!visible.length && query && (
-                                <p className="text-sm text-muted-foreground">
-                                    Nessun profilo trovato.
-                                </p>
-                            )}
-                            <TabsContent
-                                value={profileTab}
-                                aria-labelledby={undefined}
-                                aria-label="Profilo etichetta"
-                            >
-                                {active ? (
-                                    <div className="flex min-w-0 flex-col gap-6">
-                                        <form
-                                            id="label-template"
-                                            className="flex min-w-0 flex-col gap-6"
-                                            onSubmit={(event) => {
-                                                event.preventDefault();
-                                                form.submit(
-                                                    form.data.id
-                                                        ? update(form.data.id)
-                                                        : store(),
-                                                    {
-                                                        preserveScroll: true,
-                                                        onSuccess: (page) => {
-                                                            const saved = (
-                                                                page.props
-                                                                    .templates as LabelTemplate[]
-                                                            ).find(
-                                                                (template) =>
-                                                                    template.id ===
-                                                                    page.props
-                                                                        .selectedTemplateId,
-                                                            );
-                                                            if (saved)
-                                                                load(saved);
-                                                        },
-                                                    },
-                                                );
-                                            }}
-                                        >
-                                            <fieldset
-                                                disabled={form.processing}
-                                                className="flex min-w-0 flex-col gap-6"
-                                            >
-                                                <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-background p-4">
-                                                    <div className="min-w-0 flex-1">
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            className="-mx-2 h-auto max-w-full flex-col items-start gap-1 px-2 py-2 text-left wrap-break-word whitespace-normal"
-                                                            aria-label={`Modifica nome, larghezza e tipo di cavo del profilo ${form.data.name}`}
-                                                            onClick={() =>
-                                                                setMetadata({
-                                                                    name: form
-                                                                        .data
-                                                                        .name,
-                                                                    width: form
-                                                                        .data
-                                                                        .width,
-                                                                    cable_type:
-                                                                        form
-                                                                            .data
-                                                                            .cable_type,
-                                                                })
-                                                            }
-                                                        >
-                                                            <span>
-                                                                {form.data.name}
-                                                            </span>
-                                                            <span className="text-sm font-normal text-muted-foreground">
-                                                                {
-                                                                    form.data
-                                                                        .width
-                                                                }{' '}
-                                                                mm ·{' '}
-                                                                {
-                                                                    cableTypes[
-                                                                        form
-                                                                            .data
-                                                                            .cable_type
-                                                                    ]
-                                                                }
-                                                            </span>
-                                                        </Button>
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-3">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger
-                                                                asChild
-                                                            >
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="icon"
-                                                                    aria-label="Azioni profilo"
-                                                                    disabled={
-                                                                        form.processing
-                                                                    }
-                                                                >
-                                                                    <MoreHorizontal />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuGroup>
-                                                                    <DropdownMenuItem
-                                                                        onSelect={() =>
-                                                                            setMetadata(
-                                                                                {
-                                                                                    name: form
-                                                                                        .data
-                                                                                        .name,
-                                                                                    width: form
-                                                                                        .data
-                                                                                        .width,
-                                                                                    cable_type:
-                                                                                        form
-                                                                                            .data
-                                                                                            .cable_type,
-                                                                                },
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        <Pencil />
-                                                                        Nome e
-                                                                        formato
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        onSelect={() =>
-                                                                            guard(
-                                                                                () =>
-                                                                                    load(
-                                                                                        {
-                                                                                            ...structuredClone(
-                                                                                                form.data,
-                                                                                            ),
-                                                                                            id: null,
-                                                                                            name: `${form.data.name.slice(0, 247)} — copia`,
-                                                                                            revision: 0,
-                                                                                        },
-                                                                                    ),
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        <Copy />
-                                                                        Duplica
-                                                                        profilo
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        onSelect={() =>
-                                                                            setEditingSample(
-                                                                                true,
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        <Pencil />
-                                                                        Dati di
-                                                                        esempio
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuGroup>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem
-                                                                    variant="destructive"
-                                                                    disabled={
-                                                                        !form
-                                                                            .data
-                                                                            .id
-                                                                    }
-                                                                    onSelect={() =>
-                                                                        setDeleting(
-                                                                            true,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    <Trash2 />
-                                                                    Elimina
-                                                                    profilo
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                        <SaveButton
-                                                            processing={
-                                                                form.processing
-                                                            }
-                                                            saved={saved}
-                                                        >
-                                                            Salva profilo
-                                                        </SaveButton>
-                                                    </div>
-                                                </div>
-                                                {Object.keys(form.errors)
-                                                    .length > 0 && (
-                                                    <Alert variant="destructive">
-                                                        <AlertDescription>
-                                                            {Object.values(
-                                                                form.errors,
-                                                            ).join(' ')}
-                                                        </AlertDescription>
-                                                    </Alert>
-                                                )}
-                                                <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
-                                                    <section
-                                                        className="min-w-0 rounded-lg border p-4 md:p-5"
-                                                        aria-label="Modifica profilo"
-                                                    >
-                                                        <LabelEditor
-                                                            key={
-                                                                form.data.id ??
-                                                                'new'
-                                                            }
-                                                            settings={
-                                                                form.data
-                                                                    .settings
-                                                            }
-                                                            width={
-                                                                form.data.width
-                                                            }
-                                                            faceLength={
-                                                                faceLength
-                                                            }
-                                                            onChange={(
-                                                                settings,
-                                                            ) =>
-                                                                form.setData(
-                                                                    'settings',
-                                                                    settings,
-                                                                )
-                                                            }
-                                                        />
-                                                    </section>
-                                                    <section className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-28">
-                                                        <h2 className="text-lg font-medium">
-                                                            Anteprima
-                                                        </h2>
-                                                        <SampleLabelPreview
-                                                            settings={
-                                                                form.data
-                                                                    .settings
-                                                            }
-                                                            width={
-                                                                form.data.width
-                                                            }
-                                                            data={sample}
-                                                            cableType={
-                                                                form.data
-                                                                    .cable_type
-                                                            }
-                                                        />
-                                                    </section>
-                                                </div>
-                                            </fieldset>
-                                        </form>
-                                    </div>
-                                ) : (
-                                    <Alert>
-                                        <AlertDescription>
-                                            Crea un profilo per iniziare.
-                                        </AlertDescription>
-                                    </Alert>
+                                        <ComboboxCollection>
+                                            {(option: ProfileOption) => (
+                                                <ComboboxItem
+                                                    key={option.id ?? 'draft'}
+                                                    value={option}
+                                                >
+                                                    {option ===
+                                                        newProfileOption && (
+                                                        <Plus />
+                                                    )}
+                                                    {option.name}
+                                                </ComboboxItem>
+                                            )}
+                                        </ComboboxCollection>
+                                    </ComboboxGroup>
                                 )}
-                            </TabsContent>
-                        </Tabs>
-                    </TabsContent>
-                </Tabs>
+                            </ComboboxList>
+                        </ComboboxContent>
+                    </Combobox>
+                    {active && (
+                        <>
+                            <span className="text-sm text-muted-foreground">
+                                {cableTypes[form.data.cable_type]} · nastro di
+                                riferimento {form.data.width} mm
+                            </span>
+                            <div className="ml-auto flex items-center gap-3">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="Azioni profilo"
+                                            disabled={form.processing}
+                                        >
+                                            <MoreHorizontal />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuGroup>
+                                            <DropdownMenuItem
+                                                onSelect={editMetadata}
+                                            >
+                                                <Pencil />
+                                                Nome e formato
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onSelect={() =>
+                                                    guard(() =>
+                                                        load({
+                                                            ...structuredClone(
+                                                                form.data,
+                                                            ),
+                                                            id: null,
+                                                            name: `${form.data.name.slice(0, 247)} — copia`,
+                                                            revision: 0,
+                                                        }),
+                                                    )
+                                                }
+                                            >
+                                                <Copy />
+                                                Duplica profilo
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onSelect={() =>
+                                                    setEditingSample(true)
+                                                }
+                                            >
+                                                <Pencil />
+                                                Dati di esempio
+                                            </DropdownMenuItem>
+                                        </DropdownMenuGroup>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            variant="destructive"
+                                            disabled={!form.data.id}
+                                            onSelect={() => setDeleting(true)}
+                                        >
+                                            <Trash2 />
+                                            Elimina profilo
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <SaveButton
+                                    form="label-template"
+                                    processing={form.processing}
+                                    saved={saved}
+                                >
+                                    Salva profilo
+                                </SaveButton>
+                            </div>
+                        </>
+                    )}
+                </div>
+                {active ? (
+                    <form
+                        id="label-template"
+                        className="min-w-0"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            form.submit(
+                                form.data.id ? update(form.data.id) : store(),
+                                {
+                                    preserveScroll: true,
+                                    onSuccess: (page) => {
+                                        const saved = (
+                                            page.props
+                                                .templates as LabelTemplate[]
+                                        ).find(
+                                            (template) =>
+                                                template.id ===
+                                                page.props.selectedTemplateId,
+                                        );
+                                        if (saved) load(saved);
+                                    },
+                                },
+                            );
+                        }}
+                    >
+                        <fieldset
+                            disabled={form.processing}
+                            className="flex min-w-0 flex-col gap-6"
+                        >
+                            {Object.keys(form.errors).length > 0 && (
+                                <Alert variant="destructive">
+                                    <AlertDescription>
+                                        {Object.values(form.errors).join(' ')}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+                            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
+                                <section
+                                    className="min-w-0 rounded-lg border p-4 md:p-5"
+                                    aria-label="Modifica profilo"
+                                >
+                                    <LabelEditor
+                                        key={form.data.id ?? 'new'}
+                                        settings={form.data.settings}
+                                        width={form.data.width}
+                                        faceLength={layouts[0].faceLength}
+                                        errors={labelProblems(layouts, sides)}
+                                        onChange={(settings) =>
+                                            form.setData('settings', settings)
+                                        }
+                                    />
+                                </section>
+                                <section className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-20">
+                                    <h2 className="text-lg font-medium">
+                                        Anteprima
+                                    </h2>
+                                    <LabelPreviews
+                                        layouts={layouts}
+                                        printMode="both"
+                                        settings={form.data.settings}
+                                        color={
+                                            form.data.cable_type === 'fiber'
+                                                ? '#facc15'
+                                                : undefined
+                                        }
+                                    />
+                                </section>
+                            </div>
+                        </fieldset>
+                    </form>
+                ) : (
+                    <Alert>
+                        <AlertDescription>
+                            Crea un profilo per iniziare.
+                        </AlertDescription>
+                    </Alert>
+                )}
             </div>
             <Dialog
                 open={!!metadata}
@@ -488,7 +424,7 @@ export default function Labels({
                                     />
                                 </Field>
                                 <Choice
-                                    label="Larghezza TZe"
+                                    label="Nastro di riferimento"
                                     value={String(metadata.width)}
                                     choices={{
                                         '12': '12 mm',
@@ -622,7 +558,7 @@ export default function Labels({
                                 id: null,
                                 name:
                                     newName.trim() ||
-                                    `${cableTypes[newType]} — ${labelCompositions[preset as keyof typeof labelCompositions].name} (${newWidth} mm)`,
+                                    `${cableTypes[newType]} — ${labelCompositions[preset as keyof typeof labelCompositions].name}`,
                                 width: newWidth,
                                 cable_type: newType,
                                 revision: 0,
@@ -640,7 +576,7 @@ export default function Labels({
                                     id="new-profile-name"
                                     value={newName}
                                     maxLength={255}
-                                    placeholder={`${cableTypes[newType]} — ${labelCompositions[preset as keyof typeof labelCompositions].name} (${newWidth} mm)`}
+                                    placeholder={`${cableTypes[newType]} — ${labelCompositions[preset as keyof typeof labelCompositions].name}`}
                                     onChange={(event) =>
                                         setNewName(event.target.value)
                                     }
@@ -648,7 +584,7 @@ export default function Labels({
                             </Field>
                             <FieldGroup className="grid grid-cols-2 gap-4">
                                 <Choice
-                                    label="Larghezza TZe"
+                                    label="Nastro di riferimento"
                                     value={String(newWidth)}
                                     choices={{
                                         '12': '12 mm',

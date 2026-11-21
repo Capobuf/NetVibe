@@ -14,7 +14,7 @@ import { IconButton } from '@/components/icon-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Field, FieldLabel } from '@/components/ui/field';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
     Select,
@@ -28,7 +28,9 @@ import {
     defaultLabelSettings,
     layoutLabel,
     labelPrintSides,
+    labelProblems,
     printModes,
+    scaleLabelSettings,
     type CableType,
     type LabelData,
     type LabelPrintMode,
@@ -56,6 +58,8 @@ export default function CableLabels({
 }: Props) {
     const [width, setWidth] = useState<LabelWidth>(12);
     const [profileId, setProfileId] = useState('');
+    // Tape the chosen profile was designed on; its text scales to the tape being printed.
+    const [reference, setReference] = useState<LabelWidth>(12);
     const [printMode, setPrintMode] = useState<LabelPrintMode>('both');
     const [measure] = useState(createLabelMeasure);
     const [settings, setSettings] = useState(() =>
@@ -63,6 +67,8 @@ export default function CableLabels({
     );
     const [documentUrl, setDocumentUrl] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    // The browser refused the new tab: offer the document as a link instead.
+    const [blocked, setBlocked] = useState(false);
     const [error, setError] = useState('');
     useEffect(
         () => () => {
@@ -71,10 +77,14 @@ export default function CableLabels({
         [documentUrl],
     );
     const data = { ...ends, name: cable.name };
-    const layouts = labelPrintSides(printMode).map((side) =>
-        layoutLabel(settings, width, data, side, measure),
+    const sides = labelPrintSides(printMode);
+    const scaled = scaleLabelSettings(settings, reference, width);
+    const layouts = sides.map((side) =>
+        layoutLabel(scaled, width, data, side, measure),
     );
-    const problems = [...new Set(layouts.flatMap((layout) => layout.errors))];
+    const problems = labelProblems(layouts, sides);
+    const at = (group: (typeof problems)[number]['at']) =>
+        problems.filter((problem) => problem.at === group);
     function invalidate() {
         setDocumentUrl(null);
         setError('');
@@ -109,12 +119,18 @@ export default function CableLabels({
                             if (!profileId || problems.length || busy) return;
                             setBusy(true);
                             setError('');
+                            // Open the tab inside the click: browsers block tabs opened after the PDF is ready.
+                            const tab = window.open('', '_blank');
                             try {
                                 const { cableLabelPdf } =
                                     await import('@/lib/cable-label-pdf');
                                 const blob = await cableLabelPdf(layouts);
-                                setDocumentUrl(URL.createObjectURL(blob));
+                                const url = URL.createObjectURL(blob);
+                                setDocumentUrl(url);
+                                setBlocked(!tab);
+                                if (tab) tab.location.href = url;
                             } catch (error) {
+                                tab?.close();
                                 setError(
                                     error instanceof Error
                                         ? error.message
@@ -140,17 +156,7 @@ export default function CableLabels({
                                     aria-labelledby="print-width"
                                     onValueChange={(value) => {
                                         if (!value) return;
-                                        const next = Number(
-                                            value,
-                                        ) as LabelWidth;
-                                        setWidth(next);
-                                        setProfileId('');
-                                        setSettings(
-                                            defaultLabelSettings(
-                                                next,
-                                                cable.type,
-                                            ),
-                                        );
+                                        setWidth(Number(value) as LabelWidth);
                                         invalidate();
                                     }}
                                 >
@@ -176,6 +182,7 @@ export default function CableLabels({
                                                 String(template.id) === value,
                                         );
                                         setProfileId(value);
+                                        setReference(template?.width ?? width);
                                         setSettings(
                                             template?.settings ??
                                                 defaultLabelSettings(
@@ -194,29 +201,23 @@ export default function CableLabels({
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
-                                            {templates
-                                                .filter(
-                                                    (template) =>
-                                                        template.width ===
-                                                        width,
-                                                )
-                                                .map((template) => (
-                                                    <SelectItem
-                                                        key={template.id}
-                                                        value={String(
-                                                            template.id,
-                                                        )}
-                                                    >
-                                                        {template.name}
-                                                    </SelectItem>
-                                                ))}
+                                            {templates.map((template) => (
+                                                <SelectItem
+                                                    key={template.id}
+                                                    value={String(template.id)}
+                                                >
+                                                    {template.name}
+                                                </SelectItem>
+                                            ))}
                                             <SelectItem value="preset">
-                                                Preset iniziale · Completa (
-                                                {width} mm)
+                                                Preset iniziale · Completa
                                             </SelectItem>
                                         </SelectGroup>
                                     </SelectContent>
                                 </Select>
+                                {profileId && (
+                                    <FieldError errors={at('text')} />
+                                )}
                             </Field>
                             {profileId && (
                                 <>
@@ -234,6 +235,7 @@ export default function CableLabels({
                                     <LabelLengthSettings
                                         settings={settings}
                                         faceLength={layouts[0].faceLength}
+                                        errors={at('length')}
                                         onChange={(next) => {
                                             setSettings(next);
                                             invalidate();
@@ -241,6 +243,7 @@ export default function CableLabels({
                                     />
                                     <LabelPhysicalSettings
                                         settings={settings}
+                                        errors={at('cable')}
                                         onChange={(next) => {
                                             setSettings(next);
                                             invalidate();
@@ -253,7 +256,7 @@ export default function CableLabels({
                                         <Printer />
                                         {busy
                                             ? 'Preparazione…'
-                                            : `Genera PDF · ${layouts.length} ${layouts.length === 1 ? 'etichetta' : 'etichette'}`}
+                                            : `Stampa PDF · ${layouts.length} ${layouts.length === 1 ? 'etichetta' : 'etichette'}`}
                                     </Button>
                                 </>
                             )}
@@ -265,16 +268,18 @@ export default function CableLabels({
                         )}
                         {documentUrl && (
                             <div className="flex flex-col gap-3">
-                                <Button asChild>
-                                    <a
-                                        href={documentUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <Printer />
-                                        Apri PDF e stampa
-                                    </a>
-                                </Button>
+                                {blocked && (
+                                    <Button asChild>
+                                        <a
+                                            href={documentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            <Printer />
+                                            Apri PDF
+                                        </a>
+                                    </Button>
+                                )}
                                 <Button asChild variant="outline">
                                     <a
                                         href={documentUrl}
@@ -300,7 +305,7 @@ export default function CableLabels({
                             <LabelPreviews
                                 layouts={layouts}
                                 printMode={printMode}
-                                settings={settings}
+                                settings={scaled}
                                 color={cable.color}
                             />
                         ) : (

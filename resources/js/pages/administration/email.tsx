@@ -1,7 +1,7 @@
 import { SaveButton } from '@/components/save-button';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { Send } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import PasswordInput from '@/components/password-input';
 import { Badge } from '@/components/ui/badge';
@@ -24,10 +24,14 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import {
     Select,
     SelectContent,
@@ -78,6 +82,8 @@ export default function Email({
     const form = useForm(formData(settings));
     const testForm = useForm({ recipient: auth.user.email });
     const [testing, setTesting] = useState(false);
+    // Set on submit; the request starts once the dialog has closed so its toast follows the close.
+    const sendOnClose = useRef(false);
     const busy = form.processing || testForm.processing;
     const testBlocked = form.isDirty
         ? 'Salva prima le modifiche'
@@ -90,7 +96,11 @@ export default function Email({
             variant="outline"
             disabled={testBlocked !== null || busy}
         >
-            <Send data-icon="inline-start" />
+            {testForm.processing ? (
+                <Spinner data-icon="inline-start" />
+            ) : (
+                <Send data-icon="inline-start" />
+            )}
             Invia prova
         </Button>
     );
@@ -426,31 +436,42 @@ export default function Email({
                                     </TooltipContent>
                                 </Tooltip>
                             ) : (
-                                <Popover
+                                <Dialog
                                     open={testing}
                                     onOpenChange={setTesting}
                                 >
-                                    <PopoverTrigger asChild>
+                                    <DialogTrigger asChild>
                                         {testButton}
-                                    </PopoverTrigger>
-                                    <PopoverContent align="end">
+                                    </DialogTrigger>
+                                    <DialogContent
+                                        aria-describedby={undefined}
+                                        onCloseAutoFocus={() => {
+                                            if (!sendOnClose.current) return;
+                                            sendOnClose.current = false;
+                                            testForm.submit(sendTest(), {
+                                                preserveScroll: true,
+                                                onError: (errors) =>
+                                                    toast.error(
+                                                        Object.values(
+                                                            errors,
+                                                        )[0],
+                                                    ),
+                                            });
+                                        }}
+                                    >
+                                        <DialogHeader>
+                                            <DialogTitle>
+                                                Email di prova
+                                            </DialogTitle>
+                                        </DialogHeader>
                                         <form
-                                            className="flex flex-col gap-3"
+                                            className="flex flex-col gap-5"
                                             onSubmit={(event) => {
                                                 event.preventDefault();
-                                                // The popover is portaled, but React still bubbles submit to the SMTP form.
+                                                // The dialog is portaled, but React still bubbles submit to the SMTP form.
                                                 event.stopPropagation();
-                                                testForm.submit(sendTest(), {
-                                                    preserveScroll: true,
-                                                    onSuccess: () =>
-                                                        setTesting(false),
-                                                    onError: (errors) =>
-                                                        toast.error(
-                                                            Object.values(
-                                                                errors,
-                                                            )[0],
-                                                        ),
-                                                });
+                                                sendOnClose.current = true;
+                                                setTesting(false);
                                             }}
                                         >
                                             <Field>
@@ -472,26 +493,25 @@ export default function Email({
                                                     }
                                                     required
                                                     maxLength={255}
-                                                    disabled={
-                                                        testForm.processing
-                                                    }
                                                 />
                                             </Field>
-                                            <Button
-                                                type="submit"
-                                                className="self-end"
-                                                disabled={testForm.processing}
-                                            >
-                                                {testForm.processing ? (
-                                                    <Spinner data-icon="inline-start" />
-                                                ) : (
+                                            <DialogFooter>
+                                                <DialogClose asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                    >
+                                                        Annulla
+                                                    </Button>
+                                                </DialogClose>
+                                                <Button type="submit">
                                                     <Send data-icon="inline-start" />
-                                                )}
-                                                Invia
-                                            </Button>
+                                                    Invia
+                                                </Button>
+                                            </DialogFooter>
                                         </form>
-                                    </PopoverContent>
-                                </Popover>
+                                    </DialogContent>
+                                </Dialog>
                             )}
                         </CardFooter>
                     </Card>

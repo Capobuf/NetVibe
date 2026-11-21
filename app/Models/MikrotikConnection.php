@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Exceptions\MikrotikException;
+use App\Support\SyncNotifier;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,23 @@ use Illuminate\Database\Eloquent\Model;
 #[Hidden(['username', 'password', 'check_log', 'sync_log'])]
 class MikrotikConnection extends Model
 {
+    protected static function booted(): void
+    {
+        static::updated(function (self $connection) {
+            if (! $connection->wasChanged('sync_status')) {
+                return;
+            }
+            // null means never synced and suspended means deactivated by the user: neither is a failure.
+            $failing = fn (?string $status) => ! in_array($status, [null, 'ok', 'suspended'], true);
+            $device = Device::with('site.company')->find($connection->device_id);
+            if ($device) {
+                SyncNotifier::transition('mikrotik', $failing($connection->getOriginal('sync_status')), $failing($connection->sync_status), $connection->sync_status === 'ok',
+                    $device->site->company, implode(' · ', array_filter([$device->site->company->name, $device->site->name, $device->name])), route('companies.settings.integrations.mikrotik', $device->site->company),
+                    $failing($connection->sync_status) ? MikrotikException::messageFor($connection->sync_status) : null);
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

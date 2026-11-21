@@ -8,6 +8,9 @@ export type User = {
     two_factor_enabled?: boolean;
     subnet_hide_free: boolean;
     subnet_table_separators: boolean;
+    notify_snipe_it: boolean;
+    notify_mikrotik: boolean;
+    notify_unifi: boolean;
     created_at: string;
     updated_at: string;
     [key: string]: unknown;

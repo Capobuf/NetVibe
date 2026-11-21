@@ -21,6 +21,9 @@ import {
     Plug,
     Users,
     ArrowLeft,
+    UserRound,
+    ShieldCheck,
+    Palette,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -37,6 +40,9 @@ import {
     SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { home } from '@/routes';
+import { edit as appearanceSettings } from '@/routes/appearance';
+import { edit as profileSettings } from '@/routes/profile';
+import { edit as securitySettings } from '@/routes/security';
 import { index as administration } from '@/routes/administration';
 import { index as adminUsers } from '@/routes/administration/users';
 import { index as ipStatuses } from '@/routes/administration/ip-statuses';
@@ -51,6 +57,9 @@ export function AppSidebar() {
         component,
     } = usePage();
     const inAdministration = navigationArea === 'administration';
+    // Personal settings replace the sidebar like Administration does; the
+    // session area is kept so the back link returns where the user came from.
+    const inSettings = component.startsWith('settings/');
     const settingsCompany = companyNavigation?.currentCompanyId ?? null;
     const catalogActive =
         component === 'devices/models' ||
@@ -87,8 +96,31 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <SidebarNavigation key={navigationArea}>
-                    {inAdministration ? (
+                <SidebarNavigation
+                    key={inSettings ? 'settings' : navigationArea}
+                >
+                    {inSettings ? (
+                        <NavMain
+                            label="Impostazioni"
+                            items={[
+                                {
+                                    title: 'Profilo',
+                                    href: profileSettings(),
+                                    icon: UserRound,
+                                },
+                                {
+                                    title: 'Sicurezza',
+                                    href: securitySettings(),
+                                    icon: ShieldCheck,
+                                },
+                                {
+                                    title: 'Aspetto',
+                                    href: appearanceSettings(),
+                                    icon: Palette,
+                                },
+                            ]}
+                        />
+                    ) : inAdministration ? (
                         <NavMain
                             label="Amministrazione"
                             items={[
@@ -179,7 +211,7 @@ export function AppSidebar() {
 
             <SidebarFooter>
                 {/* Company settings exist only in the context of a selected company. */}
-                {!inAdministration && settingsCompany ? (
+                {!inSettings && !inAdministration && settingsCompany ? (
                     <NavMain
                         items={[
                             {
@@ -190,10 +222,32 @@ export function AppSidebar() {
                         ]}
                     />
                 ) : null}
-                {inAdministration || settingsCompany ? (
+                {!inSettings && (inAdministration || settingsCompany) ? (
                     <SidebarSeparator />
                 ) : null}
-                {inAdministration ? (
+                {inSettings ? (
+                    <NavMain
+                        items={[
+                            inAdministration
+                                ? {
+                                      title: 'Torna ad Amministrazione',
+                                      href: administration(),
+                                      icon: ArrowLeft,
+                                  }
+                                : networkContext
+                                  ? {
+                                        title: 'Torna all’azienda',
+                                        href: subnetIndex(networkContext),
+                                        icon: ArrowLeft,
+                                    }
+                                  : {
+                                        title: 'Torna alle aziende',
+                                        href: companyIndex(),
+                                        icon: ArrowLeft,
+                                    },
+                        ]}
+                    />
+                ) : inAdministration ? (
                     <NavMain
                         items={[
                             {
@@ -219,9 +273,9 @@ export function AppSidebar() {
                     />
                 ) : null}
 
-                {(inAdministration || auth.user.is_superadmin) && (
-                    <SidebarSeparator />
-                )}
+                {(inSettings ||
+                    inAdministration ||
+                    auth.user.is_superadmin) && <SidebarSeparator />}
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Exceptions\GoogleDriveException;
 use App\Exports\IpamWorkbook;
 use App\Models\GoogleDriveAccount;
+use App\Models\GoogleDriveSetting;
 use App\Models\GoogleDriveSync;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -35,14 +36,33 @@ class GoogleDrive
 
     public static function configured(): bool
     {
-        return collect(['client_id', 'client_secret', 'api_key', 'app_id'])->every(fn ($key) => filled(config('services.google.'.$key)));
+        return GoogleDriveSetting::current() !== null;
+    }
+
+    public static function redirectUri(): string
+    {
+        return route('administration.integrations.google-drive.callback');
+    }
+
+    /**
+     * A fake authorization code tells a wrong client (invalid_client) apart from a valid one (invalid_grant)
+     * without asking anyone to sign in.
+     */
+    public function verifyClient(string $clientId, string $clientSecret): bool
+    {
+        $response = Http::asForm()->acceptJson()->timeout(15)->post('https://oauth2.googleapis.com/token', [
+            'code' => 'netvibe-check', 'grant_type' => 'authorization_code', 'redirect_uri' => self::redirectUri(),
+            'client_id' => $clientId, 'client_secret' => $clientSecret,
+        ]);
+
+        return ! in_array($response->json('error'), ['invalid_client', 'unauthorized_client'], true);
     }
 
     public function authorizationUrl(string $state): string
     {
         return 'https://accounts.google.com/o/oauth2/v2/auth?'.http_build_query([
-            'client_id' => config('services.google.client_id'),
-            'redirect_uri' => route('administration.integrations.google-drive.callback'),
+            'client_id' => GoogleDriveSetting::current()?->client_id,
+            'redirect_uri' => self::redirectUri(),
             'response_type' => 'code',
             'scope' => implode(' ', self::SCOPES),
             // Offline access with forced consent always returns a refresh token, also when reconnecting.
@@ -56,7 +76,7 @@ class GoogleDrive
     /** Exchanges the authorization code and stores (or refreshes) the account it belongs to. */
     public function connect(string $code): GoogleDriveAccount
     {
-        $token = $this->tokenRequest(['code' => $code, 'grant_type' => 'authorization_code', 'redirect_uri' => route('administration.integrations.google-drive.callback')]);
+        $token = $this->tokenRequest(['code' => $code, 'grant_type' => 'authorization_code', 'redirect_uri' => self::redirectUri()]);
         if (! in_array('https://www.googleapis.com/auth/drive.file', explode(' ', $token['scope'] ?? ''), true)) {
             throw new GoogleDriveException('Accesso a Google Drive non concesso: collega di nuovo l’account e consenti l’accesso ai file.');
         }
@@ -158,11 +178,15 @@ class GoogleDrive
 
     private function tokenRequest(array $data): array
     {
+        $setting = GoogleDriveSetting::current() ?? throw new GoogleDriveException('Progetto Google non configurato.');
         $response = Http::asForm()->acceptJson()->timeout(15)->post('https://oauth2.googleapis.com/token', [
             ...$data,
-            'client_id' => config('services.google.client_id'),
-            'client_secret' => config('services.google.client_secret'),
+            'client_id' => $setting->client_id,
+            'client_secret' => $setting->client_secret,
         ]);
+        if ($response->json('error') === 'invalid_client') {
+            throw new GoogleDriveException('Client OAuth non valido: verifica il progetto Google.');
+        }
         if ($response->json('error') === 'invalid_grant') {
             throw new GoogleDriveException('Accesso Google revocato o scaduto: collega di nuovo l’account.');
         }

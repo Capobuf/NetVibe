@@ -184,6 +184,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         });
         Route::prefix('integrations/google-drive')->name('integrations.google-drive.')->controller(GoogleDriveController::class)->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::put('settings', 'settings')->middleware('throttle:10,1')->name('settings');
             Route::get('connect', 'connect')->name('connect');
             Route::get('callback', 'callback')->name('callback');
             Route::get('accounts/{googleDriveAccount}/token', 'token')->middleware('throttle:30,1')->name('token');

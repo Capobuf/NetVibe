@@ -1,22 +1,34 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
+    CircleUser,
     ExternalLink,
     FolderOpen,
     MoreHorizontal,
     Pencil,
     Plus,
     RefreshCw,
+    Settings2,
     Trash2,
     Unplug,
 } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useState, type ReactNode } from 'react';
+import { DataTable } from '@/components/data-table';
+import { ProjectSheet } from '@/components/google-drive/project-sheet';
+import { SetupGuide, type SetupStep } from '@/components/google-drive/setup-guide';
+import { SyncEditor } from '@/components/google-drive/sync-editor';
+import {
+    capitalize,
+    syncState,
+    type DriveAccount,
+    type DriveProject,
+    type DriveSync,
+    type Editing,
+} from '@/components/google-drive/types';
 import { GoogleDriveMark } from '@/components/google-drive-mark';
 import { IconButton } from '@/components/icon-button';
 import {
     IntegrationHeader,
     IntegrationStatus,
-    StatusDetails,
     intervalLabel,
     type IntegrationState,
 } from '@/components/integration-header';
@@ -24,7 +36,6 @@ import { IntegrationTabs } from '@/components/integration-tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -41,40 +52,16 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Empty,
-    EmptyHeader,
-    EmptyMedia,
-    EmptyTitle,
-} from '@/components/ui/empty';
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-    FieldLegend,
-    FieldSet,
-} from '@/components/ui/field';
-import {
     Item,
     ItemActions,
     ItemContent,
     ItemDescription,
     ItemGroup,
+    ItemMedia,
     ItemTitle,
 } from '@/components/ui/item';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
-import {
-    pickFolder,
-    type DriveFolder,
-    type PickerConfig,
-} from '@/lib/google-picker';
+import type { PickerConfig } from '@/lib/google-picker';
 import { formatDateTime } from '@/lib/utils';
 import { index as administration } from '@/routes/administration';
 import { index as integrations } from '@/routes/administration/integrations';
@@ -83,65 +70,106 @@ import {
     destroy,
     disconnect,
     index as driveIndex,
-    store,
     sync as runSync,
-    token,
-    update,
 } from '@/routes/administration/integrations/google-drive';
 import { index as companyDrive } from '@/routes/companies/settings/integrations/google-drive';
 import type { Company } from '@/types/company';
 
-type Account = { id: number; email: string; syncs_count: number };
-type Sync = {
-    id: number;
-    folder_id: string;
-    folder_name: string;
-    interval: number;
-    file_url: string | null;
-    synced_at: string | null;
-    error: string | null;
-    company: Company;
-    account: { id: number; email: string } | null;
-};
 type Props = {
     company: Company | null;
-    configured: boolean;
+    project: DriveProject;
     picker: PickerConfig | null;
-    accounts: Account[];
-    syncs: Sync[];
+    accounts: DriveAccount[];
+    syncs: DriveSync[];
     companies: Company[];
     intervals: number[];
 };
-type Editing = { sync: Sync } | { companies: Company[] };
-type Confirm = { sync: Sync } | { account: Account };
+type Confirm = { sync: DriveSync } | { account: DriveAccount };
+type Column =
+    | 'company'
+    | 'folder'
+    | 'account'
+    | 'interval'
+    | 'synced_at'
+    | 'state';
 
-const capitalize = (text: string) =>
-    text.charAt(0).toUpperCase() + text.slice(1);
-
-function syncState(sync: Sync): IntegrationState {
-    if (sync.error) return 'error';
-    if (!sync.account) return 'suspended';
-    return sync.synced_at ? 'active' : 'pending';
-}
+const stateLabels: Record<IntegrationState, string> = {
+    active: 'Attiva',
+    pending: 'Da avviare',
+    unconfigured: 'Da configurare',
+    suspended: 'Sospesa',
+    error: 'Errore',
+};
 
 export default function GoogleDrive(props: Props) {
-    const { company, configured, accounts, syncs, companies } = props;
+    const { company, project, accounts, syncs, companies } = props;
+    const [projectOpen, setProjectOpen] = useState(false);
     const [editing, setEditing] = useState<Editing | null>(null);
     const [confirm, setConfirm] = useState<Confirm | null>(null);
     const [removing, setRemoving] = useState(false);
     const [running, setRunning] = useState<number | null>(null);
     const available = company ? (syncs.length ? [] : [company]) : companies;
-    const canAdd = configured && accounts.length > 0 && available.length > 0;
+    const canAdd =
+        project.configured && accounts.length > 0 && available.length > 0;
     const state: IntegrationState =
-        !configured || !accounts.length
+        !project.configured || !accounts.length
             ? 'unconfigured'
             : syncs.some((sync) => sync.error)
               ? 'error'
               : syncs.length
                 ? 'active'
                 : 'pending';
+    const add = () => setEditing({ companies: available });
+    const connectButton = (variant: 'default' | 'outline') =>
+        project.configured ? (
+            <Button asChild size="sm" variant={variant}>
+                <a href={connect.url()}>
+                    <Plus data-icon="inline-start" />
+                    Collega account
+                </a>
+            </Button>
+        ) : (
+            <Button size="sm" variant={variant} disabled>
+                <Plus data-icon="inline-start" />
+                Collega account
+            </Button>
+        );
+    const steps: SetupStep[] = [
+        {
+            title: 'Progetto Google Cloud',
+            done: project.configured,
+            status: project.configured
+                ? `ID client ${project.client_id}`
+                : 'Client OAuth e chiave API da inserire',
+            action: (
+                <Button size="sm" onClick={() => setProjectOpen(true)}>
+                    <Settings2 data-icon="inline-start" />
+                    Configura
+                </Button>
+            ),
+        },
+        {
+            title: 'Account Google',
+            done: accounts.length > 0,
+            status: accounts.length
+                ? accounts.map((account) => account.email).join(', ')
+                : 'Nessun account collegato',
+            action: connectButton('default'),
+        },
+        {
+            title: company ? 'Cartella di destinazione' : 'Aziende',
+            done: syncs.length > 0,
+            status: 'Nessuna sincronizzazione',
+            action: (
+                <Button size="sm" disabled={!canAdd} onClick={add}>
+                    <Plus data-icon="inline-start" />
+                    {company ? 'Scegli cartella' : 'Aggiungi aziende'}
+                </Button>
+            ),
+        },
+    ];
 
-    function run(sync: Sync) {
+    function run(sync: DriveSync) {
         router.post(
             runSync(sync.id).url,
             {},
@@ -168,6 +196,16 @@ export default function GoogleDrive(props: Props) {
         );
     }
 
+    const actions = (sync: DriveSync) => (
+        <SyncActions
+            sync={sync}
+            running={running === sync.id}
+            onRun={() => run(sync)}
+            onEdit={() => setEditing({ sync })}
+            onRemove={() => setConfirm({ sync })}
+        />
+    );
+
     return (
         <>
             <Head title={`Google Drive · ${company?.name ?? 'Integrazioni'}`} />
@@ -186,7 +224,7 @@ export default function GoogleDrive(props: Props) {
                             company
                                 ? syncs[0]
                                     ? `Foglio IPAM aggiornato ${intervalLabel(syncs[0].interval)}`
-                                    : 'Nessuna sincronizzazione'
+                                    : 'IPAM non sincronizzato'
                                 : [
                                       syncs.length === 1
                                           ? '1 azienda sincronizzata'
@@ -196,83 +234,111 @@ export default function GoogleDrive(props: Props) {
                                           : `${accounts.length} account`,
                                   ].join(' · ')
                         }
-                    />
-                    {!configured ? (
-                        <Alert variant="destructive">
-                            <AlertDescription>
-                                Configurazione Google mancante: imposta
-                                GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-                                GOOGLE_API_KEY e GOOGLE_APP_ID nel file .env del
-                                server.
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    <Card>
-                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
-                            <CardTitle>
-                                {company ? 'Sincronizzazione' : 'Aziende'}
-                            </CardTitle>
-                            {canAdd ? (
+                        actions={
+                            project.configured ? (
                                 <Button
+                                    variant="outline"
                                     size="sm"
-                                    onClick={() =>
-                                        setEditing({
-                                            companies: available,
-                                        })
-                                    }
+                                    onClick={() => setProjectOpen(true)}
                                 >
-                                    <Plus data-icon="inline-start" />
-                                    {company ? 'Configura' : 'Aggiungi aziende'}
+                                    <Settings2 data-icon="inline-start" />
+                                    Progetto Google
                                 </Button>
-                            ) : null}
-                        </CardHeader>
-                        <CardContent>
-                            {syncs.length ? (
-                                <ItemGroup className="gap-2">
-                                    {syncs.map((sync) => (
-                                        <SyncRow
-                                            key={sync.id}
-                                            sync={sync}
-                                            inCompany={company !== null}
-                                            running={running === sync.id}
-                                            onRun={() => run(sync)}
-                                            onEdit={() => setEditing({ sync })}
-                                            onRemove={() =>
-                                                setConfirm({ sync })
-                                            }
-                                        />
-                                    ))}
-                                </ItemGroup>
-                            ) : (
-                                <Empty>
-                                    <EmptyHeader>
-                                        <EmptyMedia variant="icon">
-                                            <GoogleDriveMark />
-                                        </EmptyMedia>
-                                        <EmptyTitle>
-                                            {company
-                                                ? 'IPAM non sincronizzato su Drive'
-                                                : 'Nessuna azienda sincronizzata'}
-                                        </EmptyTitle>
-                                    </EmptyHeader>
-                                </Empty>
-                            )}
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
-                            <CardTitle>Account Google</CardTitle>
-                            {configured ? (
-                                <Button asChild size="sm" variant="outline">
-                                    <a href={connect.url()}>
-                                        <Plus data-icon="inline-start" />
-                                        Collega account
-                                    </a>
-                                </Button>
-                            ) : null}
-                        </CardHeader>
-                        <CardContent>
-                            {accounts.length ? (
+                            ) : null
+                        }
+                    />
+                    {steps.some((step) => !step.done) ? (
+                        <SetupGuide steps={steps} />
+                    ) : null}
+                    {company && syncs[0] ? (
+                        <CompanySync
+                            sync={syncs[0]}
+                            actions={actions(syncs[0])}
+                        />
+                    ) : null}
+                    {!company && syncs.length ? (
+                        <section
+                            className="flex flex-col gap-3"
+                            aria-labelledby="drive-companies"
+                        >
+                            <h2
+                                id="drive-companies"
+                                className="text-base font-medium"
+                            >
+                                Aziende
+                            </h2>
+                            <DataTable<DriveSync, Column>
+                                name="google-drive-syncs"
+                                searchLabel="Cerca aziende"
+                                rows={syncs}
+                                columns={[
+                                    {
+                                        id: 'company',
+                                        label: 'Azienda',
+                                        visible: true,
+                                    },
+                                    {
+                                        id: 'folder',
+                                        label: 'Cartella',
+                                        visible: true,
+                                    },
+                                    {
+                                        id: 'account',
+                                        label: 'Account',
+                                        visible: false,
+                                    },
+                                    {
+                                        id: 'interval',
+                                        label: 'Frequenza',
+                                        visible: true,
+                                    },
+                                    {
+                                        id: 'synced_at',
+                                        label: 'Ultima scrittura',
+                                        visible: true,
+                                    },
+                                    {
+                                        id: 'state',
+                                        label: 'Stato',
+                                        visible: true,
+                                    },
+                                ]}
+                                value={(sync, column) =>
+                                    ({
+                                        company: sync.company.name,
+                                        folder: sync.folder_name,
+                                        account: sync.account?.email ?? null,
+                                        interval: sync.interval,
+                                        synced_at: sync.synced_at,
+                                        state: stateLabels[syncState(sync)],
+                                    })[column]
+                                }
+                                render={(sync, column) => (
+                                    <SyncCell sync={sync} column={column} />
+                                )}
+                                actions={actions}
+                                headerActions={
+                                    canAdd ? (
+                                        <Button size="sm" onClick={add}>
+                                            <Plus data-icon="inline-start" />
+                                            Aggiungi aziende
+                                        </Button>
+                                    ) : null
+                                }
+                                defaultSort={{
+                                    column: 'company',
+                                    direction: 'asc',
+                                }}
+                            />
+                        </section>
+                    ) : null}
+                    {accounts.length ? (
+                        <Card>
+                            <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
+                                <CardTitle>Account Google</CardTitle>
+                                {connectButton('outline')}
+                            </CardHeader>
+                            <CardContent>
                                 <ItemGroup className="gap-2">
                                     {accounts.map((account) => (
                                         <Item
@@ -281,6 +347,9 @@ export default function GoogleDrive(props: Props) {
                                             size="sm"
                                             role="listitem"
                                         >
+                                            <ItemMedia variant="icon">
+                                                <CircleUser />
+                                            </ItemMedia>
                                             <ItemContent className="min-w-0">
                                                 <ItemTitle className="break-all">
                                                     {account.email}
@@ -307,19 +376,17 @@ export default function GoogleDrive(props: Props) {
                                         </Item>
                                     ))}
                                 </ItemGroup>
-                            ) : (
-                                <Empty>
-                                    <EmptyHeader>
-                                        <EmptyTitle>
-                                            Nessun account collegato
-                                        </EmptyTitle>
-                                    </EmptyHeader>
-                                </Empty>
-                            )}
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    ) : null}
                 </IntegrationTabs>
             </div>
+            <ProjectSheet
+                key={project.client_id ?? 'new'}
+                project={project}
+                open={projectOpen}
+                onOpenChange={setProjectOpen}
+            />
             {editing ? (
                 <SyncEditor
                     key={'sync' in editing ? editing.sync.id : 'new'}
@@ -374,471 +441,167 @@ export default function GoogleDrive(props: Props) {
     );
 }
 
-function SyncRow({
+function FolderName({ sync }: { sync: DriveSync }) {
+    return (
+        <span className="inline-flex items-center gap-1.5">
+            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+            {sync.folder_name}
+        </span>
+    );
+}
+
+function SyncCell({ sync, column }: { sync: DriveSync; column: Column }) {
+    switch (column) {
+        case 'company':
+            return (
+                <div className="flex min-w-0 flex-col gap-0.5">
+                    <Link
+                        href={companyDrive(sync.company.id)}
+                        className="w-fit rounded-sm font-medium outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                        {sync.company.name}
+                    </Link>
+                    {sync.error ? (
+                        <span className="text-xs break-words whitespace-normal text-destructive">
+                            {sync.error}
+                        </span>
+                    ) : null}
+                </div>
+            );
+        case 'folder':
+            return <FolderName sync={sync} />;
+        case 'interval':
+            return capitalize(intervalLabel(sync.interval));
+        case 'synced_at':
+            return sync.synced_at ? (
+                <span className="tabular-nums">
+                    {formatDateTime(sync.synced_at)}
+                </span>
+            ) : (
+                <span className="text-muted-foreground">Mai</span>
+            );
+        case 'state':
+            return <IntegrationStatus state={syncState(sync)} />;
+        default:
+            return (
+                sync.account?.email ?? (
+                    <span className="text-muted-foreground">Nessuno</span>
+                )
+            );
+    }
+}
+
+/** The company's single destination as a compact summary with its actions. */
+function CompanySync({
     sync,
-    inCompany,
+    actions,
+}: {
+    sync: DriveSync;
+    actions: ReactNode;
+}) {
+    const details: [string, ReactNode][] = [
+        ['Cartella', <FolderName key="folder" sync={sync} />],
+        ['Account', sync.account?.email ?? 'Nessuno'],
+        ['Frequenza', capitalize(intervalLabel(sync.interval))],
+        [
+            'Ultima scrittura',
+            sync.synced_at ? formatDateTime(sync.synced_at) : 'Mai',
+        ],
+    ];
+
+    return (
+        <Card>
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
+                <CardTitle className="flex items-center gap-2">
+                    Sincronizzazione
+                    <IntegrationStatus state={syncState(sync)} />
+                </CardTitle>
+                {actions}
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+                {sync.error ? (
+                    <Alert variant="destructive">
+                        <AlertDescription>{sync.error}</AlertDescription>
+                    </Alert>
+                ) : null}
+                <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                    {details.map(([label, value]) => (
+                        <div
+                            key={label}
+                            className="flex min-w-0 flex-col gap-1"
+                        >
+                            <dt className="text-muted-foreground">{label}</dt>
+                            <dd className="font-medium break-words">
+                                {value}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SyncActions({
+    sync,
     running,
     onRun,
     onEdit,
     onRemove,
 }: {
-    sync: Sync;
-    inCompany: boolean;
+    sync: DriveSync;
     running: boolean;
     onRun: () => void;
     onEdit: () => void;
     onRemove: () => void;
 }) {
-    const last = sync.synced_at
-        ? `aggiornato il ${formatDateTime(sync.synced_at)}`
-        : 'mai scritto';
-
     return (
-        <Item variant="outline" size="sm" role="listitem">
-            <ItemContent className="min-w-0">
-                <ItemTitle className="flex-wrap">
-                    {inCompany ? (
-                        <span className="inline-flex items-center gap-1.5 break-all">
-                            <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-                            {sync.folder_name}
-                        </span>
-                    ) : (
-                        <Link
-                            href={companyDrive(sync.company.id)}
-                            className="rounded-sm outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                        >
-                            {sync.company.name}
-                        </Link>
-                    )}
-                    <IntegrationStatus
-                        state={syncState(sync)}
-                        details={
-                            <StatusDetails
-                                items={[
-                                    ['Account', sync.account?.email ?? '—'],
-                                    ['Cartella', sync.folder_name],
-                                    [
-                                        'Frequenza',
-                                        capitalize(
-                                            intervalLabel(sync.interval),
-                                        ),
-                                    ],
-                                    [
-                                        'Ultima scrittura',
-                                        sync.synced_at
-                                            ? formatDateTime(sync.synced_at)
-                                            : '—',
-                                    ],
-                                ]}
-                            />
-                        }
-                    />
-                </ItemTitle>
-                <ItemDescription className="line-clamp-none">
-                    {sync.error ? (
-                        <span className="text-destructive">{sync.error}</span>
-                    ) : (
-                        [
-                            inCompany
-                                ? sync.account?.email
-                                : `Cartella «${sync.folder_name}»`,
-                            intervalLabel(sync.interval),
-                            last,
-                        ].join(' · ')
-                    )}
-                </ItemDescription>
-            </ItemContent>
-            <ItemActions>
-                {sync.file_url ? (
-                    <IconButton label="Apri il foglio" variant="ghost" asChild>
-                        <a
-                            href={sync.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            <ExternalLink />
-                        </a>
-                    </IconButton>
-                ) : null}
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={running || !sync.account}
-                    onClick={onRun}
-                >
-                    {running ? (
-                        <Spinner data-icon="inline-start" />
-                    ) : (
-                        <RefreshCw data-icon="inline-start" />
-                    )}
-                    Sincronizza ora
-                </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Altre azioni"
-                        >
-                            <MoreHorizontal />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={onEdit}>
-                            <Pencil />
-                            Modifica
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={onRemove}
-                        >
-                            <Trash2 />
-                            Rimuovi
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </ItemActions>
-        </Item>
-    );
-}
-
-/** Account, frequency and folder of one sync, or of several new ones (one folder per company). */
-function SyncEditor({
-    editing,
-    props,
-    onClose,
-}: {
-    editing: Editing;
-    props: Props;
-    onClose: () => void;
-}) {
-    const { accounts, intervals, picker } = props;
-    const existing = 'sync' in editing ? editing.sync : null;
-    const options = 'companies' in editing ? editing.companies : [];
-    const single = existing
-        ? [existing.company]
-        : options.length === 1
-          ? options
-          : null;
-    const form = useForm({
-        account_id: String(existing?.account?.id ?? accounts[0]?.id ?? ''),
-        interval: String(existing?.interval ?? 1440),
-    });
-    // Selected companies with the folder chosen for each; a key present means selected.
-    const [folders, setFolders] = useState<Record<number, DriveFolder | null>>(
-        () =>
-            existing
-                ? {
-                      [existing.company.id]: {
-                          id: existing.folder_id,
-                          name: existing.folder_name,
-                      },
-                  }
-                : single
-                  ? { [single[0].id]: null }
-                  : {},
-    );
-    const [picking, setPicking] = useState(false);
-    const selected = Object.entries(folders);
-    const complete =
-        form.data.account_id !== '' &&
-        selected.length > 0 &&
-        selected.every(([, folder]) => folder !== null);
-
-    async function choose(companyId: number) {
-        if (!picker || !form.data.account_id) return;
-        // The Picker lives outside the dialog, which would otherwise block its clicks.
-        setPicking(true);
-        try {
-            const folder = await pickFolder(
-                token(Number(form.data.account_id)).url,
-                picker,
-            );
-            if (folder) {
-                // Selected companies still without a folder get the same one; each stays editable.
-                setFolders((current) =>
-                    Object.fromEntries(
-                        Object.entries(current).map(([id, value]) => [
-                            id,
-                            Number(id) === companyId || value === null
-                                ? folder
-                                : value,
-                        ]),
-                    ),
-                );
-            }
-        } catch (error) {
-            toast.error((error as Error).message);
-        } finally {
-            setPicking(false);
-        }
-    }
-
-    function changeAccount(value: string) {
-        form.setData('account_id', value);
-        // Folders picked with another account may be out of reach for this one.
-        setFolders((current) =>
-            Object.fromEntries(Object.keys(current).map((id) => [id, null])),
-        );
-    }
-
-    function submit(event: React.FormEvent) {
-        event.preventDefault();
-        const payload = {
-            account_id: Number(form.data.account_id),
-            interval: Number(form.data.interval),
-        };
-        const options = { preserveScroll: true, onSuccess: onClose };
-        if (existing) {
-            const folder = folders[existing.company.id];
-            form.transform(() => ({
-                ...payload,
-                folder_id: folder?.id ?? '',
-                folder_name: folder?.name ?? '',
-            }));
-            form.put(update(existing.id).url, options);
-        } else {
-            form.transform(() => ({
-                ...payload,
-                targets: selected.map(([id, folder]) => ({
-                    company_id: Number(id),
-                    folder_id: folder?.id ?? '',
-                    folder_name: folder?.name ?? '',
-                })),
-            }));
-            form.post(store().url, options);
-        }
-    }
-
-    const errors = Object.entries(form.errors)
-        .filter(([key]) => key !== 'account_id' && key !== 'interval')
-        .map(([, message]) => message);
-
-    return (
-        <Dialog
-            open={!picking}
-            onOpenChange={(open) => {
-                if (!open && !form.processing) onClose();
-            }}
-        >
-            <DialogContent className="sm:max-w-lg">
-                <form onSubmit={submit} className="flex flex-col gap-6">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {existing
-                                ? `Sincronizzazione di ${existing.company.name}`
-                                : single
-                                  ? `Sincronizza ${single[0].name} su Drive`
-                                  : 'Sincronizza aziende su Drive'}
-                        </DialogTitle>
-                        {existing ? (
-                            <DialogDescription>
-                                Con un altro account o un’altra cartella il
-                                foglio viene scritto nella nuova destinazione;
-                                quello attuale resta su Drive.
-                            </DialogDescription>
-                        ) : null}
-                    </DialogHeader>
-                    <FieldGroup>
-                        <Field data-invalid={!!form.errors.account_id}>
-                            <FieldLabel htmlFor="drive-account">
-                                Account Google
-                            </FieldLabel>
-                            <div className="flex gap-2">
-                                <Select
-                                    value={form.data.account_id}
-                                    onValueChange={changeAccount}
-                                >
-                                    <SelectTrigger
-                                        id="drive-account"
-                                        className="min-w-0 flex-1"
-                                    >
-                                        <SelectValue placeholder="Scegli un account" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {accounts.map((account) => (
-                                            <SelectItem
-                                                key={account.id}
-                                                value={String(account.id)}
-                                            >
-                                                {account.email}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <IconButton
-                                    label="Collega un altro account"
-                                    asChild
-                                >
-                                    <a href={connect.url()}>
-                                        <Plus />
-                                    </a>
-                                </IconButton>
-                            </div>
-                            <FieldError>{form.errors.account_id}</FieldError>
-                        </Field>
-                        <Field data-invalid={!!form.errors.interval}>
-                            <FieldLabel htmlFor="drive-interval">
-                                Frequenza
-                            </FieldLabel>
-                            <Select
-                                value={form.data.interval}
-                                onValueChange={(value) =>
-                                    form.setData('interval', value)
-                                }
-                            >
-                                <SelectTrigger id="drive-interval">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {intervals.map((minutes) => (
-                                        <SelectItem
-                                            key={minutes}
-                                            value={String(minutes)}
-                                        >
-                                            {capitalize(intervalLabel(minutes))}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <FieldError>{form.errors.interval}</FieldError>
-                        </Field>
-                        {single ? (
-                            <Field>
-                                <FieldLabel>Cartella</FieldLabel>
-                                <FolderButton
-                                    folder={folders[single[0].id] ?? null}
-                                    disabled={!form.data.account_id}
-                                    onClick={() => choose(single[0].id)}
-                                />
-                            </Field>
-                        ) : (
-                            <FieldSet>
-                                <FieldLegend variant="label">
-                                    Aziende e cartelle
-                                </FieldLegend>
-                                <ItemGroup className="max-h-72 gap-2 overflow-y-auto">
-                                    {options.map((option) => {
-                                        const checked = option.id in folders;
-                                        return (
-                                            <Item
-                                                key={option.id}
-                                                variant="outline"
-                                                size="sm"
-                                                role="listitem"
-                                            >
-                                                <Checkbox
-                                                    id={`drive-company-${option.id}`}
-                                                    checked={checked}
-                                                    onCheckedChange={(value) =>
-                                                        setFolders(
-                                                            (current) => {
-                                                                const next = {
-                                                                    ...current,
-                                                                };
-                                                                if (value)
-                                                                    next[
-                                                                        option.id
-                                                                    ] = null;
-                                                                else
-                                                                    delete next[
-                                                                        option
-                                                                            .id
-                                                                    ];
-                                                                return next;
-                                                            },
-                                                        )
-                                                    }
-                                                />
-                                                <ItemContent className="min-w-0">
-                                                    <label
-                                                        htmlFor={`drive-company-${option.id}`}
-                                                        className="truncate text-sm font-medium"
-                                                    >
-                                                        {option.name}
-                                                    </label>
-                                                </ItemContent>
-                                                {checked ? (
-                                                    <ItemActions>
-                                                        <FolderButton
-                                                            folder={
-                                                                folders[
-                                                                    option.id
-                                                                ]
-                                                            }
-                                                            disabled={
-                                                                !form.data
-                                                                    .account_id
-                                                            }
-                                                            onClick={() =>
-                                                                choose(
-                                                                    option.id,
-                                                                )
-                                                            }
-                                                        />
-                                                    </ItemActions>
-                                                ) : null}
-                                            </Item>
-                                        );
-                                    })}
-                                </ItemGroup>
-                            </FieldSet>
-                        )}
-                    </FieldGroup>
-                    {errors.length ? (
-                        <Alert variant="destructive">
-                            <AlertDescription>
-                                {[...new Set(errors)].join(' ')}
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={form.processing}
-                            onClick={onClose}
-                        >
-                            Annulla
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={!complete || form.processing}
-                        >
-                            {form.processing ? <Spinner /> : null}
-                            {existing ? 'Salva' : 'Conferma'}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-function FolderButton({
-    folder,
-    disabled,
-    onClick,
-}: {
-    folder: DriveFolder | null;
-    disabled: boolean;
-    onClick: () => void;
-}) {
-    return (
-        <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            onClick={onClick}
-            className="max-w-64 justify-start"
-        >
-            <FolderOpen data-icon="inline-start" />
-            <span className="truncate">
-                {folder ? folder.name : 'Scegli cartella'}
-            </span>
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+            {sync.file_url ? (
+                <IconButton label="Apri il foglio" variant="ghost" asChild>
+                    <a
+                        href={sync.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <ExternalLink />
+                    </a>
+                </IconButton>
+            ) : null}
+            <IconButton
+                label="Sincronizza ora"
+                variant="ghost"
+                disabled={running || !sync.account}
+                onClick={onRun}
+            >
+                {running ? <Spinner /> : <RefreshCw />}
+            </IconButton>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Altre azioni"
+                    >
+                        <MoreHorizontal />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={onEdit}>
+                        <Pencil />
+                        Modifica
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={onRemove}
+                    >
+                        <Trash2 />
+                        Rimuovi
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
     );
 }
 

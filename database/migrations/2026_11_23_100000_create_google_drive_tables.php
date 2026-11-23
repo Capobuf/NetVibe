@@ -8,6 +8,16 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Single row (id 1): the Google Cloud project NetVibe uses, configured from administration.
+        Schema::create('google_drive_settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('client_id');
+            $table->text('client_secret');
+            $table->text('api_key');
+            $table->string('project_number', 32);
+            $table->timestamps();
+        });
+
         Schema::create('google_drive_accounts', function (Blueprint $table) {
             $table->id();
             $table->string('email')->unique();
@@ -42,5 +52,6 @@ return new class extends Migration
         });
         Schema::dropIfExists('google_drive_syncs');
         Schema::dropIfExists('google_drive_accounts');
+        Schema::dropIfExists('google_drive_settings');
     }
 };

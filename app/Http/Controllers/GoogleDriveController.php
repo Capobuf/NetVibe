@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\GoogleDriveException;
 use App\Models\Company;
 use App\Models\GoogleDriveAccount;
+use App\Models\GoogleDriveSetting;
 use App\Models\GoogleDriveSync;
 use App\Support\GoogleDrive;
 use Illuminate\Http\Client\ConnectionException;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -23,15 +25,24 @@ class GoogleDriveController extends Controller
     public function __construct(private GoogleDrive $drive) {}
 
     /** Every company sync in administration; only the company's own sync in its settings. */
-    public function index(?Company $company = null): Response
+    public function index(Request $request, ?Company $company = null): Response
     {
         $syncs = GoogleDriveSync::query()->when($company, fn ($query) => $query->whereBelongsTo($company))
             ->with('company:id,name', 'account:id,email')->get()->sortBy('company.name', SORT_NATURAL | SORT_FLAG_CASE)->values();
 
+        $setting = GoogleDriveSetting::current();
+
         return Inertia::render('integrations/google-drive', [
             'company' => $company?->only('id', 'name', 'observation_retention_days'),
-            'configured' => GoogleDrive::configured(),
-            'picker' => GoogleDrive::configured() ? ['api_key' => config('services.google.api_key'), 'app_id' => config('services.google.app_id')] : null,
+            'project' => [
+                'client_id' => $setting?->client_id,
+                'project_number' => $setting?->project_number,
+                'configured' => $setting !== null,
+                // The values the administrator copies into the Google Cloud OAuth client.
+                'origin' => $request->getSchemeAndHttpHost(),
+                'redirect_uri' => GoogleDrive::redirectUri(),
+            ],
+            'picker' => $setting ? ['api_key' => $setting->api_key, 'app_id' => $setting->project_number] : null,
             'accounts' => GoogleDriveAccount::withCount('syncs')->orderBy('email')->get(['id', 'email']),
             'syncs' => $syncs->map(fn (GoogleDriveSync $sync) => [
                 ...$sync->only('id', 'folder_id', 'folder_name', 'interval', 'file_url', 'synced_at', 'error'),
@@ -43,11 +54,37 @@ class GoogleDriveController extends Controller
         ]);
     }
 
+    /** Saved secrets stay unless replaced; the client is checked against Google before it is stored. */
+    public function settings(Request $request): RedirectResponse
+    {
+        $current = GoogleDriveSetting::current();
+        $data = $request->validate([
+            'client_id' => ['required', 'string', 'max:255', 'regex:/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/'],
+            'client_secret' => [$current ? 'nullable' : 'required', 'string', 'max:255'],
+            'api_key' => [$current ? 'nullable' : 'required', 'string', 'max:255'],
+            'project_number' => ['required', 'string', 'regex:/^[0-9]{6,20}$/'],
+        ], [
+            'client_id.regex' => 'L’ID client termina con .apps.googleusercontent.com.',
+            'project_number.regex' => 'Il numero del progetto contiene solo cifre.',
+        ]);
+        $data = array_filter($data, fn ($value) => filled($value));
+        try {
+            if (! $this->drive->verifyClient($data['client_id'], $data['client_secret'] ?? $current->client_secret)) {
+                throw ValidationException::withMessages(['client_secret' => 'Google non riconosce questo ID client con questo secret.']);
+            }
+        } catch (ConnectionException) {
+            throw ValidationException::withMessages(['client_id' => 'Google non raggiungibile: riprova più tardi.']);
+        }
+        GoogleDriveSetting::updateOrCreate(['id' => 1], $data);
+
+        return $this->toast('success', 'Progetto Google salvato.');
+    }
+
     /** Starts the Google consent screen; the callback returns to the page that asked for it. */
     public function connect(Request $request): SymfonyResponse
     {
         if (! GoogleDrive::configured()) {
-            return $this->toast('error', 'Configurazione Google mancante sul server.');
+            return $this->toast('error', 'Configura prima il progetto Google.');
         }
         $state = Str::random(40);
         $request->session()->put('google-drive', ['state' => $state, 'return' => url()->previous()]);

@@ -162,6 +162,7 @@ export function ProjectSheet({
                                 {secret(
                                     'api_key',
                                     'Chiave API (Google Picker)',
+                                    project.has_api_key,
                                 )}
                                 {text('project_number', 'Numero del progetto', {
                                     inputMode: 'numeric',

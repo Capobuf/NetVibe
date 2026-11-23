@@ -11,6 +11,7 @@ export type User = {
     notify_snipe_it: boolean;
     notify_mikrotik: boolean;
     notify_unifi: boolean;
+    notify_google_drive: boolean;
     created_at: string;
     updated_at: string;
     [key: string]: unknown;

@@ -51,6 +51,7 @@ class NotificationController extends Controller
             'notify_snipe_it' => ['required', 'boolean'],
             'notify_mikrotik' => ['required', 'boolean'],
             'notify_unifi' => ['required', 'boolean'],
+            'notify_google_drive' => ['required', 'boolean'],
         ]))->save();
 
         return back();

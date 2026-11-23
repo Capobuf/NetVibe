@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\GoogleDriveSync;
 use App\Models\MikrotikConnection;
 use App\Models\SnipeItSetting;
 use App\Models\UnifiConnection;
+use App\Support\GoogleDrive;
 use App\Support\MikrotikSync;
 use App\Support\SnipeItSync;
 use App\Support\UnifiSync;
@@ -70,3 +72,21 @@ Artisan::command('unifi:sync', function (UnifiSync $synchronizer) {
 })->purpose('Sincronizza le sedi UniFi attivate');
 
 Schedule::command('unifi:sync')->hourly()->withoutOverlapping();
+
+Artisan::command('google-drive:sync', function (GoogleDrive $drive) {
+    $failed = false;
+    foreach (GoogleDriveSync::whereNotNull('account_id')->with('company', 'account')->lazyById() as $sync) {
+        // The command runs every 15 minutes; the margin keeps a sync finished a few seconds late from slipping a whole slot.
+        if ($sync->synced_at && $sync->synced_at->gt(now()->subMinutes($sync->interval)->addMinutes(5))) {
+            continue;
+        }
+        if ($drive->sync($sync) === null) {
+            $failed = true;
+            $this->error('Azienda '.$sync->company_id.': '.$sync->error);
+        }
+    }
+
+    return $failed ? 1 : 0;
+})->purpose('Scrive su Google Drive l’IPAM delle aziende sincronizzate');
+
+Schedule::command('google-drive:sync')->everyFifteenMinutes()->withoutOverlapping();

@@ -115,13 +115,15 @@ export default function GoogleDrive(props: Props) {
     const canAdd =
         project.configured && accounts.length > 0 && available.length > 0;
     const state: IntegrationState =
-        !project.configured || !accounts.length
-            ? 'unconfigured'
-            : syncs.some((sync) => sync.error)
-              ? 'error'
-              : syncs.length
-                ? 'active'
-                : 'pending';
+        company && syncs[0]
+            ? syncState(syncs[0])
+            : !project.configured || !accounts.length
+              ? 'unconfigured'
+              : syncs.some((sync) => sync.error)
+                ? 'error'
+                : syncs.length
+                  ? 'active'
+                  : 'pending';
     const add = () => setEditing({ companies: available });
     const connectButton = (variant: 'default' | 'outline') =>
         project.configured ? (
@@ -515,10 +517,7 @@ function CompanySync({
     return (
         <Card>
             <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
-                <CardTitle className="flex items-center gap-2">
-                    Sincronizzazione
-                    <IntegrationStatus state={syncState(sync)} />
-                </CardTitle>
+                <CardTitle>Sincronizzazione</CardTitle>
                 {actions}
             </CardHeader>
             <CardContent className="flex flex-col gap-4">

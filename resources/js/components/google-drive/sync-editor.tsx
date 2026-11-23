@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { pickFolder, type DriveFolder } from '@/lib/google-picker';
+import { cn } from '@/lib/utils';
 import {
     connect,
     store,
@@ -251,6 +252,7 @@ export function SyncEditor({
                             <Field>
                                 <FieldLabel>Cartella</FieldLabel>
                                 <FolderButton
+                                    wide
                                     folder={folders[single[0].id] ?? null}
                                     disabled={!form.data.account_id}
                                     onClick={() => choose(single[0].id)}
@@ -363,10 +365,12 @@ function FolderButton({
     folder,
     disabled,
     onClick,
+    wide = false,
 }: {
     folder: DriveFolder | null;
     disabled: boolean;
     onClick: () => void;
+    wide?: boolean;
 }) {
     return (
         <Button
@@ -375,7 +379,7 @@ function FolderButton({
             size="sm"
             disabled={disabled}
             onClick={onClick}
-            className="max-w-64 justify-start"
+            className={cn('justify-start', wide ? 'w-full' : 'max-w-64')}
         >
             <FolderOpen data-icon="inline-start" />
             <span className="truncate">

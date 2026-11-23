@@ -23,13 +23,7 @@ import {
 import { IntegrationTabs } from '@/components/integration-tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardAction,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
@@ -121,7 +115,8 @@ type Props = {
 type Editing = { sync: Sync } | { companies: Company[] };
 type Confirm = { sync: Sync } | { account: Account };
 
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const capitalize = (text: string) =>
+    text.charAt(0).toUpperCase() + text.slice(1);
 
 function syncState(sync: Sync): IntegrationState {
     if (sync.error) return 'error';
@@ -207,32 +202,28 @@ export default function GoogleDrive(props: Props) {
                             <AlertDescription>
                                 Configurazione Google mancante: imposta
                                 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-                                GOOGLE_API_KEY e GOOGLE_APP_ID nel file .env
-                                del server.
+                                GOOGLE_API_KEY e GOOGLE_APP_ID nel file .env del
+                                server.
                             </AlertDescription>
                         </Alert>
                     ) : null}
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
                             <CardTitle>
                                 {company ? 'Sincronizzazione' : 'Aziende'}
                             </CardTitle>
                             {canAdd ? (
-                                <CardAction>
-                                    <Button
-                                        size="sm"
-                                        onClick={() =>
-                                            setEditing({
-                                                companies: available,
-                                            })
-                                        }
-                                    >
-                                        <Plus data-icon="inline-start" />
-                                        {company
-                                            ? 'Configura'
-                                            : 'Aggiungi aziende'}
-                                    </Button>
-                                </CardAction>
+                                <Button
+                                    size="sm"
+                                    onClick={() =>
+                                        setEditing({
+                                            companies: available,
+                                        })
+                                    }
+                                >
+                                    <Plus data-icon="inline-start" />
+                                    {company ? 'Configura' : 'Aggiungi aziende'}
+                                </Button>
                             ) : null}
                         </CardHeader>
                         <CardContent>
@@ -269,17 +260,15 @@ export default function GoogleDrive(props: Props) {
                         </CardContent>
                     </Card>
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4">
                             <CardTitle>Account Google</CardTitle>
                             {configured ? (
-                                <CardAction>
-                                    <Button asChild size="sm" variant="outline">
-                                        <a href={connect.url()}>
-                                            <Plus data-icon="inline-start" />
-                                            Collega account
-                                        </a>
-                                    </Button>
-                                </CardAction>
+                                <Button asChild size="sm" variant="outline">
+                                    <a href={connect.url()}>
+                                        <Plus data-icon="inline-start" />
+                                        Collega account
+                                    </a>
+                                </Button>
                             ) : null}
                         </CardHeader>
                         <CardContent>
@@ -430,7 +419,9 @@ function SyncRow({
                                     ['Cartella', sync.folder_name],
                                     [
                                         'Frequenza',
-                                        capitalize(intervalLabel(sync.interval)),
+                                        capitalize(
+                                            intervalLabel(sync.interval),
+                                        ),
                                     ],
                                     [
                                         'Ultima scrittura',
@@ -524,7 +515,12 @@ function SyncEditor({
 }) {
     const { accounts, intervals, picker } = props;
     const existing = 'sync' in editing ? editing.sync : null;
-    const single = existing ? [existing.company] : editing.companies.length === 1 ? editing.companies : null;
+    const options = 'companies' in editing ? editing.companies : [];
+    const single = existing
+        ? [existing.company]
+        : options.length === 1
+          ? options
+          : null;
     const form = useForm({
         account_id: String(existing?.account?.id ?? accounts[0]?.id ?? ''),
         interval: String(existing?.interval ?? 1440),
@@ -671,7 +667,10 @@ function SyncEditor({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <IconButton label="Collega un altro account" asChild>
+                                <IconButton
+                                    label="Collega un altro account"
+                                    asChild
+                                >
                                     <a href={connect.url()}>
                                         <Plus />
                                     </a>
@@ -720,7 +719,7 @@ function SyncEditor({
                                     Aziende e cartelle
                                 </FieldLegend>
                                 <ItemGroup className="max-h-72 gap-2 overflow-y-auto">
-                                    {editing.companies.map((option) => {
+                                    {options.map((option) => {
                                         const checked = option.id in folders;
                                         return (
                                             <Item

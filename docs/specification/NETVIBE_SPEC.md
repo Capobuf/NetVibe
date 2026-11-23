@@ -363,10 +363,10 @@ Valutare se il rack debba essere un modulo NetVibe o un prodotto separato, integ
 
 ### Obiettivo confermato
 
-Esportare automaticamente da NetVibe a Google Drive una copia di consultazione dell’IPAM in formato Excel (.xlsx). Flusso esclusivamente NetVibe → Drive: le modifiche ai fogli su Drive non vengono reimportate.
+Esportare automaticamente da NetVibe a Google Drive una copia di consultazione dell’IPAM come foglio Google nativo (Google Sheets), generato dalla stessa esportazione Excel dell’IPAM. Flusso esclusivamente NetVibe → Drive: le modifiche ai fogli su Drive non vengono reimportate.
 ### Formato richiesto
 
-* File Excel con un foglio «Riepilogo» e un foglio per ogni VLAN.
+* Foglio Google con un foglio «Riepilogo» e un foglio per ogni VLAN.
 * I fogli devono contenere indirizzi IP e informazioni utili alla consultazione esterna; campi precisi e presentazione sono da definire.
 * Il file deve restare leggibile anche se NetVibe o il server non sono disponibili.
 * La struttura deve tenere conto di clienti e sedi: VLAN con lo stesso numero possono esistere in sedi differenti.
@@ -379,10 +379,10 @@ Esportare automaticamente da NetVibe a Google Drive una copia di consultazione d
 * Frequenza e meccanismo di esportazione: schedulato, manuale, entrambi; gestione di sovrascritture e versioni.
 * Autenticazione Google (OAuth/servizio supportato), token, permessi minimi e disconnessione.
 * Comportamento in assenza di Drive, esportazioni fallite o spazio esaurito.
-* Non includere credenziali, segreti o altre informazioni sensibili non necessarie nei file Excel.
+* Non includere credenziali, segreti o altre informazioni sensibili non necessarie nei fogli esportati.
 ### Distinzione fondamentale
 
-L’Excel su Google Drive è una copia leggibile e operativa dell’IPAM. Non sostituisce il backup tecnico completo dell’applicazione.
+Il foglio Google su Drive è una copia leggibile e operativa dell’IPAM. Non sostituisce il backup tecnico completo dell’applicazione.
 
 
 ## A11 — Google Drive: backup ZIP e ripristino completo o per cliente

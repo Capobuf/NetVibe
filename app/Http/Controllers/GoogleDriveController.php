@@ -36,7 +36,6 @@ class GoogleDriveController extends Controller
             'company' => $company?->only('id', 'name', 'observation_retention_days'),
             'project' => [
                 'client_id' => $setting?->client_id,
-                'project_number' => $setting?->project_number,
                 'configured' => GoogleDrive::configured(),
                 'has_secret' => filled($setting?->client_secret),
                 'has_api_key' => filled($setting?->api_key),
@@ -44,7 +43,8 @@ class GoogleDriveController extends Controller
                 'origin' => $request->getSchemeAndHttpHost(),
                 'redirect_uri' => GoogleDrive::redirectUri(),
             ],
-            'picker' => GoogleDrive::configured() ? ['api_key' => $setting->api_key, 'app_id' => $setting->project_number] : null,
+            // The Picker app ID is the project number, the numeric prefix of every OAuth client ID.
+            'picker' => GoogleDrive::configured() ? ['api_key' => $setting->api_key, 'app_id' => Str::before($setting->client_id, '-')] : null,
             'accounts' => GoogleDriveAccount::withCount('syncs')->orderBy('email')->get(['id', 'email']),
             'syncs' => $syncs->map(fn (GoogleDriveSync $sync) => [
                 ...$sync->only('id', 'folder_id', 'folder_name', 'interval', 'file_url', 'synced_at', 'error'),
@@ -64,10 +64,8 @@ class GoogleDriveController extends Controller
             'client_id' => ['required', 'string', 'max:255', 'regex:/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/'],
             'client_secret' => [filled($current?->client_secret) ? 'nullable' : 'required', 'string', 'max:255'],
             'api_key' => [filled($current?->api_key) ? 'nullable' : 'required', 'string', 'max:255'],
-            'project_number' => ['required', 'string', 'regex:/^[0-9]{6,20}$/'],
         ], [
             'client_id.regex' => 'L’ID client termina con .apps.googleusercontent.com.',
-            'project_number.regex' => 'Il numero del progetto contiene solo cifre.',
         ]);
         $data = array_filter($data, fn ($value) => filled($value));
         try {

@@ -23,7 +23,7 @@ class GoogleDriveTest extends TestCase
 
         $this->get(route('administration.integrations.google-drive.index'))->assertForbidden();
         $this->put(route('administration.integrations.google-drive.settings'), [
-            'client_id' => '1-abc.apps.googleusercontent.com', 'client_secret' => 's', 'api_key' => 'k', 'project_number' => '123456',
+            'client_id' => '1-abc.apps.googleusercontent.com', 'client_secret' => 's', 'api_key' => 'k',
         ])->assertForbidden();
         $this->assertDatabaseCount('google_drive_settings', 0);
     }
@@ -67,7 +67,7 @@ class GoogleDriveTest extends TestCase
 
     private function sync(): GoogleDriveSync
     {
-        GoogleDriveSetting::create(['id' => 1, 'client_id' => '1-abc.apps.googleusercontent.com', 'client_secret' => 's', 'api_key' => 'k', 'project_number' => '123456']);
+        GoogleDriveSetting::create(['id' => 1, 'client_id' => '1-abc.apps.googleusercontent.com', 'client_secret' => 's', 'api_key' => 'k']);
         $account = GoogleDriveAccount::create(['email' => 'ops@example.com', 'refresh_token' => 'refresh']);
 
         return GoogleDriveSync::create([

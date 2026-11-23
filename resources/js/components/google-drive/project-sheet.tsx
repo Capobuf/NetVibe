@@ -1,5 +1,6 @@
 import { useForm } from '@inertiajs/react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileUp } from 'lucide-react';
+import { useRef } from 'react';
 import { CopyValue } from '@/components/copy-value';
 import PasswordInput from '@/components/password-input';
 import { SaveButton } from '@/components/save-button';
@@ -38,35 +39,56 @@ export function ProjectSheet({
         client_id: project.client_id ?? '',
         client_secret: '',
         api_key: '',
-        project_number: project.project_number ?? '',
     });
-    const text = (
-        key: 'client_id' | 'project_number',
-        label: string,
-        extra: { placeholder?: string; inputMode?: 'numeric' } = {},
-    ) => (
-        <Field data-invalid={!!form.errors[key]}>
-            <FieldLabel htmlFor={`google-${key}`}>{label}</FieldLabel>
-            <Input
-                id={`google-${key}`}
-                value={form.data[key]}
-                onChange={(event) => form.setData(key, event.target.value)}
-                required
-                autoComplete="off"
-                spellCheck={false}
-                aria-invalid={!!form.errors[key]}
-                {...extra}
-            />
-            <FieldError>{form.errors[key]}</FieldError>
-        </Field>
-    );
+    const fileInput = useRef<HTMLInputElement>(null);
+    const importClient = async (file: File) => {
+        try {
+            const client = JSON.parse(await file.text())?.web;
+            const id =
+                typeof client?.client_id === 'string' ? client.client_id : '';
+            if (!/^\d+-/.test(id) || typeof client.client_secret !== 'string') {
+                throw new Error('Not a web OAuth client');
+            }
+            form.setData((data) => ({
+                ...data,
+                client_id: id,
+                client_secret: client.client_secret,
+            }));
+            form.clearErrors('client_id', 'client_secret');
+        } catch {
+            form.setError(
+                'client_id',
+                'File non valido: scarica il JSON di un client OAuth di tipo applicazione web.',
+            );
+        }
+    };
     const secret = (
         key: 'client_secret' | 'api_key',
         label: string,
         saved: boolean,
+        link?: { href: string; label: string },
     ) => (
         <Field data-invalid={!!form.errors[key]}>
-            <FieldLabel htmlFor={`google-${key}`}>{label}</FieldLabel>
+            <div className="flex items-center justify-between gap-3">
+                <FieldLabel htmlFor={`google-${key}`}>{label}</FieldLabel>
+                {link ? (
+                    <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="-my-1.5"
+                    >
+                        <a
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            {link.label}
+                            <ExternalLink data-icon="inline-end" />
+                        </a>
+                    </Button>
+                ) : null}
+            </div>
             <PasswordInput
                 id={`google-${key}`}
                 value={form.data[key]}
@@ -150,10 +172,57 @@ export function ProjectSheet({
                         </FieldSet>
                         <Separator />
                         <FieldSet disabled={form.processing}>
+                            <div className="flex items-center justify-between gap-3">
+                                <FieldLegend variant="label" className="mb-0">
+                                    Credenziali
+                                </FieldLegend>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => fileInput.current?.click()}
+                                >
+                                    <FileUp data-icon="inline-start" />
+                                    Importa JSON
+                                </Button>
+                                <input
+                                    ref={fileInput}
+                                    type="file"
+                                    accept="application/json,.json"
+                                    className="hidden"
+                                    tabIndex={-1}
+                                    aria-hidden="true"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+                                        if (file) void importClient(file);
+                                    }}
+                                />
+                            </div>
                             <FieldGroup>
-                                {text('client_id', 'ID client', {
-                                    placeholder: '…apps.googleusercontent.com',
-                                })}
+                                <Field data-invalid={!!form.errors.client_id}>
+                                    <FieldLabel htmlFor="google-client_id">
+                                        ID client
+                                    </FieldLabel>
+                                    <Input
+                                        id="google-client_id"
+                                        value={form.data.client_id}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'client_id',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        placeholder="…apps.googleusercontent.com"
+                                        aria-invalid={!!form.errors.client_id}
+                                    />
+                                    <FieldError>
+                                        {form.errors.client_id}
+                                    </FieldError>
+                                </Field>
                                 {secret(
                                     'client_secret',
                                     'Client secret',
@@ -163,10 +232,11 @@ export function ProjectSheet({
                                     'api_key',
                                     'Chiave API (Google Picker)',
                                     project.has_api_key,
+                                    {
+                                        href: 'https://console.cloud.google.com/apis/credentials',
+                                        label: 'Chiavi API',
+                                    },
                                 )}
-                                {text('project_number', 'Numero del progetto', {
-                                    inputMode: 'numeric',
-                                })}
                             </FieldGroup>
                         </FieldSet>
                     </div>

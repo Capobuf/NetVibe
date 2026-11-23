@@ -41,6 +41,12 @@ let loading: Promise<void> | null = null;
 // Google's script is loaded only when an administrator chooses a folder.
 function load(): Promise<void> {
     loading ??= new Promise<void>((resolve, reject) => {
+        // Google checks the Picker key against the page origin, which a
+        // server-wide "same-origin" referrer policy would hide from it.
+        const policy = document.createElement('meta');
+        policy.name = 'referrer';
+        policy.content = 'strict-origin-when-cross-origin';
+        document.head.appendChild(policy);
         const script = document.createElement('script');
         script.src = 'https://apis.google.com/js/api.js';
         script.async = true;

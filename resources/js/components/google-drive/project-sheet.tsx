@@ -40,7 +40,6 @@ export function ProjectSheet({
         api_key: '',
         project_number: project.project_number ?? '',
     });
-    const saved = project.configured;
     const text = (
         key: 'client_id' | 'project_number',
         label: string,
@@ -61,7 +60,11 @@ export function ProjectSheet({
             <FieldError>{form.errors[key]}</FieldError>
         </Field>
     );
-    const secret = (key: 'client_secret' | 'api_key', label: string) => (
+    const secret = (
+        key: 'client_secret' | 'api_key',
+        label: string,
+        saved: boolean,
+    ) => (
         <Field data-invalid={!!form.errors[key]}>
             <FieldLabel htmlFor={`google-${key}`}>{label}</FieldLabel>
             <PasswordInput
@@ -151,7 +154,11 @@ export function ProjectSheet({
                                 {text('client_id', 'ID client', {
                                     placeholder: '…apps.googleusercontent.com',
                                 })}
-                                {secret('client_secret', 'Client secret')}
+                                {secret(
+                                    'client_secret',
+                                    'Client secret',
+                                    project.has_secret,
+                                )}
                                 {secret(
                                     'api_key',
                                     'Chiave API (Google Picker)',

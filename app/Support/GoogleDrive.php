@@ -36,7 +36,9 @@ class GoogleDrive
 
     public static function configured(): bool
     {
-        return GoogleDriveSetting::current() !== null;
+        $setting = GoogleDriveSetting::current();
+
+        return filled($setting?->client_id) && filled($setting?->client_secret) && filled($setting?->api_key);
     }
 
     public static function redirectUri(): string
@@ -178,7 +180,7 @@ class GoogleDrive
 
     private function tokenRequest(array $data): array
     {
-        $setting = GoogleDriveSetting::current() ?? throw new GoogleDriveException('Progetto Google non configurato.');
+        $setting = self::configured() ? GoogleDriveSetting::current() : throw new GoogleDriveException('Progetto Google non configurato.');
         $response = Http::asForm()->acceptJson()->timeout(15)->post('https://oauth2.googleapis.com/token', [
             ...$data,
             'client_id' => $setting->client_id,

@@ -37,12 +37,14 @@ class GoogleDriveController extends Controller
             'project' => [
                 'client_id' => $setting?->client_id,
                 'project_number' => $setting?->project_number,
-                'configured' => $setting !== null,
+                'configured' => GoogleDrive::configured(),
+                'has_secret' => filled($setting?->client_secret),
+                'has_api_key' => filled($setting?->api_key),
                 // The values the administrator copies into the Google Cloud OAuth client.
                 'origin' => $request->getSchemeAndHttpHost(),
                 'redirect_uri' => GoogleDrive::redirectUri(),
             ],
-            'picker' => $setting ? ['api_key' => $setting->api_key, 'app_id' => $setting->project_number] : null,
+            'picker' => GoogleDrive::configured() ? ['api_key' => $setting->api_key, 'app_id' => $setting->project_number] : null,
             'accounts' => GoogleDriveAccount::withCount('syncs')->orderBy('email')->get(['id', 'email']),
             'syncs' => $syncs->map(fn (GoogleDriveSync $sync) => [
                 ...$sync->only('id', 'folder_id', 'folder_name', 'interval', 'file_url', 'synced_at', 'error'),
@@ -60,8 +62,8 @@ class GoogleDriveController extends Controller
         $current = GoogleDriveSetting::current();
         $data = $request->validate([
             'client_id' => ['required', 'string', 'max:255', 'regex:/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/'],
-            'client_secret' => [$current ? 'nullable' : 'required', 'string', 'max:255'],
-            'api_key' => [$current ? 'nullable' : 'required', 'string', 'max:255'],
+            'client_secret' => [filled($current?->client_secret) ? 'nullable' : 'required', 'string', 'max:255'],
+            'api_key' => [filled($current?->api_key) ? 'nullable' : 'required', 'string', 'max:255'],
             'project_number' => ['required', 'string', 'regex:/^[0-9]{6,20}$/'],
         ], [
             'client_id.regex' => 'L’ID client termina con .apps.googleusercontent.com.',
@@ -69,7 +71,7 @@ class GoogleDriveController extends Controller
         ]);
         $data = array_filter($data, fn ($value) => filled($value));
         try {
-            if (! $this->drive->verifyClient($data['client_id'], $data['client_secret'] ?? $current->client_secret)) {
+            if (! $this->drive->verifyClient($data['client_id'], $data['client_secret'] ?? $current?->client_secret)) {
                 throw ValidationException::withMessages(['client_secret' => 'Google non riconosce questo ID client con questo secret.']);
             }
         } catch (ConnectionException) {

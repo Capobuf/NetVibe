@@ -20,6 +20,8 @@ export type DriveProject = {
     client_id: string | null;
     project_number: string | null;
     configured: boolean;
+    has_secret: boolean;
+    has_api_key: boolean;
     origin: string;
     redirect_uri: string;
 };

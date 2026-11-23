@@ -11,8 +11,9 @@ return new class extends Migration
         // Single row (id 1): the Google Cloud project NetVibe uses, configured from administration.
         Schema::create('google_drive_settings', function (Blueprint $table) {
             $table->id();
-            $table->string('client_id');
-            $table->text('client_secret');
+            // The OAuth client can be added after the Picker key and project number.
+            $table->string('client_id')->nullable();
+            $table->text('client_secret')->nullable();
             $table->text('api_key');
             $table->string('project_number', 32);
             $table->timestamps();

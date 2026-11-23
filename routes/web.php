@@ -12,6 +12,7 @@ use App\Http\Controllers\DeviceIpController;
 use App\Http\Controllers\DeviceModelController;
 use App\Http\Controllers\ExcludedRangeController;
 use App\Http\Controllers\FloorController;
+use App\Http\Controllers\GoogleDriveController;
 use App\Http\Controllers\IpAddressController;
 use App\Http\Controllers\IpamExportController;
 use App\Http\Controllers\IpSearchController;
@@ -105,6 +106,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('companies/{company}/settings')->name('companies.settings.')->middleware('can:administer')->group(function () {
             Route::resource('users', CompanyUserController::class)->only(['index', 'store', 'destroy']);
             Route::put('integrations/retention', [CompanyIntegrationController::class, 'retention'])->name('integrations.retention.update');
+            Route::get('integrations/google-drive', [GoogleDriveController::class, 'index'])->name('integrations.google-drive.index');
             Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
                 Route::get('/', [SnipeItController::class, 'edit'])->name('edit');
                 Route::put('/', [SnipeItController::class, 'update'])->middleware('throttle:20,1')->name('update');
@@ -179,6 +181,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('{unifiConnection}/consoles', [UnifiController::class, 'selectConsoles'])->middleware('throttle:5,1')->name('select-consoles');
             Route::put('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'associate'])->name('associate');
             Route::delete('{unifiConnection}/sites/{unifiSite}', [UnifiController::class, 'revoke'])->name('revoke');
+        });
+        Route::prefix('integrations/google-drive')->name('integrations.google-drive.')->controller(GoogleDriveController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::put('settings', 'settings')->middleware('throttle:10,1')->name('settings');
+            Route::get('connect', 'connect')->name('connect');
+            Route::get('callback', 'callback')->name('callback');
+            Route::get('accounts/{googleDriveAccount}/token', 'token')->middleware('throttle:30,1')->name('token');
+            Route::delete('accounts/{googleDriveAccount}', 'disconnect')->name('disconnect');
+            Route::post('/', 'store')->middleware('throttle:10,1')->name('store');
+            Route::put('{googleDriveSync}', 'update')->name('update');
+            Route::delete('{googleDriveSync}', 'destroy')->name('destroy');
+            Route::post('{googleDriveSync}/sync', 'run')->middleware('throttle:5,1')->name('sync');
         });
         Route::prefix('integrations/snipe-it')->name('integrations.snipe-it.')->group(function () {
             Route::get('/', [SnipeItController::class, 'edit'])->name('edit');

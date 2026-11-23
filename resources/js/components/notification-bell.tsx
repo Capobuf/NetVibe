@@ -43,6 +43,7 @@ const sourceNames = {
     snipe_it: 'Snipe-IT',
     mikrotik: 'MikroTik',
     unifi: 'UniFi',
+    google_drive: 'Google Drive',
 };
 
 const relative = new Intl.RelativeTimeFormat('it-IT', { numeric: 'auto' });

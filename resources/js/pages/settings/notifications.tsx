@@ -7,6 +7,7 @@ const sources = {
     notify_snipe_it: 'Snipe-IT',
     notify_mikrotik: 'MikroTik',
     notify_unifi: 'UniFi',
+    notify_google_drive: 'Google Drive',
 } as const;
 
 type Source = keyof typeof sources;
@@ -21,6 +22,7 @@ export default function Notifications() {
                 notify_snipe_it: user.notify_snipe_it,
                 notify_mikrotik: user.notify_mikrotik,
                 notify_unifi: user.notify_unifi,
+                notify_google_drive: user.notify_google_drive,
                 [source]: enabled,
             },
             { preserveScroll: true },

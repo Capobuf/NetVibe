@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['name', 'observation_retention_days'])]
 class Company extends Model
@@ -36,5 +37,11 @@ class Company extends Model
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);
+    }
+
+    /** @return HasOne<GoogleDriveSync, $this> */
+    public function googleDriveSync(): HasOne
+    {
+        return $this->hasOne(GoogleDriveSync::class);
     }
 }

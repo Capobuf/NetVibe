@@ -4,7 +4,7 @@ import type { Company, Site } from '@/types/company';
 export type AppNotification = {
     id: string;
     data: {
-        source: 'snipe_it' | 'mikrotik' | 'unifi';
+        source: 'snipe_it' | 'mikrotik' | 'unifi' | 'google_drive';
         failed: boolean;
         title: string;
         subject: string;

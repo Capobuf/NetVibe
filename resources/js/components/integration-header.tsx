@@ -38,6 +38,7 @@ const states: Record<IntegrationState, string> = {
 export function intervalLabel(minutes: number) {
     if (minutes === 60) return 'ogni ora';
     if (minutes === 1440) return 'una volta al giorno';
+    if (minutes === 10080) return 'una volta a settimana';
     return minutes < 60 ? `ogni ${minutes} minuti` : `ogni ${minutes / 60} ore`;
 }
 

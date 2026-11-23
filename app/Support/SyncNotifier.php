@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Notification;
 
 class SyncNotifier
 {
-    private const SOURCES = ['snipe_it' => 'Snipe-IT', 'mikrotik' => 'MikroTik', 'unifi' => 'UniFi'];
+    private const SOURCES = ['snipe_it' => 'Snipe-IT', 'mikrotik' => 'MikroTik', 'unifi' => 'UniFi', 'google_drive' => 'Google Drive'];
 
     /** Notifies only transitions: healthy → failing, or failing → ok. Repeated failures stay silent. */
     public static function transition(string $source, bool $wasFailing, bool $isFailing, bool $isOk, Company $company, string $subject, string $url, ?string $message): void

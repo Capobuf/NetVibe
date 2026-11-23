@@ -25,6 +25,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property bool $notify_snipe_it
  * @property bool $notify_mikrotik
  * @property bool $notify_unifi
+ * @property bool $notify_google_drive
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -48,6 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         'notify_snipe_it' => true,
         'notify_mikrotik' => true,
         'notify_unifi' => true,
+        'notify_google_drive' => true,
     ];
 
     /** @return BelongsToMany<Company, $this> */
@@ -70,6 +72,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'notify_snipe_it' => 'boolean',
             'notify_mikrotik' => 'boolean',
             'notify_unifi' => 'boolean',
+            'notify_google_drive' => 'boolean',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',

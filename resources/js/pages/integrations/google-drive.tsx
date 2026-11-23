@@ -14,7 +14,10 @@ import {
 import { useState, type ReactNode } from 'react';
 import { DataTable } from '@/components/data-table';
 import { ProjectSheet } from '@/components/google-drive/project-sheet';
-import { SetupGuide, type SetupStep } from '@/components/google-drive/setup-guide';
+import {
+    SetupGuide,
+    type SetupStep,
+} from '@/components/google-drive/setup-guide';
 import { SyncEditor } from '@/components/google-drive/sync-editor';
 import {
     capitalize,
@@ -531,9 +534,7 @@ function CompanySync({
                             className="flex min-w-0 flex-col gap-1"
                         >
                             <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="font-medium break-words">
-                                {value}
-                            </dd>
+                            <dd className="font-medium break-words">{value}</dd>
                         </div>
                     ))}
                 </dl>
@@ -592,10 +593,7 @@ function SyncActions({
                         Modifica
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={onRemove}
-                    >
+                    <DropdownMenuItem variant="destructive" onSelect={onRemove}>
                         <Trash2 />
                         Rimuovi
                     </DropdownMenuItem>

@@ -149,11 +149,13 @@ export function ProjectSheet({
                         <FieldSet disabled={form.processing}>
                             <FieldGroup>
                                 {text('client_id', 'ID client', {
-                                    placeholder:
-                                        '…apps.googleusercontent.com',
+                                    placeholder: '…apps.googleusercontent.com',
                                 })}
                                 {secret('client_secret', 'Client secret')}
-                                {secret('api_key', 'Chiave API (Google Picker)')}
+                                {secret(
+                                    'api_key',
+                                    'Chiave API (Google Picker)',
+                                )}
                                 {text('project_number', 'Numero del progetto', {
                                     inputMode: 'numeric',
                                 })}

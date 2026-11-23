@@ -43,7 +43,9 @@ export function SetupGuide({ steps }: { steps: SetupStep[] }) {
                                     aria-hidden="true"
                                     className={cn(
                                         'absolute top-8 bottom-0 left-3.5 w-px',
-                                        step.done ? 'bg-emerald-500/60' : 'bg-border',
+                                        step.done
+                                            ? 'bg-emerald-500/60'
+                                            : 'bg-border',
                                     )}
                                 />
                             ) : null}
@@ -88,7 +90,9 @@ export function SetupGuide({ steps }: { steps: SetupStep[] }) {
                                     </span>
                                 </div>
                                 {!step.done && step.action ? (
-                                    <div className="shrink-0">{step.action}</div>
+                                    <div className="shrink-0">
+                                        {step.action}
+                                    </div>
                                 ) : null}
                             </div>
                         </li>

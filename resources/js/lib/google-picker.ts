@@ -16,6 +16,8 @@ type DocsView = {
     setIncludeFolders(value: boolean): DocsView;
     setSelectFolderEnabled(value: boolean): DocsView;
     setMimeTypes(types: string): DocsView;
+    setParent(id: string): DocsView;
+    setLabel(label: string): DocsView;
 };
 type PickerApi = {
     DocsView: new (viewId: string) => DocsView;
@@ -87,7 +89,11 @@ export async function pickFolder(
         const view = new picker.DocsView(picker.ViewId.FOLDERS)
             .setIncludeFolders(true)
             .setSelectFolderEnabled(true)
-            .setMimeTypes('application/vnd.google-apps.folder');
+            .setMimeTypes('application/vnd.google-apps.folder')
+            // Starting from the root makes the list browsable folder by folder
+            // instead of a flat list of every folder in the account.
+            .setParent('root')
+            .setLabel('Il mio Drive');
         new picker.PickerBuilder()
             .addView(view)
             .setOAuthToken(body.access_token!)

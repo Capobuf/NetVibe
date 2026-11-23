@@ -1,5 +1,6 @@
 import { useForm } from '@inertiajs/react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileUp } from 'lucide-react';
+import { useRef } from 'react';
 import { CopyValue } from '@/components/copy-value';
 import PasswordInput from '@/components/password-input';
 import { SaveButton } from '@/components/save-button';
@@ -40,6 +41,31 @@ export function ProjectSheet({
         api_key: '',
         project_number: project.project_number ?? '',
     });
+    const fileInput = useRef<HTMLInputElement>(null);
+    const importClient = async (file: File) => {
+        try {
+            const client = JSON.parse(await file.text())?.web;
+            const id =
+                typeof client?.client_id === 'string' ? client.client_id : '';
+            // Google client IDs start with the number of the project that owns them.
+            const number = /^(\d+)-/.exec(id)?.[1];
+            if (!number || typeof client.client_secret !== 'string') {
+                throw new Error('Not a web OAuth client');
+            }
+            form.setData((data) => ({
+                ...data,
+                client_id: id,
+                client_secret: client.client_secret,
+                project_number: number,
+            }));
+            form.clearErrors('client_id', 'client_secret', 'project_number');
+        } catch {
+            form.setError(
+                'client_id',
+                'File non valido: scarica il JSON di un client OAuth di tipo applicazione web.',
+            );
+        }
+    };
     const text = (
         key: 'client_id' | 'project_number',
         label: string,
@@ -150,6 +176,33 @@ export function ProjectSheet({
                         </FieldSet>
                         <Separator />
                         <FieldSet disabled={form.processing}>
+                            <div className="flex items-center justify-between gap-3">
+                                <FieldLegend variant="label" className="mb-0">
+                                    Credenziali
+                                </FieldLegend>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => fileInput.current?.click()}
+                                >
+                                    <FileUp data-icon="inline-start" />
+                                    Importa JSON
+                                </Button>
+                                <input
+                                    ref={fileInput}
+                                    type="file"
+                                    accept="application/json,.json"
+                                    className="hidden"
+                                    tabIndex={-1}
+                                    aria-hidden="true"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+                                        if (file) void importClient(file);
+                                    }}
+                                />
+                            </div>
                             <FieldGroup>
                                 {text('client_id', 'ID client', {
                                     placeholder: '…apps.googleusercontent.com',
